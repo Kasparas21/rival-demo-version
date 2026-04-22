@@ -1,5 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "buildCommand": "npm run build --prefix hero-repro && rm -rf .next && ln -s hero-repro/.next .next"
-}
