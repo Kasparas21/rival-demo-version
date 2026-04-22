@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crush.ai Hero Recreation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=DM+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F5F3EE;
+      --text-dark: #343434;
+      --text-mid: #808080;
+      --text-muted: #897F7F;
+      --note-bg: #E9F1B5;
+      --pill-purple: rgba(243,227,255,0.65);
+      --pill-lime: rgba(233,241,181,0.65);
+      --pill-blue: rgba(221,241,253,0.65);
+      --btn-bg: #343434;
+      --grad-start: #808DD4;
+      --grad-mid: #D5F09F;
+      --grad-end: #EFCAF3;
+      --proof-bg: #F9FAFB;
+      --proof-border: #E5E7EB;
+      --card-bg: #FFFFFF;
+      --green-dot: #B4D67E;
+    }
+    body {
+      font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text-dark);
+    }
+    .note-font { font-family: "Caveat", cursive; }
+    @keyframes marquee {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .marquee { animation: marquee 45s linear infinite; }
+    .marquee.paused { animation-play-state: paused; }
+    @keyframes msgIn {
+      0% { opacity: 0; transform: translateY(10px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .animate-message { animation: msgIn 0.6s ease forwards; opacity: 0; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- NAVBAR -->
+  <div class="fixed top-0 z-[200] w-full px-5 pt-3">
+    <div class="mx-auto flex h-14 max-w-[950px] items-center justify-between rounded-[44px] bg-white/80 px-7 shadow-lg backdrop-blur-md sm:h-16">
+      <div class="text-[21px] font-black tracking-[-0.5px] text-[#111]">crush</div>
+      <nav class="hidden items-center gap-6 text-[14px] font-medium text-[#555] md:flex">
+        <a href="#solution" class="hover:text-[#111]">Solution</a>
+        <a href="#how-it-works" class="hover:text-[#111]">How It Works</a>
+        <a href="#blog" class="hover:text-[#111]">Blog</a>
+        <a href="#faq" class="hover:text-[#111]">FAQ</a>
+        <a href="#reviews" class="hover:text-[#111]">Reviews</a>
+        <a href="#affiliates" class="hover:text-[#111]">Affiliates</a>
+        <a href="#login" class="hover:text-[#111]">Login</a>
+      </nav>
+      <button id="menuBtn" class="md:hidden" aria-label="Open menu">
+        <svg class="h-5 w-5 text-[#555]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12h16"/>
+          <path d="M4 6h16"/>
+          <path d="M4 18h16"/>
+        </svg>
+      </button>
+    </div>
+    <div id="mobileMenu" class="mx-auto mt-3 hidden max-w-[950px] rounded-2xl bg-white/90 p-4 shadow-lg backdrop-blur-md md:hidden">
+      <div class="grid gap-3 text-[14px] font-medium text-[#555]">
+        <a href="#solution" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">Solution</a>
+        <a href="#how-it-works" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">How It Works</a>
+        <a href="#blog" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">Blog</a>
+        <a href="#faq" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">FAQ</a>
+        <a href="#reviews" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">Reviews</a>
+        <a href="#affiliates" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">Affiliates</a>
+        <a href="#login" class="rounded-xl px-3 py-2 hover:bg-[#F3F4F6]">Login</a>
+        <button class="rounded-xl bg-[#111] px-3 py-2 text-white">Buy Now →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <section class="relative pb-6 pt-20 sm:pt-24 lg:pt-20">
+    <div class="pointer-events-none absolute inset-0 flex items-start justify-center">
+      <div class="h-[900px] w-[900px] rounded-full" style="background: radial-gradient(circle, rgba(180,214,126,0.18), transparent 70%);"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-5xl px-6 text-center">
+      <div class="relative inline-block">
+        <h1 class="text-[clamp(44px,7vw,72px)] font-black leading-[0.9] tracking-[-2.5px] text-[#343434] sm:leading-tight">
+          <span class="block">Launch profitable</span>
+          <span class="block">Facebook ads</span>
+        </h1>
+        <div class="relative mx-auto mt-4 inline-flex h-[70px] w-[245px] shrink-0 -rotate-12 items-center justify-center rounded-lg bg-[#E9F1B5] sm:absolute sm:bottom-[-35px] sm:left-[180px] sm:h-[80px] sm:w-[285px]">
+          <div class="flex h-[62px] w-[237px] items-center justify-center rounded-[6px] border border-white sm:h-[72px] sm:w-[277px]">
+            <span class="mr-2 flex h-10 w-10 items-center justify-center text-2xl">💸</span>
+            <span class="note-font w-[160px] text-base font-bold leading-normal text-black sm:w-[189px] sm:text-xl">
+              Without wasting<br>thousands on tests
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <p class="mx-auto mt-2 max-w-4xl text-[17px] font-normal leading-relaxed text-[#808080] sm:text-xl">
+        AI that runs your entire Facebook ad strategy on autopilot - from creative to copy to
+        optimization. You focus on your business, we handle the ads.
+      </p>
+
+      <div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-[rgba(243,227,255,0.60)] px-3.5 py-1.5 text-xs font-medium text-[#666] sm:text-sm">🌍 Works in any language</span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-[rgba(233,241,181,0.60)] px-3.5 py-1.5 text-xs font-medium text-[#666] sm:text-sm">💱 Supports any currency</span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-[rgba(221,241,253,0.60)] px-3.5 py-1.5 text-xs font-medium text-[#666] sm:text-sm">⚡ 24/7 AI optimization</span>
+      </div>
+
+      <div class="mt-8 flex flex-col items-center">
+        <div class="rounded-[44px] bg-gradient-to-r from-[#808DD4] via-[#D5F09F] to-[#EFCAF3] p-[2px]">
+          <button class="rounded-[44px] bg-[#343434] px-10 py-4 text-sm font-semibold tracking-[-0.01em] text-white transition-all duration-200 hover:opacity-90">
+            Buy Now →
+          </button>
+        </div>
+        <button class="mt-5 inline-flex items-center gap-2.5 rounded-full border border-[#E5E7EB] bg-[#F9FAFB] px-4 py-2 text-xs font-semibold text-[#111827] transition-colors hover:bg-[#F3F4F6] sm:text-sm">
+          <div class="flex -space-x-2">
+            <div class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#d9b3ff] text-[10px] font-bold text-white sm:h-8 sm:w-8">A</div>
+            <div class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#b7df86] text-[10px] font-bold text-white sm:h-8 sm:w-8">B</div>
+            <div class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#91b7ff] text-[10px] font-bold text-white sm:h-8 sm:w-8">C</div>
+            <div class="flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#f2b267] text-[10px] font-bold text-white sm:h-8 sm:w-8">D</div>
+          </div>
+          ⭐ 4.9/5 from 4,268 customers
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- AD CARDS CAROUSEL -->
+  <section class="py-8 sm:py-12">
+    <div class="overflow-hidden">
+      <div id="marquee" class="marquee flex w-max gap-4 sm:gap-6">
+        <!-- Cards injected by JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- TRANSITION + VIDEO DEMO -->
+  <section class="mt-12 sm:mt-16 md:mt-20 px-6">
+    <h2 class="text-center text-[clamp(24px,4vw,36px)] font-black text-[#343434]">
+      See how your ads get managed on <span class="text-[#486FC4] underline underline-offset-4">autopilot</span>
+    </h2>
+    <p class="mx-auto mt-3 max-w-3xl text-center text-base text-[#808080] sm:text-lg">
+      Watch Crush AI analyze competitors, generate winning creatives,
+      and launch optimized campaigns
+    </p>
+
+    <div class="mx-auto mt-6 max-w-[1200px] overflow-hidden rounded-xl bg-[#1C1C1E] shadow-2xl">
+      <div class="relative flex h-11 items-center justify-between bg-[#2C2C2E] px-4">
+        <div class="flex items-center gap-2">
+          <span class="h-3 w-3 rounded-full bg-[#FF5F57]"></span>
+          <span class="h-3 w-3 rounded-full bg-[#FEBC2E]"></span>
+          <span class="h-3 w-3 rounded-full bg-[#28C840]"></span>
+        </div>
+        <div class="absolute left-1/2 -translate-x-1/2 rounded-lg bg-[#1C1C1E] px-4 py-1.5">
+          <div class="flex items-center gap-2">
+            <svg class="h-3 w-3 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 15v2" />
+              <path d="M6 21h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2z" />
+              <path d="M16 11V7a4 4 0 0 0-8 0v4" />
+            </svg>
+            <span class="text-xs font-medium text-gray-400">trycrush.ai</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 rounded-lg bg-[#1C1C1E] px-3 py-1.5">
+          <div class="flex items-center gap-1">
+            <span class="h-2 w-2 rounded-full bg-[#A9DC57]"></span>
+            <span class="h-2 w-2 rounded-full bg-[#A9DC57]"></span>
+            <span class="h-2 w-2 rounded-full bg-[#A9DC57]"></span>
+            <span class="h-2 w-2 rounded-full bg-[#A9DC57]"></span>
+            <span class="h-2 w-2 rounded-full bg-white" style="transform: scale(1.3);"></span>
+            <span class="h-2 w-2 rounded-full bg-[#555]"></span>
+          </div>
+          <span class="h-3 w-px bg-[#555]"></span>
+          <div class="flex items-center gap-2 text-[11px] font-medium text-gray-400">
+            <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 13l4 4L19 7" />
+            </svg>
+            6/6 Launch & Scale
+          </div>
+        </div>
+      </div>
+
+      <div class="flex h-[600px] bg-white sm:h-[700px]">
+        <!-- LEFT SIDEBAR -->
+        <div class="flex w-[60px] flex-shrink-0 flex-col border-r bg-white/95 sm:w-[72px]">
+          <div class="flex h-12 items-center justify-center border-b sm:h-14">
+            <svg class="h-5 w-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 12h16"/>
+              <path d="M4 6h16"/>
+              <path d="M4 18h16"/>
+            </svg>
+          </div>
+          <div class="flex-1 space-y-3 overflow-y-auto px-2 py-2">
+            <button class="flex h-10 w-full items-center justify-center rounded-[12px] bg-gray-100">+</button>
+            <div class="flex h-10 w-full items-center justify-center rounded-[12px] bg-gray-100">
+              <span class="h-2 w-2 rounded-full bg-gradient-to-r from-[#808DD4] to-[#EFCAF3]"></span>
+            </div>
+          </div>
+          <div class="space-y-2 border-t p-2">
+            <button class="flex h-9 w-full items-center justify-center rounded-[12px] bg-gray-100">
+              <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h8"/>
+              </svg>
+            </button>
+            <button class="flex h-9 w-full items-center justify-center rounded-[12px] bg-gray-100">
+              <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4"/>
+                <path d="M12 8h.01"/>
+              </svg>
+            </button>
+            <button class="flex h-9 w-full items-center justify-center rounded-[12px] bg-gray-100">
+              <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1v2"/>
+                <path d="M12 21v2"/>
+                <path d="M4.22 4.22l1.42 1.42"/>
+                <path d="M18.36 18.36l1.42 1.42"/>
+                <path d="M1 12h2"/>
+                <path d="M21 12h2"/>
+                <path d="M4.22 19.78l1.42-1.42"/>
+                <path d="M18.36 5.64l1.42-1.42"/>
+                <circle cx="12" cy="12" r="4"/>
+              </svg>
+            </button>
+            <div class="flex h-10 w-full items-center justify-center rounded-full bg-gradient-to-r from-[#808DD4] to-[#EFCAF3] text-[10px] font-bold text-white">D</div>
+          </div>
+        </div>
+
+        <!-- RIGHT CHAT AREA -->
+        <div class="flex flex-1 flex-col">
+          <div class="flex h-16 items-center justify-between border-b bg-white/95 px-6">
+            <div class="flex items-center gap-3">
+              <div class="h-11 w-11 rounded-full bg-gray-200"></div>
+              <div>
+                <div class="text-sm font-bold">Crush</div>
+                <div class="flex items-center gap-2 text-[10px] font-semibold text-green-600">
+                  <span class="h-2 w-2 rounded-full bg-green-500"></span>
+                  ONLINE
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 rounded-full border bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600">
+              <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+              Auto-optimizes every 8h
+            </div>
+          </div>
+
+          <div class="flex-1 space-y-4 overflow-y-auto p-6">
+            <div class="animate-message max-w-[80%] rounded-2xl rounded-tl-sm border bg-white p-4 shadow-sm" style="animation-delay:0.1s">
+              🚀 Scaling Update: I've increased budget on
+              'Organic Beauty Lovers' from $50 → $150/day.
+              ROAS jumped from 2.1x to 3.4x over 3 days.
+            </div>
+            <div class="animate-message max-w-[80%] rounded-2xl rounded-tl-sm border bg-white p-4 shadow-sm" style="animation-delay:0.2s">
+              📊 Performance Report: Campaign spent $847
+              yesterday. 127 purchases at $6.67 CPA. Top
+              performer: 'Sapone Organic Shampoo' 4.2x ROAS.
+            </div>
+            <div class="animate-message max-w-[80%] rounded-2xl rounded-tl-sm border bg-white p-4 shadow-sm" style="animation-delay:0.3s">
+              ⚡ Auto-Optimization: Paused 2 underperforming
+              ad sets (CPA > $15). Reallocated $200/day.
+            </div>
+            <div class="animate-message max-w-[80%] rounded-2xl rounded-tl-sm border bg-white p-4 shadow-sm" style="animation-delay:0.4s">
+              💡 Recommendation: Winning creatives showing
+              fatigue (CTR dropped 18% this week). Upload
+              fresh creatives to test!
+            </div>
+            <div class="animate-message max-w-[80%] rounded-2xl rounded-tl-sm border bg-white p-4 shadow-sm" style="animation-delay:0.5s">
+              ✅ New creatives testing campaign created!
+              I'll monitor and optimize budget automatically.
+            </div>
+          </div>
+
+          <div class="border-t p-4">
+            <div class="mb-3 flex gap-2 overflow-x-auto">
+              <span class="flex h-8 items-center rounded-full border bg-gray-50 px-3 text-xs font-medium">📊 BarChart2 Summary</span>
+              <span class="flex h-8 items-center rounded-full border bg-gray-50 px-3 text-xs font-medium">⬆ Upload Creatives</span>
+              <span class="flex h-8 items-center rounded-full border bg-gray-50 px-3 text-xs font-medium">📈 TrendingUp Insights</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <input class="w-full rounded-[16px] border bg-gray-50 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#808DD4]" placeholder="Message Crush..." />
+              <button class="flex h-8 w-8 items-center justify-center rounded-[12px] bg-gray-200">
+                <svg class="h-4 w-4 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="m22 2-7 20-4-9-9-4Z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section class="mt-12 pb-20">
+    <div class="mx-auto grid max-w-5xl grid-cols-1 gap-4 text-center sm:grid-cols-3 sm:gap-8 md:gap-12">
+      <div>
+        <div class="text-[clamp(28px,5vw,40px)] font-black tracking-[-1px] text-[#343434]">$100M+</div>
+        <div class="mt-1 text-xs font-medium text-[#898989] sm:mt-2 sm:text-sm">Ad Spend Managed</div>
+      </div>
+      <div>
+        <div class="text-[clamp(28px,5vw,40px)] font-black tracking-[-1px] text-[#343434]">50K+</div>
+        <div class="mt-1 text-xs font-medium text-[#898989] sm:mt-2 sm:text-sm">Winning Ads Created</div>
+      </div>
+      <div>
+        <div class="text-[clamp(28px,5vw,40px)] font-black tracking-[-1px] text-[#343434]">3X</div>
+        <div class="mt-1 text-xs font-medium text-[#898989] sm:mt-2 sm:text-sm">Average ROAS</div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const menuBtn = document.getElementById('menuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
+    menuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+
+    /** Paths relative to this index.html — same assets as hero-repro/public/images/ads */
+    const cardData = [
+      { src: 'hero-repro/public/images/ads/ad-1.png', reach: '1.1M', days: '93', impr: '98%', date: 'July 2025', grad: 'from-[#f7e7ff] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-2.png', reach: '2M', days: '124', impr: '23%', date: 'July 2025', grad: 'from-[#dff0ff] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-3.png', reach: '6M', days: '93', impr: '14%', date: 'July 2025', grad: 'from-[#fdf0d4] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-4.png', reach: '1M', days: '93', impr: '23%', date: 'July 2025', grad: 'from-[#e7f4ff] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-5.png', reach: '110K', days: '2', impr: '76%', date: 'Oct 2025', grad: 'from-[#fde9e5] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-6.png', reach: '3.5M', days: '45', impr: '67%', date: 'Aug 2025', grad: 'from-[#e9f7f1] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-7.png', reach: '850K', days: '30', impr: '89%', date: 'Sep 2025', grad: 'from-[#f1f3ff] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-8.png', reach: '2.2M', days: '15', impr: '92%', date: 'Oct 2025', grad: 'from-[#f2f9e7] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-9.png', reach: '1.8M', days: '60', impr: '45%', date: 'Nov 2025', grad: 'from-[#ffeef1] to-[#f5f3ff]' },
+      { src: 'hero-repro/public/images/ads/ad-10.png', reach: '4.1M', days: '28', impr: '81%', date: 'Dec 2025', grad: 'from-[#e7f0ff] to-[#f5f3ff]' },
+    ];
+
+    const marquee = document.getElementById('marquee');
+    const makeCard = (d) => {
+      const card = document.createElement('div');
+      card.className = 'flex-shrink-0 w-[280px] sm:w-[300px] md:w-[320px] rounded-[13px] bg-white shadow-lg overflow-hidden';
+      card.innerHTML = `
+        <div class="relative m-3 aspect-square rounded-[13px] overflow-hidden bg-gradient-to-br ${d.grad}">
+          <img src="${d.src}" alt="" class="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+          <div class="absolute bottom-3 left-3 right-3 z-[1] rounded-lg bg-white/90 px-3 py-2 text-sm font-medium text-gray-700 backdrop-blur-sm">
+            Generate personalized
+          </div>
+        </div>
+        <div class="p-4">
+          <div class="mb-4 flex items-center justify-center gap-2 text-[13px] text-[rgb(137,127,127)]">
+            <span>Active since</span>
+            <span class="h-1.5 w-1.5 rounded-full bg-[rgb(180,214,126)]"></span>
+            <span class="font-medium text-[rgb(52,52,52)]">${d.date}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div class="mb-1 flex justify-center">
+                <svg class="h-5 w-5 text-[rgb(137,127,127)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
+                  <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+              </div>
+              <div class="text-[18px] font-semibold text-[rgb(52,52,52)]">${d.reach}</div>
+              <div class="text-[13px] text-[rgb(137,127,127)]">Reach</div>
+            </div>
+            <div>
+              <div class="mb-1 flex justify-center">
+                <svg class="h-5 w-5 text-[rgb(137,127,127)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z" />
+                </svg>
+              </div>
+              <div class="text-[18px] font-semibold text-[rgb(52,52,52)]">${d.days}</div>
+              <div class="text-[13px] text-[rgb(137,127,127)]">Days</div>
+            </div>
+            <div>
+              <div class="mb-1 flex justify-center">
+                <svg class="h-5 w-5 text-[rgb(137,127,127)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <div class="text-[18px] font-semibold text-[rgb(52,52,52)]">${d.impr}</div>
+              <div class="text-[13px] text-[rgb(137,127,127)]">Impr.</div>
+            </div>
+          </div>
+        </div>
+      `;
+      return card;
+    };
+
+    const cards = cardData.map(makeCard);
+    cards.forEach(c => marquee.appendChild(c));
+    cards.forEach(c => marquee.appendChild(c.cloneNode(true)));
+
+    marquee.addEventListener('mouseenter', () => marquee.classList.add('paused'));
+    marquee.addEventListener('mouseleave', () => marquee.classList.remove('paused'));
+  </script>
+</body>
+</html>

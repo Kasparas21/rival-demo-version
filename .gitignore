@@ -1,0 +1,12 @@
+.DS_Store
+node_modules/
+# Next build output and root symlink to hero-repro/.next
+.next
+dist/
+build/
+.env*
+*.log
+
+# Accidental empty artifacts
+/hero-repro@0.1.0
+/next

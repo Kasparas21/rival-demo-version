@@ -1,0 +1,16 @@
+{
+  "name": "tribal",
+  "private": true,
+  "dependencies": {
+    "next": "16.1.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "scripts": {
+    "postinstall": "npm install --prefix hero-repro",
+    "dev": "npm run dev --prefix hero-repro",
+    "build": "npm run build --prefix hero-repro",
+    "start": "npm run start --prefix hero-repro",
+    "lint": "npm run lint --prefix hero-repro"
+  }
+}

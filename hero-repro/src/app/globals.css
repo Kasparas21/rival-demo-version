@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f9fb;
+  --foreground: #2d2d2d;
+  /* Rival brand DNA */
+  --rival-primary: #343434;
+  --rival-muted: #808080;
+  --rival-accent-blue: #DDF1FD;
+  --rival-accent-warm: #FFF4CB;
+  --rival-success: #95C14B;
+  --rival-bg-gradient-start: #e6f7ff;
+  --rival-bg-gradient-mid: #f0faff;
+  --rival-bg-gradient-warm: #fffde6;
+  --rival-bg-gradient-end: #fffcef;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-serif: var(--font-instrument);
+  --font-sans: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+@keyframes rival-logo-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@keyframes rival-strategy-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.rival-strategy-shimmer {
+  background: linear-gradient(90deg, #f4f4f5 0%, #e8e8ea 45%, #f4f4f5 90%);
+  background-size: 200% 100%;
+  animation: rival-strategy-shimmer 1.35s ease-in-out infinite;
+}
+
+/**
+ * Subtle scrollbars — low-contrast thumb that blends with glass/gradient panels.
+ * `.sidebar-scroll` is an alias (same rules) for older references.
+ */
+.rival-subtle-scroll,
+.sidebar-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(52, 52, 52, 0.1) transparent;
+}
+
+.rival-subtle-scroll:hover,
+.sidebar-scroll:hover {
+  scrollbar-color: rgba(52, 52, 52, 0.18) transparent;
+}
+
+.rival-subtle-scroll::-webkit-scrollbar,
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rival-subtle-scroll::-webkit-scrollbar-track,
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rival-subtle-scroll::-webkit-scrollbar-thumb,
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgba(52, 52, 52, 0.08);
+}
+
+.rival-subtle-scroll::-webkit-scrollbar-thumb:hover,
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 52, 52, 0.14);
+}
