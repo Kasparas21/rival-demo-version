@@ -13,6 +13,10 @@ function safeNextPath(value: string | null): string | null {
   return value && value.startsWith("/") && !value.startsWith("//") && value !== "/login" ? value : null;
 }
 
+function postOnboardingPath(path: string): string {
+  return path === "/checkout" ? "/api/billing/checkout" : path;
+}
+
 function LoginSetupError({ message }: { message: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f7f8fb] px-4 py-10">
@@ -35,6 +39,7 @@ export default async function LoginPage({
 }) {
   const params = (await searchParams) ?? {};
   const safeNext = safeNextPath(firstParam(params.next));
+  const safePostOnboardingPath = safeNext ? postOnboardingPath(safeNext) : null;
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {
     supabase = await createSupabaseServerClient();
@@ -53,9 +58,9 @@ export default async function LoginPage({
       .eq("id", user.id)
       .maybeSingle();
     if (!profile?.onboarding_completed) {
-      redirect(safeNext ? `/onboarding?next=${encodeURIComponent(safeNext)}` : "/onboarding");
+      redirect(safePostOnboardingPath ? `/onboarding?next=${encodeURIComponent(safePostOnboardingPath)}` : "/onboarding");
     }
-    redirect(safeNext ?? "/dashboard");
+    redirect(safePostOnboardingPath ?? "/dashboard");
   }
 
   return <LoginForm />;

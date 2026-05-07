@@ -18,13 +18,18 @@ function safeNextPath(value: string | null): string | null {
     : null;
 }
 
+function postOnboardingPath(path: string): string {
+  return path === "/checkout" ? "/api/billing/checkout" : path;
+}
+
 export default async function OnboardingPage({
   searchParams,
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
   const params = (await searchParams) ?? {};
-  const postOnboardingPath = safeNextPath(firstParam(params.next)) ?? "/dashboard";
+  const nextPath = safeNextPath(firstParam(params.next));
+  const destinationAfterOnboarding = nextPath ? postOnboardingPath(nextPath) : "/dashboard";
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -41,7 +46,7 @@ export default async function OnboardingPage({
     .maybeSingle();
 
   if (profile?.onboarding_completed) {
-    redirect(postOnboardingPath);
+    redirect(destinationAfterOnboarding);
   }
 
   return (
@@ -55,7 +60,7 @@ export default async function OnboardingPage({
             <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
           </Link>
         </div>
-        <OnboardingForm initialData={profile} postOnboardingPath={postOnboardingPath} userId={user.id} />
+        <OnboardingForm initialData={profile} postOnboardingPath={destinationAfterOnboarding} userId={user.id} />
       </div>
     </RivalVideoShell>
   );

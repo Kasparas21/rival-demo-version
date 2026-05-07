@@ -26,6 +26,10 @@ function safeNextPath(value: string | null | undefined): string | null {
   return decoded.startsWith("/") && !decoded.startsWith("//") && decoded !== "/login" ? decoded : null;
 }
 
+function postOnboardingPath(path: string): string {
+  return path === "/checkout" ? "/api/billing/checkout" : path;
+}
+
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.clone();
   const code = url.searchParams.get("code");
@@ -122,12 +126,13 @@ export async function GET(request: NextRequest) {
   const onboardingDone = profile?.onboarding_completed === true;
   const requestedNext = url.searchParams.get("next") ?? request.cookies.get("rival_oauth_next")?.value;
   const safeRequested = safeNextPath(requestedNext);
+  const safePostOnboardingPath = safeRequested ? postOnboardingPath(safeRequested) : null;
 
   let pathname: string;
   if (!onboardingDone) {
     pathname = "/onboarding";
-  } else if (safeRequested) {
-    pathname = safeRequested;
+  } else if (safePostOnboardingPath) {
+    pathname = safePostOnboardingPath;
   } else {
     pathname = "/dashboard";
   }
@@ -136,8 +141,8 @@ export async function GET(request: NextRequest) {
   finalDest.pathname = pathname;
   finalDest.search = "";
   finalDest.hash = "";
-  if (!onboardingDone && safeRequested) {
-    finalDest.searchParams.set("next", safeRequested);
+  if (!onboardingDone && safePostOnboardingPath) {
+    finalDest.searchParams.set("next", safePostOnboardingPath);
   }
 
   const out = NextResponse.redirect(finalDest);

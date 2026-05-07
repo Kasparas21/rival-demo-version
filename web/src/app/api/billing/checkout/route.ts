@@ -13,7 +13,7 @@ async function createCheckoutRedirect() {
 
   if (!user) {
     const loginUrl = new URL("/login", getAppUrl());
-    loginUrl.searchParams.set("next", "/checkout");
+    loginUrl.searchParams.set("next", "/api/billing/checkout");
     return NextResponse.redirect(loginUrl);
   }
 
@@ -37,7 +37,7 @@ async function createCheckoutRedirect() {
     trialInterval: TrialInterval.Day,
     trialIntervalCount: 1,
     successUrl: `${appUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
-    returnUrl: `${appUrl}/checkout`,
+    returnUrl: `${appUrl}/dashboard/settings`,
   });
 
   return NextResponse.redirect(checkout.url);
