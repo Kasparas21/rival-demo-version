@@ -340,7 +340,11 @@ export async function POST(req: Request): Promise<NextResponse> {
       .maybeSingle();
     const currentRuns = monthUsage?.scrape_operations ?? 0;
     const requestedRuns = [...platformsNeedingScrape].filter(isCacheablePlatform).length;
-    if (requestedRuns > 0 && currentRuns + requestedRuns > billing.limits.maxAdLibraryScrapeRunsPerMonth) {
+    if (
+      !billing.isUnlimited &&
+      requestedRuns > 0 &&
+      currentRuns + requestedRuns > billing.limits.maxAdLibraryScrapeRunsPerMonth
+    ) {
       return NextResponse.json(quotaExceededResponseBody(currentRuns, requestedRuns), { status: 402 });
     }
   }

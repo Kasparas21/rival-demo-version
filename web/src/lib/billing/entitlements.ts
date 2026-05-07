@@ -6,7 +6,17 @@ export const BILLING_LIMITS = {
   maxAdLibraryScrapeRunsPerMonth: 15,
 } as const;
 
+export const ADMIN_BILLING_LIMITS = {
+  maxWatchedCompetitors: 1_000_000,
+  maxAdLibraryScrapeRunsPerMonth: 1_000_000,
+} as const;
+
 export const BILLING_PLAN_NAME = "Spy Rival Pro";
+
+export type BillingLimits = {
+  maxWatchedCompetitors: number;
+  maxAdLibraryScrapeRunsPerMonth: number;
+};
 
 export type BillingEntitlement = {
   hasAccess: boolean;
@@ -17,11 +27,21 @@ export type BillingEntitlement = {
   trialEnd: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  limits: typeof BILLING_LIMITS;
+  limits: BillingLimits;
+  isUnlimited: boolean;
 };
 
 export function isSubscriptionStatusAllowed(status: string | null | undefined): boolean {
   return status === "active" || status === "trialing";
+}
+
+function isManualAdminUnlimited(rawPayload: unknown): boolean {
+  return (
+    typeof rawPayload === "object" &&
+    rawPayload !== null &&
+    "admin_unlimited" in rawPayload &&
+    (rawPayload as { admin_unlimited?: unknown }).admin_unlimited === true
+  );
 }
 
 export async function getBillingEntitlement(
@@ -31,12 +51,13 @@ export async function getBillingEntitlement(
   const { data } = await supabase
     .from("billing_subscriptions")
     .select(
-      "status, polar_product_id, polar_product_name, polar_customer_id, trial_end, current_period_end, cancel_at_period_end",
+      "status, polar_product_id, polar_product_name, polar_customer_id, trial_end, current_period_end, cancel_at_period_end, raw_payload",
     )
     .eq("user_id", userId)
     .maybeSingle();
 
   const status = data?.status ?? "none";
+  const isUnlimited = isManualAdminUnlimited(data?.raw_payload);
 
   return {
     hasAccess: isSubscriptionStatusAllowed(status),
@@ -47,12 +68,17 @@ export async function getBillingEntitlement(
     trialEnd: data?.trial_end ?? null,
     currentPeriodEnd: data?.current_period_end ?? null,
     cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,
-    limits: BILLING_LIMITS,
+    limits: isUnlimited ? ADMIN_BILLING_LIMITS : BILLING_LIMITS,
+    isUnlimited,
   };
 }
 
-export function remainingMonthlyScrapeRuns(currentRuns: number, requestedRuns = 0): number {
-  return Math.max(0, BILLING_LIMITS.maxAdLibraryScrapeRunsPerMonth - currentRuns - Math.max(0, requestedRuns));
+export function remainingMonthlyScrapeRuns(
+  currentRuns: number,
+  requestedRuns = 0,
+  limit: number = BILLING_LIMITS.maxAdLibraryScrapeRunsPerMonth,
+): number {
+  return Math.max(0, limit - currentRuns - Math.max(0, requestedRuns));
 }
 
 export function billingRequiredResponseBody(message = "An active subscription is required.") {

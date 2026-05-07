@@ -59,7 +59,11 @@ export async function GET() {
       adLibraryRefreshes: rows.length,
       limits: billing.limits,
       remaining: {
-        adLibraryScrapeRunsThisMonth: remainingMonthlyScrapeRuns(monthRow?.scrape_operations ?? 0),
+        adLibraryScrapeRunsThisMonth: remainingMonthlyScrapeRuns(
+          monthRow?.scrape_operations ?? 0,
+          0,
+          billing.limits.maxAdLibraryScrapeRunsPerMonth,
+        ),
         competitorsWatched: Math.max(0, billing.limits.maxWatchedCompetitors - competitorsWatched),
       },
     },
@@ -73,7 +77,11 @@ export async function GET() {
       cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
       limits: billing.limits,
       remaining: {
-        adLibraryScrapeRunsThisMonth: remainingMonthlyScrapeRuns(monthRow?.scrape_operations ?? 0),
+        adLibraryScrapeRunsThisMonth: remainingMonthlyScrapeRuns(
+          monthRow?.scrape_operations ?? 0,
+          0,
+          billing.limits.maxAdLibraryScrapeRunsPerMonth,
+        ),
         competitorsWatched: Math.max(0, billing.limits.maxWatchedCompetitors - competitorsWatched),
       },
     },

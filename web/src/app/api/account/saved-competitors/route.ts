@@ -111,7 +111,7 @@ export async function POST(request: Request) {
   const items = payload
     .map(normalizeCompetitor)
     .filter((item) => item.slug && item.name)
-    .slice(0, maxWatchedCompetitors);
+    .slice(0, entitlement.isUnlimited ? undefined : maxWatchedCompetitors);
 
   const { data: existingRows, error: existingErr } = await supabase
     .from("saved_competitors")
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
     existingSlugs.add(row.slug);
   }
 
-  if (existingSlugs.size > maxWatchedCompetitors) {
+  if (!entitlement.isUnlimited && existingSlugs.size > maxWatchedCompetitors) {
     return NextResponse.json(
       {
         error: `You can watch at most ${maxWatchedCompetitors} competitors. Remove one to add another.`,
