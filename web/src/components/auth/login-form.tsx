@@ -14,6 +14,12 @@ function buildRedirectTo(path: string) {
   return new URL(path, window.location.origin).toString();
 }
 
+function rememberOAuthNext(path: string) {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `rival_oauth_next=${encodeURIComponent(path)}; Path=/; Max-Age=900; SameSite=Lax${secure}`;
+}
+
 export function LoginForm() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -132,6 +138,7 @@ export function LoginForm() {
     setIsSendingGoogle(true);
     setGoogleError(null);
     setEmailError(null);
+    rememberOAuthNext(next);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",

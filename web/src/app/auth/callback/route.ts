@@ -15,6 +15,17 @@ const OTP_TYPES = new Set<EmailOtpType>([
   "email_change",
 ]);
 
+function safeNextPath(value: string | null | undefined): string | null {
+  if (!value) return null;
+  let decoded = value;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    decoded = value;
+  }
+  return decoded.startsWith("/") && !decoded.startsWith("//") && decoded !== "/login" ? decoded : null;
+}
+
 export async function GET(request: NextRequest) {
   const url = request.nextUrl.clone();
   const code = url.searchParams.get("code");
@@ -109,14 +120,8 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   const onboardingDone = profile?.onboarding_completed === true;
-  const requestedNext = url.searchParams.get("next");
-  const safeRequested =
-    requestedNext &&
-    requestedNext.startsWith("/") &&
-    !requestedNext.startsWith("//") &&
-    requestedNext !== "/login"
-      ? requestedNext
-      : null;
+  const requestedNext = url.searchParams.get("next") ?? request.cookies.get("rival_oauth_next")?.value;
+  const safeRequested = safeNextPath(requestedNext);
 
   let pathname: string;
   if (!onboardingDone) {
@@ -131,10 +136,14 @@ export async function GET(request: NextRequest) {
   finalDest.pathname = pathname;
   finalDest.search = "";
   finalDest.hash = "";
+  if (!onboardingDone && safeRequested) {
+    finalDest.searchParams.set("next", safeRequested);
+  }
 
   const out = NextResponse.redirect(finalDest);
   cookieJar.forEach(({ value, options }, name) => {
     out.cookies.set(name, value, options);
   });
+  out.cookies.set("rival_oauth_next", "", { maxAge: 0, path: "/" });
   return out;
 }

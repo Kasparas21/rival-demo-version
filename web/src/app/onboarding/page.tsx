@@ -5,7 +5,26 @@ import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function OnboardingPage() {
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function firstParam(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function safeNextPath(value: string | null): string | null {
+  return value && value.startsWith("/") && !value.startsWith("//") && value !== "/login" && value !== "/onboarding"
+    ? value
+    : null;
+}
+
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const params = (await searchParams) ?? {};
+  const postOnboardingPath = safeNextPath(firstParam(params.next)) ?? "/dashboard";
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -22,7 +41,7 @@ export default async function OnboardingPage() {
     .maybeSingle();
 
   if (profile?.onboarding_completed) {
-    redirect("/dashboard");
+    redirect(postOnboardingPath);
   }
 
   return (
@@ -36,7 +55,7 @@ export default async function OnboardingPage() {
             <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
           </Link>
         </div>
-        <OnboardingForm initialData={profile} userId={user.id} />
+        <OnboardingForm initialData={profile} postOnboardingPath={postOnboardingPath} userId={user.id} />
       </div>
     </RivalVideoShell>
   );

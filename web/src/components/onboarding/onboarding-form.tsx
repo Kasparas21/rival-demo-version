@@ -15,7 +15,6 @@ import {
   isPlausiblePublicHostname,
   MAX_COMPANY_INPUT_CHARS,
   MAX_ONBOARDING_COMPETITORS,
-  LANDING_COMPETITOR_SESSION_KEY,
   normalizedWorkspaceHost,
   sanitizeCompanyUrlInput,
 } from "@/lib/onboarding/host";
@@ -212,6 +211,7 @@ function mergeScrapeFromSocials(
 
 type Props = {
   userId: string;
+  postOnboardingPath?: string;
   initialData: {
     company_name?: string | null;
     company_url?: string | null;
@@ -234,7 +234,7 @@ type CompetitorEnrichmentRow = {
   socials: { label: string; href: string; handle: string }[];
 };
 
-export function OnboardingForm({ userId, initialData }: Props) {
+export function OnboardingForm({ userId, postOnboardingPath = "/dashboard", initialData }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -346,29 +346,6 @@ export function OnboardingForm({ userId, initialData }: Props) {
     void load();
     return () => ac.abort();
   }, [step, normalizedCompany, brandInsights]);
-
-  /** Prefill competitor from landing hero (`LandingSpySearchBar`) after login redirect. */
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = sessionStorage.getItem(LANDING_COMPETITOR_SESSION_KEY);
-      if (!raw) return;
-      sessionStorage.removeItem(LANDING_COMPETITOR_SESSION_KEY);
-      const host = normalizedWorkspaceHost(sanitizeCompanyUrlInput(raw));
-      if (!isPlausiblePublicHostname(host)) return;
-      setSelectedCompetitors((prev) => {
-        if (prev.length > 0) return prev;
-        return [host];
-      });
-      setCompetitorAdMarkets((m) => {
-        if ((m[host] ?? []).length > 0) return m;
-        const inferred = inferAdMarketFromHostname(host);
-        return { ...m, [host]: inferred ? [inferred] : [] };
-      });
-    } catch {
-      /* ignore quota / access errors */
-    }
-  }, []);
 
   /** Firecrawl scrape for added rival domains — homepage social links only */
   useEffect(() => {
@@ -675,7 +652,7 @@ export function OnboardingForm({ userId, initialData }: Props) {
         /* non-fatal */
       }
 
-      router.push("/dashboard");
+      router.push(postOnboardingPath);
       router.refresh();
     } catch {
       setError("Something went wrong while finishing onboarding. Try again.");
@@ -685,15 +662,13 @@ export function OnboardingForm({ userId, initialData }: Props) {
     }
   };
 
-  const stepLabels = ["Website", "Your brand", "Rivals", "Ad sources"];
-  const totalSteps = 4;
+  const stepLabels = ["Website", "Your brand"];
+  const totalSteps = 2;
 
   const goBack = () => {
     if (saving) return;
     setError(null);
-    if (step === 3) setStep(2);
-    else if (step === 2) setStep(1);
-    else if (step === 1) setStep(0);
+    if (step === 1) setStep(0);
   };
 
   return (
@@ -715,7 +690,7 @@ export function OnboardingForm({ userId, initialData }: Props) {
         </div>
         <div className="flex items-center justify-end gap-3 sm:gap-4">
           <div className="flex items-center gap-1.5">
-            {[0, 1, 2, 3].map((i) => (
+            {[0, 1].map((i) => (
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -876,14 +851,11 @@ export function OnboardingForm({ userId, initialData }: Props) {
 
             <button
               type="button"
-              onClick={() => {
-                setError(null);
-                setStep(2);
-              }}
+              onClick={() => void finish()}
               disabled={brandLoading || saving}
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
-              Continue →
+              {saving ? "Finishing…" : "Finish setup →"}
             </button>
           </>
         ) : null}

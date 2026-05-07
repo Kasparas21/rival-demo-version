@@ -2,6 +2,17 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function firstParam(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+function safeNextPath(value: string | null): string | null {
+  return value && value.startsWith("/") && !value.startsWith("//") && value !== "/login" ? value : null;
+}
+
 function LoginSetupError({ message }: { message: string }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f7f8fb] px-4 py-10">
@@ -17,7 +28,13 @@ function LoginSetupError({ message }: { message: string }) {
   );
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const params = (await searchParams) ?? {};
+  const safeNext = safeNextPath(firstParam(params.next));
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {
     supabase = await createSupabaseServerClient();
@@ -36,9 +53,9 @@ export default async function LoginPage() {
       .eq("id", user.id)
       .maybeSingle();
     if (!profile?.onboarding_completed) {
-      redirect("/onboarding");
+      redirect(safeNext ? `/onboarding?next=${encodeURIComponent(safeNext)}` : "/onboarding");
     }
-    redirect("/dashboard");
+    redirect(safeNext ?? "/dashboard");
   }
 
   return <LoginForm />;

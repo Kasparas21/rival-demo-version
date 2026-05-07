@@ -6,7 +6,6 @@ import { Search } from "lucide-react";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
 import {
   isPlausiblePublicHostname,
-  LANDING_COMPETITOR_SESSION_KEY,
   normalizedWorkspaceHost,
   sanitizeCompanyUrlInput,
 } from "@/lib/onboarding/host";
@@ -15,7 +14,7 @@ type LandingSpySearchBarProps = {
   inputId: string;
 };
 
-/** Hero competitor field: validate domain → stash for onboarding → `/onboarding` (login if needed). */
+/** Hero brand field: validate domain → `/onboarding` (login if needed). */
 export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
   const router = useRouter();
   const [value, setValue] = useState("");
@@ -26,7 +25,7 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
     setValue(sanitized);
     const host = normalizedWorkspaceHost(sanitized);
     if (!host) {
-      setError("Enter a competitor domain.");
+      setError("Enter your brand domain.");
       return;
     }
     if (!isPlausiblePublicHostname(host)) {
@@ -34,11 +33,6 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
       return;
     }
     setError(null);
-    try {
-      sessionStorage.setItem(LANDING_COMPETITOR_SESSION_KEY, host);
-    } catch {
-      /* private mode / quota — still send user to signup */
-    }
     router.push("/onboarding");
   };
 
@@ -56,15 +50,15 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
       >
         <Search className="pointer-events-none absolute left-5 top-6 size-5 text-gray-400 sm:left-4 sm:top-1/2 sm:-translate-y-1/2" aria-hidden strokeWidth={2} />
         <label htmlFor={inputId} className="sr-only">
-          Competitor domain
+          Brand domain
         </label>
         <input
           id={inputId}
-          name="competitor"
+          name="brand"
           type="text"
           inputMode="url"
           autoComplete="url"
-          placeholder="Enter competitor domain"
+          placeholder="Enter your brand domain"
           value={value}
           onChange={(e) => {
             setValue(sanitizeCompanyUrlInput(e.target.value));
@@ -76,7 +70,7 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
           type="submit"
           className="inline-flex w-full shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#1a1a1a] px-7 py-3 font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-black hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto sm:py-2.5"
         >
-          Spy
+          Start
         </button>
       </form>
       {error ? (

@@ -1,8 +1,5 @@
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
-/** SessionStorage: hero “Spy” saves hostname here; onboarding reads once to pre-fill competitors. */
-export const LANDING_COMPETITOR_SESSION_KEY = "rival_landing_competitor_host";
-
 /** Single-line hostname / URL snippet only */
 export const MAX_COMPANY_INPUT_CHARS = 300;
 export const MAX_COMPETITOR_INPUT_CHARS = 12_000;

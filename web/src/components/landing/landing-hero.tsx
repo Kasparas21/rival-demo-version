@@ -97,7 +97,7 @@ export function LandingHero() {
 
         <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">
           <div className="relative z-20 mx-auto w-full max-w-2xl">
-            <LandingSpySearchBar inputId="competitor-domain" />
+            <LandingSpySearchBar inputId="brand-domain" />
           </div>
 
           <div className="relative z-[5] mx-auto w-full max-w-[56rem] px-1 sm:px-6 md:px-8 lg:px-10">
