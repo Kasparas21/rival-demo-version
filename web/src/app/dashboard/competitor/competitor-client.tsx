@@ -18,6 +18,7 @@ import {
   Video,
   Check,
   Loader2,
+  Lock,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
@@ -1054,23 +1055,36 @@ function CompetitorDashboardBody({
           <nav className="flex gap-0 -mb-px overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
+              const isDisabled = "disabled" in tab && tab.disabled;
               const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
+                  type="button"
+                  disabled={isDisabled}
+                  aria-disabled={isDisabled}
+                  title={isDisabled ? "Coming soon" : undefined}
+                  onClick={() => {
+                    if (isDisabled) return;
+                    handleTabChange(tab.id);
+                  }}
                   className={`relative flex items-center gap-2 px-4 py-3 text-[14px] font-medium whitespace-nowrap transition-colors border-b-2 ${
-                    isActive
+                    isDisabled
+                      ? "cursor-not-allowed border-transparent text-[#b8beca] opacity-60"
+                      : isActive
                       ? "border-[#343434] text-[#343434]"
                       : "border-transparent text-[#6b7280] hover:text-[#343434] hover:border-[#DDF1FD]"
                   } ${tab.id === "AI insight" ? "" : ""}`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${
-                    isActive
+                    isDisabled
+                      ? "text-[#b8beca]"
+                      : isActive
                       ? tab.id === "AI insight" ? "text-amber-500" : "text-[#343434]"
                       : "text-[#9ca3af]"
                   }`} />
                   {tab.label}
+                  {isDisabled ? <Lock className="h-3.5 w-3.5 shrink-0 text-[#b8beca]" aria-hidden /> : null}
                 </button>
               );
             })}
