@@ -48,13 +48,13 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
   };
 
   return (
-    <div className="relative mx-auto max-w-2xl">
+    <div className="relative mx-auto w-full max-w-2xl">
       <form
         onSubmit={onSubmit}
-        className={`${glassPillShellClass} relative flex items-center rounded-full px-4 py-2`}
+        className={`${glassPillShellClass} relative flex flex-col gap-2 rounded-3xl px-3 py-3 sm:flex-row sm:items-center sm:rounded-full sm:px-4 sm:py-2`}
         noValidate
       >
-        <Search className="pointer-events-none absolute left-4 size-5 text-gray-400" aria-hidden strokeWidth={2} />
+        <Search className="pointer-events-none absolute left-5 top-6 size-5 text-gray-400 sm:left-4 sm:top-1/2 sm:-translate-y-1/2" aria-hidden strokeWidth={2} />
         <label htmlFor={inputId} className="sr-only">
           Competitor domain
         </label>
@@ -70,11 +70,11 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
             setValue(sanitizeCompanyUrlInput(e.target.value));
             if (error) setError(null);
           }}
-          className="min-w-0 flex-1 border-0 bg-transparent py-3 pl-8 text-base text-[#1a1a1a] outline-none placeholder:text-gray-400"
+          className="min-h-12 w-full min-w-0 flex-1 border-0 bg-transparent py-3 pl-9 pr-2 text-base text-[#1a1a1a] outline-none placeholder:text-gray-400 sm:pl-8"
         />
         <button
           type="submit"
-          className="inline-flex shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#1a1a1a] px-7 py-2.5 font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-black hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+          className="inline-flex w-full shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#1a1a1a] px-7 py-3 font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-black hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto sm:py-2.5"
         >
           Spy
         </button>

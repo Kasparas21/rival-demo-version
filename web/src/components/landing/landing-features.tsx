@@ -33,19 +33,19 @@ function FeatureFig({ src, alt, width, height }: FeatureFigProps) {
 
 export function LandingFeatures() {
   return (
-    <section className="relative z-[11] bg-white py-24 text-center">
-      <div className="mx-auto max-w-6xl px-6">
-        <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-5xl font-bold text-[#1a1a1a]`}>
+    <section className="relative z-[11] overflow-hidden bg-white py-16 text-center sm:py-24">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
           See competitors clearly <span className="text-[#4a7fa5]">in</span>
           <br />
           <span className="text-[#4a7fa5]">seconds.</span>
         </h2>
-        <p className="mx-auto mt-4 max-w-lg text-base text-gray-500">
+        <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">
           Stop hopping between six different transparency tools. Rival pulls every active ad, decodes the funnel, and shows you the gaps —
           in one search.
         </p>
 
-        <div className="mt-16 grid grid-cols-1 gap-10 text-left md:grid-cols-3 md:gap-8">
+        <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:gap-8">
           <article className="flex flex-col">
             <FeatureFig
               src="/landing/features/feature-ads-library.png"

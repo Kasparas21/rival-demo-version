@@ -42,15 +42,15 @@ const reviews = [
 
 export function LandingReviews() {
   return (
-    <section className="py-24 text-center">
-      <div className="mx-auto max-w-6xl px-6">
-        <h2 id="reviews" className={`${landingNavAnchorScrollClasses} text-5xl font-bold text-[#1a1a1a]`}>
+    <section className="overflow-hidden py-16 text-center sm:py-24">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <h2 id="reviews" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
           The preferred tool
           <br />
           <span className="text-[#4a7fa5]">of performance marketers.</span>
         </h2>
 
-        <div className="mt-16 grid grid-cols-1 gap-5 text-left sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-5 text-left sm:mt-16 sm:grid-cols-2 lg:grid-cols-3">
           {reviews.map((r) => (
             <article key={r.name} className="rounded-2xl bg-white p-6 shadow-sm">
               <div className="flex items-start gap-3">

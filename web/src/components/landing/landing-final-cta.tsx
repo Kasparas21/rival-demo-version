@@ -2,14 +2,14 @@ import Link from "next/link";
 
 export function LandingFinalCTA() {
   return (
-    <section className="py-32 text-center">
-      <div className="mx-auto max-w-6xl px-6">
-        <h2 className="text-6xl font-bold leading-tight text-[#1a1a1a]">
+    <section className="overflow-hidden py-20 text-center sm:py-32">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <h2 className="text-[clamp(2.65rem,12vw,4.5rem)] font-bold leading-[1.05] tracking-[-0.04em] text-[#1a1a1a]">
           Stop guessing what your
           <br />
           competitor <span className="text-[#4a7fa5]">is doing.</span>
         </h2>
-        <p className="mx-auto mt-5 max-w-sm text-base text-gray-500">
+        <p className="mx-auto mt-5 max-w-sm text-sm leading-6 text-gray-500 sm:text-base">
           Run your first competitor search free. See every ad. Every platform. In 30 seconds.
         </p>
         <div className="mt-8 flex flex-col items-center gap-6">
@@ -20,12 +20,12 @@ export function LandingFinalCTA() {
             </span>
           </div>
           <Link
-            href="/onboarding"
-            className="rounded-full bg-[#1a1a1a] px-12 py-5 text-lg font-semibold text-white shadow-xl hover:opacity-90"
+            href="/checkout"
+            className="w-full max-w-sm rounded-full bg-[#1a1a1a] px-8 py-4 text-base font-semibold text-white shadow-xl hover:opacity-90 sm:w-auto sm:max-w-none sm:px-12 sm:py-5 sm:text-lg"
           >
-            Try Rival for $3 — 3 days full access
+            Start your 1-day free trial
           </Link>
-          <p className="mt-4 text-xs text-gray-400">No credit card required to start · Cancel anytime</p>
+          <p className="mt-4 text-xs text-gray-400">Cancel anytime from your Polar customer portal</p>
         </div>
       </div>
     </section>

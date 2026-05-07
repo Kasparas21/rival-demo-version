@@ -50,18 +50,18 @@ export function LandingFAQ() {
   };
 
   return (
-    <section className="py-24 text-center">
-      <div className="mx-auto max-w-6xl px-6">
+    <section className="overflow-hidden py-16 text-center sm:py-24">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-[#4a7fa5]">
           NOT CONVINCED YET?
         </p>
-        <h2 id="faq" className={`${landingNavAnchorScrollClasses} mt-2 text-5xl font-bold text-[#1a1a1a]`}>
+        <h2 id="faq" className={`${landingNavAnchorScrollClasses} mt-2 text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
           Frequently asked
           <br />
           <span className="text-[#4a7fa5]">questions.</span>
         </h2>
 
-        <div className="mx-auto mt-16 max-w-3xl space-y-3 text-left">
+        <div className="mx-auto mt-10 max-w-3xl space-y-3 text-left sm:mt-16">
           {faqItems.map((item, idx) => {
             const expanded = open[idx];
             return (
@@ -69,7 +69,7 @@ export function LandingFAQ() {
                 key={item.q}
                 type="button"
                 onClick={() => toggle(idx)}
-                className="w-full cursor-pointer rounded-2xl bg-white px-7 py-5 text-left shadow-sm hover:bg-neutral-50/80"
+                className="w-full cursor-pointer rounded-2xl bg-white px-5 py-4 text-left shadow-sm hover:bg-neutral-50/80 sm:px-7 sm:py-5"
               >
                 <div className="flex items-start justify-between gap-6">
                   <span className="text-base font-medium text-[#1a1a1a]">{item.q}</span>

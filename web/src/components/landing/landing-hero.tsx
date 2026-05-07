@@ -15,7 +15,7 @@ import {
 
 function PlatformIconCircle({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex size-[4.25rem] shrink-0 items-center justify-center rounded-full bg-white shadow-[0_4px_14px_rgba(26,26,26,0.08),0_1px_3px_rgba(26,26,26,0.06)] sm:size-16 md:size-[4.5rem]">
+    <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_4px_14px_rgba(26,26,26,0.08),0_1px_3px_rgba(26,26,26,0.06)] sm:size-16 md:size-[4.5rem]">
       {children}
     </div>
   );
@@ -67,7 +67,7 @@ export function LandingHero() {
   ];
 
   return (
-    <section className="relative isolate overflow-hidden pb-28 pt-[calc(4.875rem+3.75rem)] text-center sm:pt-[calc(5.5rem+3.75rem)]">
+    <section className="relative isolate overflow-hidden pb-20 pt-28 text-center sm:pb-28 sm:pt-[calc(5.5rem+3.75rem)]">
       {/* Same stack as `/login` (RivalVideoShell): full-bleed, including behind the fixed header */}
       <div
         aria-hidden
@@ -82,10 +82,10 @@ export function LandingHero() {
         className="pointer-events-none absolute inset-x-0 bottom-0 left-1/2 z-[1] h-[min(46vh,460px)] w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent via-white/[0.55] via-[45%] to-white"
       />
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6">
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h1
           id="how-it-works"
-          className={`${landingNavAnchorScrollClasses} mb-8 text-7xl font-extrabold leading-tight text-[#1a1a1a]`}
+          className={`${landingNavAnchorScrollClasses} mx-auto mb-6 max-w-[11ch] text-[clamp(3.25rem,16vw,7rem)] font-extrabold leading-[0.96] tracking-[-0.055em] text-[#1a1a1a] sm:mb-8 sm:max-w-none sm:tracking-[-0.04em]`}
         >
           Spy your
           <br />
@@ -95,14 +95,14 @@ export function LandingHero() {
           <span className="font-serif font-normal italic">all platforms</span>
         </h1>
 
-        <div className="relative mx-auto w-full max-w-5xl overflow-visible">
-          <div className="relative z-20 mx-auto max-w-2xl">
+        <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">
+          <div className="relative z-20 mx-auto w-full max-w-2xl">
             <LandingSpySearchBar inputId="competitor-domain" />
           </div>
 
-          <div className="relative z-[5] mx-auto w-full max-w-[56rem] px-4 sm:px-6 md:px-8 lg:px-10">
+          <div className="relative z-[5] mx-auto w-full max-w-[56rem] px-1 sm:px-6 md:px-8 lg:px-10">
             {/* Aspect matches viewBox so horizontal positions line up with the icon grid */}
-            <div className="relative -mt-1 w-full max-w-full overflow-visible [aspect-ratio:1000/240]">
+            <div className="relative -mt-1 hidden w-full max-w-full overflow-visible [aspect-ratio:1000/240] sm:block">
               <svg
                 className="absolute inset-0 h-full w-full text-[#bfbfbf]"
                 viewBox="0 0 1000 240"
@@ -133,8 +133,8 @@ export function LandingHero() {
               </svg>
             </div>
 
-            <div className="relative z-10 -mt-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:overflow-visible">
-              <div className="mx-auto grid w-full min-w-[320px] grid-cols-6 gap-x-5 sm:min-w-0 sm:gap-x-6 md:gap-x-7">
+            <div className="relative z-10 mt-7 overflow-hidden pb-1 sm:-mt-2 sm:overflow-visible">
+              <div className="mx-auto grid w-full max-w-[22rem] grid-cols-3 gap-x-3 gap-y-5 sm:max-w-none sm:grid-cols-6 sm:gap-x-6 md:gap-x-7">
                 {platforms.map(({ name, icon }) => (
                   <div key={name} className="flex min-w-0 flex-col items-center gap-2.5 pt-1">
                     <PlatformIconCircle>{icon}</PlatformIconCircle>

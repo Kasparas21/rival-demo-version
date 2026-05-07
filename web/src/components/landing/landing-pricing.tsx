@@ -85,9 +85,9 @@ export function LandingPricing() {
   const [billing, setBilling] = useState<Billing>("monthly");
 
   return (
-    <section className="py-24 text-center">
-      <div className="mx-auto max-w-6xl px-6">
-        <h2 id="pricing" className={`${landingNavAnchorScrollClasses} text-5xl font-bold text-[#1a1a1a]`}>
+    <section className="overflow-hidden py-16 text-center sm:py-24">
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <h2 id="pricing" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
           The only ad intelligence subscription <br />
           you&apos;ll ever
           <br />
@@ -100,13 +100,13 @@ export function LandingPricing() {
         <div
           role="radiogroup"
           aria-label="Billing period"
-          className="mx-auto mt-10 inline-flex rounded-full bg-gray-100/90 p-1 shadow-inner ring-1 ring-black/[0.04]"
+          className="mx-auto mt-8 inline-flex max-w-full rounded-full bg-gray-100/90 p-1 shadow-inner ring-1 ring-black/[0.04] sm:mt-10"
         >
           <button
             type="button"
             role="radio"
             aria-checked={billing === "monthly"}
-            className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors sm:px-5 ${
               billing === "monthly" ? "bg-white text-[#1a1a1a] shadow-sm" : "text-gray-500 hover:text-[#1a1a1a]"
             }`}
             onClick={() => setBilling("monthly")}
@@ -117,7 +117,7 @@ export function LandingPricing() {
             type="button"
             role="radio"
             aria-checked={billing === "annual"}
-            className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors sm:px-5 ${
               billing === "annual" ? "bg-white text-[#1a1a1a] shadow-sm" : "text-gray-500 hover:text-[#1a1a1a]"
             }`}
             onClick={() => setBilling("annual")}
@@ -126,9 +126,9 @@ export function LandingPricing() {
           </button>
         </div>
 
-        <div className="mt-14 grid grid-cols-1 items-stretch gap-8 text-left lg:grid-cols-3 lg:gap-6">
+        <div className="mt-10 grid grid-cols-1 items-stretch gap-6 text-left sm:mt-14 lg:grid-cols-3 lg:gap-6">
           {/* Starter */}
-          <div className="flex flex-col rounded-3xl bg-white p-8 shadow-lg">
+          <div className="flex flex-col rounded-3xl bg-white p-6 shadow-lg sm:p-8">
             <p className="text-xl font-bold text-[#1a1a1a]">Starter</p>
             <PricingBlock billing={billing} listMonthlyUsd={19} />
             <p className="mt-4 text-sm font-bold text-[#1a1a1a]">5 searches included monthly</p>
@@ -153,7 +153,7 @@ export function LandingPricing() {
           </div>
 
           {/* Pro — highlighted */}
-          <div className="relative flex flex-col rounded-3xl border-2 border-[#4a7fa5] bg-white p-8 shadow-[0_4px_28px_-4px_rgba(74,127,165,0.55),0_22px_56px_-12px_rgba(74,127,165,0.42),0_42px_90px_-24px_rgba(74,127,165,0.28)]">
+          <div className="relative flex flex-col rounded-3xl border-2 border-[#4a7fa5] bg-white p-6 shadow-[0_4px_28px_-4px_rgba(74,127,165,0.45),0_22px_56px_-12px_rgba(74,127,165,0.32)] sm:p-8 lg:shadow-[0_4px_28px_-4px_rgba(74,127,165,0.55),0_22px_56px_-12px_rgba(74,127,165,0.42),0_42px_90px_-24px_rgba(74,127,165,0.28)]">
             <span className="absolute right-6 top-6 rounded-full bg-[#4a7fa5] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
               Most Popular
             </span>
@@ -179,7 +179,7 @@ export function LandingPricing() {
           </div>
 
           {/* Agency */}
-          <div className="flex flex-col rounded-3xl bg-white p-8 shadow-lg">
+          <div className="flex flex-col rounded-3xl bg-white p-6 shadow-lg sm:p-8">
             <p className="text-xl font-bold text-[#1a1a1a]">Agency</p>
             <PricingBlock billing={billing} listMonthlyUsd={89} />
             <p className="mt-4 text-sm font-bold text-[#1a1a1a]">40 searches included monthly</p>
@@ -203,7 +203,7 @@ export function LandingPricing() {
           </div>
         </div>
 
-        <div className="mx-auto mt-12 max-w-fit rounded-full bg-white px-6 py-3 text-sm text-gray-600 shadow-sm">
+        <div className="mx-auto mt-10 max-w-full rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-gray-600 shadow-sm sm:mt-12 sm:max-w-fit sm:rounded-full sm:px-6">
           Switching from{" "}
           <a
             href="https://www.spyfu.com"

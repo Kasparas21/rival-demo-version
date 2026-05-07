@@ -9,10 +9,10 @@ import { LandingReviews } from "@/components/landing/landing-reviews";
 
 export default function LandingHome() {
   return (
-    <div className="font-sans text-[#1a1a1a] antialiased">
+    <div className="w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased">
       <LandingHeader />
       {/* Hero handles top padding under the fixed header so its video backdrop can reach the top edge */}
-      <div>
+      <div className="w-full overflow-x-clip">
         <LandingHero />
         <LandingBrandMarquee />
         <LandingFeatures />

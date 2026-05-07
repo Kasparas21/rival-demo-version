@@ -72,9 +72,9 @@ function SocialIcons() {
 
 export function LandingFooter() {
   return (
-    <footer id="affiliates" className={`${landingNavAnchorScrollClasses} bg-[#f5f0e5] pt-16 pb-8`}>
-      <div className="mx-auto max-w-6xl px-6">
-        <div className="grid grid-cols-2 gap-10 md:grid-cols-4">
+    <footer id="affiliates" className={`${landingNavAnchorScrollClasses} overflow-hidden bg-[#f5f0e5] pb-8 pt-14 sm:pt-16`}>
+      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div className="grid grid-cols-1 gap-9 text-center sm:grid-cols-2 sm:text-left md:grid-cols-4 md:gap-10">
           {columns.map((col) => (
             <div key={col.title}>
               <h3 className="mb-4 text-xs font-bold tracking-widest text-[#1a1a1a]">
@@ -97,7 +97,9 @@ export function LandingFooter() {
         <div className="mt-12 flex flex-col items-center gap-6 border-t border-gray-200 pt-6 text-xs text-gray-400 md:flex-row md:justify-between">
           <span>© 2026 Spy Rival</span>
           <SocialIcons />
-          <span>Support: hello@spy-rival.com</span>
+          <a href="mailto:hello@spy-rival.com" className="hover:text-[#4a7fa5]">
+            Support: hello@spy-rival.com
+          </a>
         </div>
       </div>
     </footer>
