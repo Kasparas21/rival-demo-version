@@ -7,8 +7,8 @@ export const CACHEABLE_PLATFORMS = [
   "google",
   "linkedin",
   "tiktok",
-  "microsoft",
   "pinterest",
+  "snapchat",
 ] as const;
 
 export type CacheablePlatform = (typeof CACHEABLE_PLATFORMS)[number];

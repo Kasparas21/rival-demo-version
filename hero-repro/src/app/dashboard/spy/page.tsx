@@ -125,60 +125,58 @@ export default function SpyOnCompetitorPage() {
       channels: selectedChannels,
     });
     setInputValue("");
-    router.push(`/dashboard/searching?${params.toString()}`);
+    router.push(`/dashboard/searching?${params.toString()}`, { scroll: false });
   };
 
   const fullQuery = inputValue.trim() ? [...termValues, inputValue.trim()].join(" ") : termValues.join(" ");
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12 h-full min-h-screen">
-      <div className="w-full max-w-2xl flex flex-col items-center mt-[-6vh] sm:mt-[-10vh]">
-        <h1 className="mb-[5vh] sm:mb-[6vh] flex justify-center filter drop-shadow-sm">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center px-6 py-10 sm:px-10 sm:py-14">
+      <div className="flex w-full max-w-2xl flex-col items-center">
+        <h1 className="mb-8 flex justify-center filter drop-shadow-sm sm:mb-10">
           <RivalLogoImg className="h-12 w-auto max-w-[min(320px,88vw)] object-contain sm:h-16" />
         </h1>
 
-        <div className="w-full text-center flex flex-col items-center relative">
-          <h2 className="text-[13px] sm:text-[15px] font-bold tracking-[0.15em] text-[#808080] uppercase mb-2 sm:mb-3">
+        <div className="relative flex w-full flex-col items-center text-center">
+          <h2 className="mb-2 text-[13px] font-bold uppercase tracking-[0.15em] text-[#808080] sm:mb-3 sm:text-[15px]">
             Find your competitor
           </h2>
-          <p className="text-[14px] text-[#9ca3af] font-medium max-w-md mx-auto mb-5 sm:mb-6 leading-snug">
+          <p className="mx-auto mb-5 max-w-md text-[14px] font-medium leading-snug text-[#9ca3af] sm:mb-6">
             Enter a URL, brand name, or keyword — we&apos;ll discover their ad profiles across platforms.
           </p>
 
           <form
             onSubmit={handleSpy}
-            className="w-full sm:max-w-[640px] mb-8 min-h-[72px] flex flex-wrap items-center gap-2 p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] rounded-[28px] bg-white/40 backdrop-blur-md border border-white/60 transition-all duration-300 hover:bg-white/50 hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] focus-within:ring-4 focus-within:ring-[#DDF1FD] focus-within:border-[#DDF1FD] focus-within:bg-white/60"
+            className="mb-8 flex min-h-[72px] w-full flex-wrap items-center gap-2 rounded-[28px] border border-white/60 bg-white/40 p-2.5 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-[background-color,box-shadow,border-color] duration-300 ease-out motion-safe:hover:bg-white/50 motion-safe:hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] focus-within:border-[#DDF1FD]/90 focus-within:bg-white/55 focus-within:shadow-[0_10px_36px_0_rgba(31,38,135,0.09)] motion-safe:focus-within:ring-2 motion-safe:focus-within:ring-[#DDF1FD]/90 motion-reduce:focus-within:outline motion-reduce:focus-within:outline-2 motion-reduce:focus-within:outline-offset-2 motion-reduce:focus-within:outline-[#DDF1FD] sm:max-w-[640px] sm:p-3"
           >
-            <div className="pl-2 sm:pl-3 text-gray-500 shrink-0">
+            <div className="pl-2 text-gray-500 sm:pl-3 shrink-0">
               <Search size={20} strokeWidth={2.5} />
             </div>
 
-            <div className="flex-1 flex flex-wrap items-center gap-2 min-w-0">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               {terms.map((entry, i) => {
                 const type = getDisplayType(entry);
                 return (
                   <span
                     key={`${entry.value}-${i}`}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[13px] font-medium border ${TYPE_STYLES[type]}`}
+                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[13px] font-medium ${TYPE_STYLES[type]}`}
                   >
-                    <span className="truncate max-w-[140px] sm:max-w-[180px]" title={entry.value}>
+                    <span className="max-w-[140px] truncate sm:max-w-[180px]" title={entry.value}>
                       {entry.value}
                     </span>
                     <button
                       type="button"
                       onClick={() => cycleTermType(i)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/50 hover:bg-white/80 transition-colors cursor-pointer border border-black/5"
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-black/5 bg-white/50 px-2 py-0.5 transition-colors hover:bg-white/80"
                       title="Click to change: URL, Brand, or Keyword"
                     >
-                      <span className="text-[11px] font-semibold uppercase tracking-wide">
-                        {TYPE_LABELS[type]}
-                      </span>
+                      <span className="text-[11px] font-semibold uppercase tracking-wide">{TYPE_LABELS[type]}</span>
                       <RefreshCw size={11} className="opacity-70" aria-hidden />
                     </button>
                     <button
                       type="button"
                       onClick={() => removeTerm(i)}
-                      className="w-5 h-5 rounded-full flex items-center justify-center hover:bg-black/10 transition-colors shrink-0"
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-black/10"
                       aria-label={`Remove ${entry.value}`}
                     >
                       <X size={12} strokeWidth={2.5} />
@@ -194,31 +192,27 @@ export default function SpyOnCompetitorPage() {
                   onKeyDown={handleKeyDown}
                   placeholder={terms.length === 0 ? "Enter a URL, brand name, or keyword" : "Add more..."}
                   type="text"
-                  className="flex-1 min-w-[120px] bg-transparent border-none text-[#343434] py-2 px-1 text-base sm:text-[17px] focus:outline-none placeholder:text-gray-400 font-medium tracking-wide"
+                  className="min-w-[120px] flex-1 border-none bg-transparent px-1 py-2 text-base font-medium tracking-wide text-[#343434] placeholder:text-gray-400 focus:outline-none sm:text-[17px]"
                 />
               ) : (
-                <span className="text-[13px] text-[#808080] font-medium py-2 px-1">
-                  Remove one to add more
-                </span>
+                <span className="px-1 py-2 text-[13px] font-medium text-[#808080]">Remove one to add more</span>
               )}
             </div>
 
             <button
               type="submit"
-              className="flex items-center justify-center shrink-0 h-[44px] sm:h-[48px] w-[80px] sm:w-[100px] rounded-[20px] bg-[#343434] text-white font-semibold shadow-lg hover:bg-[#2a2a2a] hover:scale-[1.02] active:scale-95 transition-all duration-200 cursor-pointer text-sm sm:text-[16px] tracking-wide"
+              className="flex h-[44px] w-[80px] shrink-0 cursor-pointer items-center justify-center rounded-[20px] bg-[#343434] text-sm font-semibold tracking-wide text-white shadow-lg transition-[background-color,transform] duration-200 ease-out hover:bg-[#2a2a2a] motion-safe:active:scale-[0.98] sm:h-[48px] sm:w-[100px] sm:text-[16px]"
             >
               Spy
             </button>
           </form>
 
-          <p className="text-[14px] sm:text-[15px] text-[#808080] font-medium max-w-lg mx-auto leading-relaxed mb-1">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-white/80 text-[#343434] font-mono text-[13px]">Enter</kbd> to add each one. Wrong type? Click the label to change it.
+          <p className="mx-auto mb-1 max-w-lg text-[14px] font-medium leading-relaxed text-[#808080] sm:text-[15px]">
+            Press{" "}
+            <kbd className="rounded bg-white/80 px-1.5 py-0.5 font-mono text-[13px] text-[#343434]">Enter</kbd> to
+            add each one. Wrong type? Click the label to change it.
           </p>
-          {atLimit && (
-            <p className="text-[13px] text-[#a1a1aa] font-medium">
-              {terms.length}/{MAX_TERMS} terms
-            </p>
-          )}
+          {atLimit && <p className="text-[13px] font-medium text-[#a1a1aa]">{terms.length}/{MAX_TERMS} terms</p>}
         </div>
       </div>
 

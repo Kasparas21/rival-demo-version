@@ -31,7 +31,7 @@ async function getAuthenticatedUser() {
     return { supabase, user: null };
   }
 
-  await ensureUserProfile(user);
+  await ensureUserProfile(supabase, user);
   return { supabase, user };
 }
 

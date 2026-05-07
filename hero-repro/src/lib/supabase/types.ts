@@ -15,6 +15,10 @@ export type Database = {
           email: string | null;
           full_name: string | null;
           avatar_url: string | null;
+          company_name: string | null;
+          company_url: string | null;
+          company_role: string | null;
+          onboarding_completed: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -23,6 +27,10 @@ export type Database = {
           email?: string | null;
           full_name?: string | null;
           avatar_url?: string | null;
+          company_name?: string | null;
+          company_url?: string | null;
+          company_role?: string | null;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -31,8 +39,48 @@ export type Database = {
           email?: string | null;
           full_name?: string | null;
           avatar_url?: string | null;
+          company_name?: string | null;
+          company_url?: string | null;
+          company_role?: string | null;
+          onboarding_completed?: boolean;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      brands: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          domain: string | null;
+          logo_url: string | null;
+          color: string | null;
+          is_primary: boolean;
+          brand_context: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          domain?: string | null;
+          logo_url?: string | null;
+          color?: string | null;
+          is_primary?: boolean;
+          brand_context?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
+          domain?: string | null;
+          logo_url?: string | null;
+          color?: string | null;
+          is_primary?: boolean;
+          brand_context?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };

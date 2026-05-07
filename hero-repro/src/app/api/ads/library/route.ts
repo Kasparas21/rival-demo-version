@@ -3,17 +3,16 @@ import { ApifyRunnerError } from "@/lib/apify/client";
 import { scrapeFacebookAds } from "@/lib/apify/facebook-ads";
 import { buildGoogleSearchTerms, scrapeGoogleAdsTransparency } from "@/lib/apify/google-ads";
 import { scrapeLinkedInAdLibrary } from "@/lib/apify/linkedin-ads";
-import { scrapeMicrosoftAdsLibrary } from "@/lib/apify/microsoft-ads";
 import { scrapePinterestAdsLibrary } from "@/lib/apify/pinterest-ads";
 import { scrapeTikTokAdsLibrary } from "@/lib/apify/tiktok-ads";
 import {
   googleItemToRow,
   linkedInItemToCard,
-  microsoftDatasetItemToCard,
   pinterestDatasetItemToCard,
 } from "@/lib/ad-library/normalize";
 import { ADS_CACHE_TTL_MS, CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
@@ -23,7 +22,6 @@ import {
 } from "@/lib/ad-library/google-ads-regions";
 import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
-import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-options";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 
 export const runtime = "nodejs";
@@ -73,11 +71,6 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
     tiktokMaxAds?: number;
     tiktokStartDate?: string;
     tiktokEndDate?: string;
-    microsoftMaxSearchResults?: number;
-    /** Single Microsoft Ads Library market code (e.g. `66` = Germany) */
-    microsoftCountryCode?: string;
-    microsoftStartDate?: string;
-    microsoftEndDate?: string;
     pinterestMaxResults?: number;
     pinterestStartDate?: string;
     pinterestEndDate?: string;
@@ -111,6 +104,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
         tiktok: { ads: [], error: "Invalid JSON" },
         microsoft: { ads: [], error: "Invalid JSON" },
         pinterest: { ads: [], error: "Invalid JSON" },
+        snapchat: { ads: [], error: "Invalid JSON" },
       },
       { status: 400 }
     );
@@ -134,13 +128,6 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
   const tiktokMaxAds = Math.max(1, Math.min(body.tiktokMaxAds ?? MAX_ADS, MAX_ADS));
   const tiktokStartDate = body.tiktokStartDate?.trim();
   const tiktokEndDate = body.tiktokEndDate?.trim();
-  const microsoftMaxSearchResults = Math.max(
-    24,
-    Math.min(body.microsoftMaxSearchResults ?? MAX_ADS, MAX_ADS, 1000)
-  );
-  const microsoftCountryCodes = microsoftMarketCodeToArray(body.microsoftCountryCode ?? "66");
-  const microsoftStartDate = body.microsoftStartDate?.trim();
-  const microsoftEndDate = body.microsoftEndDate?.trim();
   const pinterestMaxResults = Math.max(
     1,
     Math.min(body.pinterestMaxResults ?? MAX_ADS, MAX_ADS, 1000)
@@ -155,14 +142,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
   const googleRegion = normalizeGoogleAdsRegion(body.googleRegion);
   const googleResultsLimit = normalizeGoogleAdsResultsLimit(body.googleResultsLimit);
   const pinterestCountry = normalizePinterestAdsCountry(body.pinterestCountry);
-  const ALL_PLATFORMS: AdsLibraryPlatform[] = [
-    "meta",
-    "google",
-    "linkedin",
-    "tiktok",
-    "microsoft",
-    "pinterest",
-  ];
+  const ALL_PLATFORMS = ALL_ADS_API_PLATFORMS;
   const platformsRequested = new Set<AdsLibraryPlatform>();
   if (Array.isArray(body.platforms)) {
     if (body.platforms.length === 0) {
@@ -192,6 +172,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
         tiktok: { ads: [], error: msg },
         microsoft: { ads: [], error: msg },
         pinterest: { ads: [], error: msg },
+        snapchat: { ads: [], error: msg },
       },
       { status: 503 }
     );
@@ -216,6 +197,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
           tiktok: { ads: [], error: null },
           microsoft: { ads: [], error: null },
           pinterest: { ads: [], error: err },
+          snapchat: { ads: [], error: null },
         },
         { status: 400 }
       );
@@ -268,6 +250,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
     tiktok: { ads: [], error: null },
     microsoft: { ads: [], error: null },
     pinterest: { ads: [], error: null },
+    snapchat: { ads: [], error: null },
   };
 
   for (const [platform, data] of platformCacheHits) {
@@ -279,10 +262,9 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
       out.linkedin = data as AdsLibraryResponse["linkedin"];
     if (platform === "tiktok")
       out.tiktok = data as AdsLibraryResponse["tiktok"];
-    if (platform === "microsoft")
-      out.microsoft = data as AdsLibraryResponse["microsoft"];
     if (platform === "pinterest")
       out.pinterest = data as AdsLibraryResponse["pinterest"];
+    if (platform === "snapchat") out.snapchat = data as AdsLibraryResponse["snapchat"];
   }
 
   const isPartial = platformsRequested.size < ALL_PLATFORMS.length;
@@ -361,25 +343,6 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
       }
     })(),
     (async () => {
-      if (!platformsRequested.has("microsoft") || !platformsNeedingScrape.has("microsoft")) return;
-      try {
-        const rows = await scrapeMicrosoftAdsLibrary({
-          brandName,
-          maxSearchResults: microsoftMaxSearchResults,
-          advertiserIdOverride: ids.microsoft,
-          countryCodes: microsoftCountryCodes,
-          startDate: microsoftStartDate,
-          endDate: microsoftEndDate,
-        });
-        out.microsoft.ads = rows
-          .slice(0, microsoftMaxSearchResults)
-          .map((raw, i) => microsoftDatasetItemToCard(raw, i));
-      } catch (e) {
-        out.microsoft.error =
-          e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Microsoft ads failed";
-      }
-    })(),
-    (async () => {
       if (!platformsRequested.has("pinterest") || !platformsNeedingScrape.has("pinterest")) return;
       try {
         const rows = await scrapePinterestAdsLibrary({
@@ -424,9 +387,9 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
               ? out.linkedin
               : p === "tiktok"
                 ? out.tiktok
-                : p === "microsoft"
-                  ? out.microsoft
-                  : out.pinterest
+                : p === "pinterest"
+                  ? out.pinterest
+                  : out.snapchat
       ) as unknown as Json;
       rows.push({
         user_id: userId,
@@ -468,8 +431,8 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
     if (platformsRequested.has("google")) partialBody.google = out.google;
     if (platformsRequested.has("linkedin")) partialBody.linkedin = out.linkedin;
     if (platformsRequested.has("tiktok")) partialBody.tiktok = out.tiktok;
-    if (platformsRequested.has("microsoft")) partialBody.microsoft = out.microsoft;
     if (platformsRequested.has("pinterest")) partialBody.pinterest = out.pinterest;
+    if (platformsRequested.has("snapchat")) partialBody.snapchat = out.snapchat;
     return NextResponse.json(partialBody as unknown as AdsLibraryResponse);
   }
 

@@ -21,15 +21,43 @@ import {
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import { getDashboardDemoCompetitors } from "@/lib/dashboard-demo-competitors";
+import { competitorHostFromDashboardPathname } from "@/lib/competitor-dashboard-url";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { fetchSavedCompetitorsFromAccount, syncCompetitorsToAccount } from "@/lib/account/client";
 import { DemoBanner } from "@/components/demo-banner";
+
+const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
 const defaultBrands: Brand[] = [
   { id: "my-brand", name: "My Brand", badge: "M", color: "#343434" },
   { id: "agency", name: "Agency Account", badge: "A", color: "#5a99b8" },
   { id: "growth-lab", name: "Growth Lab", badge: "G", color: "#95C14B" },
 ];
+
+function mapApiBrandRow(row: {
+  id: string;
+  name: string;
+  domain?: string | null;
+  logo_url?: string | null;
+  color?: string | null;
+}): Brand {
+  const name = row.name?.trim() || "Brand";
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+  const badge = initials.length > 0 ? initials.slice(0, 2) : name.slice(0, 2).toUpperCase() || "B";
+  return {
+    id: row.id,
+    name,
+    badge,
+    logoUrl: row.logo_url?.trim() || undefined,
+    color: row.color?.trim() || "#343434",
+  };
+}
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -43,6 +71,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [savedCompetitors, setSavedCompetitors] = useState<SidebarCompetitor[]>([]);
   const [competitorFilter, setCompetitorFilter] = useState("");
   const competitorSearchRef = useRef<HTMLInputElement>(null);
+  const [userProfile, setUserProfile] = useState<{
+    full_name?: string | null;
+    company_name?: string | null;
+    email?: string | null;
+    avatar_url?: string | null;
+  } | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   const demoSidebarCompetitors: SidebarCompetitor[] = useMemo(() => getDashboardDemoCompetitors(), []);
 
@@ -66,38 +101,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hydrateDashboardPrefs = useCallback(() => {
-    const raw = window.localStorage.getItem("rival_brands");
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as Brand[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setBrands(parsed);
-        }
-      } catch {
-        // Ignore malformed local data and fall back to defaults.
-      }
-    } else {
-      const legacy = window.localStorage.getItem("rival_workspaces");
-      if (legacy) {
-        try {
-          const parsed = JSON.parse(legacy) as { id: string; name: string; badge: string; logoUrl?: string }[];
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const migrated: Brand[] = parsed.map((workspace) => ({
-              id: workspace.id,
-              name: workspace.name,
-              badge: workspace.badge,
-              logoUrl: workspace.logoUrl,
-              color: "#343434",
-            }));
-            setBrands(migrated);
-            window.localStorage.removeItem("rival_workspaces");
-          }
-        } catch {
-          // Ignore malformed legacy data and fall back to defaults.
-        }
-      }
-    }
-
     const storedActive =
       window.localStorage.getItem("rival_active_brand") ??
       window.localStorage.getItem("rival_active_workspace");
@@ -124,6 +127,92 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     hydrateDashboardPrefs();
   }, [hydrateDashboardPrefs]);
+
+  useEffect(() => {
+    void fetch("/api/account/profile")
+      .then((r) => r.json())
+      .then(
+        (d: {
+          ok?: boolean;
+          profile?: {
+            full_name?: string | null;
+            company_name?: string | null;
+            email?: string | null;
+            avatar_url?: string | null;
+          };
+        }) => {
+          if (d.ok && d.profile) {
+            setUserProfile(d.profile);
+          }
+        }
+      );
+  }, []);
+
+  useEffect(() => {
+    void fetch("/api/account/brands")
+      .then((r) => r.json())
+      .then(
+        (d: {
+          ok?: boolean;
+          brands?: {
+            id: string;
+            name: string;
+            domain?: string | null;
+            logo_url?: string | null;
+            color?: string | null;
+            is_primary?: boolean;
+          }[];
+        }) => {
+          if (!d.ok || !d.brands?.length) {
+            return;
+          }
+          const mapped = d.brands.map(mapApiBrandRow);
+          setBrands(mapped);
+          const stored =
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("rival_active_brand") ??
+                window.localStorage.getItem("rival_active_workspace")
+              : null;
+          if (stored && mapped.some((b) => b.id === stored)) {
+            setActiveBrandId(stored);
+            return;
+          }
+          const primary = d.brands.find((b) => b.is_primary);
+          const primaryMapped = primary ? mapApiBrandRow(primary) : mapped[0];
+          if (primaryMapped) {
+            setActiveBrandId(primaryMapped.id);
+          }
+        }
+      );
+  }, []);
+
+  useEffect(() => {
+    if (brands.length === 0) return;
+    if (!brands.some((b) => b.id === activeBrandId)) {
+      setActiveBrandId(brands[0].id);
+    }
+  }, [brands, activeBrandId]);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(FIRST_RUN_WELCOME_DISMISSED_KEY) === "1") {
+        setShowWelcome(false);
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    setShowWelcome(savedCompetitors.length === 0);
+  }, [savedCompetitors]);
+
+  const dismissFirstRunWelcome = useCallback(() => {
+    try {
+      localStorage.setItem(FIRST_RUN_WELCOME_DISMISSED_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setShowWelcome(false);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,10 +242,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, [refreshSavedCompetitors]);
 
   useEffect(() => {
-    localStorage.setItem("rival_brands", JSON.stringify(brands));
-  }, [brands]);
-
-  useEffect(() => {
     localStorage.setItem("rival_active_brand", activeBrandId);
   }, [activeBrandId]);
 
@@ -168,24 +253,33 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     () => brands.find((b) => b.id === activeBrandId) ?? brands[0],
     [activeBrandId, brands]
   );
-  const activeCompetitorUrl = searchParams.get("url");
-  const activeCompetitorSlug = activeCompetitorUrl ? normalizeCompetitorSlug(activeCompetitorUrl) : "";
+  const pathCompetitorHost = competitorHostFromDashboardPathname(pathname);
+  const queryCompetitorHost = searchParams.get("url")?.trim();
+  const activeCompetitorSlug =
+    pathCompetitorHost || (queryCompetitorHost ? normalizeCompetitorSlug(queryCompetitorHost) : "");
 
   const handleCreateBrand = () => {
     const name = window.prompt("Brand name");
     if (!name) return;
     const cleanName = name.trim();
     if (!cleanName) return;
-    const slug = cleanName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    const newBrand: Brand = {
-      id: `${slug || "brand"}-${Date.now()}`,
-      name: cleanName,
-      badge: cleanName.slice(0, 2).toUpperCase().slice(0, 2),
-      color: "#343434",
-    };
-    setBrands((prev) => [newBrand, ...prev]);
-    setActiveBrandId(newBrand.id);
-    setIsBrandMenuOpen(false);
+    void (async () => {
+      const res = await fetch("/api/account/brands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: cleanName }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        brand?: { id: string; name: string; domain?: string | null; logo_url?: string | null; color?: string | null };
+      };
+      if (json.ok && json.brand) {
+        const mapped = mapApiBrandRow(json.brand);
+        setBrands((prev) => [mapped, ...prev.filter((b) => b.id !== mapped.id)]);
+        setActiveBrandId(mapped.id);
+      }
+      setIsBrandMenuOpen(false);
+    })();
   };
 
   const handleSignOut = async () => {
@@ -209,7 +303,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar */}
       <aside
-        className={`hidden sm:flex flex-col h-full min-h-0 sticky top-0 shrink-0 bg-white/80 backdrop-blur-xl border-r border-[#e8e8e8] shadow-[0_4px_24px_rgba(0,0,0,0.04)] transition-[width] duration-200 ease-out z-20 overflow-x-hidden overflow-y-hidden ${
+        className={`hidden sm:flex flex-col h-full min-h-0 sticky top-0 shrink-0 bg-white/80 backdrop-blur-xl border-r border-[#e8e8e8] shadow-[0_4px_24px_rgba(0,0,0,0.04)] motion-safe:transition-[width,min-width] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none z-20 overflow-x-hidden overflow-y-hidden ${
           collapsed ? "w-[92px] min-w-[92px]" : "w-[280px] min-w-[280px]"
         }`}
       >
@@ -351,10 +445,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           <div className={collapsed ? "flex flex-col items-center gap-2" : "space-y-1"}>
             <Link
               href="/dashboard/spy"
-              onClick={() => {
-                if (sidebarCollapsed) setSidebarCollapsed(false);
-              }}
-              className={`flex items-center rounded-xl transition-colors ${
+              scroll={false}
+              className={`flex items-center rounded-xl transition-colors duration-200 ${
                 pathname === "/dashboard/spy" || pathname === "/dashboard/searching"
                   ? collapsed
                     ? "bg-[color:var(--rival-accent-blue)]/70 text-[color:var(--rival-primary)] ring-1 ring-[color:var(--rival-accent-blue)]"
@@ -420,15 +512,18 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   </Link>
                 </p>
               )}
-            {rowsToRender.map((competitor) => {
+            {rowsToRender.map((competitor, competitorIdx) => {
               const urlHost = coerceSidebarCompetitorUrlHost(competitor);
               const rowSlug = urlHost || normalizeCompetitorSlug(competitor.slug);
+              const rowReactKey = `${normalizeCompetitorSlug(competitor.slug)}:${competitorIdx}`;
+              const onCompetitorView =
+                pathname.startsWith("/dashboard/competitor/") || pathname === "/dashboard/competitor";
               const isActive =
-                pathname === "/dashboard/competitor" && activeCompetitorSlug !== "" && activeCompetitorSlug === rowSlug;
+                onCompetitorView && activeCompetitorSlug !== "" && activeCompetitorSlug === rowSlug;
               if (competitor.pending) {
                 return (
                   <div
-                    key={`pending-${rowSlug}`}
+                    key={`pending-${rowReactKey}`}
                     className={`rounded-xl transition-colors ${
                       isActive
                         ? "bg-[color:var(--rival-accent-blue)]/35 ring-1 ring-[color:var(--rival-accent-blue)]/50"
@@ -445,7 +540,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               const href = buildCompetitorSidebarHref(competitor);
               return (
                 <Link
-                  key={rowSlug}
+                  key={rowReactKey}
                   href={href}
                   className={`flex items-center rounded-xl transition-colors ${
                     isActive
@@ -467,9 +562,50 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Bottom: Settings + Collapse — always at bottom */}
+        {/* Bottom: user identity, sign out, collapse */}
         <div className={`shrink-0 border-t border-[#e8e8e8]/90 ${collapsed ? "px-3 py-2.5" : "px-4 py-2.5"}`}>
           <div className={collapsed ? "flex flex-col items-center gap-2" : "space-y-1"}>
+            {userProfile ? (
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/settings")}
+                className={
+                  collapsed
+                    ? "flex size-11 shrink-0 items-center justify-center rounded-full bg-[#6366f1] text-white text-[11px] font-bold overflow-hidden hover:ring-2 hover:ring-[#DDF1FD] transition-all"
+                    : "flex w-full items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-[#f4f4f5] transition-colors text-left"
+                }
+                title={userProfile.full_name || userProfile.email || "Account"}
+              >
+                {userProfile.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={userProfile.avatar_url}
+                    alt=""
+                    className={collapsed ? "size-11 object-cover" : "w-7 h-7 rounded-full object-cover shrink-0"}
+                  />
+                ) : (
+                  <span
+                    className={
+                      collapsed
+                        ? "flex size-11 items-center justify-center"
+                        : "w-7 h-7 rounded-full bg-[#6366f1] flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                    }
+                  >
+                    {(userProfile.full_name?.[0] ?? userProfile.email?.[0] ?? "?").toUpperCase()}
+                  </span>
+                )}
+                {!collapsed && (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-medium text-[#1a1a2e] truncate">
+                      {userProfile.full_name?.trim() || userProfile.email}
+                    </p>
+                    {userProfile.company_name ? (
+                      <p className="text-[11px] text-[#71717a] truncate">{userProfile.company_name}</p>
+                    ) : null}
+                  </div>
+                )}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={handleSignOut}
@@ -504,9 +640,46 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="rival-subtle-scroll flex-1 flex flex-col relative min-w-0 overflow-x-hidden overflow-y-auto z-10">
-        <div className="relative z-10 w-full h-full flex flex-col" onClick={() => setIsBrandMenuOpen(false)}>
+        <div
+          className="relative z-10 flex h-full min-h-0 w-full flex-1 flex-col"
+          onClick={() => setIsBrandMenuOpen(false)}
+        >
+          {showWelcome && pathname === "/dashboard" ? (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 backdrop-blur-sm">
+              <div className="mx-4 w-full max-w-[480px] rounded-3xl bg-white p-10 text-center shadow-[0_8px_40px_rgba(0,0,0,0.1)]">
+                <RivalLogoImg className="mx-auto mb-6 h-7 w-auto max-w-[160px] object-contain" />
+
+                <h2 className="mb-2 text-[22px] font-bold text-[#1a1a2e]">Your workspace is ready</h2>
+                <p className="mb-8 text-[14px] leading-relaxed text-[#71717a]">
+                  Start by spying on a competitor. Enter their domain and Rival will scrape their ads across every
+                  platform automatically.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissFirstRunWelcome();
+                    router.push("/dashboard/spy");
+                  }}
+                  className="mb-3 w-full rounded-xl bg-[#1a1a2e] py-3 text-[14px] font-medium text-white transition-colors hover:bg-[#2d2d44]"
+                >
+                  Spy on your first competitor →
+                </button>
+
+                <button
+                  type="button"
+                  onClick={dismissFirstRunWelcome}
+                  className="text-[13px] text-[#a1a1aa] transition-colors hover:text-[#71717a]"
+                >
+                  I&apos;ll explore on my own
+                </button>
+              </div>
+            </div>
+          ) : null}
           <BrandProvider brand={activeBrand}>
-            {children}
+            <div key={pathname} className="rival-dashboard-route-shell flex min-h-0 min-w-0 flex-1 flex-col">
+              {children}
+            </div>
           </BrandProvider>
         </div>
       </main>

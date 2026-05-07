@@ -18,7 +18,6 @@ import {
   extractFacebookPageIdFromHtml,
   refineRedditWithBrand,
   refineSnapchatWithBrand,
-  pickMerchantIdFromHits,
   parseSocialLinksFromHits,
   normalizeDiscoveredIds,
   googleFaviconUrlForDomain,
@@ -270,15 +269,6 @@ async function fallbackSearchForSocials(
           ])
         );
         break;
-      case "x":
-        tasks.push(
-          runKey("x", [
-            `${brandSlug} site:twitter.com OR site:x.com`,
-            `"${safeName}" twitter official`,
-            `"${qShort}" twitter OR x.com`,
-          ])
-        );
-        break;
       case "tiktok":
         tasks.push(
           runKey("tiktok", [
@@ -286,16 +276,6 @@ async function fallbackSearchForSocials(
             `"${safeName}" tiktok official`,
             `"${qShort}" tiktok`,
             `@${brandSlug} tiktok`,
-          ])
-        );
-        break;
-      case "youtube":
-        tasks.push(
-          runKey("youtube", [
-            `${brandSlug} site:youtube.com`,
-            `"${safeName}" youtube channel`,
-            `"${qShort}" youtube`,
-            `youtube.com @${brandSlug}`,
           ])
         );
         break;
@@ -338,38 +318,6 @@ async function fallbackSearchForSocials(
             `${brandSlug} reddit brand account`,
             `"${domain}" reddit community`,
           ])
-        );
-        break;
-      case "shopping":
-        tasks.push(
-          runKey(
-            "shopping",
-            [
-              `"${safeName}" google merchant id`,
-              `"${qShort}" google merchant`,
-              `"${brandSlug}" google shopping seller`,
-              `site:merchants.google.com "${brandSlug}"`,
-              `${brandSlug} site:merchants.google.com`,
-              `"${safeName}" merchants.google merchant center`,
-            ],
-            4
-          )
-        );
-        break;
-      case "microsoft":
-        tasks.push(
-          runKey(
-            "microsoft",
-            [
-              `${brandSlug} site:ads.microsoft.com`,
-              `site:adlibrary.about.ads.microsoft.com "${safeName}"`,
-              `"${safeName}" Microsoft Advertising transparency advertiser`,
-              `"${qShort}" Microsoft Ads advertiser id`,
-              `"${brandSlug}" site:ads.microsoft.com OR site:adlibrary.about.ads.microsoft.com`,
-              `"${domain}" Microsoft Advertising advertiser`,
-            ],
-            5
-          )
         );
         break;
       default:
@@ -508,12 +456,8 @@ function buildFieldConfidence(
   const keys: ChannelId[] = [
     "meta",
     "google",
-    "x",
     "tiktok",
-    "youtube",
     "linkedin",
-    "microsoft",
-    "shopping",
     "pinterest",
     "snapchat",
     "reddit",
@@ -572,34 +516,12 @@ function buildFieldPreviewUrls(
     }
   }
 
-  if (discovered.x) {
-    const h = discovered.x.replace(/^@/, "");
-    out.x = `https://x.com/${h}`;
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "x");
-    if (u) out.x = u;
-  }
-
   if (discovered.tiktok) {
     const h = discovered.tiktok.replace(/^@/, "");
     out.tiktok = `https://www.tiktok.com/@${h}`;
   } else {
     const u = pickPreviewUrlFromHits(linkHits, "tiktok");
     if (u) out.tiktok = u;
-  }
-
-  if (discovered.youtube) {
-    const y = discovered.youtube.trim();
-    if (y.startsWith("UC") || y.startsWith("UU")) {
-      out.youtube = `https://www.youtube.com/channel/${y}`;
-    } else if (y.startsWith("@")) {
-      out.youtube = `https://www.youtube.com/${y}`;
-    } else {
-      out.youtube = `https://www.youtube.com/@${y.replace(/^@/, "")}`;
-    }
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "youtube");
-    if (u) out.youtube = u;
   }
 
   if (discovered.linkedin) {
@@ -632,21 +554,6 @@ function buildFieldPreviewUrls(
   } else {
     const u = pickPreviewUrlFromHits(linkHits, "reddit");
     if (u) out.reddit = u;
-  }
-
-  if (discovered.shopping) {
-    out.shopping = `https://www.google.com/search?q=${encodeURIComponent(`${discovered.shopping} google merchant`)}`;
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "shopping");
-    if (u) out.shopping = u;
-  }
-
-  if (discovered.microsoft) {
-    const id = String(discovered.microsoft).trim();
-    out.microsoft = `https://www.google.com/search?q=${encodeURIComponent(`${id} Microsoft Advertising advertiser ad library`)}`;
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "microsoft");
-    if (u) out.microsoft = u;
   }
 
   return out;
@@ -728,9 +635,13 @@ export async function POST(req: Request) {
     }
 
     const allKeys: (keyof PlatformIdentifier)[] = [
-      "meta", "google", "x", "tiktok", "youtube", "linkedin",
-      "microsoft",
-      "shopping", "pinterest", "snapchat", "reddit",
+      "meta",
+      "google",
+      "tiktok",
+      "linkedin",
+      "pinterest",
+      "snapchat",
+      "reddit",
     ];
     let missing = allKeys.filter((k) => !fromScrape[k]);
     if (selectedChannels?.length) {
@@ -767,16 +678,6 @@ export async function POST(req: Request) {
 
     discoveredIds = refineRedditWithBrand(discoveredIds, metaHits, scrapedDomain);
     discoveredIds = refineSnapchatWithBrand(discoveredIds, metaHits, scrapedDomain);
-
-    if (selectedChannels === null || selectedChannels.includes("shopping")) {
-      const sh = String(discoveredIds.shopping ?? "").trim();
-      if (!sh) {
-        const mid = pickMerchantIdFromHits(metaHits);
-        if (mid) {
-          discoveredIds = { ...discoveredIds, shopping: mid };
-        }
-      }
-    }
 
     if (selectedChannels === null || selectedChannels.includes("meta")) {
       const needMeta =

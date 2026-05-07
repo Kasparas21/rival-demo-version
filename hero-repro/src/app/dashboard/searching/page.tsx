@@ -8,7 +8,14 @@ import { looksLikeUrl, googleFaviconUrlForDomain } from "@/lib/discovery";
 import type { TermHint } from "@/lib/competitor-query";
 import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
-import { normalizeCompetitorSlug, upsertSidebarCompetitor } from "@/lib/sidebar-competitors";
+import {
+  findMatchingCompetitorIndex,
+  loadSidebarCompetitors,
+  MAX_WATCHED_COMPETITORS,
+  normalizeCompetitorSlug,
+  upsertSidebarCompetitor,
+} from "@/lib/sidebar-competitors";
+import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { saveCompetitorToAccount, saveSearchToAccount } from "@/lib/account/client";
 import {
@@ -33,15 +40,13 @@ import {
 import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 
-/** Map channel row to ads API platform (YouTube shares Google Transparency). */
+/** Map channel row to ads API platform. */
 function channelIdToAdsLibraryPlatform(id: ChannelId): AdsLibraryPlatform | null {
-  if (id === "youtube") return "google";
   if (
     id === "meta" ||
     id === "google" ||
     id === "linkedin" ||
     id === "tiktok" ||
-    id === "microsoft" ||
     id === "pinterest"
   ) {
     return id;
@@ -52,12 +57,8 @@ function channelIdToAdsLibraryPlatform(id: ChannelId): AdsLibraryPlatform | null
 const CHANNEL_TO_STATUS: Record<ChannelId, "found" | "no ads found"> = {
   meta: "found",
   google: "found",
-  x: "found",
   tiktok: "no ads found",
-  youtube: "no ads found",
   linkedin: "no ads found",
-  microsoft: "found",
-  shopping: "no ads found",
   pinterest: "found",
   snapchat: "no ads found",
   reddit: "no ads found",
@@ -142,14 +143,15 @@ function SearchingContent() {
 
   useEffect(() => {
     if (phase !== "discovering") return;
-    upsertSidebarCompetitor({
-      slug: normalizeCompetitorSlug(displayName),
-      name: q.trim() || displayName,
-      pending: true,
-    });
+    const slug = normalizeCompetitorSlug(displayName);
+    const label = q.trim() || displayName;
+    const list = loadSidebarCompetitors();
+    const idx = findMatchingCompetitorIndex(list, slug, label);
+    if (idx < 0 && list.length >= MAX_WATCHED_COMPETITORS) return;
+    upsertSidebarCompetitor({ slug, name: label, pending: true });
     void saveCompetitorToAccount({
-      slug: normalizeCompetitorSlug(displayName),
-      name: q.trim() || displayName,
+      slug,
+      name: label,
       pending: true,
     });
   }, [phase, displayName, q]);
@@ -165,16 +167,18 @@ function SearchingContent() {
             logoUrl: discoveredBrand.logoUrl,
           }
         : undefined;
-    upsertSidebarCompetitor({
+    const label = discoveredBrand?.name ?? displayName;
+    const added = upsertSidebarCompetitor({
       slug,
-      name: discoveredBrand?.name ?? displayName,
+      name: label,
       logoUrl: discoveredBrand?.logoUrl,
       brand,
       pending: false,
     });
+    if (!added.ok) return;
     void saveCompetitorToAccount({
       slug,
-      name: discoveredBrand?.name ?? displayName,
+      name: label,
       logoUrl: discoveredBrand?.logoUrl,
       brand,
       pending: false,
@@ -183,14 +187,17 @@ function SearchingContent() {
 
   useEffect(() => {
     if (!discoveryError) return;
-    upsertSidebarCompetitor({
-      slug: normalizeCompetitorSlug(displayName),
-      name: q.trim() || displayName,
+    const slug = normalizeCompetitorSlug(displayName);
+    const label = q.trim() || displayName;
+    const added = upsertSidebarCompetitor({
+      slug,
+      name: label,
       pending: false,
     });
+    if (!added.ok) return;
     void saveCompetitorToAccount({
-      slug: normalizeCompetitorSlug(displayName),
-      name: q.trim() || displayName,
+      slug,
+      name: label,
       pending: false,
     });
   }, [discoveryError, displayName, q]);
@@ -204,6 +211,17 @@ function SearchingContent() {
   }, [displayName, q, selectedChannels, termHints]);
 
   const runDiscovery = useCallback(async () => {
+    const capSlug = normalizeCompetitorSlug(displayName);
+    const capLabel = q.trim() || displayName;
+    const capList = loadSidebarCompetitors();
+    const capIdx = findMatchingCompetitorIndex(capList, capSlug, capLabel);
+    if (capIdx < 0 && capList.length >= MAX_WATCHED_COMPETITORS) {
+      setDiscoveryError(
+        `You can watch up to ${MAX_WATCHED_COMPETITORS} competitors. Remove one from the sidebar first.`
+      );
+      return;
+    }
+
     setDiscoveryError(null);
     setDiscoveryWarning(null);
     setDiscoveryStep(
@@ -251,7 +269,7 @@ function SearchingContent() {
     } finally {
       window.clearTimeout(timeoutId);
     }
-  }, [q, selectedChannels, termHints]);
+  }, [q, selectedChannels, termHints, displayName]);
 
   useEffect(() => {
     if (phase !== "discovering") return;
@@ -270,12 +288,8 @@ function SearchingContent() {
       setPlatformStatuses(initialStatuses);
 
       const navigateToCompetitor = () => {
-        const params = new URLSearchParams({ url: displayName });
-        params.set("confirmed", "1");
-        if (selectedChannels.length > 0) params.set("channels", selectedChannels.join(","));
-        if (Object.keys(mergedIds).length > 0) params.set("ids", JSON.stringify(mergedIds));
-        if (discoveredBrand) params.set("brand", JSON.stringify(discoveredBrand));
-        const href = `/dashboard/competitor?${params.toString()}`;
+        const canonicalHost = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
+        const href = buildCompetitorDashboardPath(canonicalHost);
         router.prefetch(href);
         router.push(href);
       };
@@ -393,8 +407,9 @@ function SearchingContent() {
   const handleManualSubmit = (identifiers: PlatformIdentifier) => {
     setManualIds(identifiers);
     const mergedIds = { ...discoveredIds, ...identifiers };
-    upsertSidebarCompetitor({
-      slug: normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName),
+    const slug = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
+    const added = upsertSidebarCompetitor({
+      slug,
       name: discoveredBrand?.name ?? displayName,
       brand: discoveredBrand
         ? { name: discoveredBrand.name, domain: discoveredBrand.domain, logoUrl: discoveredBrand.logoUrl }
@@ -406,40 +421,20 @@ function SearchingContent() {
       },
       pending: false,
     });
-    void runScanAndNavigate(mergedIds);
-  };
-
-  const handleManualSkip = () => {
-    const mergedIds = { ...discoveredIds, ...manualIds };
+    if (!added.ok) {
+      setDiscoveryError(
+        `You can watch up to ${MAX_WATCHED_COMPETITORS} competitors. Remove one from the sidebar first.`
+      );
+      return;
+    }
     void runScanAndNavigate(mergedIds);
   };
 
   /** Build competitor URL (same logic as auto-redirect). */
-  const buildCompetitorHref = useCallback((idsOverride?: PlatformIdentifier) => {
-    const merged = idsOverride ?? { ...discoveredIds, ...manualIds };
-    const channelsWithIds = selectedChannels.filter((ch) => {
-      if (ch === "meta") {
-        const v = merged.meta ?? merged.metaPageUrl;
-        return v && String(v).trim().length > 0;
-      }
-      return Boolean(merged[ch] && String(merged[ch]).trim());
-    });
-    const params = new URLSearchParams({ url: displayName });
-    params.set("confirmed", "1");
-    if (channelsWithIds.length > 0) {
-      params.set("channels", channelsWithIds.join(","));
-    } else if (selectedChannels.length < CHANNELS.length) {
-      params.set("channels", selectedChannels.join(","));
-    }
-    const idsWithValues = Object.entries(merged).filter(([, v]) => v);
-    if (idsWithValues.length > 0) {
-      params.set("ids", JSON.stringify(merged));
-    }
-    if (discoveredBrand) {
-      params.set("brand", JSON.stringify(discoveredBrand));
-    }
-    return `/dashboard/competitor?${params.toString()}`;
-  }, [displayName, selectedChannels, discoveredIds, manualIds, discoveredBrand]);
+  const buildCompetitorHref = useCallback((_idsOverride?: PlatformIdentifier) => {
+    const canonicalHost = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
+    return buildCompetitorDashboardPath(canonicalHost);
+  }, [displayName, discoveredBrand]);
 
   const isDiscovering = phase === "discovering";
   const isManualNeeded = phase === "manual-needed";
@@ -542,7 +537,6 @@ function SearchingContent() {
               selectedChannels={selectedChannels}
               discoveredIds={discoveredIds}
               onSubmit={handleManualSubmit}
-              onSkip={handleManualSkip}
               competitorLabel={discoveredBrand?.name ?? displayName}
               competitorDomain={discoveredBrand?.domain}
               interpretationSummary={discoveryInterpretation?.summary}
@@ -595,8 +589,14 @@ function SearchingContent() {
               const isActiveScanning = isScanning;
               const adsApiPlatform = channelIdToAdsLibraryPlatform(platform.id);
               const runtimeStatus = adsApiPlatform ? platformStatuses[adsApiPlatform] : undefined;
-              const isPlatformFound = runtimeStatus === "done" || (platform.status === "found" && !isActiveScanning);
-              const noAdsFound = runtimeStatus === "error" || (platform.status === "no ads found" && !isActiveScanning);
+              const isRedditChannel = platform.id === "reddit";
+              const isPlatformFound =
+                runtimeStatus === "done" ||
+                (platform.status === "found" && !isActiveScanning) ||
+                (isRedditChannel && !isActiveScanning);
+              const noAdsFound =
+                !isRedditChannel &&
+                (runtimeStatus === "error" || (platform.status === "no ads found" && !isActiveScanning));
 
               return (
                 <div
@@ -633,9 +633,11 @@ function SearchingContent() {
                               : runtimeStatus === "error"
                                 ? "Failed"
                                 : "Checking..."
-                        : platform.status === "no ads found"
+                        : isRedditChannel
                           ? "No ads found"
-                          : "Ads found"}
+                          : platform.status === "no ads found"
+                            ? "No ads found"
+                            : "Ads found"}
                     </span>
                   </div>
                 </div>
@@ -668,8 +670,15 @@ function SearchingContent() {
 
 export default function SearchingViewWrapper() {
   return (
-    <Suspense fallback={<div className="flex-1 flex min-h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-[#343434]" /></div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-[#343434]" aria-hidden />
+          <span className="sr-only">Loading search</span>
+        </div>
+      }
+    >
       <SearchingContent />
     </Suspense>
-  )
+  );
 }

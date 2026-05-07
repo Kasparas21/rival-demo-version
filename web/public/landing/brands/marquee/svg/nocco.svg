@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 260" fill="none" aria-hidden="true">
+  <g transform="skewX(-8)">
+    <rect x="48" y="36" width="220" height="26" rx="3" fill="#000" />
+    <rect x="48" y="78" width="220" height="26" rx="3" fill="#000" />
+  </g>
+  <text
+    x="170"
+    y="232"
+    text-anchor="middle"
+    fill="#000"
+    font-family="ui-sans-serif, system-ui, sans-serif"
+    font-size="72"
+    font-weight="800"
+    letter-spacing="-0.06em"
+  >
+    NOCCO
+  </text>
+</svg>

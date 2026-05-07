@@ -64,14 +64,6 @@ function isValidMetaField(value: string): boolean {
   return false;
 }
 
-function isValidYouTubeChannelId(value: string): boolean {
-  if (!value.trim()) return true;
-  const v = value.trim();
-  if (/^UC[\w-]{10,}$/.test(v) || /^UU[\w-]{10,}$/.test(v)) return true;
-  // Discovery often resolves /@handle before we have UC…
-  return /^@?[\w.-]{2,40}$/.test(v);
-}
-
 function isValidHandle(value: string): boolean {
   if (!value.trim()) return true;
   const v = value.trim();
@@ -199,17 +191,6 @@ const CHANNEL_FIELDS: {
     }),
   },
   {
-    id: "x",
-    label: "X (Twitter) handle",
-    placeholder: "e.g. @nike",
-    hint: "Their X/Twitter username",
-    validator: (v) => ({
-      valid: isValidHandle(v),
-      message: "Enter a handle like @nike (we'll add @ if you forget)",
-      normalize: normalizeHandle,
-    }),
-  },
-  {
     id: "tiktok",
     label: "TikTok handle",
     placeholder: "e.g. @nike",
@@ -221,16 +202,6 @@ const CHANNEL_FIELDS: {
     }),
   },
   {
-    id: "youtube",
-    label: "YouTube Channel ID",
-    placeholder: "e.g. UC_x5XG1OV2P6uZZ5FSM9Ttw",
-    hint: "From channel URL or About page",
-    validator: (v) => ({
-      valid: isValidYouTubeChannelId(v),
-      message: "Use a channel ID (UC…) or handle like @brandname",
-    }),
-  },
-  {
     id: "linkedin",
     label: "LinkedIn Company page",
     placeholder: "e.g. linkedin.com/company/nike",
@@ -239,29 +210,6 @@ const CHANNEL_FIELDS: {
       valid: isValidLinkedInUrl(v),
       message: "Enter a full URL like linkedin.com/company/nike",
       normalize: normalizeUrl,
-    }),
-  },
-  {
-    id: "microsoft",
-    label: "Microsoft advertiser ID",
-    labelSub: "Optional — overrides name search",
-    placeholder: "Leave blank to search by brand name",
-    hint: "Numeric advertiser ID from Microsoft Advertising Transparency (EEA) if you have it",
-    validator: (v) => ({
-      valid: !v.trim() || /^\d{4,20}$/.test(v.replace(/\s/g, "")),
-      message: "Digits only, or leave blank",
-      normalize: (x) => x.replace(/\D/g, ""),
-    }),
-  },
-  {
-    id: "shopping",
-    label: "Google Merchant ID",
-    placeholder: "e.g. 123456789012",
-    hint: "From Google Merchant Center",
-    validator: (v) => ({
-      valid: !v.trim() || /^\d{10,15}$/.test(v.replace(/\s/g, "")),
-      message: "Enter a 10–15 digit Merchant ID",
-      normalize: (x) => x.replace(/\D/g, ""),
     }),
   },
   {
@@ -300,13 +248,39 @@ const CHANNEL_FIELDS: {
   },
 ];
 
+/** Stable signature for discovery payloads when the parent swaps competitors or refetches IDs. */
+function discoveryFingerprint(ids: Partial<PlatformIdentifier>): string {
+  const parts: string[] = [];
+  if (ids.meta) parts.push(`meta:${ids.meta}`);
+  if (ids.metaPageUrl) parts.push(`metaPageUrl:${ids.metaPageUrl}`);
+  const rest = CHANNEL_FIELDS.filter((f) => f.id !== "meta")
+    .map((f) => {
+      const v = ids[f.id];
+      return typeof v === "string" && v.length > 0 ? `${f.id}:${v}` : null;
+    })
+    .filter((s): s is string => s != null);
+  rest.sort((a, b) => a.localeCompare(b));
+  parts.sort((a, b) => a.localeCompare(b));
+  return [...parts, ...rest].join("|");
+}
+
+/** Display strings seeded from discovery; Auto-found shows only while each input still matches its snapshot. */
+function autoFoundDisplaySnapshot(ids: Partial<PlatformIdentifier>): Partial<Record<ChannelId, string>> {
+  const fields: Partial<Record<ChannelId, string>> = {};
+  fields.meta = ids.metaPageUrl ?? ids.meta ?? "";
+  for (const f of CHANNEL_FIELDS) {
+    if (f.id === "meta") continue;
+    fields[f.id] = typeof ids[f.id] === "string" ? ids[f.id]! : "";
+  }
+  return fields;
+}
+
 type FieldConfidence = "high" | "medium" | "low";
 
 interface ManualIdentifiersFormProps {
   selectedChannels: ChannelId[];
   discoveredIds: Partial<PlatformIdentifier>;
   onSubmit: (identifiers: PlatformIdentifier) => void;
-  onSkip: () => void;
   /** Resolved competitor name (not the raw search box string) */
   competitorLabel: string;
   competitorDomain?: string;
@@ -430,7 +404,6 @@ export function ManualIdentifiersForm({
   selectedChannels,
   discoveredIds,
   onSubmit,
-  onSkip,
   competitorLabel,
   competitorDomain,
   interpretationSummary,
@@ -449,6 +422,17 @@ export function ManualIdentifiersForm({
   );
   const [focusedField, setFocusedField] = useState<ChannelId | null>(null);
   const [errors, setErrors] = useState<Partial<Record<ChannelId, string>>>({});
+
+  const competitorKey = useMemo(
+    () =>
+      [competitorLabel, competitorDomain ?? "", discoveryFingerprint(discoveredIds)].join("\0"),
+    [competitorLabel, competitorDomain, discoveredIds]
+  );
+
+  const autoFoundDisplaySnap = useMemo(
+    () => autoFoundDisplaySnapshot(discoveredIds),
+    [competitorKey, discoveredIds]
+  );
 
   const fieldsToShow = CHANNEL_FIELDS.filter((f) => selectedChannels.includes(f.id));
 
@@ -638,6 +622,12 @@ export function ManualIdentifiersForm({
                 Boolean(previewUrl?.startsWith("http")) &&
                 (wasDiscovered || Boolean(value.trim()));
 
+              const autoFoundSnap = autoFoundDisplaySnap[field.id] ?? "";
+              const showAutoFoundBadge =
+                wasDiscovered &&
+                isNonEmptyDiscovered(autoFoundSnap) &&
+                value === autoFoundSnap;
+
               const isFocused = focusedField === field.id;
               const error = errors[field.id];
 
@@ -693,7 +683,7 @@ export function ManualIdentifiersForm({
                     </div>
                     {/* Badges always on their own row — stable height; empty row keeps rhythm when none */}
                     <div className="shrink-0 mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 w-full min-h-[26px]">
-                      {wasDiscovered ? (
+                      {showAutoFoundBadge ? (
                         <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded whitespace-nowrap">
                           Auto-found
                         </span>
@@ -717,13 +707,9 @@ export function ManualIdentifiersForm({
                       className={`text-[12px] leading-snug min-h-[2.5rem] shrink-0 mt-2 ${error ? "text-red-500" : "text-[#6b7280]"}`}
                     >
                       {error ||
-                        (field.id === "shopping" &&
-                        !value.trim() &&
-                        !wasDiscovered
-                          ? "We couldn’t detect a Merchant ID automatically (it’s rarely public). Leave blank or paste the numeric ID from Merchant Center if you run Shopping ads."
-                          : field.id === "pinterest" && identifiers.pinterestAdvertiserName?.trim()
-                            ? `${field.hint} Pinterest Ads search uses: “${identifiers.pinterestAdvertiserName.trim()}” (from the profile URL).`
-                            : field.hint)}
+                        (field.id === "pinterest" && identifiers.pinterestAdvertiserName?.trim()
+                          ? `${field.hint} Pinterest Ads search uses: “${identifiers.pinterestAdvertiserName.trim()}” (from the profile URL).`
+                          : field.hint)}
                     </p>
                   </div>
                 </div>
@@ -731,24 +717,15 @@ export function ManualIdentifiersForm({
             })}
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 mt-8 pt-6 border-t border-gray-100">
+          <div className="mt-8 pt-6 border-t border-gray-100">
             <button
               type="submit"
-              className="flex-1 min-h-[48px] rounded-xl bg-[#343434] text-white font-semibold text-[14px] hover:bg-[#2a2a2a] transition-colors shadow-sm px-4"
+              className="w-full min-h-[48px] rounded-xl bg-[#343434] text-white font-semibold text-[14px] hover:bg-[#2a2a2a] transition-colors shadow-sm px-4"
             >
               {allSelectedChannelsFilled
                 ? "Looks good — continue"
                 : "Continue"}
             </button>
-            {!allSelectedChannelsFilled ? (
-              <button
-                type="button"
-                onClick={onSkip}
-                className="min-h-[48px] px-6 rounded-xl border border-gray-200 text-[#6b7280] font-medium text-[14px] hover:bg-gray-50 hover:border-gray-300 transition-colors shrink-0"
-              >
-                Skip for now
-              </button>
-            ) : null}
           </div>
         </form>
       </div>

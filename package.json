@@ -7,10 +7,10 @@
     "react-dom": "19.2.3"
   },
   "scripts": {
-    "postinstall": "npm install --prefix hero-repro",
-    "dev": "npm run dev --prefix hero-repro",
-    "build": "npm run build --prefix hero-repro",
-    "start": "npm run start --prefix hero-repro",
-    "lint": "npm run lint --prefix hero-repro"
+    "postinstall": "npm install --prefix web",
+    "dev": "npm run dev --prefix web",
+    "build": "npm run build --prefix web",
+    "start": "npm run start --prefix web",
+    "lint": "npm run lint --prefix web"
   }
 }

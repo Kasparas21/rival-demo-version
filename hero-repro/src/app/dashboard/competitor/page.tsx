@@ -24,6 +24,7 @@ import {
   ExternalLink,
   Play,
   SlidersHorizontal,
+  Video,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -45,6 +46,7 @@ import {
 import { useAdLibrary } from "@/hooks/use-ad-library";
 import { UnconnectedPlatformPlaceholder } from "@/components/ads-library/unconnected-platform-placeholder";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
+import { GoogleAdFormatIcon } from "@/components/ads-library/google-ad-format-icon";
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-modal";
@@ -77,7 +79,6 @@ import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-lib
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
   googleAdsExternalLinkLabel,
-  googleCreativeFormatLabel,
   youtubeThumbnailFromUrl,
   type GoogleAdRow,
   type LinkedInAdCard,
@@ -216,50 +217,48 @@ function GoogleTransparencyCard({
     ad.adUrl || `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(brandDomain)}`;
   const linkCta = googleAdsExternalLinkLabel(href);
 
-  const fmt = googleCreativeFormatLabel(ad.format);
   /** Prefer Transparency “Preview URL” for the creative (same as Google’s preview iframe source). */
   const imageSrc = (ad.previewUrl?.trim() || ad.img || "").trim();
   const isFaviconOnly = Boolean(
     imageSrc.includes("google.com/s2/favicons") || imageSrc.includes("gstatic.com/favicon")
   );
   const hasCreativeImageAsset = Boolean(imageSrc && !isFaviconOnly);
-  const imageOpenHref = ad.previewUrl?.trim() || href;
+  const previewHref = ad.previewUrl?.trim() || "";
+  const imageOpenHref = previewHref || href;
+  const showCreativePreviewLinkRow = Boolean(previewHref && !hasCreativeImageAsset);
   const detailTitle = ad.advertiserName?.trim() || sn.headline.split(" — ")[0]?.trim() || sn.headline;
   const lastShown =
     ad.lastShownLabel?.trim() || ad.shownSummary?.replace(/\s*–\s*/, " → ") || "—";
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-2xl border border-[#dadce0] bg-white text-left shadow-[0_1px_2px_rgba(60,64,67,0.08)] transition-colors hover:border-[#c7c7c7]">
-      <div className="border-b border-[#e8eaed] px-4 py-3">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#5f6368]">Google Ads</p>
-        <h3 className="mt-2 text-[15px] font-medium leading-snug text-[#202124]">Ad details</h3>
-        <p className="mt-1 text-[17px] font-normal leading-snug text-[#202124]">{detailTitle}</p>
-        <p className="mt-1 text-[12px] leading-snug text-[#5f6368]">
-          The information about this ad may vary by location.
-        </p>
-        <dl className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[#f1f3f4] pt-3 text-[13px]">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <dt className="text-[#5f6368]">Last shown</dt>
-            <dd className="font-medium text-[#202124] [overflow-wrap:anywhere] break-words">{lastShown}</dd>
-          </div>
-          {fmt ? (
-            <div className="flex flex-wrap items-baseline gap-2">
-              <dt className="text-[#5f6368]">Format</dt>
-              <dd className="font-medium text-[#202124]">{fmt.replace(/\s+ad$/i, "")}</dd>
-            </div>
+    <article className="flex h-full min-w-0 flex-col rounded-2xl border border-[#dadce0] bg-white text-left shadow-[0_1px_2px_rgba(60,64,67,0.08)] transition-colors hover:border-[#c7c7c7]">
+      <div className="shrink-0 border-b border-[#e8eaed] px-4 py-3">
+        <h3 className="text-[17px] font-medium leading-snug text-[#202124] text-pretty [overflow-wrap:anywhere] break-words">
+          {detailTitle}
+        </h3>
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-[#f1f3f4] pt-3 text-[13px]">
+          <span className="text-[#5f6368]">Last shown</span>
+          <span className="font-medium text-[#202124] [overflow-wrap:anywhere] break-words">{lastShown}</span>
+          {ad.format?.trim() ? (
+            <>
+              <span className="text-[#dadce0]" aria-hidden>
+                ·
+              </span>
+              <GoogleAdFormatIcon format={ad.format} />
+            </>
           ) : null}
-        </dl>
+        </div>
       </div>
 
-      <div className="bg-[#f1f3f4] px-4 py-4">
-        <div className="mx-auto max-w-[360px] overflow-hidden rounded-2xl border border-[#e8eaed] bg-white shadow-sm">
+      <div className="flex min-h-0 flex-1 flex-col bg-[#f1f3f4] px-4 py-4">
+        <div className="mx-auto flex h-full min-h-0 w-full max-w-[360px] flex-1 flex-col overflow-hidden rounded-2xl border border-[#e8eaed] bg-white shadow-sm">
           {hasCreativeImageAsset ? (
             <a
               href={imageOpenHref}
               target="_blank"
               rel="noopener noreferrer"
-              title={ad.previewUrl ? "Open preview URL" : ad.adUrl ?? undefined}
-              className="block bg-[#f8f9fa]"
+              title={previewHref ? "Open creative preview" : ad.adUrl ?? undefined}
+              className="block shrink-0 bg-[#f8f9fa]"
             >
               {!creativeImgFailed ? (
                 <img
@@ -275,21 +274,21 @@ function GoogleTransparencyCard({
               )}
             </a>
           ) : null}
-          {ad.previewUrl?.trim() ? (
-            <div className="border-t border-[#e8eaed] bg-[#fafafa] px-3 py-2">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#5f6368]">Preview URL</p>
+          {showCreativePreviewLinkRow ? (
+            <div className="shrink-0 bg-[#fafafa] px-3 py-2">
               <a
-                href={ad.previewUrl.trim()}
+                href={previewHref}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-0.5 line-clamp-3 break-all text-[11px] leading-snug text-[#1a73e8] hover:underline"
+                className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#1a73e8] hover:underline"
               >
-                {ad.previewUrl.trim()}
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
+                Open creative preview
               </a>
             </div>
           ) : null}
           <div
-            className={`border-[#e8eaed] bg-white p-4 ${hasCreativeImageAsset ? "border-t" : ""}`}
+            className={`flex min-h-0 flex-1 flex-col bg-white p-4 ${hasCreativeImageAsset || showCreativePreviewLinkRow ? "border-t border-[#e8eaed]" : ""}`}
           >
             {isFaviconOnly && imageSrc ? (
               <div className="mb-3 flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border border-[#e8eaed] bg-[#f8f9fa]">
@@ -308,6 +307,8 @@ function GoogleTransparencyCard({
             {sn.body ? (
               <ExpandableAdText
                 text={sn.body}
+                collapseOverflow={false}
+                unclampedMaxHeightClass=""
                 className="mt-2 text-[13px] leading-relaxed text-[#3c4043] [overflow-wrap:anywhere] break-words whitespace-pre-wrap"
               />
             ) : null}
@@ -315,7 +316,7 @@ function GoogleTransparencyCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-[#f1f3f4] px-4 py-3">
+      <div className="flex shrink-0 flex-col gap-2 border-t border-[#f1f3f4] px-4 py-3">
         {ad.shownSummary && !ad.lastShownLabel ? (
           <p className="flex items-center gap-2 text-[12px] text-[#5f6368]">
             <Clock className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
@@ -357,12 +358,12 @@ function GoogleYoutubeAdCard({
   const showPoster = Boolean(thumb) && !posterFailed;
 
   return (
-    <article className="min-w-0 flex flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)]">
+    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)]">
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="relative block aspect-video overflow-hidden bg-[#0f0f0f]"
+        className="relative block aspect-video shrink-0 overflow-hidden bg-[#0f0f0f]"
       >
         {showPoster ? (
           <img
@@ -376,10 +377,10 @@ function GoogleYoutubeAdCard({
             <span className="mb-1 flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-white shadow-lg ring-1 ring-white/20">
               <Play className="ml-0.5 h-7 w-7" fill="currentColor" aria-hidden />
             </span>
-            <span className="line-clamp-3 text-[12px] font-semibold leading-snug text-white [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)]">
+            <span className="text-[12px] font-semibold leading-snug text-white [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)] [overflow-wrap:anywhere] px-2">
               {ad.title}
             </span>
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-red-300/95">Google Ads Library</span>
+            <YouTubeLogo className="mt-1 h-6 w-6 shrink-0 opacity-90" aria-hidden />
           </div>
         )}
         <span className="pointer-events-none absolute left-2 top-2 rounded bg-black/80 px-2 py-1 text-[10px] font-medium text-white">
@@ -390,11 +391,12 @@ function GoogleYoutubeAdCard({
             <div className="h-0 w-0 border-b-[7px] border-b-transparent border-l-[12px] border-l-white border-t-[7px] border-t-transparent" />
           </div>
         </div>
-        <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/80 px-2 py-1 text-[11px] text-white">
-          Video
+        <span className="pointer-events-none absolute bottom-2 right-2 rounded bg-black/80 px-2 py-1 text-white" title="Video">
+          <Video className="h-4 w-4" aria-hidden />
+          <span className="sr-only">Video</span>
         </span>
       </a>
-      <div className="flex gap-3 p-3">
+      <div className="flex min-h-0 flex-1 gap-3 p-3">
         <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-[#e5e7eb] bg-white">
           <BrandLogoThumb src={brand.logoUrl ?? ""} alt={brand.name} className="bg-white" />
         </div>
@@ -406,7 +408,7 @@ function GoogleYoutubeAdCard({
           <p className="text-[12px] text-[#606060]">{ad.views}</p>
         </div>
       </div>
-      <div className="border-t border-[#f1f5f9] px-3 pb-3 pt-0">
+      <div className="flex shrink-0 flex-col gap-2 border-t border-[#f1f5f9] px-3 pb-3 pt-0">
         <a
           href={href}
           target="_blank"
@@ -690,7 +692,6 @@ function CompetitorContent() {
   const [tiktokAdsModalOpen, setTiktokAdsModalOpen] = useState(false);
   const [microsoftAdsModalOpen, setMicrosoftAdsModalOpen] = useState(false);
   const [pinterestAdsModalOpen, setPinterestAdsModalOpen] = useState(false);
-  const [adsFilter, setAdsFilter] = useState<"active" | "all">("active");
   const [sortBy, setSortBy] = useState("recent");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -762,11 +763,10 @@ function CompetitorContent() {
         ids: (platformIds ?? undefined) as Record<string, string> | undefined,
         channels: channelsParam ? channelsParam.split(",").filter(Boolean) : undefined,
         confirmed: isConfirmed,
-        adsFilter,
       },
       pending: false,
     });
-  }, [adsFilter, brand.name, brand.domain, brand.logoUrl, channelsParam, isConfirmed, platformIds]);
+  }, [brand.name, brand.domain, brand.logoUrl, channelsParam, isConfirmed, platformIds]);
 
   const {
     data: adLib,
@@ -789,7 +789,6 @@ function CompetitorContent() {
   } = useAdLibrary(
     { name: brand.name, domain: brand.domain, logoUrl: brand.logoUrl },
     platformIds,
-    adsFilter,
     adsPlatforms,
     isConfirmed,
     tiktokRegion,
@@ -829,16 +828,6 @@ function CompetitorContent() {
   const fetchTikTok = adsPlatforms.includes("tiktok");
   const fetchMicrosoft = adsPlatforms.includes("microsoft");
   const fetchPinterest = adsPlatforms.includes("pinterest");
-
-  const adsFilterRefetchReadyRef = useRef(false);
-  useEffect(() => {
-    if (!isConfirmed || !fetchMeta) return;
-    if (!adsFilterRefetchReadyRef.current) {
-      adsFilterRefetchReadyRef.current = true;
-      return;
-    }
-    void refreshMetaAds();
-  }, [adsFilter, isConfirmed, fetchMeta, refreshMetaAds]);
 
   const googleRegionRefetchReadyRef = useRef(false);
   useEffect(() => {
@@ -1101,36 +1090,6 @@ function CompetitorContent() {
           <div className="flex flex-col gap-2 px-6 sm:px-8 lg:px-10 py-3.5 bg-[#DDF1FD]/20 border-t border-white/60">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2.5">
-              <div className="flex bg-white p-0.5 rounded-lg border border-[#e0e3e8] shadow-sm">
-                  <button
-                    type="button"
-                    onClick={() => setAdsFilter("active")}
-                    className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
-                      adsFilter === "active"
-                        ? "bg-[#343434] text-white shadow-sm"
-                        : "text-[#6b7280] hover:text-[#343434]"
-                    }`}
-                  >
-                    Active
-                  </button>
-                <button
-                  type="button"
-                  onClick={() => setAdsFilter("all")}
-                  className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
-                    adsFilter === "all"
-                      ? "bg-[#343434] text-white shadow-sm"
-                      : "text-[#6b7280] hover:text-[#343434]"
-                  }`}
-                >
-                  All ads
-                </button>
-              </div>
-              {fetchMeta ? (
-                <span className="text-[11px] text-[#64748b] max-w-md leading-snug">
-                  Meta only: <strong className="font-semibold text-[#475569]">Active</strong> = ads Meta marks active;{" "}
-                  <strong className="font-semibold text-[#475569]">All</strong> includes inactive. Updates Meta via Apify.
-                </span>
-              ) : null}
               <div className="relative w-full sm:w-64 lg:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9ca3af] pointer-events-none" />
                 <input
@@ -1257,7 +1216,7 @@ function CompetitorContent() {
                           ? metaRefreshing
                             ? "Refreshing Meta ads…"
                             : "Loading ads…"
-                          : `${metaAds.length} loaded (max ${scrapeFields.metaMaxAds} per request) from Ad Library`}
+                          : `${metaAds.length} active ads loaded (max ${scrapeFields.metaMaxAds} per request) from Ad Library`}
                         {adLib?.meta?.error && metaAds.length === 0 ? ` · ${adLib.meta?.error}` : ""}
                       </p>
                     </div>
@@ -1314,17 +1273,6 @@ function CompetitorContent() {
                       </span>
                     </div>
                     <div className={platformScrapeFieldsGridClass}>
-                      <label className="flex flex-col gap-1 min-w-0">
-                        <span className="text-[11px] font-medium text-[#64748b]">Activity (ad status)</span>
-                        <select
-                          value={adsFilter}
-                          onChange={(e) => setAdsFilter(e.target.value === "all" ? "all" : "active")}
-                          className={platformSelectClass}
-                        >
-                          <option value="active">Active</option>
-                          <option value="all">All ads</option>
-                        </select>
-                      </label>
                       <label className="flex flex-col gap-1 min-w-0">
                         <span className="text-[11px] font-medium text-[#64748b]">Max ads</span>
                         <input
@@ -1425,7 +1373,7 @@ function CompetitorContent() {
                   ))
                 ) : filteredMetaAds.length === 0 ? (
                   <p className="text-[14px] text-[#6b7280] col-span-full py-6">
-                    No Meta ads matched your filters. Try changing search, sort, or ad status.
+                    No Meta ads matched your filters. Try changing search or sort, or run a fresh scrape.
                   </p>
                 ) : (
                   filteredMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
@@ -2334,7 +2282,34 @@ function CompetitorContent() {
               <UnconnectedPlatformPlaceholder title="Pinterest" Logo={PinterestLogo} compact />
             ) : null}
             <UnconnectedPlatformPlaceholder title="Snapchat" Logo={SnapchatLogo} compact />
-            <UnconnectedPlatformPlaceholder title="Reddit" Logo={RedditLogo} compact />
+
+            <section aria-labelledby="reddit-ads-heading">
+              <div className={platformSectionPanelClass}>
+                <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/60 bg-white/80 shadow-sm backdrop-blur-sm">
+                      <RedditLogo className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                        <h3 id="reddit-ads-heading" className="font-semibold text-[#343434] text-[16px] tracking-[-0.01em]">
+                          Reddit
+                        </h3>
+                        <span className="inline-flex shrink-0 rounded-full bg-[#343434] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          Active
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-[#6b7280] mt-0.5">Reddit Ads Library</p>
+                    </div>
+                  </div>
+                </div>
+                <div className={`${platformScrapeToggleBarClass} px-4 pb-5 pt-5 sm:px-5`}>
+                  <div className="rounded-xl border border-[#e2e8f0] bg-white/70 px-4 py-3.5 text-[14px] leading-relaxed text-[#475569] shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                    No ads found.
+                  </div>
+                </div>
+              </div>
+            </section>
 
             </div>
           </div>

@@ -1,5 +1,6 @@
 import type {
   FacebookAdLibraryItem,
+  FacebookAdSnapshot,
   GoogleCompanyAdItem,
   LinkedInAdItem,
 } from "@/lib/ad-library/apify-raw-types";
@@ -20,10 +21,15 @@ export function safeHttpsUrl(text: string): string | null {
 /** Meta / Facebook grid card */
 export type MetaAdCard = {
   id: string;
+  /** Link-unit headline under the domain (not primary text above the creative). */
   headline: string;
+  /** Primary text above the creative (`snapshot.body.text`). */
   desc: string;
   cta: string;
+  /** Legacy: landing URL or short display string; prefer `destinationUrl`. */
   subtext: string;
+  destinationUrl?: string;
+  linkDescription?: string;
   img: string;
   isVideo: boolean;
   videoUrl?: string;
@@ -129,6 +135,21 @@ export type PinterestAdCard = {
   reachSummary?: string | null;
 };
 
+/** Snapchat EU Ads Gallery — rows from Apify EU transparency-style actors. */
+export type SnapchatAdCard = {
+  id: string;
+  headline: string;
+  desc: string;
+  url: string;
+  img: string;
+  videoUrl?: string | null;
+  advertiser: string;
+  adUrl: string;
+  /** EU market where the row surfaced (ISO2) when present */
+  euCountry?: string | null;
+  impressionsLabel?: string | null;
+};
+
 function containsTemplateTokens(value: string): boolean {
   return /\{\{[^}]+\}\}/.test(value);
 }
@@ -176,33 +197,184 @@ function pickMetaVideoUrl(snap: FacebookAdLibraryItem["snapshot"]): string | und
   return fromSnapshot || undefined;
 }
 
+function facebookSnapshotString(snap: FacebookAdLibraryItem["snapshot"], keys: string[]): string {
+  if (!snap) return "";
+  const o = snap as Record<string, unknown>;
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string") {
+      const t = cleanMetaText(v);
+      if (t) return t;
+    }
+  }
+  return "";
+}
+
+function facebookCardString(card: unknown, keys: string[]): string {
+  if (!card || typeof card !== "object") return "";
+  const o = card as Record<string, unknown>;
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string") {
+      const t = cleanMetaText(v);
+      if (t) return t;
+    }
+  }
+  return "";
+}
+
+function metaDestinationHttps(raw: string): string | undefined {
+  const t = raw.trim();
+  if (!t || /\s/.test(t)) return undefined;
+  const withProto = /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/\/+/, "")}`;
+  const href = safeHttpsUrl(withProto);
+  return href || undefined;
+}
+
+function looksLikeFbFeedPrimaryStory(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  const words = t.split(/\s+/).filter(Boolean).length;
+  if (words >= 14) return true;
+  if (t.length >= 90) return true;
+  if (/\n/.test(t)) return true;
+  if (/\.\.\.\s*$|…\s*$/.test(t)) return true;
+  if (t.length >= 80 && (/[.!?]\s+[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t) || /\s—\s/.test(t))) return true;
+  return false;
+}
+
+function fbCaptionProbablyDisplayOnlyLabel(s: string): boolean {
+  if (looksLikeFbFeedPrimaryStory(s)) return false;
+  const t = s.trim();
+  if (!t) return false;
+  return t.split(/\s+/).filter(Boolean).length <= 12 && t.length <= 72;
+}
+
+function collectFbPrimaryBodyCandidates(snap: FacebookAdSnapshot | undefined): string[] {
+  if (!snap) return [];
+  const out: string[] = [];
+  const push = (s: string) => {
+    const t = cleanMetaText(s);
+    if (t && !out.includes(t)) out.push(t);
+  };
+
+  push(snap.body?.text || "");
+
+  const o = snap as Record<string, unknown>;
+  for (const k of ["primary_text", "primaryText", "ad_body", "adBody", "message"]) {
+    const v = o[k];
+    if (typeof v === "string") push(v);
+  }
+
+  const bodiesArr = o.bodies;
+  if (Array.isArray(bodiesArr)) {
+    for (const item of bodiesArr) {
+      if (typeof item === "string") push(item);
+      else if (item && typeof item === "object") {
+        const b = item as Record<string, unknown>;
+        if (typeof b.text === "string") push(b.text);
+        else if (typeof b.body === "string") push(b.body);
+      }
+    }
+  }
+
+  for (const c of snap.cards ?? []) {
+    push(typeof c.body === "string" ? c.body : "");
+  }
+
+  return out;
+}
+
+function fbPickRichPrimaryCandidate(candidates: string[]): string {
+  if (candidates.length === 0) return "";
+  const scored = [...candidates].sort((a, b) => {
+    const ap = looksLikeFbFeedPrimaryStory(a) ? 1 : 0;
+    const bp = looksLikeFbFeedPrimaryStory(b) ? 1 : 0;
+    if (ap !== bp) return bp - ap;
+    return b.length - a.length;
+  });
+  return scored[0] || "";
+}
+
 export function facebookItemToMetaCard(item: FacebookAdLibraryItem, index: number): MetaAdCard | null {
   const snap = item.snapshot;
   const card = snap?.cards?.[0];
-  const body = cleanMetaText(snap?.body?.text || "") || cleanMetaText(card?.body || "");
-  const title =
-    cleanMetaText(card?.title || "") ||
-    cleanMetaText(snap?.title || "") ||
-    cleanMetaText(snap?.caption || "");
-  const pageName =
-    snap?.page_name?.trim() ||
-    snap?.current_page_name?.trim() ||
-    item.page_name?.trim() ||
-    "Sponsored";
-  const cta = snap?.cta_text?.trim() || "Learn more";
+
+  let primaryDesc = fbPickRichPrimaryCandidate(collectFbPrimaryBodyCandidates(snap));
+
+  const linkHeadline = cleanMetaText(card?.title || "") || cleanMetaText(snap?.title || "");
+  let captionRaw =
+    facebookCardString(card, ["caption"]) || facebookSnapshotString(snap, ["caption"]);
+
+  let linkDesc =
+    facebookCardString(card, ["link_description", "linkDescription"]) ||
+    facebookSnapshotString(snap, ["link_description", "linkDescription"]);
+
+  if (!primaryDesc.trim() && captionRaw && looksLikeFbFeedPrimaryStory(captionRaw)) {
+    primaryDesc = captionRaw;
+    captionRaw = "";
+  }
+
+  if (!primaryDesc.trim() && linkDesc && looksLikeFbFeedPrimaryStory(linkDesc) && !linkHeadline.trim()) {
+    primaryDesc = linkDesc;
+    linkDesc = "";
+  }
+
+  const desc = primaryDesc;
+
+  let headline = linkHeadline;
+  if (!headline && captionRaw.trim() && fbCaptionProbablyDisplayOnlyLabel(captionRaw)) {
+    headline = captionRaw.trim();
+  }
+
+  if (desc.trim() && headline.trim()) {
+    const hn = headline.trim().toLowerCase();
+    const pr = desc.trim().toLowerCase();
+    const storyPrimary = looksLikeFbFeedPrimaryStory(desc);
+    if (storyPrimary) {
+      if (
+        hn === pr ||
+        pr.startsWith(hn) ||
+        (/\.\.\.|…/.test(headline.trim()) && pr.startsWith(hn.replace(/\.\.\.|…$/g, "").trim()))
+      ) {
+        headline = linkHeadline.trim();
+      }
+      if (!linkHeadline.trim() && (/\.\.\.|…/.test(headline) || looksLikeFbFeedPrimaryStory(headline))) {
+        headline = "";
+      }
+    }
+  }
+
+  let linkDescOut = linkDesc.trim();
+  if (linkDescOut && desc.trim() && desc.trim().startsWith(linkDescOut)) linkDescOut = "";
+  else if (
+    linkDescOut &&
+    desc.trim() &&
+    (linkDescOut === desc.trim() ||
+      desc.trim().includes(linkDescOut) ||
+      linkDescOut.includes(desc.trim()))
+  ) {
+    const shortOne = desc.length <= linkDescOut.length ? desc : linkDescOut;
+    if (looksLikeFbFeedPrimaryStory(shortOne)) linkDescOut = "";
+  }
+
+  const ctaRaw =
+    cleanMetaText(card?.cta_text || "") ||
+    facebookSnapshotString(snap, ["cta_text", "ctaText"]) ||
+    "Learn more";
+
   const { url: img, isVideo } = pickMetaImage(snap);
   const videoUrl = pickMetaVideoUrl(snap);
-  const caption = cleanMetaText(snap?.caption || "");
-  let headline: string;
-  let desc: string;
-  if (!title && !caption && body) {
-    headline = body;
-    desc = "";
-  } else {
-    headline = title || caption || body || "Ad";
-    desc = body || title || caption || "—";
-  }
-  const subtext = cleanMetaText(String(card?.link_url || snap?.link_url || "")) || pageName;
+
+  const rawLinkUrl = typeof card?.link_url === "string" ? card.link_url.trim() : "";
+  const rawSnapLink = typeof snap?.link_url === "string" ? snap.link_url.trim() : "";
+  const linkMerged = rawLinkUrl || rawSnapLink;
+  const captionDisplayRemainder = captionRaw.trim();
+  const captionForHostname =
+    !captionDisplayRemainder || captionDisplayRemainder === desc.trim() ? "" : captionDisplayRemainder;
+  const subtext = linkMerged || captionForHostname || "";
+  const destinationUrl = linkMerged ? metaDestinationHttps(linkMerged) : undefined;
+
   const id = item.ad_archive_id || item.collation_id || `fb-${index}`;
   const adLibraryUrl =
     item.ad_library_url?.trim() ||
@@ -215,15 +387,21 @@ export function facebookItemToMetaCard(item: FacebookAdLibraryItem, index: numbe
     id: String(id),
     headline,
     desc,
-    cta: cta === "No button" ? "Learn more" : cta,
+    cta: ctaRaw === "No button" ? "Learn more" : ctaRaw,
     subtext,
+    ...(destinationUrl ? { destinationUrl } : {}),
+    ...(linkDescOut ? { linkDescription: linkDescOut } : {}),
     img: img || snap?.page_profile_picture_url || "",
     isVideo,
     adLibraryUrl,
     startedAt: item.start_date,
     endedAt: item.end_date,
     impressionsIndex: item.impressions_with_index?.impressions_index,
-    pageName,
+    pageName:
+      snap?.page_name?.trim() ||
+      snap?.current_page_name?.trim() ||
+      item.page_name?.trim() ||
+      "Sponsored",
     pageProfilePic: pic,
     ...(videoUrl ? { videoUrl } : {}),
   };
@@ -459,13 +637,59 @@ export type GoogleRowContext = {
   queryDomain: string;
 };
 
-/** Human label for API `format` (text / image / video). */
+/**
+ * Bucket for Google Ads Transparency `format` strings — aligns with common Google Ads surfaces
+ * (Search, Display, Video, Shopping, App, Discovery / Demand Gen, Performance Max).
+ */
+export type GoogleTransparencyFormatKind =
+  | "text"
+  | "image"
+  | "video"
+  | "shopping"
+  | "app"
+  | "discovery"
+  | "performance_max"
+  | "display"
+  | "unknown";
+
+export function googleCreativeFormatKind(format: string | undefined): GoogleTransparencyFormatKind {
+  const raw = (format || "").trim();
+  const f = raw.toLowerCase().replace(/[\s-]+/g, "_");
+  if (!f) return "unknown";
+
+  if (/(^|_)video($|_)|youtube|bumper|truview|in[-_]?stream|skippable/.test(f)) return "video";
+  if (/shopping|product|merchant|feed/.test(f)) return "shopping";
+  if (/^app($|_)|app_promotion|install|engagement/.test(f)) return "app";
+  if (/discovery|demand_gen|gallery/.test(f)) return "discovery";
+  if (/performance_max|^pmax/.test(f)) return "performance_max";
+  if (/responsive_display|banner|rich_media|html5|expandable/.test(f)) return "display";
+  if (/responsive_search|^text$|^search$|dsa/.test(f)) return "text";
+
+  if (f === "image") return "image";
+  if (f === "text") return "text";
+  if (f === "video") return "video";
+
+  return "unknown";
+}
+
+const FORMAT_KIND_LABELS: Record<GoogleTransparencyFormatKind, string> = {
+  text: "Search / text",
+  image: "Image",
+  video: "Video",
+  shopping: "Shopping",
+  app: "App",
+  discovery: "Discovery",
+  performance_max: "Performance Max",
+  display: "Display",
+  unknown: "",
+};
+
+/** Human label for UI / summaries (tooltips, descriptions). */
 export function googleCreativeFormatLabel(format: string | undefined): string | null {
-  const f = (format || "").toLowerCase();
-  if (f === "text") return "Text ad";
-  if (f === "image") return "Image ad";
-  if (f === "video") return "Video ad";
-  return format?.trim() ? format.trim() : null;
+  const raw = format?.trim();
+  const kind = googleCreativeFormatKind(raw);
+  if (kind !== "unknown") return FORMAT_KIND_LABELS[kind];
+  return raw || null;
 }
 
 export function googleItemToRow(

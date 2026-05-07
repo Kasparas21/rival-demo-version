@@ -5,15 +5,11 @@ export type { PlatformIdentifier };
 /** Platforms we can try to resolve via web search (not domain-based or merchant IDs). */
 export const FALLBACK_SEARCH_KEYS: (keyof PlatformIdentifier)[] = [
   "meta",
-  "x",
   "tiktok",
-  "youtube",
   "linkedin",
   "pinterest",
   "snapchat",
   "reddit",
-  "shopping",
-  "microsoft",
 ];
 
 /** Subreddits that are almost never the brand's official community */

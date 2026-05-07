@@ -7,25 +7,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   MetaLogo,
   GoogleLogo,
-  XLogo,
   LinkedInLogo,
-  MicrosoftLogo,
   RedditLogo,
   SnapchatLogo,
   TikTokLogo,
   PinterestLogo,
-  YouTubeLogo,
 } from "./platform-logos";
 
 export const CHANNELS = [
   { id: "meta", name: "Meta ads", Logo: MetaLogo },
   { id: "google", name: "Google ads", Logo: GoogleLogo },
-  { id: "x", name: "X (Twitter) ads", Logo: XLogo },
   { id: "tiktok", name: "TikTok ads", Logo: TikTokLogo },
-  { id: "youtube", name: "YouTube ads", Logo: YouTubeLogo },
   { id: "linkedin", name: "LinkedIn ads", Logo: LinkedInLogo },
-  { id: "microsoft", name: "Microsoft Ads", Logo: MicrosoftLogo },
-  { id: "shopping", name: "Google Shopping ads", Logo: GoogleLogo },
   { id: "pinterest", name: "Pinterest ads", Logo: PinterestLogo },
   { id: "snapchat", name: "Snapchat ads", Logo: SnapchatLogo },
   { id: "reddit", name: "Reddit ads", Logo: RedditLogo },
@@ -79,11 +72,8 @@ export function ChannelPickerModal({
   const toggle = (id: ChannelId) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -96,7 +86,8 @@ export function ChannelPickerModal({
     onClose();
   };
 
-  const displayQuery = competitorQuery.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || competitorQuery;
+  const displayQuery =
+    competitorQuery.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || competitorQuery;
 
   if (!mounted) return null;
 
@@ -105,135 +96,144 @@ export function ChannelPickerModal({
       {isOpen ? (
         <div
           key="channel-picker-overlay"
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex items-end justify-center p-0 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4"
           role="presentation"
         >
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="absolute inset-0 z-0 bg-black/20 backdrop-blur-sm"
+            className="absolute inset-0 z-0 bg-black/25 backdrop-blur-[3px]"
             onClick={onClose}
             aria-hidden
           />
 
-          {/* Modal */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="relative z-10 w-full max-w-lg bg-white rounded-[28px] shadow-[0_24px_64px_rgba(31,38,135,0.12)] border border-white/80 overflow-hidden"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            className="relative z-10 flex max-h-[min(92dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-[24px] border border-[#e8e8e8] bg-white shadow-[0_24px_64px_rgba(31,38,135,0.14)] sm:max-h-[min(88dvh,680px)] sm:rounded-[24px]"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="channel-picker-title"
           >
-          {/* Header */}
-          <div className="px-6 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-gray-100">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="channel-picker-title" className="font-serif text-[24px] sm:text-[28px] text-[#343434] tracking-tight">
-                  Where should we look?
-                </h2>
-                <p className="mt-1.5 text-[14px] sm:text-[15px] text-[#808080] font-medium">
-                  Pick the platforms you want to track
-                </p>
+            {/* Header */}
+            <div className="shrink-0 border-b border-[#f1f5f9] px-5 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-6">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="channel-picker-title"
+                    className="font-serif text-[20px] font-semibold leading-snug tracking-tight text-[#343434] sm:text-[22px]"
+                  >
+                    Choose which platforms to show
+                  </h2>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-[#64748b] sm:text-[14px]">
+                    Tap a logo to hide or show that section.
+                  </p>
+                  <div className="mt-3 inline-flex max-w-full items-center rounded-full border border-[#DDF1FD] bg-[#DDF1FD]/40 px-3 py-1.5">
+                    <span className="truncate text-[13px] font-semibold text-[#343434]" title={displayQuery}>
+                      {displayQuery}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex size-10 shrink-0 items-center justify-center rounded-full text-[#64748b] transition-colors hover:bg-[#f4f4f5] hover:text-[#343434]"
+                  aria-label="Close"
+                >
+                  <X size={20} strokeWidth={2} />
+                </button>
               </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  className="text-[13px] font-semibold text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+                >
+                  Select all
+                </button>
+                <span className="text-[#e2e8f0]" aria-hidden>
+                  ·
+                </span>
+                <button
+                  type="button"
+                  onClick={selectNone}
+                  className="text-[13px] font-semibold text-[#64748b] transition-colors hover:text-[#343434]"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable grid — 3 columns on wide modal avoids orphan row */}
+            <div className="rival-subtle-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {CHANNELS.map((channel) => {
+                  const isSelected = selected.has(channel.id);
+                  const Logo = channel.Logo;
+                  return (
+                    <button
+                      key={channel.id}
+                      type="button"
+                      onClick={() => toggle(channel.id)}
+                      className={[
+                        "flex min-h-[52px] items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow] duration-150 outline-none",
+                        "focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/50 focus-visible:ring-offset-2",
+                        isSelected
+                          ? "border-[#343434]/85 bg-white shadow-[0_2px_12px_rgba(52,52,52,0.06)]"
+                          : "border-transparent bg-[#f8fafc] hover:border-[#e2e8f0] hover:bg-[#f1f5f9]",
+                      ].join(" ")}
+                    >
+                      <div
+                        className={[
+                          "flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 transition-colors",
+                          isSelected ? "bg-white ring-[#343434]/15" : "bg-white ring-[#e2e8f0]",
+                        ].join(" ")}
+                      >
+                        {Logo ? <Logo className="size-[22px]" /> : <div className="size-[22px] rounded bg-[#e2e8f0]" />}
+                      </div>
+                      <span
+                        className={[
+                          "min-w-0 flex-1 text-[13px] font-semibold leading-snug",
+                          isSelected ? "text-[#343434]" : "text-[#475569]",
+                        ].join(" ")}
+                      >
+                        {channel.name}
+                      </span>
+                      <div
+                        className={[
+                          "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
+                          isSelected ? "bg-[#343434] text-white" : "border border-[#cbd5e1] bg-white text-transparent",
+                        ].join(" ")}
+                        aria-hidden
+                      >
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 border-t border-[#f1f5f9] bg-white px-5 py-4 sm:px-6">
               <button
-                onClick={onClose}
-                className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-100 hover:text-[#343434] transition-colors"
-                aria-label="Close"
+                type="button"
+                onClick={handleConfirm}
+                disabled={selected.size === 0}
+                className="flex h-[50px] w-full items-center justify-center rounded-[18px] bg-[#343434] text-[15px] font-semibold text-white shadow-md transition-colors hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#343434]"
               >
-                <X size={20} strokeWidth={2} />
+                {selected.size === 0
+                  ? "Pick at least one platform"
+                  : `Search ${selected.size} platform${selected.size === 1 ? "" : "s"}`}
               </button>
             </div>
-
-            {/* Competitor badge */}
-            <div className="mt-4 inline-flex items-center px-4 py-2 rounded-full bg-[#DDF1FD]/50 border border-[#DDF1FD]">
-              <span className="text-[14px] font-semibold text-[#343434] truncate max-w-[240px]">{displayQuery}</span>
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div className="px-6 sm:px-8 py-3 flex gap-2">
-            <button
-              onClick={selectAll}
-              className="text-[13px] font-medium text-[#808080] hover:text-[#343434] transition-colors"
-            >
-              Select all
-            </button>
-            <span className="text-gray-300">·</span>
-            <button
-              onClick={selectNone}
-              className="text-[13px] font-medium text-[#808080] hover:text-[#343434] transition-colors"
-            >
-              Clear
-            </button>
-          </div>
-
-          {/* Channel grid */}
-          <div className="px-6 sm:px-8 pb-6 sm:pb-8">
-            <div className="grid grid-cols-2 gap-3">
-              {CHANNELS.map((channel) => {
-                const isSelected = selected.has(channel.id);
-                return (
-                  <button
-                    key={channel.id}
-                    onClick={() => toggle(channel.id)}
-                    className={`
-                      flex items-center gap-4 p-4 rounded-[20px] border-2 transition-all duration-200
-                      text-left
-                      ${isSelected
-                        ? "bg-white border-[#343434] shadow-[0_4px_16px_rgba(52,52,52,0.08)]"
-                        : "bg-gray-50/80 border-transparent hover:bg-gray-100/80 hover:border-gray-200"
-                      }
-                    `}
-                  >
-                    <div
-                      className={`w-12 h-12 rounded-[14px] flex items-center justify-center shrink-0 ring-1 transition-colors ${
-                        isSelected ? "bg-white ring-[#343434]/20" : "bg-white ring-gray-200"
-                      }`}
-                    >
-                      {channel.Logo ? (
-                        <channel.Logo className="w-6 h-6" />
-                      ) : (
-                        <div className="w-6 h-6 rounded bg-gray-200" />
-                      )}
-                    </div>
-                    <span
-                      className={`flex-1 font-semibold text-[14px] min-w-0 whitespace-normal break-words ${
-                        isSelected ? "text-[#343434]" : "text-gray-600"
-                      }`}
-                    >
-                      {channel.name}
-                    </span>
-                    <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-all ${
-                        isSelected ? "bg-[#343434] text-white" : "bg-gray-200 text-transparent"
-                      }`}
-                    >
-                      <Check size={14} strokeWidth={3} />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Confirm button */}
-            <button
-              onClick={handleConfirm}
-              disabled={selected.size === 0}
-              className="mt-6 w-full h-[52px] rounded-[24px] bg-[#343434] text-white font-semibold text-[16px] shadow-lg hover:bg-[#2a2a2a] hover:scale-[1.01] active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-            >
-              {selected.size === 0
-                ? "Pick at least one platform"
-                : `Search ${selected.size} platform${selected.size === 1 ? "" : "s"}`}
-            </button>
-          </div>
-        </motion.div>
+          </motion.div>
         </div>
       ) : null}
     </AnimatePresence>,

@@ -19,7 +19,6 @@ export type SidebarCompetitor = {
     ids?: Record<string, string>;
     channels?: string[];
     confirmed?: boolean;
-    adsFilter?: "active" | "all";
   };
   /** ISO timestamp from `saved_competitors.last_scraped_at` when synced from account */
   lastScrapedAt?: string;
@@ -158,16 +157,30 @@ function mergeDuplicateGroup(newer: SidebarCompetitor, older: SidebarCompetitor)
   };
 }
 
-/** Collapse duplicates (same slug group or same name fingerprint); input should be newest-first */
+function isLikelyRealDomainHost(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  if (!h.includes(".")) return false;
+  return /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(h);
+}
+
+function sidebarRowCanonicalHost(c: SidebarCompetitor): string {
+  return coerceSidebarCompetitorUrlHost(c).toLowerCase();
+}
+
+/** Collapse duplicates (same slug group, same name fingerprint, or same canonical domain); input should be newest-first */
 export function dedupeSidebarCompetitors(list: SidebarCompetitor[]): SidebarCompetitor[] {
   const out: SidebarCompetitor[] = [];
   for (const item of list) {
     const lookupName = item.brand?.name ?? item.name;
     const j = findMatchingCompetitorIndex(out, item.slug, lookupName);
-    if (j < 0) {
+    const host = sidebarRowCanonicalHost(item);
+    const hostIdx =
+      isLikelyRealDomainHost(host) ? out.findIndex((o) => sidebarRowCanonicalHost(o) === host) : -1;
+    const mergeIdx = j >= 0 ? j : hostIdx >= 0 ? hostIdx : -1;
+    if (mergeIdx < 0) {
       out.push({ ...item });
     } else {
-      out[j] = mergeDuplicateGroup(out[j], item);
+      out[mergeIdx] = mergeDuplicateGroup(out[mergeIdx], item);
     }
   }
   return out;
@@ -207,7 +220,14 @@ function migrateV1IfNeeded(): SidebarCompetitor[] {
   return [];
 }
 
-const MAX_STORED = 36;
+/** Max active watched competitors per user (server + local storage). */
+export const MAX_WATCHED_COMPETITORS = 10;
+
+const MAX_STORED = MAX_WATCHED_COMPETITORS;
+
+export type UpsertSidebarCompetitorResult =
+  | { ok: true }
+  | { ok: false; reason: "max_watched_competitors" };
 
 export function loadSidebarCompetitors(): SidebarCompetitor[] {
   if (typeof window === "undefined") return [];
@@ -241,12 +261,18 @@ export function saveSidebarCompetitors(list: SidebarCompetitor[]) {
 /**
  * Insert or update one competitor — matches existing row by slug, related domain, or same brand name (no duplicates).
  */
-export function upsertSidebarCompetitor(partial: { slug: string } & Partial<Omit<SidebarCompetitor, "slug">>) {
-  if (typeof window === "undefined") return;
+export function upsertSidebarCompetitor(
+  partial: { slug: string } & Partial<Omit<SidebarCompetitor, "slug">>
+): UpsertSidebarCompetitorResult {
+  if (typeof window === "undefined") return { ok: true };
   const slug = normalizeCompetitorSlug(partial.slug);
   const lookupName = partial.name?.trim() || partial.brand?.name || slug;
   const list = loadSidebarCompetitors();
   const idx = findMatchingCompetitorIndex(list, slug, lookupName);
+  const isNew = idx < 0;
+  if (isNew && list.length >= MAX_STORED) {
+    return { ok: false, reason: "max_watched_competitors" };
+  }
   const prev = idx >= 0 ? list[idx] : undefined;
   const merged: SidebarCompetitor = prev
     ? mergePatchIntoRow(prev, partial)
@@ -258,9 +284,16 @@ export function upsertSidebarCompetitor(partial: { slug: string } & Partial<Omit
         pending: partial.pending ?? false,
         ...(partial.lastScrapedAt !== undefined ? { lastScrapedAt: partial.lastScrapedAt } : {}),
       };
-  const next = list.filter((_, i) => i !== idx);
-  next.unshift(merged);
-  saveSidebarCompetitors(next);
+  if (isNew) {
+    const nextNew = [...list];
+    nextNew.unshift(merged);
+    saveSidebarCompetitors(nextNew);
+  } else if (idx >= 0) {
+    const nextUpdate = [...list];
+    nextUpdate[idx] = merged;
+    saveSidebarCompetitors(nextUpdate);
+  }
+  return { ok: true };
 }
 
 export function mergeSavedCompetitorsWithDemos(saved: SidebarCompetitor[], demos: SidebarCompetitor[]): SidebarCompetitor[] {
@@ -333,32 +366,7 @@ export function buildCompetitorSidebarHref(
   c: Pick<SidebarCompetitor, "slug" | "brand" | "logoUrl" | "libraryContext">
 ): string {
   const urlHost = coerceSidebarCompetitorUrlHost(c);
-  const params = new URLSearchParams({ url: urlHost });
-  if (c.brand?.name && c.brand.domain) {
-    const logoUrl =
-      firstNonEmptyLogoUrl(c.brand.logoUrl, c.logoUrl) ?? synthesizeClearbitLogoUrl(c);
-    params.set(
-      "brand",
-      JSON.stringify({
-        name: c.brand.name,
-        domain: c.brand.domain,
-        ...(logoUrl ? { logoUrl } : {}),
-      })
-    );
-  }
-  if (c.libraryContext) {
-    const ctx = c.libraryContext;
-    if (ctx.ids && Object.keys(ctx.ids).length > 0) {
-      params.set("ids", JSON.stringify(ctx.ids));
-    }
-    if (ctx.channels && ctx.channels.length > 0) {
-      params.set("channels", ctx.channels.join(","));
-    }
-    if (ctx.confirmed) {
-      params.set("confirmed", "1");
-    }
-  }
-  return `/dashboard/competitor?${params.toString()}`;
+  return `/dashboard/competitor/${encodeURIComponent(urlHost)}`;
 }
 
 const SIDEBAR_LETTER_PALETTE = [

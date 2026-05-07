@@ -50,7 +50,6 @@ function readGoogleDetailsFlag(): boolean {
 export function useAdLibrary(
   brand: Brand,
   ids: Ids | null,
-  adsFilter: "active" | "all",
   /** Only these platforms call `/api/ads/library` (from `?channels=` on competitor page). */
   adsPlatforms: AdsLibraryPlatform[],
   enabled = true,
@@ -91,7 +90,7 @@ export function useAdLibrary(
         logoUrl: brand.logoUrl,
       }),
       ids: ids ?? {},
-      metaStatus: adsFilter === "all" ? ("ALL" as const) : ("ACTIVE" as const),
+      metaStatus: "ACTIVE" as const,
       googleGetAdDetails: readGoogleDetailsFlag(),
       platforms: platformsSorted,
       ...(platformsSorted.includes("tiktok") ? { tiktokRegion } : {}),
@@ -128,7 +127,6 @@ export function useAdLibrary(
       brand.domain,
       brand.logoUrl,
       ids,
-      adsFilter,
       platformsSorted,
       tiktokRegion,
       googleRegionNorm,
@@ -273,7 +271,7 @@ export function useAdLibrary(
     [load]
   );
 
-  /** Re-fetch only Meta — respects `adsFilter` → `metaStatus` (ACTIVE vs ALL). */
+  /** Re-fetch only Meta (`metaStatus`: active ads). */
   const refreshMetaAds = useCallback(
     () => load({ skipCache: true, platforms: ["meta"] }),
     [load]

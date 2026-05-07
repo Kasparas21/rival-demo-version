@@ -14,6 +14,9 @@ export type FacebookAdSnapshot = {
     body?: string | null;
     cta_text?: string | null;
     title?: string | null;
+    caption?: string | null;
+    link_description?: string | null;
+    linkDescription?: string | null;
     link_url?: string | null;
     original_image_url?: string | null;
     resized_image_url?: string | null;
@@ -24,6 +27,9 @@ export type FacebookAdSnapshot = {
   link_url?: string | null;
   title?: string | null;
   caption?: string | null;
+  /** Muted line under link headline in the Ad Library snapshot. */
+  link_description?: string | null;
+  linkDescription?: string | null;
   page_name?: string | null;
   current_page_name?: string | null;
   page_profile_picture_url?: string | null;

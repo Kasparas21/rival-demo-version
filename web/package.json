@@ -1,0 +1,50 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "seed:strategy-overview": "tsx scripts/seed-strategy-overview.ts",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "analyze": "ANALYZE=true next build --webpack",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mendable/firecrawl-js": "^4.21.0",
+    "@openrouter/sdk": "^0.12.31",
+    "@polar-sh/sdk": "^0.47.1",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.105.3",
+    "@tabler/icons-react": "^3.42.0",
+    "@xyflow/react": "^12.10.2",
+    "apify-client": "^2.23.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.14.0",
+    "motion": "^12.38.0",
+    "next": "16.1.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "recharts": "^3.8.1",
+    "resend": "^6.12.2",
+    "tailwind-merge": "^3.5.0",
+    "undici": "^6.25.0",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.13"
+  },
+  "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.4",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.7",
+    "tailwindcss": "^4",
+    "tsx": "^4.21.0",
+    "typescript": "^5",
+    "vitest": "^4.1.5"
+  }
+}
