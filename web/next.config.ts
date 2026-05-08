@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "scontent.cdninstagram.com", pathname: "/**" },
       { protocol: "https", hostname: "video.xx.fbcdn.net", pathname: "/**" },
       { protocol: "https", hostname: "scontent.xx.fbcdn.net", pathname: "/**" },
+      { protocol: "https", hostname: "8g55zxgme2.ufs.sh", pathname: "/f/**" },
     ],
   },
 };

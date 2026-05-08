@@ -48,7 +48,7 @@ export function LandingFeatures() {
         <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:gap-8">
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-ads-library.png"
+              src="https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mUvEI2iMcDz2qYZFsOfNkSV7i51vL4pdQ9IeM"
               alt="Rival Ads Library preview showing cross‑platform Meta, Google and other ad creatives in one place."
               width={1024}
               height={722}
@@ -62,7 +62,7 @@ export function LandingFeatures() {
 
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-strategy-map.png"
+              src="https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mS5Pp9RLgLYkhla84OziVnT6FcZQeJRftAEoj"
               alt="Full funnel strategy map with platforms placed across TOF, MOF and BOF plus spend and audience signals."
               width={1024}
               height={722}
@@ -76,7 +76,7 @@ export function LandingFeatures() {
 
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-strategy-insights.png"
+              src="https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mauBEWMtFKU3Hr9N0RjMX5Y1Lc6PJiyQVdGCl"
               alt="Strategy overview with funnel architecture, budget allocation, creative cadence and performance insight cards."
               width={1024}
               height={722}
