@@ -8,7 +8,7 @@ import type { Database } from "./types";
  * Unauthenticated /api/* must not be redirected to /login (would break JSON) — short-circuit below.
  */
 const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/api/account"];
-const AUTH_PAGES = ["/login"];
+const AUTH_PAGES = ["/login", "/signup"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

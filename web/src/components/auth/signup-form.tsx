@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { glassPanelClass } from "@/components/ui/glass-styles";
@@ -27,50 +27,71 @@ const glassInputWrap =
 const glassInputField =
   "w-full border-none bg-transparent py-3 text-[15px] font-medium tracking-wide text-gray-900 outline-none placeholder:text-gray-600 focus:ring-0";
 
-export function LoginForm() {
-  const router = useRouter();
+export function SignupForm() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const next = safeAuthNextPath(searchParams.get("next"), "/login") ?? "/dashboard";
+  const next = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard";
   const urlAuthError = searchParams.get("error");
   const rawNextQuery = searchParams.get("next");
-  const signupHref = rawNextQuery ? `/signup?next=${encodeURIComponent(rawNextQuery)}` : "/signup";
+  const loginHref = rawNextQuery ? `/login?next=${encodeURIComponent(rawNextQuery)}` : "/login";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
-  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingGoogle, setIsSendingGoogle] = useState(false);
 
-  const handlePasswordSignIn = async () => {
+  const handleSignUp = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
       setFormError("Enter your email address first.");
       return;
     }
     if (!password) {
-      setFormError("Enter your password.");
+      setFormError("Choose a password.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setFormError("Passwords don't match");
       return;
     }
 
-    setIsSigningIn(true);
+    setIsSubmitting(true);
     setFormError(null);
+    setInfoMessage(null);
     setGoogleError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: trimmed,
-      password,
+    const effectiveNext = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard";
+
+    const res = await fetch("/api/auth/sign-up-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: trimmed, password, next: effectiveNext }),
     });
+    let payload: { ok?: boolean; error?: string } = {};
+    try {
+      payload = (await res.json()) as { ok?: boolean; error?: string };
+    } catch {
+      /* non-JSON */
+    }
 
-    setIsSigningIn(false);
+    setIsSubmitting(false);
 
-    if (error) {
-      setFormError(error.message);
+    if (!res.ok) {
+      setFormError(payload.error ?? "Could not complete signup.");
       return;
     }
 
-    router.refresh();
-    router.replace(next);
+    if (!payload.ok) {
+      setFormError("Could not complete signup.");
+      return;
+    }
+
+    setInfoMessage(
+      "Check your inbox for a confirmation email from us. Open the link to finish signup, then you can sign in."
+    );
   };
 
   const handleGoogleSignIn = async () => {
@@ -116,26 +137,26 @@ export function LoginForm() {
 
       <div className={`w-full max-w-[440px] ${glassPanelClass}`}>
         <h2 className="text-[1.65rem] font-semibold tracking-tight text-gray-900 sm:text-[1.75rem]">
-          Sign in to Rival
+          Create your account
         </h2>
         <p className="mt-2.5 text-[14px] font-medium leading-relaxed text-gray-600">
-          Enter your email and password to continue.
+          Enter your email and choose a password.
         </p>
 
         <form
           className="mt-8 space-y-5"
           onSubmit={(event) => {
             event.preventDefault();
-            void handlePasswordSignIn();
+            void handleSignUp();
           }}
         >
           <div>
-            <label htmlFor="login-email" className="text-[13px] font-semibold text-gray-900">
+            <label htmlFor="signup-email" className="text-[13px] font-semibold text-gray-900">
               Email address
             </label>
             <div className={glassInputWrap}>
               <input
-                id="login-email"
+                id="signup-email"
                 type="email"
                 autoComplete="email"
                 placeholder="yourstore@example.com"
@@ -147,15 +168,15 @@ export function LoginForm() {
           </div>
 
           <div>
-            <label htmlFor="login-password" className="text-[13px] font-semibold text-gray-900">
+            <label htmlFor="signup-password" className="text-[13px] font-semibold text-gray-900">
               Password
             </label>
             <div className={glassInputWrap}>
               <input
-                id="login-password"
+                id="signup-password"
                 type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
+                autoComplete="new-password"
+                placeholder="Choose a password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className={glassInputField}
@@ -163,12 +184,29 @@ export function LoginForm() {
             </div>
           </div>
 
+          <div>
+            <label htmlFor="signup-password-confirm" className="text-[13px] font-semibold text-gray-900">
+              Confirm password
+            </label>
+            <div className={glassInputWrap}>
+              <input
+                id="signup-password-confirm"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className={glassInputField}
+              />
+            </div>
+          </div>
+
           <button
             type="submit"
-            disabled={isSigningIn}
+            disabled={isSubmitting}
             className="mt-0 w-full rounded-full bg-gray-900 px-5 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-65 disabled:hover:scale-100"
           >
-            {isSigningIn ? "Signing in…" : "Sign in"}
+            {isSubmitting ? "Creating account…" : "Create account"}
           </button>
         </form>
 
@@ -177,6 +215,7 @@ export function LoginForm() {
             {urlAuthError}
           </p>
         ) : null}
+        {infoMessage ? <p className="mt-4 text-[13px] font-medium text-[#1d4f2f]">{infoMessage}</p> : null}
         {formError ? <p className="mt-4 text-[13px] text-[#b42318]">{formError}</p> : null}
 
         <div className="mt-6 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
@@ -198,9 +237,9 @@ export function LoginForm() {
         {googleError ? <p className="mt-4 text-[13px] text-[#b42318]">{googleError}</p> : null}
 
         <p className={linkMutedClass}>
-          Don&apos;t have an account?{" "}
-          <Link href={signupHref} className="font-semibold text-gray-900 underline underline-offset-2">
-            Sign up
+          Already have an account?{" "}
+          <Link href={loginHref} className="font-semibold text-gray-900 underline underline-offset-2">
+            Sign in
           </Link>
         </p>
       </div>

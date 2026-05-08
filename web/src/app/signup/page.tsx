@@ -1,16 +1,16 @@
 import { redirect } from "next/navigation";
-import { LoginForm } from "@/components/auth/login-form";
+import { SignupForm } from "@/components/auth/signup-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export default async function LoginPage({
+export default async function SignupPage({
   searchParams,
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
   const params = (await searchParams) ?? {};
-  const safeNext = safeAuthNextPath(firstParam(params.next), "/login");
+  const safeNext = safeAuthNextPath(firstParam(params.next), "/signup");
   const safePostOnboardingPath = safeNext ? postOnboardingPath(safeNext) : null;
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {
@@ -35,5 +35,5 @@ export default async function LoginPage({
     redirect(safePostOnboardingPath ?? "/dashboard");
   }
 
-  return <LoginForm />;
+  return <SignupForm />;
 }
