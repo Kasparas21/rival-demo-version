@@ -1,137 +1,63 @@
 "use client";
 
-import LogoLoop, { type LogoImgItem, type LogoItem, type LogoNodeItem } from "@/components/ui/logo-loop";
+import LogoLoop, { type LogoImgItem, type LogoItem } from "@/components/ui/logo-loop";
 
-const wordmarkSvgClass =
-  "block h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(92vw,720px)] shrink-0 text-black";
-
-function MarqueeFoodspringMark() {
-  return (
-    <svg viewBox="0 0 520 80" className={wordmarkSvgClass} fill="none" aria-hidden>
-      <text
-        x={8}
-        y={56}
-        fill="currentColor"
-        style={{
-          fontFamily:
-            "ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          fontSize: 48,
-          fontWeight: 600,
-          letterSpacing: "-0.03em",
-        }}
-      >
-        foodspring
-      </text>
-      <text
-        x={396}
-        y={28}
-        fill="currentColor"
-        style={{
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
-          fontSize: 15,
-          fontWeight: 600,
-        }}
-      >
-        {"\u00AE"}
-      </text>
-    </svg>
-  );
-}
-
-function MarqueeNoccoMark() {
-  return (
-    <svg viewBox="0 0 340 260" className={wordmarkSvgClass} fill="none" aria-hidden>
-      <g transform="skewX(-8)">
-        <rect x={48} y={36} width={220} height={26} rx={3} fill="currentColor" />
-        <rect x={48} y={78} width={220} height={26} rx={3} fill="currentColor" />
-      </g>
-      <text
-        x={170}
-        y={232}
-        textAnchor="middle"
-        fill="currentColor"
-        style={{
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
-          fontSize: 72,
-          fontWeight: 800,
-          letterSpacing: "-0.06em",
-        }}
-      >
-        NOCCO
-      </text>
-    </svg>
-  );
-}
-
-function MarqueePipedriveMark() {
-  return (
-    <svg viewBox="0 0 520 88" className={wordmarkSvgClass} fill="none" aria-hidden>
-      <text
-        x={8}
-        y={60}
-        fill="currentColor"
-        style={{
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
-          fontSize: 52,
-          fontWeight: 700,
-          letterSpacing: "-0.03em",
-        }}
-      >
-        pipedrive
-      </text>
-      <text
-        x={412}
-        y={34}
-        fill="currentColor"
-        style={{
-          fontFamily: "ui-sans-serif, system-ui, sans-serif",
-          fontSize: 14,
-          fontWeight: 600,
-        }}
-      >
-        {"\u2122"}
-      </text>
-    </svg>
-  );
-}
-
-const STRIP_LOGOS: LogoImgItem[] = [
+const UPLOADTHING_LOGOS: LogoImgItem[] = [
   {
-    src: "/landing/brands/marquee/crypto-partners.png",
-    alt: "Crypto and blockchain platforms",
-    width: 1024,
-    height: 285,
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mpT141dY3ioqCgXkPlJzmOvapUc1GYEMfbstN",
+    alt: "Partner logo",
+    title: "IMG_1309.png",
+    width: 3305,
+    height: 337,
   },
   {
-    src: "/landing/brands/marquee/payments-partners.png",
-    alt: "Payment methods and wallets",
-    width: 1024,
-    height: 104,
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57m7zj6fB30ztENURWbyi4KfpQahlXDr6oS2jnM",
+    alt: "Partner logo",
+    title: "IMG_8869.png",
+    width: 1280,
+    height: 1063,
   },
   {
-    src: "/landing/brands/marquee/automotive-partners.png",
-    alt: "Automotive brands",
-    width: 1024,
-    height: 206,
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mnsik3mOpAUc05haRBokQr7es8C4gLnDtVd3Y",
+    alt: "Partner logo",
+    title: "IMG_7490.png",
+    width: 3840,
+    height: 776,
   },
   {
-    src: "/landing/brands/marquee/real-estate-partners.png",
-    alt: "Real estate networks",
-    width: 1024,
-    height: 845,
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mBm6WiVMKWS8Fz1Q6m9BnTafJepxV5oNXIUvj",
+    alt: "Partner logo",
+    title: "IMG_1160.png",
+    width: 2500,
+    height: 2065,
+  },
+  {
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57m68Of5KymJhew8PIdWsMfY1ypotvnir4Rgm5G",
+    alt: "Partner logo",
+    title: "IMG_2707.png",
+    width: 256,
+    height: 256,
+  },
+  {
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mLPSAfB6oblBEKcRnJxNvHfs5SXQUkI7eC0jz",
+    alt: "Partner logo",
+    title: "IMG_0519.png",
+    width: 1920,
+    height: 585,
+  },
+  {
+    src: "https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mO87Opio5fkuXsrdl3ADwq0E71RFyBUI9nje4",
+    alt: "Partner logo",
+    title: "IMG_5932.png",
+    width: 1182,
+    height: 329,
   },
 ];
 
-const WORDMARK_LOGOS: LogoNodeItem[] = [
-  { node: <MarqueeFoodspringMark />, title: "Foodspring", ariaLabel: "Foodspring" },
-  { node: <MarqueeNoccoMark />, title: "NOCCO", ariaLabel: "NOCCO" },
-  { node: <MarqueePipedriveMark />, title: "Pipedrive", ariaLabel: "Pipedrive" },
-];
-
-const MARQUEE_LOGOS: LogoItem[] = [...STRIP_LOGOS, ...WORDMARK_LOGOS];
+const MARQUEE_LOGOS: LogoItem[] = UPLOADTHING_LOGOS;
 
 function stripImgClass() {
-  return "!h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(92vw,720px)] object-contain [image-rendering:auto] grayscale invert contrast-110 mix-blend-multiply";
+  return "!h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(92vw,720px)] object-contain [image-rendering:auto]";
 }
 
 /** Infinite logo strip between hero and features — React Bits-style smooth loop + edge fade. */
@@ -153,7 +79,7 @@ export function LandingBrandMarquee() {
             {MARQUEE_LOGOS.map((entry) =>
               "src" in entry ? (
                 <li key={entry.src} className="flex w-full justify-center">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- local strip PNGs */}
+                  {/* eslint-disable-next-line @next/next/no-img-element -- LogoLoop measures intrinsic img layout */}
                   <img
                     src={entry.src}
                     alt={entry.alt ?? ""}
@@ -190,6 +116,7 @@ export function LandingBrandMarquee() {
               "node" in item ? (
                 <span className="inline-flex shrink-0 items-center text-black">{item.node}</span>
               ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- LogoLoop measures intrinsic img layout
                 <img
                   src={item.src}
                   alt={item.alt ?? ""}
