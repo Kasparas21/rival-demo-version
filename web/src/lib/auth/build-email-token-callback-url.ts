@@ -1,11 +1,11 @@
 /**
  * Builds an in-app `/auth/callback` URL for `verifyOtp({ token_hash, type })`.
- * Use `otpType` `"email"` for magic-link hashes; `"signup"` for signup confirmation hashes.
+ * `"email"` magic-link, `"signup"` confirmation, `"recovery"` password reset.
  */
 export function buildEmailTokenCallbackUrl(args: {
   origin: string;
   hashedToken: string;
-  otpType: "email" | "signup";
+  otpType: "email" | "signup" | "recovery";
   nextPath: string;
 }): string {
   const callback = new URL("/auth/callback", args.origin);

@@ -10,6 +10,16 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Google } from "@/components/icons/google-logo";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
 
+function looksLikeWrongPasswordAttempt(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("invalid login credentials") ||
+    m.includes("invalid email or password") ||
+    m.includes("wrong password") ||
+    m.includes("incorrect password")
+  );
+}
+
 function buildRedirectTo(path: string) {
   if (typeof window === "undefined") return path;
   return new URL(path, window.location.origin).toString();
@@ -33,9 +43,18 @@ export function LoginForm() {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const next = safeAuthNextPath(searchParams.get("next"), "/login") ?? "/dashboard";
   const urlAuthError = searchParams.get("error");
+  const notice = searchParams.get("notice");
   const rawNextQuery = searchParams.get("next");
   const signupHref = rawNextQuery ? `/signup?next=${encodeURIComponent(rawNextQuery)}` : "/signup";
   const [email, setEmail] = useState("");
+  const forgotPasswordHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (rawNextQuery) params.set("next", rawNextQuery);
+    const trimmed = email.trim();
+    if (trimmed) params.set("email", trimmed);
+    const qs = params.toString();
+    return qs ? `/forgot-password?${qs}` : "/forgot-password";
+  }, [rawNextQuery, email]);
   const [password, setPassword] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [googleError, setGoogleError] = useState<string | null>(null);
@@ -122,6 +141,12 @@ export function LoginForm() {
           Enter your email and password to continue.
         </p>
 
+        {notice === "password_reset" ? (
+          <p className="mt-4 rounded-xl border border-[#b7dfc6] bg-[#edfdf3] px-3 py-2 text-[13px] font-medium text-[#1d4f2f]">
+            Your password was updated. Sign in with your new password below.
+          </p>
+        ) : null}
+
         <form
           className="mt-8 space-y-5"
           onSubmit={(event) => {
@@ -147,9 +172,17 @@ export function LoginForm() {
           </div>
 
           <div>
-            <label htmlFor="login-password" className="text-[13px] font-semibold text-gray-900">
-              Password
-            </label>
+            <div className="flex items-baseline justify-between gap-3">
+              <label htmlFor="login-password" className="text-[13px] font-semibold text-gray-900">
+                Password
+              </label>
+              <Link
+                href={forgotPasswordHref}
+                className="text-[13px] font-semibold text-gray-900 underline underline-offset-2"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <div className={glassInputWrap}>
               <input
                 id="login-password"
@@ -177,7 +210,20 @@ export function LoginForm() {
             {urlAuthError}
           </p>
         ) : null}
-        {formError ? <p className="mt-4 text-[13px] text-[#b42318]">{formError}</p> : null}
+        {formError ? (
+          <div className="mt-4 space-y-2">
+            <p className="text-[13px] text-[#b42318]">{formError}</p>
+            {looksLikeWrongPasswordAttempt(formError) ? (
+              <p className="text-[13px] font-medium text-gray-600">
+                If you forgot it,{" "}
+                <Link href={forgotPasswordHref} className="font-semibold text-gray-900 underline underline-offset-2">
+                  reset your password via email
+                </Link>
+                .
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-6 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
           <span className="h-px flex-1 bg-gray-900/10" />

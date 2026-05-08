@@ -128,8 +128,12 @@ export async function GET(request: NextRequest) {
   const safeRequested = safeNextPath(requestedNext);
   const safePostOnboardingPath = safeRequested ? postOnboardingPath(safeRequested) : null;
 
+  const RESET_PASSWORD_PATH = "/reset-password";
+
   let pathname: string;
-  if (!onboardingDone) {
+  if (safePostOnboardingPath === RESET_PASSWORD_PATH) {
+    pathname = RESET_PASSWORD_PATH;
+  } else if (!onboardingDone) {
     pathname = "/onboarding";
   } else if (safePostOnboardingPath) {
     pathname = safePostOnboardingPath;
@@ -141,7 +145,7 @@ export async function GET(request: NextRequest) {
   finalDest.pathname = pathname;
   finalDest.search = "";
   finalDest.hash = "";
-  if (!onboardingDone && safePostOnboardingPath) {
+  if (!onboardingDone && safePostOnboardingPath && pathname !== RESET_PASSWORD_PATH) {
     finalDest.searchParams.set("next", safePostOnboardingPath);
   }
 
