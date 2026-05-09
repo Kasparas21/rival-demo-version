@@ -68,6 +68,7 @@ import {
   normalizeCompetitorSlug,
   saveSidebarCompetitors,
   SIDEBAR_COMPETITORS_EVENT,
+  shouldSuppressSidebarUpsertForSlug,
   slugsLikelySameCompany,
   type SidebarCompetitor,
   upsertSidebarCompetitor,
@@ -610,6 +611,9 @@ function CompetitorDashboardBody({
     // so SSR matches the first client paint. Running `upsertSidebarCompetitor` in that state would merge
     // `confirmed: false` (and drop ids) into the real localStorage row — permanently disabling Ad Library.
     if (sidebarSnapshot === undefined) return;
+
+    const domainSlug = normalizeCompetitorSlug(brand.domain);
+    if (shouldSuppressSidebarUpsertForSlug(domainSlug)) return;
 
     const row: SidebarCompetitor = {
       slug: normalizeCompetitorSlug(brand.domain),

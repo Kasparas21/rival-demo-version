@@ -21,6 +21,7 @@ import {
   saveSidebarCompetitors,
   SIDEBAR_COMPETITORS_EVENT,
   SIDEBAR_COMPETITORS_STORAGE_KEY,
+  suppressSidebarUpsertAfterRemoval,
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import { competitorHostFromDashboardPathname } from "@/lib/competitor-dashboard-url";
@@ -92,6 +93,29 @@ function RemoveWatchedCompetitorDialog({
       </div>
     </div>
   );
+}
+
+/**
+ * True when the URL `/dashboard/competitor/<host>` refers to this sidebar row.
+ * Path-normalization and stored slug/domain can diverge (e.g. brand domain vs keyword slug).
+ */
+function competitorRowMatchesActivePath(
+  competitor: SidebarCompetitor,
+  activeHostOrSlug: string,
+  rowSlugNav: string
+): boolean {
+  if (!activeHostOrSlug.trim()) return false;
+  const active = normalizeCompetitorSlug(activeHostOrSlug);
+  if (!active) return false;
+  const hints = [
+    rowSlugNav,
+    coerceSidebarCompetitorUrlHost(competitor),
+    competitor.slug,
+    competitor.brand?.domain,
+  ]
+    .filter((x): x is string => Boolean(x?.trim()))
+    .map((x) => normalizeCompetitorSlug(x));
+  return hints.some((h) => h === active);
 }
 
 function mapApiBrandRow(row: {
@@ -391,26 +415,23 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      suppressSidebarUpsertAfterRemoval(competitor);
+
+      const onCompetitorView =
+        pathname.startsWith("/dashboard/competitor/") || pathname === "/dashboard/competitor";
+      const viewingDeleted =
+        onCompetitorView &&
+        activeCompetitorSlug !== "" &&
+        competitorRowMatchesActivePath(competitor, activeCompetitorSlug, rowSlugNav);
+
       removeSidebarCompetitor(competitor);
       refreshSavedCompetitors();
 
-      const navigatedSlug = normalizeCompetitorSlug(rowSlugNav);
-      const onCompetitorView =
-        pathname.startsWith("/dashboard/competitor/") || pathname === "/dashboard/competitor";
-      if (
-        onCompetitorView &&
-        activeCompetitorSlug !== "" &&
-        activeCompetitorSlug === navigatedSlug
-      ) {
-        router.push("/dashboard/spy", { scroll: false });
+      if (viewingDeleted) {
+        router.replace("/dashboard/spy", { scroll: false });
       }
     },
-    [
-      pathname,
-      activeCompetitorSlug,
-      refreshSavedCompetitors,
-      router,
-    ]
+    [pathname, activeCompetitorSlug, refreshSavedCompetitors, router],
   );
 
   const handleSignOut = async () => {

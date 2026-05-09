@@ -374,6 +374,51 @@ export function coerceSidebarCompetitorUrlHost(c: Pick<SidebarCompetitor, "slug"
   return normalizeCompetitorSlug(one || raw);
 }
 
+/**
+ * After DELETE from the sidebar, the competitor route can still be mounted for a frame — its
+ * `useEffect` calls `upsertSidebarCompetitor` and would re-insert the row. Suppress upserts for
+ * this slug set briefly (sessionStorage) so the row stays removed.
+ */
+const SIDEBAR_UPSERT_SUPPRESS_KEY = "rival_sidebar_upsert_suppress_v1";
+
+type SidebarUpsertSuppressPayload = { slugs: string[]; until: number };
+
+export function suppressSidebarUpsertAfterRemoval(competitor: SidebarCompetitor, ttlMs = 12_000): void {
+  if (typeof window === "undefined") return;
+  const slugs = new Set<string>();
+  slugs.add(normalizeCompetitorSlug(competitor.slug));
+  slugs.add(normalizeCompetitorSlug(coerceSidebarCompetitorUrlHost(competitor)));
+  const bd = competitor.brand?.domain?.trim();
+  if (bd) slugs.add(normalizeCompetitorSlug(bd));
+  try {
+    const payload: SidebarUpsertSuppressPayload = {
+      slugs: [...slugs].filter(Boolean),
+      until: Date.now() + ttlMs,
+    };
+    window.sessionStorage.setItem(SIDEBAR_UPSERT_SUPPRESS_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function shouldSuppressSidebarUpsertForSlug(slug: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.sessionStorage.getItem(SIDEBAR_UPSERT_SUPPRESS_KEY);
+    if (!raw) return false;
+    const o = JSON.parse(raw) as SidebarUpsertSuppressPayload;
+    if (!o?.until || !Array.isArray(o.slugs)) return false;
+    if (Date.now() > o.until) {
+      window.sessionStorage.removeItem(SIDEBAR_UPSERT_SUPPRESS_KEY);
+      return false;
+    }
+    const n = normalizeCompetitorSlug(slug);
+    return o.slugs.some((s) => s && normalizeCompetitorSlug(s) === n);
+  } catch {
+    return false;
+  }
+}
+
 /** Sidebar search: match name, slug, brand, domain, or coerced host (multi-word = all words must match). */
 export function competitorMatchesFilter(c: SidebarCompetitor, filter: string): boolean {
   const q = filter.trim().toLowerCase();
