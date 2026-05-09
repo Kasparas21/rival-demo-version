@@ -43,6 +43,10 @@ import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-mod
 import { MetaAdsAllModal } from "@/components/ads-library/meta-ads-all-modal";
 import { TikTokAdCard } from "@/components/ads-library/tiktok-ad-card";
 import { SnapchatAdCard } from "@/components/ads-library/snapchat-ad-card";
+import { PinterestAdCard } from "@/components/ads-library/pinterest-ad-card";
+import {
+  UnverifiedSourceBadge,
+} from "@/components/ads-library/unverified-source-overlay";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 import { META_ADS_INLINE_PREVIEW } from "@/lib/ad-library/constants";
 import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
@@ -50,9 +54,10 @@ import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
   googleAdsExternalLinkLabel,
   youtubeThumbnailFromUrl,
+  sortSnapchatAdsForResponse,
+  sortTikTokAdsForResponse,
   type GoogleAdRow,
   type LinkedInAdCard,
-  type PinterestAdCard,
 } from "@/lib/ad-library/normalize";
 import { fetchSavedCompetitorsFromAccount, saveCompetitorToAccount } from "@/lib/account/client";
 import type { SavedCompetitorPayload } from "@/lib/account/types";
@@ -429,7 +434,7 @@ function LinkedInFeedAdCard({
   brand: { name: string; logoUrl?: string };
 }) {
   return (
-    <article className="min-w-0 h-full flex flex-col bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 overflow-hidden hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] hover:border-[#DDF1FD]/60 transition-all duration-200 text-left">
+    <article className="relative min-w-0 h-full flex flex-col bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 overflow-hidden hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] hover:border-[#DDF1FD]/60 transition-all duration-200 text-left">
       <div className="p-4 shrink-0">
         <div className="flex items-start gap-3">
           <div className="h-10 w-10 shrink-0 overflow-hidden rounded border border-[#e5e7eb] bg-[#f3f4f6]">
@@ -450,6 +455,11 @@ function LinkedInFeedAdCard({
                 </>
               ) : null}
             </p>
+            {ad.advertiserMismatch ? (
+              <div className="mt-2">
+                <UnverifiedSourceBadge />
+              </div>
+            ) : null}
           </div>
           <div className="flex items-center gap-0.5 shrink-0 text-[#6b7280]">
             <span className="p-1.5">
@@ -501,60 +511,6 @@ function LinkedInFeedAdCard({
         <span className="flex items-center gap-2 text-[13px] font-medium py-1.5">
           <Send className="w-4 h-4" /> Share
         </span>
-      </div>
-    </article>
-  );
-}
-
-function PinterestFeedAdCard({
-  ad,
-  brand,
-}: {
-  ad: PinterestAdCard;
-  brand: { name: string; logoUrl?: string };
-}) {
-  return (
-    <article className="min-w-0 h-full flex flex-col bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 overflow-hidden hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] hover:border-[#DDF1FD]/60 transition-all duration-200 text-left">
-      <div className="p-4 shrink-0">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded border border-[#e5e7eb] bg-[#f3f4f6]">
-            <BrandLogoThumb src={brand.logoUrl ?? ""} alt={ad.advertiser} className="bg-[#f3f4f6]" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-[15px] text-[#bd081c]">{ad.advertiser}</p>
-            <p className="text-[12px] text-[#6b7280] mt-0.5">Pinterest Ad Transparency (EU / BR / TR)</p>
-            {ad.reachSummary ? (
-              <p className="text-[11px] text-[#9ca3af] mt-1 tabular-nums">Reach: {ad.reachSummary}</p>
-            ) : null}
-          </div>
-        </div>
-        {ad.desc?.trim() && ad.desc !== "—" ? (
-          <div className="mt-3">
-            <ExpandableAdText
-              text={ad.desc}
-              className="text-[14px] text-[#374151] leading-relaxed break-words [overflow-wrap:anywhere] text-pretty whitespace-pre-wrap"
-            />
-          </div>
-        ) : null}
-      </div>
-      <div className="flex flex-1 flex-col min-h-0 bg-[#f9fafb] border-y border-[#e5e7eb] overflow-hidden">
-        <AdCreativeVideoOrImage
-          img={ad.img ?? ""}
-          videoUrl={ad.videoUrl}
-          openHref={ad.adUrl}
-          className="min-h-0 w-full flex-1"
-          minHeightClass="min-h-[200px]"
-          fillAvailableHeight
-        />
-        <a
-          href={ad.adUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block shrink-0 p-4 bg-white border-t border-[#e5e7eb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#bd081c]"
-        >
-          <p className="font-semibold text-[15px] text-[#374151] break-words [overflow-wrap:anywhere] text-pretty leading-snug">{ad.headline}</p>
-          <p className="text-[13px] text-[#6b7280] mt-0.5 break-all [overflow-wrap:anywhere]">{ad.url}</p>
-        </a>
       </div>
     </article>
   );
@@ -895,15 +851,14 @@ function CompetitorDashboardBody({
   const filteredLinkedInAds = useMemo(() => {
     return [...linkedinAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
   }, [linkedinAds]);
-  const filteredTikTokAds = useMemo(() => {
-    return [...tiktokAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
-  }, [tiktokAds]);
+  const filteredTikTokAds = useMemo(() => sortTikTokAdsForResponse(tiktokAds), [tiktokAds]);
   const filteredPinterestAds = useMemo(() => {
     return [...pinterestAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
   }, [pinterestAds]);
-  const filteredSnapchatAds = useMemo(() => {
-    return [...snapchatAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
-  }, [snapchatAds]);
+  const filteredSnapchatAds = useMemo(
+    () => sortSnapchatAdsForResponse(snapchatAds),
+    [snapchatAds]
+  );
 
   /** Avoid platform skeletons while `adLibLoading` stays true — e.g. Google already hydrated from cache but Meta still scraping. */
   const metaSectionBusy = useMemo(
@@ -1676,7 +1631,7 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={ADS_GRID_CLASS}>
                       {filteredPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <PinterestFeedAdCard key={ad.id} ad={ad} brand={brand} />
+                        <PinterestAdCard key={ad.id} ad={ad} />
                       ))}
                     </div>
                   )}
@@ -1690,7 +1645,7 @@ function CompetitorDashboardBody({
                 ads={filteredPinterestAds}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
-                renderItem={(ad) => <PinterestFeedAdCard ad={ad} brand={brand} />}
+                renderItem={(ad) => <PinterestAdCard ad={ad} />}
               />
             </section>
             ) : null}

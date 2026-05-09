@@ -36,13 +36,31 @@ type ApifyRunResponse = {
   };
 };
 
-type ApifyDatasetItemsResponse<T> = {
-  data?: {
-    items?: T[];
-  };
-};
-
 const APIFY_API_BASE = "https://api.apify.com/v2";
+
+function parseApifyDatasetItems<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === "object") {
+    const o = payload as Record<string, unknown>;
+    if (Array.isArray(o.items)) return o.items as T[];
+    if (Array.isArray(o.data)) return o.data as T[];
+  }
+  return [];
+}
+
+/**
+ * Crawlee / Apify dataset rows frequently wrap the crawler record under `json`.
+ * Merge once so downstream normalizers see advertiser/headline at the top level.
+ */
+export function flattenApifyDatasetRecord(row: Record<string, unknown>): Record<string, unknown> {
+  const nested = row.json;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const inner = nested as Record<string, unknown>;
+    const { json: _omit, ...rest } = row;
+    return { ...inner, ...rest };
+  }
+  return row;
+}
 
 function requireApifyToken(): string {
   const token = process.env.APIFY_TOKEN?.trim();
@@ -148,7 +166,9 @@ export async function runApifyActor<T = Record<string, unknown>>(
     );
   }
 
-  const items = (await datasetResponse.json()) as T[];
+  /** Apify datasets are usually a JSON array; some exporters / proxies may wrap arrays. */
+  const rawPayload = (await datasetResponse.json()) as unknown;
+  const items = parseApifyDatasetItems<T>(rawPayload);
 
   return {
     run: {

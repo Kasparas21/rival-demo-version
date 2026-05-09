@@ -1,72 +1,165 @@
 "use client";
 
-import { ExternalLink, Ghost } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import type { SnapchatAdCard as SnapchatCardModel } from "@/lib/ad-library/normalize";
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
-import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
+import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
+
+function GalleryMetaRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-wrap gap-x-1 text-[11px] leading-snug">
+      <span className="shrink-0 text-[#6b7280]">{label}</span>
+      <span className="min-w-0 font-medium text-[#171717]" title={value}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function formatSnapCtaLabel(raw: string | null | undefined): string {
+  const t = raw?.trim();
+  if (!t) return "Learn more";
+  return t
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .map((seg) => seg.charAt(0).toUpperCase() + seg.slice(1).toLowerCase())
+    .join(" ");
+}
 
 export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
   const hasVideo = Boolean(ad.videoUrl?.trim());
   const tryImg = Boolean(ad.img?.trim());
+  const hasCreative = hasVideo || tryImg;
+  /** Light gallery framing + equal padding instead of letterboxed black chrome. */
+  const lightCreativeChrome = hasCreative && tryImg && !hasVideo;
+  const isActive = ad.status === "ACTIVE";
 
   return (
-    <article className="min-w-0 flex h-full flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)]">
-      <div className="shrink-0 border-b border-[#fde047]/25 bg-[#fffbeb]/95 px-4 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Ghost className="h-5 w-5 shrink-0 text-[#eab308]" aria-hidden />
-          <div className="min-w-0">
-            <p className="truncate text-[11px] font-bold uppercase tracking-wide text-[#854d0e]">
-              Snapchat Ads (EU transparency)
-              {ad.euCountry ? <span className="ml-1.5 opacity-85"> · {ad.euCountry}</span> : null}
+    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm transition-shadow hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+      {/* Ads Gallery–style facts */}
+      <div className="shrink-0 border-b border-[#ececec] px-4 pb-4 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] text-[#111827]">
+              <span className="font-semibold">Ad Publisher:</span>{" "}
+              <span className="font-bold">{ad.advertiser}</span>
+              {ad.advertiserMismatch ? <UnverifiedSourceBadge /> : null}
             </p>
-            <p className="truncate text-[14px] font-semibold leading-tight text-[#451a03]">{ad.advertiser}</p>
-            {ad.impressionsLabel ? (
-              <p className="mt-1 text-[11px] font-medium tabular-nums text-[#a16207]">
-                Est. impressions: {ad.impressionsLabel}
-              </p>
-            ) : null}
           </div>
+          {ad.status ? (
+            <span
+              className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                isActive ? "bg-emerald-600 text-white" : "border border-[#e5e5e5] bg-[#fafafa] text-[#525252]"
+              }`}
+            >
+              {isActive ? "Active" : ad.status}
+            </span>
+          ) : null}
         </div>
-      </div>
-      <div className="relative min-h-[200px] flex-1 border-y border-[#e5e7eb] bg-[#fafafa]">
-        {hasVideo || tryImg ? (
-          <AdCreativeVideoOrImage
-            img={tryImg ? (ad.img ?? "") : ""}
-            videoUrl={hasVideo ? (ad.videoUrl ?? "") : undefined}
-            openHref={ad.adUrl}
-            className="h-full min-h-[200px] w-full"
-            minHeightClass="min-h-[200px]"
+
+        <div className="mt-3 space-y-1">
+          <GalleryMetaRow
+            label="Brand Advertised:"
+            value={(ad.brandAdvertised ?? "N/A").trim() || "N/A"}
           />
-        ) : (
+          <GalleryMetaRow label="Ad Start Date:" value={ad.startDateLabel ?? "N/A"} />
+          <GalleryMetaRow label="Ad End Date:" value={ad.endDateLabel ?? "N/A"} />
+          <GalleryMetaRow
+            label="Total Impressions:"
+            value={ad.impressionsLabel?.trim() ? ad.impressionsLabel : "N/A"}
+          />
+          {ad.euCountry?.trim() ? (
+            <GalleryMetaRow label="Market:" value={ad.euCountry.trim()} />
+          ) : null}
+        </div>
+
+        <div className="mt-3 flex justify-center">
           <a
             href={ad.adUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex min-h-[200px] w-full flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#fef9c3] via-white to-[#eff6ff] px-4 py-10 text-center"
+            className="text-[13px] font-semibold text-[#0077b5] underline decoration-[#0077b5]/35 underline-offset-2 hover:text-[#005582]"
           >
-            <Ghost className="h-12 w-12 text-[#ca8a04]/80" aria-hidden />
-            <p className="text-[13px] font-semibold leading-snug text-[#451a03] line-clamp-4">{ad.headline}</p>
-            <span className="flex items-center gap-1 text-[12px] font-semibold text-[#92400e]">
-              View in library <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            </span>
+            See Details
           </a>
+        </div>
+      </div>
+
+      {/* Static snapshot: airy light frame · video/no-preview: unchanged dark fallback */}
+      <div
+        className={`flex min-h-0 flex-1 flex-col ${
+          lightCreativeChrome ? "bg-[#f4f4f5]" : "bg-neutral-950"
+        }`}
+      >
+        <div
+          className={`relative w-full shrink-0 ${lightCreativeChrome ? "min-h-[260px] p-3 sm:p-4" : "min-h-[280px]"}`}
+        >
+          {hasCreative ? (
+            <AdCreativeVideoOrImage
+              img={tryImg ? (ad.img ?? "") : ""}
+              videoUrl={hasVideo ? (ad.videoUrl ?? "") : undefined}
+              openHref={ad.adUrl}
+              minHeightClass={lightCreativeChrome ? "min-h-[220px]" : "min-h-[280px]"}
+              variant={lightCreativeChrome ? "neutralMat" : "default"}
+              className={
+                lightCreativeChrome
+                  ? "rounded-lg border border-black/[0.06] bg-white shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] py-5 px-4 sm:py-6 sm:px-5 !max-h-[min(500px,58vh)]"
+                  : "rounded-none bg-neutral-950 !py-0 !max-h-[min(520px,62vh)]"
+              }
+            />
+          ) : (
+            <a
+              href={ad.adUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-[240px] w-full flex-col items-center justify-center gap-3 bg-gradient-to-b from-neutral-900 to-neutral-950 px-4 py-10 text-center"
+            >
+              <p className="text-[15px] font-semibold leading-snug text-white drop-shadow-sm line-clamp-4">{ad.headline}</p>
+              <span className="inline-flex items-center gap-1 text-[13px] font-semibold text-sky-400 hover:text-sky-300">
+                Open in Snapchat Ads Gallery
+                <ExternalLink className="h-4 w-4 shrink-0" aria-hidden />
+              </span>
+            </a>
+          )}
+        </div>
+
+        {((ad.suppressCreativeHeadline ? false : Boolean(ad.headline?.trim())) || ad.ctaLabel?.trim()) && (
+          <div
+            className={`shrink-0 space-y-2 px-4 py-3 ${
+              lightCreativeChrome
+                ? "border-t border-zinc-200/90 bg-[#fafafa]"
+                : "border-t border-neutral-800"
+            }`}
+          >
+            {!ad.suppressCreativeHeadline && ad.headline?.trim() ? (
+              <p
+                className={`text-[14px] font-semibold leading-snug ${lightCreativeChrome ? "text-neutral-900" : "text-white"}`}
+              >
+                {ad.headline.trim()}
+              </p>
+            ) : null}
+            {ad.ctaLabel?.trim() ? (
+              <span
+                className={`inline-flex rounded-full px-4 py-2 text-[12px] font-bold uppercase tracking-wide shadow-sm ring-1 ${
+                  lightCreativeChrome
+                    ? "bg-neutral-900 text-white ring-neutral-900/10"
+                    : "bg-white text-neutral-950 ring-white/30"
+                }`}
+              >
+                {formatSnapCtaLabel(ad.ctaLabel)}
+              </span>
+            ) : null}
+          </div>
         )}
       </div>
-      <div className="shrink-0 space-y-2 p-4">
-        <ExpandableAdText text={ad.desc} className="text-[13px] leading-relaxed text-[#4b5563]" />
-        <a
-          href={ad.adUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-[13px] font-semibold text-[#0ea5e9] hover:text-[#0284c7]"
-        >
-          Open ad snapshot
-          <ExternalLink className="h-4 w-4" aria-hidden />
-        </a>
-        <p className="truncate text-[12px] text-[#6b7280]" title={ad.url}>
-          {ad.url}
-        </p>
-      </div>
+
+      {ad.desc?.trim() && ad.desc.trim() !== "—" ? (
+        <div className="shrink-0 border-t border-[#ececec] px-4 py-2.5">
+          <p className="line-clamp-2 text-[11px] leading-relaxed text-[#6b7280]" title={ad.desc}>
+            {ad.desc}
+          </p>
+        </div>
+      ) : null}
     </article>
   );
 }

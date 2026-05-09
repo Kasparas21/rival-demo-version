@@ -16,12 +16,13 @@ import {
   extractFacebookPageIdFromHtml,
   parseSocialLinksFromHits,
   googleFaviconUrlForDomain,
-  pickBestFacebookPageUrl,
   pickPreviewUrlFromHits,
   normalizeSocialUrlCandidate,
   type PlatformIdentifier,
   type SearchHit,
 } from "@/lib/discovery";
+import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
+import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
 
 export const DISCOVER_FIRECRAWL_TIMEOUT_MS = 55_000;
 
@@ -224,6 +225,192 @@ export async function tryResolveMetaPageIdFromFacebookUrls(
   return undefined;
 }
 
+export function buildMetaAdLibraryUrl(viewAllPageId: string): string {
+  const id = viewAllPageId.replace(/\D/g, "");
+  return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(id)}`;
+}
+
+export function isMetaAdLibraryUrl(url: string): boolean {
+  const low = url.toLowerCase();
+  return (low.includes("facebook.com") || low.includes("fb.com")) && low.includes("ads/library");
+}
+
+export function normalizeMetaNumericPageId(meta: string | undefined): string | undefined {
+  if (!meta?.trim()) return undefined;
+  const digits = meta.replace(/\D/g, "");
+  if (digits.length >= 10 && digits.length <= 22) return digits;
+  return undefined;
+}
+
+/** Prefer Ad Library URL when numeric Page ID is known — never populate vanity facebook.com paths as canonical. */
+export function applyDiscoveredMetaPresentation(
+  discoveredIds: Partial<PlatformIdentifier>,
+  _metaHits: SearchHit[],
+  _scrapedDomain: string
+): Partial<PlatformIdentifier> {
+  const digits = normalizeMetaNumericPageId(String(discoveredIds.meta ?? ""));
+  if (digits) {
+    return {
+      ...discoveredIds,
+      meta: digits,
+      metaPageUrl: buildMetaAdLibraryUrl(digits),
+    };
+  }
+  const next: Partial<PlatformIdentifier> = { ...discoveredIds };
+  delete next.metaPageUrl;
+  if (next.meta != null && !normalizeMetaNumericPageId(String(next.meta))) {
+    delete next.meta;
+  }
+  return next;
+}
+
+export function extractLinkedInCompanyIdFromHtml(html: string): string | undefined {
+  if (!html?.trim() || html.length < 120) return undefined;
+  const patterns: RegExp[] = [
+    /"companyId"\s*:\s*"?(\d{6,20})"?/,
+    /urn:li:company:(\d{6,20})\b/,
+    /linkedin\.com\/company\/(\d{6,20})(?:\/|"|'|\?|#|$)/i,
+    /\/company\/(\d{6,20})(?:\/|"|'|\?|#|\s)/i,
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m?.[1] && /^\d{6,20}$/.test(m[1])) return m[1];
+  }
+  return undefined;
+}
+
+export function isLinkedInAdLibraryCompanyIdsUrl(url: string): boolean {
+  return linkedInAdLibraryUrlHasAdvertiserTargeting(url);
+}
+
+export function collectLinkedInCompanyPageUrls(
+  hits: SearchHit[],
+  scrapeLinks: string[],
+  seedLinkedin?: string
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    const low = t.toLowerCase();
+    if (!/linkedin\.com\/company\//i.test(low)) return;
+    if (/linkedin\.com\/ad-library/i.test(low)) return;
+    try {
+      const u = new URL(normalizeSocialUrlCandidate(t));
+      const m = u.pathname.match(/\/company\/([^/]+)/i);
+      if (!m?.[1]) return;
+      const segment = decodeURIComponent(m[1].replace(/\/$/, ""));
+      if (!segment) return;
+      const canonical = `https://www.linkedin.com/company/${segment}`;
+      if (!seen.has(canonical)) {
+        seen.add(canonical);
+        out.push(canonical);
+      }
+    } catch {
+      /* skip */
+    }
+  };
+  for (const h of hits) add(h.url);
+  for (const s of scrapeLinks) add(s);
+  if (seedLinkedin?.trim()) add(seedLinkedin.trim());
+  return out.slice(0, 8);
+}
+
+export function buildLinkedInAdLibraryCompanySearchUrl(companyNumericId: string): string {
+  const id = companyNumericId.replace(/\D/g, "");
+  const params = new URLSearchParams();
+  params.append("companyIds[0]", id);
+  return `https://www.linkedin.com/ad-library/search?${params.toString()}`;
+}
+
+export async function tryResolveLinkedInCompanyIdFromUrls(
+  app: InstanceType<typeof Firecrawl>,
+  urls: string[]
+): Promise<string | undefined> {
+  const htmlFormats: ScrapeOptions["formats"] = [{ type: "rawHtml" }];
+  for (const liUrl of urls.slice(0, 6)) {
+    for (const proxy of [undefined, "stealth" as const, "auto" as const]) {
+      try {
+        const doc = await app.scrape(liUrl, {
+          formats: htmlFormats,
+          timeout: 20_000,
+          waitFor: 1000,
+          ...(proxy ? { proxy } : {}),
+        });
+        const html = doc.rawHtml || doc.html || "";
+        const id = extractLinkedInCompanyIdFromHtml(html);
+        if (id) return id;
+      } catch {
+        /* try next */
+      }
+    }
+  }
+  return undefined;
+}
+
+export async function finalizeLinkedInDiscovery(
+  app: InstanceType<typeof Firecrawl> | null,
+  discoveredIds: Partial<PlatformIdentifier>,
+  metaHits: SearchHit[],
+  scrapeLinks: string[],
+  linkedinChannelSelected: boolean
+): Promise<Partial<PlatformIdentifier>> {
+  if (!linkedinChannelSelected) return discoveredIds;
+  const cur = discoveredIds.linkedin?.trim();
+  if (cur && isLinkedInAdLibraryCompanyIdsUrl(cur)) return discoveredIds;
+
+  const urls = collectLinkedInCompanyPageUrls(metaHits, scrapeLinks, cur);
+  if (!app || urls.length === 0) {
+    if (cur && /linkedin\.com\/company\//i.test(cur)) {
+      const { linkedin: _drop, ...rest } = discoveredIds;
+      return rest;
+    }
+    return discoveredIds;
+  }
+
+  const id = await tryResolveLinkedInCompanyIdFromUrls(app, urls);
+  if (id) return { ...discoveredIds, linkedin: buildLinkedInAdLibraryCompanySearchUrl(id) };
+
+  const { linkedin: _drop, ...rest } = discoveredIds;
+  return rest;
+}
+
+/** Keyword suggestions for TikTok / Snapchat / Pinterest (deduped, priority order). */
+export function buildRecommendedKeywords(ctx: {
+  brandName: string;
+  domain: string;
+  discoveredIds?: Partial<PlatformIdentifier>;
+}): string[] {
+  const out: string[] = [];
+  const seenLower = new Set<string>();
+  const push = (raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    const k = t.toLowerCase();
+    if (seenLower.has(k)) return;
+    seenLower.add(k);
+    out.push(t);
+  };
+
+  push(ctx.brandName.split("/")[0]?.trim() ?? "");
+  push(brandSlugFromDomain(ctx.domain));
+
+  const tt = ctx.discoveredIds?.tiktok?.trim();
+  if (tt) push(tt.replace(/^@+/, ""));
+
+  const sc = ctx.discoveredIds?.snapchat?.trim();
+  if (sc) push(sc.replace(/^@+/, ""));
+
+  const pin = ctx.discoveredIds?.pinterest?.trim();
+  if (pin) {
+    const h = extractPinterestHandleFromUrlOrString(pin);
+    if (h) push(h);
+  }
+
+  return out;
+}
+
 async function runSearches(
   app: InstanceType<typeof Firecrawl>,
   queries: string[],
@@ -424,6 +611,14 @@ export function buildFieldConfidence(
       continue;
     }
 
+    if (k === "linkedin") {
+      const s = String(v);
+      if (isLinkedInAdLibraryCompanyIdsUrl(s)) {
+        out[k] = "high";
+        continue;
+      }
+    }
+
     const had = fromScrape[k];
     const hadStr = had != null && String(had).trim().length > 0;
     if (hadStr && String(had) === String(v)) out[k] = "high";
@@ -446,49 +641,24 @@ export function buildFieldPreviewUrls(
     out.google = `https://${discovered.google.replace(/^www\./, "")}`;
   }
 
-  if (discovered.metaPageUrl) {
-    out.meta = discovered.metaPageUrl;
+  const metaPage = discovered.metaPageUrl?.trim();
+  if (metaPage && isMetaAdLibraryUrl(metaPage)) {
+    out.meta = metaPage.startsWith("http") ? metaPage : `https://${metaPage}`;
   } else {
-    const fb = pickPreviewUrlFromHits(linkHits, "meta");
-    if (fb) out.meta = fb;
-    else {
-      const d = String(discovered.meta ?? "").replace(/\D/g, "");
-      if (d.length >= 10 && d.length <= 22) {
-        out.meta = `https://www.facebook.com/profile.php?id=${d}`;
-      }
+    const d = String(discovered.meta ?? "").replace(/\D/g, "");
+    if (d.length >= 10 && d.length <= 22) {
+      out.meta = buildMetaAdLibraryUrl(d);
+    } else {
+      out.meta = "https://www.facebook.com/ads/library/";
     }
   }
 
-  if (discovered.tiktok) {
-    const h = discovered.tiktok.replace(/^@/, "");
-    out.tiktok = `https://www.tiktok.com/@${h}`;
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "tiktok");
-    if (u) out.tiktok = u;
-  }
-
-  if (discovered.linkedin) {
+  if (discovered.linkedin?.trim()) {
     const l = discovered.linkedin.trim();
     out.linkedin = l.startsWith("http") ? l : `https://${l}`;
   } else {
     const u = pickPreviewUrlFromHits(linkHits, "linkedin");
     if (u) out.linkedin = u;
-  }
-
-  if (discovered.pinterest) {
-    const p = discovered.pinterest.trim();
-    out.pinterest = p.startsWith("http") ? p : `https://${p}`;
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "pinterest");
-    if (u) out.pinterest = u;
-  }
-
-  if (discovered.snapchat) {
-    const h = discovered.snapchat.replace(/^@/, "");
-    out.snapchat = `https://www.snapchat.com/add/${h}`;
-  } else {
-    const u = pickPreviewUrlFromHits(linkHits, "snapchat");
-    if (u) out.snapchat = u;
   }
 
   return out;

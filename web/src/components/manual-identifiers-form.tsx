@@ -1,9 +1,17 @@
 "use client";
 
-import React, { useState, useRef, useLayoutEffect, useMemo, useCallback, useId } from "react";
+import React, {
+  useState,
+  useRef,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+  useId,
+  useEffect,
+} from "react";
 import { ExternalLink, HelpCircle, Info } from "lucide-react";
 import { CHANNELS, type ChannelId } from "./channel-picker-modal";
-import { googleFaviconUrlForDomain } from "@/lib/discovery";
+import { googleFaviconUrlForDomain, brandSlugFromDomain } from "@/lib/discovery";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 import type { AdLibraryRegionPrefs } from "@/lib/ad-library/ad-library-region-prefs";
 import { buildGoogleAdsRegionOptions } from "@/lib/ad-library/google-ads-regions";
@@ -15,6 +23,7 @@ import {
   CollapsibleSingleSelectFlagChipRow,
   type RegionChipOption,
 } from "@/components/ad-library/single-select-flag-chip-row";
+import { validateIdentifierField } from "@/lib/validate-identifier-field";
 
 /** “All markets” / world options first; then ISO 3166-1 alpha-2 A–Z (same order on every platform row). */
 function compareRegionChipValue(a: string, b: string): number {
@@ -58,52 +67,10 @@ export type PlatformIdentifier = {
   snapchat?: string;
 };
 
-function isValidUrl(value: string): boolean {
-  if (!value.trim()) return true;
-  try {
-    const url = value.startsWith("http") ? value : `https://${value}`;
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function isValidDomain(value: string): boolean {
   if (!value.trim()) return true;
   const v = value.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
   return /^[a-z0-9][a-z0-9-]*\.[a-z]{2,}$/i.test(v);
-}
-
-function isValidMetaPageId(value: string): boolean {
-  if (!value.trim()) return true;
-  const d = value.replace(/\s/g, "");
-  return /^\d{10,22}$/.test(d);
-}
-
-function isValidMetaField(value: string): boolean {
-  if (!value.trim()) return true;
-  const t = value.trim();
-  const digits = t.replace(/\D/g, "");
-  if (/^\d[\d\s]*$/.test(t) && digits.length >= 10 && digits.length <= 22) return true;
-  const low = t.toLowerCase();
-  if (low.includes("facebook.com") || low.includes("fb.com") || low.includes("fb.me")) {
-    return isValidUrl(normalizeUrl(t));
-  }
-  return false;
-}
-
-function isValidHandle(value: string): boolean {
-  if (!value.trim()) return true;
-  const v = value.trim();
-  return /^@?[\w.]+$/.test(v) && v.replace("@", "").length >= 2;
-}
-
-function isValidLinkedInUrl(value: string): boolean {
-  if (!value.trim()) return true;
-  const v = value.trim().toLowerCase();
-  if (!v.includes("linkedin.com")) return false;
-  return isValidUrl(v);
 }
 
 function normalizeDomain(value: string): string {
@@ -118,13 +85,133 @@ function normalizeUrl(value: string): string {
   return v.replace(/\/+$/, "");
 }
 
-function normalizeHandle(value: string): string {
-  const v = value.trim();
-  if (!v) return v;
-  return v.startsWith("@") ? v : `@${v}`;
+/** Client-side mirror of server Meta Ad Library detection (avoid importing discovery stack with Firecrawl). */
+function isFacebookAdLibraryUrl(url: string): boolean {
+  const low = url.toLowerCase();
+  return (low.includes("facebook.com") || low.includes("fb.com")) && low.includes("ads/library");
+}
+
+function buildTikTokAdsLibraryPreviewUrl(advertiserName?: string): string {
+  const params = new URLSearchParams({
+    region: "all",
+    adv_biz_ids: "",
+    query_type: "1",
+    sort_type: "last_shown_date,desc",
+  });
+  const trimmed = advertiserName?.trim();
+  if (trimmed) params.set("adv_name", trimmed);
+  return `https://library.tiktok.com/ads?${params.toString()}`;
+}
+
+/** Snapchat EU Ads Gallery deep-link — mirrors the public gallery’s advertiser filter. */
+function buildSnapchatAdsGalleryPreviewUrl(keyword?: string): string {
+  const u = new URL("https://adsgallery.snap.com/");
+  const trimmed = keyword?.trim();
+  if (trimmed) u.searchParams.set("advertiser", trimmed);
+  return u.toString();
+}
+
+function advertiserKeywordFromDomain(domain: string): string {
+  const d = domain.replace(/^www\./i, "").trim();
+  if (!d) return "";
+  return (d.split(".")[0] ?? "").trim();
+}
+
+const KEYWORD_CHANNEL_IDS = ["tiktok", "pinterest", "snapchat"] as const;
+
+function keywordDisplayFromDiscovered(
+  ids: Partial<PlatformIdentifier>,
+  ch: typeof KEYWORD_CHANNEL_IDS[number]
+): string {
+  const v = ids[ch];
+  return typeof v === "string" ? v.replace(/^@+/, "").trim() : "";
+}
+
+function buildManualIdentifierSeed(
+  discoveredIds: Partial<PlatformIdentifier>,
+  recommendedKeywords: string[] | undefined,
+  selectedChannels: ChannelId[]
+): PlatformIdentifier {
+  const next: PlatformIdentifier = { ...discoveredIds };
+  delete next.meta;
+  delete next.metaPageUrl;
+
+  const kwFirst = recommendedKeywords?.[0]?.trim() ?? "";
+  for (const ch of KEYWORD_CHANNEL_IDS) {
+    if (!selectedChannels.includes(ch)) {
+      delete next[ch];
+      continue;
+    }
+    if (kwFirst) {
+      next[ch] = kwFirst;
+    } else {
+      const stripped = keywordDisplayFromDiscovered(discoveredIds, ch);
+      next[ch] = stripped ? stripped : undefined;
+    }
+  }
+  return next;
 }
 
 type FieldValidator = (value: string) => { valid: boolean; message?: string; normalize?: (v: string) => string };
+
+/** Primary row title: “Website” for Google; short platform name from channel config otherwise. */
+function rowHeadingLabel(fieldId: ChannelId, fieldLabelWebsite: string, channelName?: string): string {
+  if (fieldId === "google") return fieldLabelWebsite;
+  if (!channelName) return fieldId;
+  return channelName.replace(/\s+ads$/i, "").trim() || channelName;
+}
+
+/**
+ * Preview target for each row — prefers server-provided URLs, then current input / domain falls back,
+ * then a sensible library landing page so every platform always has Preview.
+ */
+function buildRowPreviewUrl(
+  fieldId: ChannelId,
+  value: string,
+  serverPreview: Partial<Record<ChannelId, string>>,
+  competitorDomain?: string
+): string | undefined {
+  const v = value.trim();
+  const fromServer =
+    fieldId === "meta" ? serverPreview.meta : serverPreview[fieldId];
+  const ensureHttp = (u: string) => (/^https?:\/\//i.test(u) ? u : `https://${u.replace(/^\/\//, "")}`);
+
+  const domainFallback = competitorDomain?.replace(/^www\./i, "").split("/")[0]?.trim() ?? "";
+
+  switch (fieldId) {
+    case "meta": {
+      if (fromServer?.startsWith("http") && isFacebookAdLibraryUrl(fromServer)) return fromServer;
+      if (/^https?:\/\//i.test(v)) {
+        const url = ensureHttp(v);
+        if (isFacebookAdLibraryUrl(url)) return url;
+      }
+      return "https://www.facebook.com/ads/library/";
+    }
+    case "google": {
+      if (fromServer?.startsWith("http")) return fromServer;
+      const domRaw = (v && isValidDomain(v) ? normalizeDomain(v) : "") || domainFallback;
+      if (domRaw && isValidDomain(domRaw)) return `https://${normalizeDomain(domRaw)}`;
+      return "https://www.google.com/ads/transparency/";
+    }
+    case "linkedin": {
+      if (v && /linkedin\.com\/ad-library/i.test(v)) return normalizeUrl(v);
+      if (fromServer?.startsWith("http") && /linkedin\.com\/ad-library/i.test(fromServer)) return fromServer;
+      return "https://www.linkedin.com/ad-library/home";
+    }
+    case "tiktok":
+      return buildTikTokAdsLibraryPreviewUrl(v || undefined);
+    case "pinterest":
+      return "https://ads.pinterest.com/ads-repository/";
+    case "snapchat": {
+      if (fromServer?.startsWith("http")) return fromServer;
+      const advertiser =
+        v.trim() || advertiserKeywordFromDomain(domainFallback);
+      return buildSnapchatAdsGalleryPreviewUrl(advertiser || undefined);
+    }
+    default:
+      return undefined;
+  }
+}
 
 /** Icon + tooltip — compact “why verify” for medium/low confidence matches. */
 function DoubleCheckHelpBadge({ fieldId }: { fieldId: string }) {
@@ -244,26 +331,23 @@ function FieldTipTrigger({ tip, fieldLabel }: { tip: string; fieldLabel: string 
 
 const CHANNEL_FIELDS: {
   id: ChannelId;
+  /** Google row primary heading only — other platforms use channel name */
   label: string;
   labelSub?: string;
-  /** Short hint on label hover/focus */
   labelTitle?: string;
   placeholder: string;
-  /** Longer guidance — icon tooltip on hover/focus */
   tip?: string;
+  helperText?: string;
   validator?: FieldValidator;
 }[] = [
   {
     id: "meta",
-    label: "Facebook",
-    labelSub: "Page ID or page URL",
-    labelTitle: "10–22 digit Page ID from Meta Business Suite, or the public facebook.com page URL",
-    placeholder: "615512345678901 or facebook.com/…",
-    tip: "Use the numeric Page ID from Meta Business Suite, or paste the full public page URL.",
-    validator: (v) => ({
-      valid: isValidMetaField(v),
-      message: "Enter a 10–22 digit Page ID or a facebook.com page URL",
-    }),
+    label: "",
+    labelSub: "Ad Library URL",
+    labelTitle: "Ads Library link with view_all_page_id (preferred) or a numeric Page ID.",
+    placeholder: "https://www.facebook.com/ads/library/?view_all_page_id=...",
+    tip: "We use the Ads Library so lookups target the right Page, not a similarly named profile.",
+    helperText: "Must be an Ad Library URL, not a Facebook page URL",
   },
   {
     id: "google",
@@ -280,55 +364,40 @@ const CHANNEL_FIELDS: {
   },
   {
     id: "tiktok",
-    label: "TikTok",
-    labelSub: "Handle",
-    labelTitle: "Brand or business @handle",
-    placeholder: "@nike",
-    tip: "Business or brand username on TikTok.",
-    validator: (v) => ({
-      valid: isValidHandle(v),
-      message: "Enter a handle like @nike",
-      normalize: normalizeHandle,
-    }),
+    label: "",
+    labelSub: "Advertiser name",
+    labelTitle:
+      "TikTok Ads Library advertiser as plain text (no surrounding quotation marks)",
+    placeholder: "e.g. Nike or Apple Germany",
+    helperText:
+      "Uses advertiser search (`query_type=2`). TikTok often returns zero ads when extra quotes wrap the advertiser (literal quote characters). Use the plain advertiser name from the Ads Library UI. Matches your competitor brand field when blank.",
   },
   {
     id: "linkedin",
-    label: "LinkedIn",
-    labelSub: "Company URL",
-    labelTitle: "Full company page URL",
-    placeholder: "linkedin.com/company/…",
-    tip: "Paste the full company page URL.",
-    validator: (v) => ({
-      valid: isValidLinkedInUrl(v),
-      message: "Enter a full URL like linkedin.com/company/nike",
-      normalize: normalizeUrl,
-    }),
+    label: "",
+    labelSub: "Ad Library URL",
+    labelTitle: "Paste the Ad Library search URL (company IDs or company/advertiser slug).",
+    placeholder: "https://www.linkedin.com/ad-library/search?companyIds[0]=… or ?accountOwner=…",
+    helperText:
+      "Prefer a URL with companyIds or accountOwner (Company or advertiser) from the Ad Library. Plain keyword search may pull in other brands.",
   },
   {
     id: "pinterest",
-    label: "Pinterest",
-    labelSub: "Profile URL",
-    labelTitle: "Business profile URL; path is used for Pinterest Ads search",
-    placeholder: "pinterest.com/…",
-    tip: "Business profile URL. The path (handle) powers Pinterest Ads search.",
-    validator: (v) => ({
-      valid: !v.trim() || (v.toLowerCase().includes("pinterest.com") && isValidUrl(v)),
-      message: "Enter a URL like pinterest.com/username",
-      normalize: normalizeUrl,
-    }),
+    label: "",
+    labelSub: "Search keyword",
+    labelTitle: "Keyword used for Pinterest Ads Library search",
+    placeholder: "e.g. NOCCO",
+    helperText:
+      "Results are keyword-based and may include ads from similar brands. Use the most specific keyword for this brand.",
   },
   {
     id: "snapchat",
-    label: "Snapchat",
-    labelSub: "Public profile",
-    labelTitle: "Business or public username",
-    placeholder: "@myfitnesspal",
-    tip: "Public profile or business username.",
-    validator: (v) => ({
-      valid: isValidHandle(v),
-      message: "Enter a handle like @myfitnesspal",
-      normalize: normalizeHandle,
-    }),
+    label: "",
+    labelSub: "Search keyword",
+    labelTitle: "Keyword used with brand context for Snapchat disclosure search",
+    placeholder: "e.g. NOCCO",
+    helperText:
+      "Results are keyword-based and may include ads from similar brands. Use the most specific keyword for this brand.",
   },
 ];
 
@@ -354,6 +423,14 @@ function autoFoundDisplaySnapshot(ids: Partial<PlatformIdentifier>): Partial<Rec
   fields.meta = ids.metaPageUrl ?? ids.meta ?? "";
   for (const f of CHANNEL_FIELDS) {
     if (f.id === "meta") continue;
+    if (
+      f.id === "tiktok" ||
+      f.id === "pinterest" ||
+      f.id === "snapchat"
+    ) {
+      fields[f.id] = keywordDisplayFromDiscovered(ids, f.id);
+      continue;
+    }
     fields[f.id] = typeof ids[f.id] === "string" ? ids[f.id]! : "";
   }
   return fields;
@@ -377,6 +454,8 @@ interface ManualIdentifiersFormProps {
   /** Region / market picks for ad scrapes (Meta, Google, TikTok, Pinterest, LinkedIn, Snapchat). */
   adLibraryRegions: AdLibraryRegionPrefs;
   onAdLibraryRegionsChange: (next: AdLibraryRegionPrefs) => void;
+  /** From discover API — keyword suggestions for TikTok / Snapchat / Pinterest. */
+  recommendedKeywords?: string[];
 }
 
 function isNonEmptyDiscovered(v: unknown): v is string {
@@ -472,17 +551,46 @@ function DiscoveryTextInput({
   );
 }
 
+function buildMetaAdLibraryUrl(pageIdDigits: string): string {
+  const id = pageIdDigits.replace(/\D/g, "");
+  return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(id)}`;
+}
+
 /** Split Meta row into numeric id vs facebook URL for API payload */
 function mergeMetaFromInput(raw: string): Pick<PlatformIdentifier, "meta" | "metaPageUrl"> {
   const t = raw.trim();
   if (!t) return { meta: undefined, metaPageUrl: undefined };
   const low = t.toLowerCase();
+  const adLib =
+    low.includes("facebook.com/ads/library") ||
+    low.includes("fb.com/ads/library") ||
+    low.includes("m.facebook.com/ads/library");
+  if (adLib) {
+    const normalized = normalizeUrl(t);
+    try {
+      const u = new URL(normalized);
+      const qpid = u.searchParams.get("view_all_page_id") ?? "";
+      const digitsFromQ = qpid.replace(/\D/g, "");
+      if (digitsFromQ.length >= 10 && digitsFromQ.length <= 22) {
+        return {
+          meta: digitsFromQ,
+          metaPageUrl:
+            /\bview_all_page_id=/i.test(normalized)
+              ? normalized
+              : buildMetaAdLibraryUrl(digitsFromQ),
+        };
+      }
+    } catch {
+      /* use metaPageUrl only */
+    }
+    return { meta: undefined, metaPageUrl: normalized };
+  }
   if (low.includes("facebook.com") || low.includes("fb.com") || low.includes("fb.me")) {
     return { meta: undefined, metaPageUrl: normalizeUrl(t) };
   }
   const digits = t.replace(/\D/g, "");
   if (digits.length >= 10 && digits.length <= 22 && /^[\d\s-]+$/.test(t.replace(/[^\d\s-]/g, ""))) {
-    return { meta: digits, metaPageUrl: undefined };
+    return { meta: digits, metaPageUrl: buildMetaAdLibraryUrl(digits) };
   }
   return { meta: undefined, metaPageUrl: undefined };
 }
@@ -499,24 +607,36 @@ export function ManualIdentifiersForm({
   brandLogoUrl,
   adLibraryRegions,
   onAdLibraryRegionsChange,
+  recommendedKeywords,
 }: ManualIdentifiersFormProps) {
-  const [identifiers, setIdentifiers] = useState<PlatformIdentifier>(() => {
-    const rest = { ...discoveredIds };
-    delete rest.meta;
-    delete rest.metaPageUrl;
-    return rest;
-  });
+  const [identifiers, setIdentifiers] = useState<PlatformIdentifier>(() =>
+    buildManualIdentifierSeed(discoveredIds, recommendedKeywords, selectedChannels)
+  );
   const [metaDisplay, setMetaDisplay] = useState(
     () => discoveredIds.metaPageUrl ?? discoveredIds.meta ?? ""
   );
   const [focusedField, setFocusedField] = useState<ChannelId | null>(null);
   const [errors, setErrors] = useState<Partial<Record<ChannelId, string>>>({});
+  const [warnings, setWarnings] = useState<Partial<Record<ChannelId, string>>>({});
 
   const competitorKey = useMemo(
     () =>
-      [competitorLabel, competitorDomain ?? "", discoveryFingerprint(discoveredIds)].join("\0"),
-    [competitorLabel, competitorDomain, discoveredIds]
+      [
+        competitorLabel,
+        competitorDomain ?? "",
+        discoveryFingerprint(discoveredIds),
+        (recommendedKeywords ?? []).join("\u029e"),
+        [...selectedChannels].sort().join(","),
+      ].join("\0"),
+    [competitorLabel, competitorDomain, discoveredIds, recommendedKeywords, selectedChannels]
   );
+
+  useEffect(() => {
+    setIdentifiers(buildManualIdentifierSeed(discoveredIds, recommendedKeywords, selectedChannels));
+    setMetaDisplay(discoveredIds.metaPageUrl ?? discoveredIds.meta ?? "");
+    setErrors({});
+    setWarnings({});
+  }, [competitorKey]);
 
   const autoFoundDisplaySnap = useMemo(
     () => autoFoundDisplaySnapshot(discoveredIds),
@@ -524,6 +644,51 @@ export function ManualIdentifiersForm({
   );
 
   const fieldsToShow = CHANNEL_FIELDS.filter((f) => selectedChannels.includes(f.id));
+
+  const keywordRecommendationChips = useMemo(() => {
+    const base: string[] = [...(recommendedKeywords ?? [])];
+    const bl = competitorLabel.split("/")[0]?.trim();
+    if (bl) base.push(bl);
+    const dom = competitorDomain?.trim();
+    if (dom) {
+      base.push(brandSlugFromDomain(dom));
+      const stem = dom.replace(/^www\./i, "").replace(/\.[^.]+$/, "");
+      if (stem) base.push(stem);
+    }
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const r of base) {
+      const t = r.trim();
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+      if (out.length >= 3) break;
+    }
+    return out;
+  }, [recommendedKeywords, competitorLabel, competitorDomain]);
+
+  const blockingErrorForChannel = useCallback((channelId: ChannelId, value: string): string | null => {
+    const v = value.trim();
+    if (!v) return null;
+    if (channelId === "google") {
+      const field = CHANNEL_FIELDS.find((f) => f.id === "google");
+      const result = field?.validator?.(v);
+      return result?.valid === false ? result.message ?? "Invalid domain" : null;
+    }
+    const idv = validateIdentifierField(channelId, v);
+    if (!idv.valid && "error" in idv) return idv.error;
+    return null;
+  }, []);
+
+  const warningForChannel = useCallback((channelId: ChannelId, value: string): string | undefined => {
+    const v = value.trim();
+    if (!v) return undefined;
+    const idv = validateIdentifierField(channelId, v);
+    if (!idv.valid && "warning" in idv) return idv.warning;
+    return undefined;
+  }, []);
 
   const patchRegions = useCallback(
     (patch: Partial<AdLibraryRegionPrefs>) => {
@@ -623,6 +788,7 @@ export function ManualIdentifiersForm({
     if (channelId === "meta") {
       setMetaDisplay(value);
       setErrors((prev) => ({ ...prev, meta: undefined }));
+      setWarnings((prev) => ({ ...prev, meta: undefined }));
       return;
     }
     if (channelId === "pinterest") {
@@ -636,65 +802,75 @@ export function ManualIdentifiersForm({
         };
       });
       setErrors((prev) => ({ ...prev, [channelId]: undefined }));
+      setWarnings((prev) => ({ ...prev, [channelId]: undefined }));
       return;
     }
     setIdentifiers((prev) => ({ ...prev, [channelId]: value || undefined }));
     setErrors((prev) => ({ ...prev, [channelId]: undefined }));
-  };
-
-  const validateField = (channelId: ChannelId, value: string): string | null => {
-    if (channelId === "meta") {
-      if (!value.trim()) return null;
-      return isValidMetaField(value) ? null : "Enter a 10–22 digit Page ID or a facebook.com page URL";
-    }
-    const field = CHANNEL_FIELDS.find((f) => f.id === channelId);
-    if (!field?.validator || !value.trim()) return null;
-    const result = field.validator(value);
-    return result.valid ? null : result.message ?? "Invalid format";
+    setWarnings((prev) => ({ ...prev, [channelId]: undefined }));
   };
 
   const handleBlur = (channelId: ChannelId) => {
     setFocusedField(null);
-    let value = identifiers[channelId] ?? "";
-    if (!value.trim()) return;
+    let nextVal = (identifiers[channelId] ?? "").trim();
+    if (!nextVal) {
+      setErrors((prev) => ({ ...prev, [channelId]: undefined }));
+      setWarnings((prev) => ({ ...prev, [channelId]: undefined }));
+      return;
+    }
+
+    if (channelId === "linkedin" && /linkedin\.com/i.test(nextVal)) {
+      const norm = normalizeUrl(nextVal);
+      if (norm !== nextVal) {
+        nextVal = norm;
+        setIdentifiers((prev) => ({ ...prev, linkedin: norm }));
+      }
+    }
 
     const field = CHANNEL_FIELDS.find((f) => f.id === channelId);
     if (field?.validator) {
-      const result = field.validator(value);
+      const result = field.validator(nextVal);
       if (result.normalize) {
-        const normalized = result.normalize(value);
-        if (normalized !== value.trim()) {
-          value = normalized;
+        const normalized = result.normalize(nextVal);
+        if (normalized !== nextVal) {
+          nextVal = normalized;
           setIdentifiers((prev) => ({ ...prev, [channelId]: normalized }));
         }
       }
-      const err = validateField(channelId, value);
-      setErrors((prev) => ({ ...prev, [channelId]: err ?? undefined }));
     }
+
+    setErrors((prev) => ({ ...prev, [channelId]: blockingErrorForChannel(channelId, nextVal) ?? undefined }));
+    setWarnings((prev) => ({ ...prev, [channelId]: warningForChannel(channelId, nextVal) ?? undefined }));
   };
 
   const handleMetaBlur = () => {
     setFocusedField(null);
-    if (!metaDisplay.trim()) {
+    const raw = metaDisplay.trim();
+    if (!raw) {
       setErrors((prev) => ({ ...prev, meta: undefined }));
+      setWarnings((prev) => ({ ...prev, meta: undefined }));
       return;
     }
     const merged = mergeMetaFromInput(metaDisplay);
-    if (merged.metaPageUrl) setMetaDisplay(merged.metaPageUrl);
-    else if (merged.meta) setMetaDisplay(merged.meta);
-    const err = validateField("meta", merged.metaPageUrl ?? merged.meta ?? metaDisplay);
-    setErrors((prev) => ({ ...prev, meta: err ?? undefined }));
+    const displayNext = merged.metaPageUrl ?? merged.meta ?? raw;
+    setMetaDisplay(displayNext);
+    setErrors((prev) => ({ ...prev, meta: blockingErrorForChannel("meta", displayNext) ?? undefined }));
+    setWarnings((prev) => ({ ...prev, meta: undefined }));
   };
 
   const validateAll = (): boolean => {
     const newErrors: Partial<Record<ChannelId, string>> = {};
+    const newWarnings: Partial<Record<ChannelId, string>> = {};
     fieldsToShow.forEach((field) => {
       const value =
         field.id === "meta" ? metaDisplay : (identifiers[field.id] ?? "");
-      const err = validateField(field.id, value);
+      const err = blockingErrorForChannel(field.id, value);
       if (err) newErrors[field.id] = err;
+      const warn = warningForChannel(field.id, value);
+      if (warn) newWarnings[field.id] = warn;
     });
     setErrors(newErrors);
+    setWarnings(newWarnings);
     return Object.keys(newErrors).length === 0;
   };
 
@@ -778,6 +954,7 @@ export function ManualIdentifiersForm({
               const channel = CHANNELS.find((c) => c.id === field.id);
               const value =
                 field.id === "meta" ? metaDisplay : (identifiers[field.id] ?? "");
+              const rowTitle = rowHeadingLabel(field.id, field.label, channel?.name);
               const wasDiscovered =
                 field.id === "meta"
                   ? isNonEmptyDiscovered(discoveredIds.metaPageUrl) ||
@@ -788,28 +965,30 @@ export function ManualIdentifiersForm({
                   ? fieldConfidence.meta
                   : fieldConfidence[field.id];
               const needsVerify = wasDiscovered && conf && conf !== "high";
-              const previewUrl =
-                field.id === "meta"
-                  ? fieldPreviewUrls.meta
-                  : fieldPreviewUrls[field.id];
-              const showPreview =
-                Boolean(previewUrl?.startsWith("http")) &&
-                (wasDiscovered || Boolean(value.trim()));
+              const previewUrl = buildRowPreviewUrl(
+                field.id,
+                value,
+                fieldPreviewUrls,
+                competitorDomain
+              );
+              const showPreview = typeof previewUrl === "string" && previewUrl.startsWith("http");
 
               const autoFoundSnap = autoFoundDisplaySnap[field.id] ?? "";
               const showAutoFoundBadge =
                 wasDiscovered &&
                 isNonEmptyDiscovered(autoFoundSnap) &&
+                value.trim() !== "" &&
                 value === autoFoundSnap;
 
               const isFocused = focusedField === field.id;
               const error = errors[field.id];
+              const warning = warnings[field.id];
 
               const inputClass = `w-full h-[44px] min-h-[44px] box-border px-3.5 rounded-lg border text-[14px] font-medium placeholder:text-gray-400 transition-all
-                        ${error ? "border-red-300 bg-red-50/50" : "border-gray-200"}
-                        ${isFocused && !error ? "border-[#343434] ring-2 ring-[#DDF1FD]/50" : ""}
-                        ${!isFocused && !error ? "hover:border-gray-300" : ""}
-                        ${wasDiscovered && !error ? "bg-emerald-50/30" : "bg-white"}`;
+                        ${error ? "border-red-300 bg-red-50/50" : warning ? "border-amber-300 bg-amber-50/35" : "border-gray-200"}
+                        ${isFocused && !error && !warning ? "border-[#343434] ring-2 ring-[#DDF1FD]/50" : ""}
+                        ${!isFocused && !error && !warning ? "hover:border-gray-300" : ""}
+                        ${wasDiscovered && !error && !warning ? "bg-emerald-50/30" : "bg-white"}`;
 
               return (
                 <div
@@ -827,17 +1006,24 @@ export function ManualIdentifiersForm({
                   )}
                   <div className="flex-1 min-w-0 max-w-full flex flex-col h-full min-h-0">
                     {/* Label row — badges inline so they don’t crowd the input border */}
-                    <div className="shrink-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 items-start w-full min-w-0 sm:min-h-[2.85rem]">
-                      <div className="min-w-0 flex flex-col gap-1">
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                    <div className="shrink-0 grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 items-start w-full min-w-0">
+                      <div className="min-w-0 flex flex-row gap-2 items-start w-full">
+                        <div className="min-w-0 flex flex-col gap-0.5 flex-1">
                           <label
                             htmlFor={`rival-discover-${field.id}`}
                             className="text-[13px] font-semibold text-[#343434] cursor-pointer leading-snug"
                             title={field.labelTitle}
                           >
-                            {field.label}
+                            {rowTitle}
                           </label>
-                          {field.tip ? <FieldTipTrigger tip={field.tip} fieldLabel={field.label} /> : null}
+                          {field.labelSub ? (
+                            <span className="text-[11px] font-medium text-[#6b7280] leading-snug">
+                              {field.labelSub}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-1 sm:pt-0.5 ml-auto">
+                          {field.tip ? <FieldTipTrigger tip={field.tip} fieldLabel={rowTitle} /> : null}
                           {showAutoFoundBadge ? (
                             <span className="inline-flex items-center text-[10px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-1.5 py-0.5 rounded-md whitespace-nowrap leading-none">
                               Auto-found
@@ -845,22 +1031,15 @@ export function ManualIdentifiersForm({
                           ) : null}
                           {needsVerify ? <DoubleCheckHelpBadge fieldId={field.id} /> : null}
                         </div>
-                        {field.labelSub ? (
-                          <span className="text-[11px] font-medium text-[#6b7280] leading-snug">
-                            {field.labelSub}
-                          </span>
-                        ) : (
-                          <span className="block min-h-[1rem]" aria-hidden />
-                        )}
                       </div>
-                      <div className="flex items-start justify-end sm:pt-0.5">
+                      <div className="flex shrink-0 items-start justify-end self-start pt-px">
                         {showPreview ? (
                           <a
                             href={previewUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Preview in new tab"
-                            aria-label={`Preview ${field.label} in new tab`}
+                            aria-label={`Preview ${rowTitle} in new tab`}
                             className="inline-flex items-center justify-center gap-1 shrink-0 h-8 w-8 sm:h-auto sm:w-auto sm:px-2 rounded-lg border border-transparent text-[#1e6fa8] hover:bg-[#f8fcff] hover:border-[#DDF1FD]/80 hover:text-[#155a8a] transition-colors sm:pt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6fa8]/30 focus-visible:ring-offset-1"
                           >
                             <ExternalLink className="w-4 h-4 shrink-0" aria-hidden />
@@ -889,6 +1068,31 @@ export function ManualIdentifiersForm({
                       placeholder={field.placeholder}
                       className={`${inputClass} shrink-0`}
                     />
+                    {field.helperText ? (
+                      <p className="text-[11px] leading-snug shrink-0 mt-2 text-[#64748b]">{field.helperText}</p>
+                    ) : null}
+                    {field.id === "linkedin" && !wasDiscovered && !value.trim() ? (
+                      <p className="text-[11px] leading-snug shrink-0 mt-1 text-[#64748b]">
+                        Could not auto-detect. Browse{" "}
+                        <span className="whitespace-nowrap">linkedin.com/ad-library/home</span>{" "}
+                        to find your link.
+                      </p>
+                    ) : null}
+                    {(field.id === "tiktok" || field.id === "pinterest" || field.id === "snapchat") &&
+                    keywordRecommendationChips.length > 1 ? (
+                      <div className="flex flex-wrap gap-1.5 mt-2 shrink-0">
+                        {keywordRecommendationChips.map((kw) => (
+                          <button
+                            key={`${field.id}-${kw}`}
+                            type="button"
+                            onClick={() => handleChange(field.id, kw)}
+                            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-[#4b5563] hover:bg-gray-100 hover:border-gray-300 transition-colors"
+                          >
+                            {kw}
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
                     {field.id === "meta" ? (
                       <CollapsibleSingleSelectFlagChipRow
                         ariaLabel="Meta — ad library country"
@@ -946,15 +1150,8 @@ export function ManualIdentifiersForm({
                     {error ? (
                       <p className="text-[12px] leading-snug shrink-0 mt-2 text-red-500">{error}</p>
                     ) : null}
-                    {!error &&
-                    field.id === "pinterest" &&
-                    identifiers.pinterestAdvertiserName?.trim() ? (
-                      <p className="text-[11px] leading-snug text-[#6b7280] mt-2">
-                        Pinterest Ads search:{" "}
-                        <span className="font-medium text-[#4b5563]">
-                          “{identifiers.pinterestAdvertiserName.trim()}”
-                        </span>
-                      </p>
+                    {!error && warning ? (
+                      <p className="text-[12px] leading-snug shrink-0 mt-2 text-amber-800">{warning}</p>
                     ) : null}
                   </div>
                 </div>

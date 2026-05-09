@@ -13,6 +13,11 @@ type Props = {
   className?: string;
   minHeightClass?: string;
   /**
+   * `neutralMat` — light matte (e.g. Snapchat EU snapshot): symmetric padding from parent +
+   * light letterboxing on video instead of black bars.
+   */
+  variant?: "default" | "neutralMat";
+  /**
    * Fill a stretched grid row: no fixed max-height on the media frame so `flex-1` parents
    * can grow; images/videos use `max-h-full` inside the frame.
    */
@@ -29,16 +34,19 @@ export function AdCreativeVideoOrImage({
   openHref,
   className = "",
   minHeightClass = "min-h-[160px]",
+  variant = "default",
   fillAvailableHeight = false,
 }: Props) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
   const v = videoUrl?.trim();
   const poster = img?.trim();
-  const licdnPoster = poster && /\.licdn\.com/i.test(poster);
-  const licdnVideo = v && /\.licdn\.com/i.test(v);
+  const nrPoster = poster ? mediaMayNeedNoReferrer(poster) : false;
+  const nrVideo = v ? mediaMayNeedNoReferrer(v) : false;
   const showVideo = Boolean(v) && !videoFailed;
   const showImg = Boolean(poster) && !imgFailed && !showVideo;
+
+  const mat = variant === "neutralMat";
 
   useEffect(() => {
     setVideoFailed(false);
@@ -46,10 +54,20 @@ export function AdCreativeVideoOrImage({
   }, [v, poster]);
 
   const frameClass = fillAvailableHeight
-    ? `flex min-h-0 flex-1 flex-col items-center justify-center bg-[#f3f4f6] px-2 py-3 ${minHeightClass} overflow-auto ${className}`
-    : `flex items-center justify-center py-3 px-2 ${minHeightClass} max-h-[min(400px,45vh)] bg-[#f3f4f6] overflow-hidden ${className}`;
+    ? `flex min-h-0 flex-1 flex-col items-center justify-center ${
+        mat ? "bg-transparent px-0 py-0" : "bg-[#f3f4f6] px-2 py-3"
+      } ${minHeightClass} overflow-auto ${className}`
+    : `flex items-center justify-center ${mat ? "bg-transparent px-0 py-0" : "py-3 px-2 bg-[#f3f4f6]"} ${minHeightClass} ${
+        mat ? "max-h-[min(520px,60vh)]" : "max-h-[min(400px,45vh)]"
+      } overflow-hidden ${className}`;
 
-  const mediaMax = fillAvailableHeight ? "max-h-full max-w-full" : "max-h-[min(360px,42vh)] max-w-full";
+  const mediaMax = fillAvailableHeight
+    ? "max-h-full max-w-full"
+    : mat
+      ? "max-h-[min(380px,50vh)] max-w-full"
+      : "max-h-[min(360px,42vh)] max-w-full";
+
+  const videoBackdrop = mat ? "bg-zinc-100" : "bg-black";
 
   return (
     <div className={frameClass}>
@@ -59,10 +77,10 @@ export function AdCreativeVideoOrImage({
           playsInline
           preload="metadata"
           poster={poster && !isLikelyVideoFileUrl(poster) ? poster : undefined}
-          className={`${mediaMax} h-auto w-auto object-contain object-center bg-black`}
+          className={`${mediaMax} h-auto w-auto object-contain object-center ${videoBackdrop}`}
           src={v}
           onError={() => setVideoFailed(true)}
-          {...(licdnPoster || licdnVideo ? { referrerPolicy: "no-referrer" as const } : {})}
+          {...(nrPoster || nrVideo ? { referrerPolicy: "no-referrer" as const } : {})}
         />
       ) : showImg ? (
         <a
@@ -78,7 +96,7 @@ export function AdCreativeVideoOrImage({
           <img
             src={poster}
             alt=""
-            referrerPolicy={licdnPoster ? "no-referrer" : undefined}
+            referrerPolicy={nrPoster ? "no-referrer" : undefined}
             className={`${mediaMax} h-auto w-auto object-contain object-center`}
             onError={() => setImgFailed(true)}
           />
@@ -113,4 +131,15 @@ export function AdCreativeVideoOrImage({
 
 function isLikelyVideoFileUrl(url: string): boolean {
   return /\.(mp4|m3u8|webm)(\?|$)/i.test(url);
+}
+
+function mediaMayNeedNoReferrer(url: string): boolean {
+  const u = url.toLowerCase();
+  return (
+    u.includes("licdn.com") ||
+    u.includes("linkedin.com") ||
+    u.includes("snapchat.com") ||
+    u.includes("snapcdn") ||
+    u.includes("sc-cdn")
+  );
 }

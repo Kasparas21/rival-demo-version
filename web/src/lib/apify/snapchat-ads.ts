@@ -1,4 +1,5 @@
-import { runApifyActor } from "@/lib/apify/client";
+import { flattenApifyDatasetRecord, runApifyActor } from "@/lib/apify/client";
+import { snapchatDatasetRowMediaPriority } from "@/lib/ad-library/normalize";
 
 const DEFAULT_ACTOR = "zadexinho/snapchat-ads-scraper";
 const MAX_GLOBAL = 10000;
@@ -80,12 +81,44 @@ function numImpressionsRow(row: Record<string, unknown>): number {
   return Number.isFinite(nested) ? nested : 0;
 }
 
-export function stableSnapchatRowId(row: Record<string, unknown>): string {
-  const v = row.adId ?? row.ad_id ?? row.adID ?? row.id ?? row.snapAdId ?? row.adLibraryId ?? row.uuid;
-  return String(v ?? "");
+function snapMergeRowQuality(row: Record<string, unknown>): [number, number] {
+  return [snapchatDatasetRowMediaPriority(row), numImpressionsRow(row)];
 }
 
-/** Merge actor rows across countries — dedupe IDs, prefer higher impressions, sort desc. */
+function snapMergeDominates(candidate: Record<string, unknown>, incumbent: Record<string, unknown>): boolean {
+  const [cp, ci] = snapMergeRowQuality(candidate);
+  const [ip, ii] = snapMergeRowQuality(incumbent);
+  if (cp !== ip) return cp > ip;
+  return ci > ii;
+}
+
+export function stableSnapchatRowId(row: Record<string, unknown>): string {
+  const r = row as Record<string, unknown>;
+  const candidates = [
+    r.adId,
+    r.ad_id,
+    r.adID,
+    r.id,
+    r.snapAdId,
+    r.adLibraryId,
+    r.uuid,
+    r["AdId"],
+    r["Ad ID"],
+    r["adLibrary_id"],
+  ];
+  for (const c of candidates) {
+    const s =
+      typeof c === "number" && Number.isFinite(c)
+        ? String(Math.trunc(c))
+        : typeof c === "string" && c.trim()
+          ? c.trim()
+          : "";
+    if (s) return s;
+  }
+  return "";
+}
+
+/** Merge actor rows across countries — dedupe IDs, prefer snapshots with hero `mediaUrl`, then impressions, sort desc. */
 export function mergeSnapchatRowsDeduped(rows: Record<string, unknown>[], maxCap: number): Record<string, unknown>[] {
   const bestById = new Map<string, Record<string, unknown>>();
   const noIdBucket: Record<string, unknown>[] = [];
@@ -96,12 +129,17 @@ export function mergeSnapchatRowsDeduped(rows: Record<string, unknown>[], maxCap
       continue;
     }
     const prev = bestById.get(id);
-    if (!prev || numImpressionsRow(row) > numImpressionsRow(prev)) {
+    if (!prev || snapMergeDominates(row, prev)) {
       bestById.set(id, row);
     }
   }
   const merged = [...bestById.values(), ...noIdBucket];
-  merged.sort((a, b) => numImpressionsRow(b) - numImpressionsRow(a));
+  merged.sort((a, b) => {
+    const [ap, ai] = snapMergeRowQuality(a);
+    const [bp, bi] = snapMergeRowQuality(b);
+    if (ap !== bp) return bp - ap;
+    return bi - ai;
+  });
   return merged.slice(0, Math.max(0, maxCap));
 }
 
@@ -113,6 +151,8 @@ export async function scrapeSnapchatEuAdsGallery(params: {
   domain: string;
   brandName: string;
   maxItemsGlobal: number;
+  /** When set (e.g. saved competitor “Search keyword”), used as the actor `search` string. */
+  searchKeyword?: string;
   /** Single EU ISO2; omit or `"ALL"` to sweep SNAPCHAT_EU_COUNTRY_CODES. */
   countryCode?: string;
   startDate?: string;
@@ -121,7 +161,11 @@ export async function scrapeSnapchatEuAdsGallery(params: {
 }): Promise<Record<string, unknown>[]> {
   const actorId = process.env.APIFY_SNAPCHAT_ADS_ACTOR?.trim() || DEFAULT_ACTOR;
   const maxCap = Math.max(1, Math.min(params.maxItemsGlobal || 100, MAX_GLOBAL));
-  const search = snapchatBrandSearchToken(params.domain, params.brandName);
+  const override = params.searchKeyword?.trim().replace(/^@+/, "");
+  const search = (override && override.length > 0 ? override : snapchatBrandSearchToken(params.domain, params.brandName)).slice(
+    0,
+    140
+  );
   let startDate =
     params.startDate?.trim() && ISO_DATE_RE.test(params.startDate.trim())
       ? params.startDate.trim()
@@ -167,7 +211,10 @@ export async function scrapeSnapchatEuAdsGallery(params: {
       timeoutSecs: POLL_WAIT_SECS,
       maxItems: limitEach,
     });
-    return items;
+    return items.flatMap((row) => {
+      if (!row || typeof row !== "object" || Array.isArray(row)) return [];
+      return [flattenApifyDatasetRecord(row as Record<string, unknown>)];
+    });
   };
 
   const all: Record<string, unknown>[] = [];

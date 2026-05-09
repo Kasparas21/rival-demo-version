@@ -1,9 +1,12 @@
 import { runApifyActor } from "@/lib/apify/client";
 import { facebookItemToMetaCard, type MetaAdCard } from "@/lib/ad-library/normalize";
-import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
+import {
+  ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
+  ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+} from "@/lib/ad-library/constants";
 
 const DEFAULT_FACEBOOK_ADS_ACTOR = "curious_coder/facebook-ads-library-scraper";
-const DEFAULT_MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
+const DEFAULT_MAX_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
 const ACTOR_MINIMUM_COUNT = 10;
 const MAX_ACTOR_TIMEOUT_SECS = 300;
 
@@ -81,7 +84,10 @@ export async function scrapeFacebookAds(
 ): Promise<MetaAdCard[]> {
   const actorId = process.env.APIFY_FACEBOOK_ADS_ACTOR?.trim() || DEFAULT_FACEBOOK_ADS_ACTOR;
   const activeStatus = params.activeStatus === "ALL" ? "ALL" : "ACTIVE";
-  const maxAds = Math.max(1, Math.min(params.maxAds ?? DEFAULT_MAX_ADS, DEFAULT_MAX_ADS));
+  const maxAds = Math.max(
+    1,
+    Math.min(params.maxAds ?? DEFAULT_MAX_ADS, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM)
+  );
   const actorCount = Math.max(ACTOR_MINIMUM_COUNT, maxAds);
   const country = (params.countryCode ?? "US").trim().toUpperCase() || "US";
   const sd = params.metaStartDate?.trim();

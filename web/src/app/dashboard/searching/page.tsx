@@ -163,6 +163,7 @@ function SearchingContent() {
     Partial<Record<ChannelId, "high" | "medium" | "low">>
   >({});
   const [fieldPreviewUrls, setFieldPreviewUrls] = useState<Partial<Record<ChannelId, string>>>({});
+  const [recommendedKeywords, setRecommendedKeywords] = useState<string[]>([]);
   const [scanProgress, setScanProgress] = useState(0);
   /** Live ads fetch: completed platform requests vs total (for progress label). */
   const [scanFraction, setScanFraction] = useState({ done: 0, total: 0 });
@@ -203,12 +204,16 @@ function SearchingContent() {
       setDiscoveryInterpretation(saved.discoveryInterpretation);
       setFieldConfidence(saved.fieldConfidence ?? {});
       setFieldPreviewUrls(saved.fieldPreviewUrls ?? {});
+      setRecommendedKeywords(
+        Array.isArray(saved.recommendedKeywords) ? saved.recommendedKeywords : []
+      );
       setAdLibraryRegions({
         ...readAdLibraryRegionPrefsFromSession(),
         ...snapshotAdLibraryRegionPrefs(saved.adLibraryRegionPrefs),
       });
     } else {
       setAdLibraryRegions(readAdLibraryRegionPrefsFromSession());
+      setRecommendedKeywords([]);
     }
     setFlowRehydrated(true);
   }, [flowKey]);
@@ -251,6 +256,7 @@ function SearchingContent() {
       discoveryInterpretation,
       fieldConfidence,
       fieldPreviewUrls,
+      recommendedKeywords,
       adLibraryRegionPrefs: adLibraryRegions,
     };
     writeSearchingFlowSnapshot(flowKey, snapshot);
@@ -267,6 +273,7 @@ function SearchingContent() {
     discoveryInterpretation,
     fieldConfidence,
     fieldPreviewUrls,
+    recommendedKeywords,
     adLibraryRegions,
   ]);
 
@@ -385,6 +392,9 @@ function SearchingContent() {
       );
       setFieldConfidence(data.fieldConfidence ?? {});
       setFieldPreviewUrls(data.fieldPreviewUrls ?? {});
+      setRecommendedKeywords(
+        Array.isArray(data.recommendedKeywords) ? data.recommendedKeywords : []
+      );
       if (typeof data.warning === "string" && data.warning.trim()) {
         setDiscoveryWarning(data.warning.trim());
       }
@@ -721,6 +731,7 @@ function SearchingContent() {
               brandLogoUrl={discoveredBrand?.logoUrl}
               adLibraryRegions={adLibraryRegions}
               onAdLibraryRegionsChange={setAdLibraryRegions}
+              recommendedKeywords={recommendedKeywords}
             />
           </div>
         )}

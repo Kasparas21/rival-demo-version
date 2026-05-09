@@ -1,5 +1,6 @@
 import type { AdsLibraryResponse } from "./api-types";
 import { META_ADS_INLINE_PREVIEW } from "./constants";
+import { sortSnapchatAdsForResponse, sortTikTokAdsForResponse } from "./normalize";
 
 const DEFAULT_MAX_URLS = 48;
 
@@ -40,7 +41,8 @@ export function collectAdsLibraryWarmupUrls(
     pushHttpUrl(urls, ad.advertiserLogoUrl);
   }
 
-  for (const ad of full.tiktok.ads.slice(0, per)) {
+  const ttWarm = sortTikTokAdsForResponse(full.tiktok.ads);
+  for (const ad of ttWarm.slice(0, per)) {
     pushHttpUrl(urls, ad.img);
   }
 
@@ -52,8 +54,10 @@ export function collectAdsLibraryWarmupUrls(
     pushHttpUrl(urls, ad.img);
   }
 
-  for (const ad of full.snapchat.ads.slice(0, per)) {
+  const snapWarm = sortSnapchatAdsForResponse(full.snapchat.ads);
+  for (const ad of snapWarm.slice(0, per)) {
     pushHttpUrl(urls, ad.img);
+    pushHttpUrl(urls, ad.videoUrl);
   }
 
   return [...urls].slice(0, max);

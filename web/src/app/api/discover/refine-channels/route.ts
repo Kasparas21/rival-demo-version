@@ -4,7 +4,6 @@ import {
   FALLBACK_SEARCH_KEYS,
   refineSnapchatWithBrand,
   normalizeDiscoveredIds,
-  pickBestFacebookPageUrl,
   extractDomain,
   toFullUrl,
   type PlatformIdentifier,
@@ -18,6 +17,8 @@ import {
   fallbackSearchForSocials,
   buildFieldConfidence,
   buildFieldPreviewUrls,
+  applyDiscoveredMetaPresentation,
+  finalizeLinkedInDiscovery,
 } from "@/lib/competitor-discover-firecrawl";
 
 /** Second-pass discovery while confirming profiles — deeper homepage mine + targeted web search. */
@@ -145,10 +146,18 @@ export async function POST(req: Request): Promise<NextResponse<DiscoverRefineCha
           working = { ...working, meta: resolved };
         }
       }
-      const fbPageUrl = pickBestFacebookPageUrl(metaHits, normalizedDomain);
-      if (fbPageUrl) {
-        working = { ...working, metaPageUrl: fbPageUrl };
-      }
+      working = applyDiscoveredMetaPresentation(working, metaHits, normalizedDomain);
+    }
+
+    const linkedinTargets = targets.includes("linkedin");
+    if (linkedinTargets) {
+      working = await finalizeLinkedInDiscovery(
+        app,
+        working,
+        metaHits,
+        scrapeLinks,
+        true
+      );
     }
 
     if (targets.includes("pinterest") && working.pinterest?.trim()) {

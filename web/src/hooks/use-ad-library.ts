@@ -44,6 +44,10 @@ type Ids = Partial<{
   pinterest: string;
   /** Optional override (handle or URL, normalized server-side). */
   pinterestAdvertiserName: string;
+  /** Snapchat EU gallery keyword (saved competitor row). */
+  snapchat: string;
+  /** TikTok advertiser / exact-match token or library URL — server uses same `query_type=2` quoting as brand unless URL or numeric id. */
+  tiktok: string;
 }>;
 
 export function useAdLibrary(

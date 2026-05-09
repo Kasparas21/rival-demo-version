@@ -12,12 +12,18 @@ import {
   linkedInItemToCard,
   microsoftDatasetItemToCard,
   pinterestDatasetItemToCard,
+  sortSnapchatAdsForResponse,
+  sortTikTokAdsForResponse,
+  snapchatDatasetRowMediaPriority,
   snapchatDatasetItemToCard,
 } from "@/lib/ad-library/normalize";
 import { ADS_CACHE_TTL_MS, CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
-import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
+import {
+  ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
+  ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+} from "@/lib/ad-library/constants";
 import {
   billingRequiredResponseBody,
   getBillingEntitlement,
@@ -51,7 +57,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
-const DEFAULT_META_MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
+const DEFAULT_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
 
 type Ids = {
   meta?: string;
@@ -63,6 +69,10 @@ type Ids = {
   pinterest?: string;
   /** Optional override: handle or URL (normalized); otherwise brand name is used. */
   pinterestAdvertiserName?: string;
+  /** Saved Snapchat Ads Gallery keyword (manual identifiers / discovery). */
+  snapchat?: string;
+  /** Saved TikTok Ads Library advertiser token or library URL (`query_type=2` exact match with quotes, same as brand). */
+  tiktok?: string;
 };
 
 function cleanDomain(d: string): string {
@@ -131,7 +141,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     tiktokRegion?: string;
     /** Google Transparency `region` — `anywhere` or ISO 3166-1 alpha-2 (default `anywhere`). */
     googleRegion?: string;
-    /** Google `resultsLimit` (default 50, max 500). */
+    /** Google `resultsLimit` (default from `GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT`, max 500). */
     googleResultsLimit?: number;
     /** Pinterest transparency actor — EU-27, BR, or TR (default `DE`). */
     pinterestCountry?: string;
@@ -168,30 +178,30 @@ export async function POST(req: Request): Promise<NextResponse> {
   const domain = cleanDomain(body.brand?.domain || "");
   const ids: Ids = body.ids ?? {};
   const metaStatus = body.metaStatus === "ALL" ? "ALL" : "ACTIVE";
-  const metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_META_MAX_ADS, MAX_ADS));
+  const metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_ADS, MAX_ADS));
   const metaCountry = (body.metaCountry ?? "US").trim().toUpperCase() || "US";
   const metaStartDate = body.metaStartDate?.trim();
   const metaEndDate = body.metaEndDate?.trim();
   const metaSortBy = (body.metaSortBy ?? "impressions_desc").trim() || "impressions_desc";
   const linkedinMaxAds = Math.max(
     1,
-    Math.min(body.linkedinMaxAds ?? MAX_ADS, MAX_ADS)
+    Math.min(body.linkedinMaxAds ?? DEFAULT_ADS, MAX_ADS)
   );
   const linkedinDateRange = body.linkedinDateRange?.trim() || "past-year";
   const linkedinCountryCode = body.linkedinCountryCode?.trim() ?? "";
-  const tiktokMaxAds = Math.max(1, Math.min(body.tiktokMaxAds ?? MAX_ADS, MAX_ADS));
+  const tiktokMaxAds = Math.max(1, Math.min(body.tiktokMaxAds ?? DEFAULT_ADS, MAX_ADS));
   const tiktokStartDate = body.tiktokStartDate?.trim();
   const tiktokEndDate = body.tiktokEndDate?.trim();
   const microsoftMaxSearchResults = Math.max(
     24,
-    Math.min(body.microsoftMaxSearchResults ?? MAX_ADS, MAX_ADS, 1000)
+    Math.min(body.microsoftMaxSearchResults ?? DEFAULT_ADS, MAX_ADS, 1000)
   );
   const microsoftCountryCodes = microsoftMarketCodeToArray(body.microsoftCountryCode ?? "66");
   const microsoftStartDate = body.microsoftStartDate?.trim();
   const microsoftEndDate = body.microsoftEndDate?.trim();
   const pinterestMaxResults = Math.max(
     1,
-    Math.min(body.pinterestMaxResults ?? MAX_ADS, MAX_ADS, 1000)
+    Math.min(body.pinterestMaxResults ?? DEFAULT_ADS, MAX_ADS, 1000)
   );
   const pinterestStartDate = body.pinterestStartDate?.trim();
   const pinterestEndDate = body.pinterestEndDate?.trim();
@@ -199,7 +209,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const pinterestAge = body.pinterestAge?.trim();
   const snapchatMaxItems = Math.max(
     10,
-    Math.min(body.snapchatMaxItems ?? Math.min(MAX_ADS, 300), MAX_ADS, 10000)
+    Math.min(body.snapchatMaxItems ?? Math.min(DEFAULT_ADS, 300), MAX_ADS, 10000)
   );
   const snapchatCountryIso = body.snapchatCountry?.trim().toUpperCase() ?? "";
   const snapchatStartDate = body.snapchatStartDate?.trim();
@@ -444,6 +454,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       try {
         out.tiktok.ads = await scrapeTikTokAdsLibrary({
           brandName,
+          savedTiktok: typeof ids.tiktok === "string" ? ids.tiktok : undefined,
           region: tiktokRegion,
           maxAds: tiktokMaxAds,
           fetchDetails: true,
@@ -487,7 +498,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         });
         out.pinterest.ads = rows
           .slice(0, pinterestMaxResults)
-          .map((raw, i) => pinterestDatasetItemToCard(raw, i));
+          .map((raw, i) => pinterestDatasetItemToCard(raw, i, { brandName }));
       } catch (e) {
         out.pinterest.error =
           e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Pinterest ads failed";
@@ -504,6 +515,9 @@ export async function POST(req: Request): Promise<NextResponse> {
           domain,
           brandName,
           maxItemsGlobal: snapchatMaxItems,
+          ...(typeof ids.snapchat === "string" && ids.snapchat.trim()
+            ? { searchKeyword: ids.snapchat.trim() }
+            : {}),
           countryCode:
             snapchatCountryIso &&
             snapchatCountryIso !== "ANYWHERE" &&
@@ -515,13 +529,23 @@ export async function POST(req: Request): Promise<NextResponse> {
           endDate: snapchatEndDate || undefined,
           ...(metaStatus === "ACTIVE" ? { status: "ACTIVE" as const } : {}),
         });
-        out.snapchat.ads = raw.slice(0, snapchatMaxItems).map((row, i) => snapchatDatasetItemToCard(row, i));
+        out.snapchat.ads = [...raw]
+          .sort((a, b) => snapchatDatasetRowMediaPriority(b) - snapchatDatasetRowMediaPriority(a))
+          .slice(0, snapchatMaxItems)
+          .map((row, i) => snapchatDatasetItemToCard(row, i, { brandName }));
       } catch (e) {
         out.snapchat.error =
           e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Snapchat ads failed";
       }
     })(),
   ]);
+
+  if (platformsRequested.has("snapchat") && out.snapchat.ads.length > 0) {
+    out.snapchat = { ...out.snapchat, ads: sortSnapchatAdsForResponse(out.snapchat.ads) };
+  }
+  if (platformsRequested.has("tiktok") && out.tiktok.ads.length > 0) {
+    out.tiktok = { ...out.tiktok, ads: sortTikTokAdsForResponse(out.tiktok.ads) };
+  }
 
   const platformsToPersist =
     userId && resolvedCompetitorId

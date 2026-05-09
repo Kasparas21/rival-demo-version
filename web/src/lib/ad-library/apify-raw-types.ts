@@ -94,4 +94,6 @@ export type LinkedInAdItem = {
   endDate?: string | null;
   totalImpressions?: string | null;
   targeting?: Record<string, string>;
+  /** LinkedIn company / org id from transparency actor when present (for advertiser verification). */
+  advertiserCompanyId?: string | null;
 };

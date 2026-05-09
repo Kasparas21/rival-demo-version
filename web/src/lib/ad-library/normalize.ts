@@ -42,6 +42,8 @@ export type MetaAdCard = {
   /** Advertiser shown in card header (from Ad Library) */
   pageName: string;
   pageProfilePic?: string;
+  /** True when scraped page_id does not match the user-confirmed Meta page id */
+  advertiserMismatch?: boolean;
 };
 
 /** Google / YouTube style row */
@@ -94,6 +96,7 @@ export type LinkedInAdCard = {
   ctaLabel?: string | null;
   /** Open in LinkedIn / destination */
   adUrl: string;
+  advertiserMismatch?: boolean;
 };
 
 export type TikTokAdCard = {
@@ -111,6 +114,7 @@ export type TikTokAdCard = {
   lastShown?: string | null;
   /** e.g. "1K-10K" from Ad Audience / reach */
   uniqueUsersSeen?: string | null;
+  advertiserMismatch?: boolean;
 };
 
 /** Microsoft Advertising Transparency (EEA) — Apify codebyte/microsoft-ads-library */
@@ -126,10 +130,17 @@ export type MicrosoftAdCard = {
   impressionsRange?: string | null;
 };
 
+/** One row from Pinterest transparency `targeting` (shown as label + value). */
+export type PinterestTargetingRow = {
+  label: string;
+  value: string;
+};
+
 /** Pinterest Ad Transparency (DSA regions) — Apify zadexinho/pinterest-ads-scraper */
 export type PinterestAdCard = {
   id: string;
   headline: string;
+  /** Compact text summary (strategy / comparisons); mirrors structured targeting when available. */
   desc: string;
   url: string;
   img: string;
@@ -137,8 +148,15 @@ export type PinterestAdCard = {
   videoUrl?: string | null;
   advertiser: string;
   adUrl: string;
+  /** Structured targeting breakdown for display (ages, geo, keywords, extras from API). */
+  targetingRows?: PinterestTargetingRow[];
   /** e.g. from reach.totalEU */
   reachSummary?: string | null;
+  /** Impressions or similar disclosure when scraped */
+  impressionsLabel?: string | null;
+  /** Human-readable disclosure / flight window when dates exist on the row */
+  disclosureWindow?: string | null;
+  advertiserMismatch?: boolean;
 };
 
 /** Snapchat EU Ads Gallery — rows from Apify EU transparency-style actors. */
@@ -154,7 +172,55 @@ export type SnapchatAdCard = {
   /** EU market where the row surfaced (ISO2) when present */
   euCountry?: string | null;
   impressionsLabel?: string | null;
+  advertiserMismatch?: boolean;
+  /** Raw status e.g. ACTIVE — drives gallery-style badge */
+  status?: string | null;
+  brandAdvertised?: string | null;
+  startDateLabel?: string | null;
+  endDateLabel?: string | null;
+  ctaLabel?: string | null;
+  /** When true, omit headline overlay under creative (duplicate / Snapchat template noise). */
+  suppressCreativeHeadline?: boolean;
+  /** Actor row had a non-empty `mediaUrl` / `MediaUrl` (EU gallery hero asset). */
+  hasHeroMediaUrl?: boolean;
 };
+
+const GENERIC_ADVERTISER_PLACEHOLDER = /^advertiser$/i;
+
+function normalizeBrandAdvertiserString(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** True when normalized names have no mutual substring relationship (wrong-brand heuristic). */
+function brandAdvertiserNameMismatchForCard(brandName: string, advertiserNameFromPayload: string): boolean {
+  const b = normalizeBrandAdvertiserString(brandName);
+  const a = normalizeBrandAdvertiserString(advertiserNameFromPayload);
+  if (!b || !a) return false;
+  if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiserNameFromPayload.trim())) return false;
+  if (a === b) return false;
+  if (a.includes(b) || b.includes(a)) return false;
+  return true;
+}
+
+function linkedInAdvertiserCompanyIdFromDatasetRow(raw: Record<string, unknown>): string | undefined {
+  const pick = (v: unknown): string | undefined => {
+    if (typeof v === "number" && Number.isFinite(v)) return String(Math.trunc(v));
+    if (typeof v === "string" && v.trim()) return v.trim();
+    return undefined;
+  };
+
+  const fromTop = pick(raw.advertiserCompanyId ?? raw.companyId ?? raw.company_id ?? raw.organizationId ?? raw.organization_id);
+  if (fromTop) return fromTop;
+
+  const adv = raw.advertiser;
+  if (adv && typeof adv === "object" && !Array.isArray(adv)) {
+    const o = adv as Record<string, unknown>;
+    const id = pick(o.id ?? o.companyId ?? o.company_id ?? o.companyID);
+    if (id) return id;
+  }
+
+  return undefined;
+}
 
 function containsTemplateTokens(value: string): boolean {
   return /\{\{[^}]+\}\}/.test(value);
@@ -472,7 +538,11 @@ function fbPickRichPrimaryCandidate(candidates: string[]): string {
   return scored[0] || "";
 }
 
-export function facebookItemToMetaCard(itemUnknown: unknown, index: number): MetaAdCard | null {
+export function facebookItemToMetaCard(
+  itemUnknown: unknown,
+  index: number,
+  ctx?: { confirmedPageId?: string }
+): MetaAdCard | null {
   const item = coerceFacebookDatasetRow(itemUnknown);
   const snap = item.snapshot;
   const card = snap?.cards?.[0];
@@ -574,6 +644,12 @@ export function facebookItemToMetaCard(itemUnknown: unknown, index: number): Met
   const hasRenderable =
     !!(item.ad_archive_id || item.collation_id || item.page_name?.trim() || snap || probeImg);
   if (!hasRenderable) return null;
+
+  const confirmedNorm = ctx?.confirmedPageId?.replace(/\D/g, "") ?? "";
+  const pageIdNorm = item.page_id?.replace(/\D/g, "") ?? "";
+  const advertiserMismatch =
+    Boolean(confirmedNorm) && Boolean(pageIdNorm) && pageIdNorm !== confirmedNorm;
+
   return {
     id: String(id),
     headline,
@@ -591,6 +667,7 @@ export function facebookItemToMetaCard(itemUnknown: unknown, index: number): Met
     pageName,
     pageProfilePic: pic,
     ...(videoUrl ? { videoUrl } : {}),
+    ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }
 
@@ -1001,7 +1078,11 @@ export function googleItemToRow(
   };
 }
 
-export function linkedInItemToCard(item: LinkedInAdItem, index: number): LinkedInAdCard {
+export function linkedInItemToCard(
+  item: LinkedInAdItem,
+  index: number,
+  ctx?: { confirmedCompanyId?: string }
+): LinkedInAdCard {
   const id = item.id || `li-${index}`;
   const body = item.description?.trim() || "";
   const metaBits: string[] = [];
@@ -1046,6 +1127,12 @@ export function linkedInItemToCard(item: LinkedInAdItem, index: number): LinkedI
     rawDest.replace(/^https?:\/\//, "").slice(0, 48) ||
     (item.advertiserLinkedinPage || "").replace(/^https?:\/\//, "").slice(0, 48) ||
     "linkedin.com";
+
+  const confirmedCo = ctx?.confirmedCompanyId?.trim();
+  const scrapedCo = item.advertiserCompanyId?.trim();
+  const advertiserMismatch =
+    Boolean(confirmedCo) && Boolean(scrapedCo) && scrapedCo !== confirmedCo;
+
   return {
     id: String(id),
     headline,
@@ -1057,6 +1144,7 @@ export function linkedInItemToCard(item: LinkedInAdItem, index: number): LinkedI
     ctaLabel: item.cta?.trim() || undefined,
     advertiser: item.advertiser || item.poster || "Advertiser",
     adUrl,
+    ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }
 
@@ -1316,6 +1404,7 @@ function linkedInIvanVsApifyItemToLegacyItem(raw: Record<string, unknown>, index
     endDate: end,
     totalImpressions: typeof raw.totalImpression === "string" ? raw.totalImpression : undefined,
     targeting,
+    advertiserCompanyId: linkedInAdvertiserCompanyIdFromDatasetRow(raw),
   };
 }
 
@@ -1392,6 +1481,7 @@ function linkedInDataXplorerApifyItemToLegacyItem(raw: Record<string, unknown>, 
     adDuration,
     totalImpressions: typeof raw.adTotalImpressions === "string" ? raw.adTotalImpressions : undefined,
     targeting,
+    advertiserCompanyId: linkedInAdvertiserCompanyIdFromDatasetRow(raw),
   };
 }
 
@@ -1424,7 +1514,13 @@ function mergeLinkedInItemWithRawMediaGlean(raw: Record<string, unknown>, item: 
     image = g.image.trim();
   }
 
-  return { ...item, image, video };
+  return {
+    ...item,
+    image,
+    video,
+    advertiserCompanyId:
+      item.advertiserCompanyId ?? linkedInAdvertiserCompanyIdFromDatasetRow(raw),
+  };
 }
 
 /** Map Apify LinkedIn dataset rows → legacy item. */
@@ -1460,6 +1556,7 @@ export function linkedInApifyItemToLegacyItem(raw: Record<string, unknown>, inde
       adDetailUrl: typeof raw.detailUrl === "string" ? raw.detailUrl : undefined,
       cta: typeof raw.ctaLabel === "string" ? raw.ctaLabel : undefined,
       adType: typeof raw.adFormat === "string" ? raw.adFormat : undefined,
+      advertiserCompanyId: linkedInAdvertiserCompanyIdFromDatasetRow(raw),
     });
   }
 
@@ -1497,6 +1594,8 @@ function deepFindHttpsImageUrl(value: unknown, depth = 0): string {
     const s = value.trim();
     if (!/^https?:\/\//i.test(s) || s.length > 4000) return "";
     if (/\.(png|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i.test(s)) return s;
+    const low = s.toLowerCase();
+    if (low.includes("sc-cdn.net") || low.includes("snapcdn")) return s;
     return "";
   }
   if (Array.isArray(value)) {
@@ -1515,6 +1614,70 @@ function deepFindHttpsImageUrl(value: unknown, depth = 0): string {
   return "";
 }
 
+/** Publisher badge / Bolt-resolved tiny asset — not the EU gallery hero creative (`/d/…`). */
+function isLikelySnapProfileBoltAssetUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  return (
+    /^https:\/\//i.test(url.trim()) &&
+    u.includes("sc-cdn.net") &&
+    u.includes("/aps/bolt/")
+  );
+}
+
+function snapCreativeImageScore(url: string): number {
+  if (!url.trim()) return -Infinity;
+  if (looksLikeVideoFileUrl(url)) return -Infinity;
+  if (isLikelySnapProfileBoltAssetUrl(url)) return -1_000_000;
+  const u = url.toLowerCase();
+  let base = u.includes("/d/") ? 5_000_000 : 0;
+  if (/\.(png|jpe?g|webp|gif|avif|bmp)(\?|#|$)/i.test(url)) base += 100;
+  /** Longer Snapchat CDN URLs usually carry fuller creative payloads */
+  base += Math.min(url.length, 4000);
+  return base;
+}
+
+/** Walk row like `deepFindHttpsImageUrl` but **collect** candidates and pick hero over Bolt logo. */
+function deepFindSnapPreferredCreativeImage(value: unknown, depth = 0, acc: string[] = []): string[] {
+  if (depth > 12) return acc;
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (/^https?:\/\//i.test(s) && s.length <= 4000) {
+      const low = s.toLowerCase();
+      const onSnapHost = low.includes("sc-cdn.net") || low.includes("snapcdn");
+      if (!onSnapHost || looksLikeVideoFileUrl(s)) return acc;
+      const rasterExt =
+        /\.(png|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i.test(s) || /\b_FMpng\b/i.test(s);
+      const heroDelivery = /\/d\//.test(low);
+      const boltBadge = /\/?aps\/bolt\//.test(low);
+      if (heroDelivery || rasterExt || boltBadge) acc.push(s);
+    }
+    return acc;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) deepFindSnapPreferredCreativeImage(v, depth + 1, acc);
+    return acc;
+  }
+  if (value && typeof value === "object") {
+    for (const v of Object.values(value as Record<string, unknown>))
+      deepFindSnapPreferredCreativeImage(v, depth + 1, acc);
+  }
+  return acc;
+}
+
+function deepPickSnapHeroImageFromUnknown(value: unknown): string {
+  const cands = deepFindSnapPreferredCreativeImage(value, 0);
+  let best = "";
+  let score = -Infinity;
+  for (const u of cands) {
+    const sc = snapCreativeImageScore(u);
+    if (sc > score) {
+      score = sc;
+      best = u;
+    }
+  }
+  return Number.isFinite(score) && score > -500_000 ? best : "";
+}
+
 /** LinkedIn often puts author headshots in `mediaUrl` for video ads — avoid using as creative. */
 export function isLikelyLinkedInProfileOrAuthorPhoto(url: string): boolean {
   const u = url.toLowerCase();
@@ -1528,6 +1691,30 @@ export function isLikelyLinkedInProfileOrAuthorPhoto(url: string): boolean {
 
 function looksLikeVideoFileUrl(s: string): boolean {
   return /\.(mp4|m3u8|webm)(\?|$)/i.test(s.trim());
+}
+
+function deepFindHttpsVideoUrl(value: unknown, depth = 0): string {
+  if (depth > 10) return "";
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (!/^https?:\/\//i.test(s) || s.length > 4000) return "";
+    if (looksLikeVideoFileUrl(s)) return s;
+    return "";
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const u = deepFindHttpsVideoUrl(v, depth + 1);
+      if (u) return u;
+    }
+    return "";
+  }
+  if (value && typeof value === "object") {
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      const u = deepFindHttpsVideoUrl(v, depth + 1);
+      if (u) return u;
+    }
+  }
+  return "";
 }
 
 function extractLinkedInAutomationLabMedia(raw: Record<string, unknown>): {
@@ -1619,30 +1806,6 @@ function extractLinkedInMediaFromArray(media: unknown[]): { image?: string; vide
   return { image, video };
 }
 
-function deepFindHttpsVideoUrl(value: unknown, depth = 0): string {
-  if (depth > 10) return "";
-  if (typeof value === "string") {
-    const s = value.trim();
-    if (!/^https?:\/\//i.test(s) || s.length > 4000) return "";
-    if (looksLikeVideoFileUrl(s)) return s;
-    return "";
-  }
-  if (Array.isArray(value)) {
-    for (const v of value) {
-      const u = deepFindHttpsVideoUrl(v, depth + 1);
-      if (u) return u;
-    }
-    return "";
-  }
-  if (value && typeof value === "object") {
-    for (const v of Object.values(value as Record<string, unknown>)) {
-      const u = deepFindHttpsVideoUrl(v, depth + 1);
-      if (u) return u;
-    }
-  }
-  return "";
-}
-
 /** Map codebyte/microsoft-ads-library (or compatible) dataset row → card. */
 export function microsoftDatasetItemToCard(raw: Record<string, unknown>, index: number): MicrosoftAdCard {
   const adId = raw.AdId ?? raw.adId ?? raw.id ?? raw.ID;
@@ -1721,17 +1884,178 @@ export function microsoftDatasetItemToCard(raw: Record<string, unknown>, index: 
   };
 }
 
-function formatPinterestTargetingDesc(targeting: unknown): string {
-  if (!targeting || typeof targeting !== "object") return "—";
-  const o = targeting as Record<string, unknown>;
-  const parts: string[] = [];
-  for (const key of ["ages", "genders", "countries", "interests", "keywords"]) {
-    const v = o[key];
-    if (Array.isArray(v) && v.length) {
-      parts.push(`${key}: ${v.map(String).join(", ")}`);
-    }
+/** Pull human-readable fragments from heterogeneous targeting payloads. */
+function collectPinterestTargetingValues(v: unknown, depth = 0): string[] {
+  if (depth > 8) return [];
+  if (v == null) return [];
+  const t = typeof v;
+  if (t === "string" || t === "number" || t === "boolean") {
+    const s = String(v).trim();
+    return s !== "" ? [s.replace(/\s+/g, " ")] : [];
   }
-  return parts.length ? parts.join(" · ") : "—";
+  if (Array.isArray(v)) {
+    const chunks = v.flatMap((x) => collectPinterestTargetingValues(x, depth + 1)).filter(Boolean);
+    return pinterestDedupePreserveOrder(chunks);
+  }
+  if (t === "object") {
+    const o = v as Record<string, unknown>;
+    const named =
+      firstString(o, ["name", "label", "title", "text", "value", "slug", "formattedName", "displayName"]) ??
+      "";
+    if (named.trim()) return [named.trim().replace(/\s+/g, " ")];
+    const chunks: string[] = [];
+    for (const val of Object.values(o)) {
+      chunks.push(...collectPinterestTargetingValues(val, depth + 1));
+    }
+    return pinterestDedupePreserveOrder(chunks);
+  }
+  return [];
+}
+
+function pinterestDedupePreserveOrder(parts: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of parts) {
+    const key = p.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(p.trim());
+  }
+  return out;
+}
+
+function pinterestTitleCaseKey(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\w\S*/g, (x) => x.charAt(0).toUpperCase() + x.slice(1));
+}
+
+/** Preferred field order · label copy for Ads Library targeting objects. */
+const PINTEREST_TARGETING_KEY_ORDER: readonly string[] = [
+  "ages",
+  "ageGroups",
+  "genders",
+  "countries",
+  "regions",
+  "metros",
+  "dma",
+  "locations",
+  "languages",
+  "deviceTypes",
+  "devices",
+  "placementTypes",
+  "placements",
+  "partnerCategories",
+  "interests",
+  "interestCategories",
+  "topics",
+  "audienceKeywords",
+  "keywords",
+];
+
+const PINTEREST_TARGETING_LABELS: Partial<Record<string, string>> = {
+  ages: "Age ranges",
+  ageGroups: "Age ranges",
+  genders: "Genders",
+  countries: "Countries",
+  regions: "Regions / states",
+  metros: "Metro areas",
+  dma: "Metro areas",
+  locations: "Locations",
+  languages: "Languages",
+  deviceTypes: "Devices",
+  devices: "Devices",
+  placementTypes: "Placements",
+  placements: "Placements",
+  partnerCategories: "Partner categories",
+  interests: "Topics & interests",
+  interestCategories: "Interest categories",
+  topics: "Topics",
+  audienceKeywords: "Audience keywords",
+  keywords: "Keywords",
+};
+
+function mergePinterestTargetingRows(rows: PinterestTargetingRow[]): PinterestTargetingRow[] {
+  const m = new Map<string, string>();
+  for (const r of rows) {
+    const prev = m.get(r.label);
+    const next = prev ? `${prev}; ${r.value}` : r.value;
+    m.set(r.label, next);
+  }
+  return [...m.entries()].map(([label, value]) => ({ label, value }));
+}
+
+function parsePinterestTargeting(targeting: unknown): PinterestTargetingRow[] {
+  if (!targeting || typeof targeting !== "object" || Array.isArray(targeting)) return [];
+  const o = targeting as Record<string, unknown>;
+  const used = new Set<string>();
+  const rows: PinterestTargetingRow[] = [];
+
+  for (const key of PINTEREST_TARGETING_KEY_ORDER) {
+    if (!(key in o)) continue;
+    const vals = collectPinterestTargetingValues(o[key]);
+    if (!vals.length) continue;
+    used.add(key);
+    const label = PINTEREST_TARGETING_LABELS[key] ?? pinterestTitleCaseKey(key);
+    rows.push({ label, value: vals.join(", ") });
+  }
+
+  const rest = Object.keys(o)
+    .filter((k) => !used.has(k) && typeof k === "string" && !k.startsWith("_"))
+    .sort();
+
+  for (const key of rest) {
+    const vals = collectPinterestTargetingValues(o[key]);
+    if (!vals.length) continue;
+    rows.push({ label: pinterestTitleCaseKey(key), value: vals.join(", ") });
+  }
+
+  return mergePinterestTargetingRows(rows);
+}
+
+function summarizePinterestTargetingRows(rows: PinterestTargetingRow[]): string {
+  if (!rows.length) return "—";
+  return rows.map((r) => `${r.label}: ${r.value}`).join(" · ");
+}
+
+function pinterestDisclosureDates(raw: Record<string, unknown>): { start?: string; end?: string } {
+  const start =
+    firstString(raw, ["startDate", "StartDate", "startedAt", "deliveryStartDate", "campaignStartDate"]) ??
+    "";
+  const end =
+    firstString(raw, ["endDate", "EndDate", "endedAt", "deliveryEndDate", "campaignEndDate"]) ?? "";
+  return {
+    ...(start.trim() ? { start: start.trim() } : {}),
+    ...(end.trim() ? { end: end.trim() } : {}),
+  };
+}
+
+function formatPinterestDisclosureDate(raw: string): string {
+  const t = raw.trim();
+  if (!t) return t;
+  const parsed = /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(t) ? `${t}T12:00:00Z` : t;
+  const d = new Date(parsed);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  return t.length > 56 ? `${t.slice(0, 56)}…` : t;
+}
+
+function pinterestDisclosureWindowText(raw: Record<string, unknown>): string | null {
+  const { start, end } = pinterestDisclosureDates(raw);
+  if (start && end) {
+    const a = formatPinterestDisclosureDate(start);
+    const b = formatPinterestDisclosureDate(end);
+    return `Ran ${a} – ${b}`;
+  }
+  if (start) return `From ${formatPinterestDisclosureDate(start)}`;
+  if (end) return `Until ${formatPinterestDisclosureDate(end)}`;
+  const single =
+    firstString(raw, ["disclosureDate", "DisclosureDate", "shownAt", "lastSeen", "scrapedAt"]) ?? "";
+  if (single.trim()) return `Shown ${formatPinterestDisclosureDate(single.trim())}`;
+  return null;
 }
 
 function pinterestReachSummary(reach: unknown): string | null {
@@ -1743,7 +2067,11 @@ function pinterestReachSummary(reach: unknown): string | null {
 }
 
 /** Map zadexinho/pinterest-ads-scraper dataset row → card (PascalCase + camelCase). */
-export function pinterestDatasetItemToCard(raw: Record<string, unknown>, index: number): PinterestAdCard {
+export function pinterestDatasetItemToCard(
+  raw: Record<string, unknown>,
+  index: number,
+  ctx?: { brandName?: string }
+): PinterestAdCard {
   const pinId = raw.id ?? raw.Id ?? raw.pinId;
   const id = pinId != null ? String(pinId) : `pin-${index}`;
 
@@ -1791,14 +2119,31 @@ export function pinterestDatasetItemToCard(raw: Record<string, unknown>, index: 
     : "—";
 
   const targeting = raw.targeting ?? raw.Targeting;
-  const desc = formatPinterestTargetingDesc(targeting);
+  const targetingRows = parsePinterestTargeting(targeting);
+  const desc = summarizePinterestTargetingRows(targetingRows);
 
   const reachSummary = pinterestReachSummary(raw.reach ?? raw.Reach);
+  const impressionsLabelRaw =
+    firstString(raw, [
+      "impressionsLabel",
+      "impressionsRange",
+      "ImpressionsRange",
+      "impressionRange",
+      "ImpressionRange",
+      "estimatedImpressions",
+      "estimated_impressions",
+    ]) ?? "";
+
+  const disclosureWindow = pinterestDisclosureWindowText(raw);
 
   const adUrl =
     safeHttpsUrl(pinUrl) ||
     safeHttpsUrl(productUrl) ||
     "https://www.pinterest.com/";
+
+  const bn = ctx?.brandName?.trim();
+  const advertiserMismatch =
+    Boolean(bn) && brandAdvertiserNameMismatchForCard(bn!, advertiser);
 
   return {
     id,
@@ -1809,7 +2154,13 @@ export function pinterestDatasetItemToCard(raw: Record<string, unknown>, index: 
     videoUrl: videoUrl || undefined,
     advertiser,
     adUrl,
+    ...(targetingRows.length ? { targetingRows } : {}),
     reachSummary,
+    ...(impressionsLabelRaw.trim()
+      ? { impressionsLabel: impressionsLabelRaw.trim() }
+      : {}),
+    ...(disclosureWindow ? { disclosureWindow } : {}),
+    ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }
 
@@ -1917,8 +2268,74 @@ function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
   return firstString(raw, ["Ad Target Audience Size", "adTargetAudienceSize"]);
 }
 
+function parseTikTokAudienceScalar(fragment: string): number | null {
+  const compact = fragment.replace(/\s+/g, "").replace(/,/g, "").trim();
+  if (!compact) return null;
+  const m = /^([\d.]+)([kmb]?)$/i.exec(compact);
+  if (!m) {
+    const n = Number(compact);
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  const suf = (m[2] ?? "").toUpperCase();
+  const mult = suf === "B" ? 1e9 : suf === "M" ? 1e6 : suf === "K" ? 1e3 : 1;
+  return n * mult;
+}
+
+/**
+ * TikTok exposes reach as labelled bands (“100K–200K”, “&lt;1K”). No actor sort knob exists —
+ * we approximate with a midpoint / lower bound so higher‑reach ads bubble up after fetch.
+ *
+ * Returns `-1` when unknown so missing rows sort last.
+ */
+export function tikTokAudienceBandSortScore(label: string | null | undefined): number {
+  if (label == null) return -1;
+  const s = label.replace(/\u2013/g, "-").replace(/\u2014/g, "-").trim();
+  if (!s) return -1;
+  const low = s.toLowerCase();
+
+  const lt = /^<\s*(~?\s*)?([\d.,]+\s*[kmb]?)\s*$/i.exec(low);
+  if (lt?.[2]) {
+    const u = parseTikTokAudienceScalar(lt[2].replace(/\s+/g, ""));
+    return u != null ? u * 0.45 : 0;
+  }
+
+  const range = /([\d.,]+\s*[kmb]?)\s*-\s*([\d.,]+\s*[kmb]?)/i.exec(low);
+  if (range) {
+    const a = parseTikTokAudienceScalar(range[1]!.replace(/\s+/g, ""));
+    const b = parseTikTokAudienceScalar(range[2]!.replace(/\s+/g, ""));
+    if (a != null && b != null) return (a + b) / 2;
+    if (a != null) return a;
+    if (b != null) return b;
+  }
+
+  const plus = /^([\d.,]+\s*[kmb]?)\s*\+$/i.exec(low.trim());
+  if (plus?.[1]) {
+    const u = parseTikTokAudienceScalar(plus[1].replace(/\s+/g, ""));
+    return u != null ? u * 1.2 : 0;
+  }
+
+  const single = parseTikTokAudienceScalar(low.replace(/^~\s*/, "").trim());
+  if (single != null) return single;
+  return 0;
+}
+
+export function sortTikTokAdsForResponse(ads: TikTokAdCard[]): TikTokAdCard[] {
+  return [...ads].sort((a, b) => {
+    const sa = tikTokAudienceBandSortScore(a.uniqueUsersSeen);
+    const sb = tikTokAudienceBandSortScore(b.uniqueUsersSeen);
+    if (sb !== sa) return sb - sa;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
 /** Map data_xplorer/tiktok-ads-library-pay-per-event dataset row → card. */
-export function tiktokApifyItemToCard(raw: Record<string, unknown>, index: number): TikTokAdCard | null {
+export function tiktokApifyItemToCard(
+  raw: Record<string, unknown>,
+  index: number,
+  ctx?: { brandName?: string }
+): TikTokAdCard | null {
   const id =
     firstString(raw, ["adId", "ad_id", "AD ID", "id"]) ?? `tt-${index}`;
   const advertiser =
@@ -1969,6 +2386,10 @@ export function tiktokApifyItemToCard(raw: Record<string, unknown>, index: numbe
   const lastShown = lastRaw ? formatTikTokUiDate(lastRaw) : null;
   const uniqueUsersSeen = pickTikTokAudience(raw) ?? null;
 
+  const bn = ctx?.brandName?.trim();
+  const advertiserMismatch =
+    Boolean(bn) && brandAdvertiserNameMismatchForCard(bn!, advertiser);
+
   return {
     id: String(id),
     headline,
@@ -1981,67 +2402,394 @@ export function tiktokApifyItemToCard(raw: Record<string, unknown>, index: numbe
     firstShown,
     lastShown,
     uniqueUsersSeen,
+    ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }
 
-/** Map Snapchat EU gallery dataset row → card (field names vary across actor versions). */
-export function snapchatDatasetItemToCard(raw: Record<string, unknown>, index: number): SnapchatAdCard {
+/** Snapchat CDN creative URLs usually have no `.jpg` / `.mp4` suffix — identify by host. */
+export function isLikelySnapCdnMediaUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  return (
+    /^https:\/\//i.test(url.trim()) &&
+    (u.includes("sc-cdn.net") || u.includes("snapcdn") || u.includes("cf-st."))
+  );
+}
+
+/**
+ * Stable `mediaUrl` / `MediaUrl` read — used when sorting scraped rows before mapping to cards.
+ * @returns 0 = none, 1 = logo/other only would need separate check — here we count only hero `mediaUrl`
+ */
+export function snapchatDatasetRowMediaPriority(row: Record<string, unknown>): number {
+  const m =
+    (typeof row.mediaUrl === "string" ? row.mediaUrl.trim() : "") ||
+    (typeof row.MediaUrl === "string" ? row.MediaUrl.trim() : "") ||
+    (() => {
+      const u = snapPickFromRowIgnoreCase(row, "mediaurl");
+      return typeof u === "string" ? u.trim() : "";
+    })();
+  if (!m) return 0;
+  /** Huge base so rows with hero `mediaUrl` always sort / merge ahead of logo-only snapshots. */
+  return 10_000_000 + Math.min(Math.max(m.length, 8), 50_000);
+}
+
+/**
+ * Dashboard / modal sort key — prefers real creatives (Snap `/d/…` raster, non-Bolt video)
+ * over **`/aps/bolt/…` publisher logos** after rows are mapped to {@link SnapchatAdCard}.
+ */
+export function snapchatAdCardCreativePriority(ad: SnapchatAdCard): number {
+  const v = ad.videoUrl?.trim() ?? "";
+  const i = ad.img?.trim() ?? "";
+  let best = 0;
+
+  if (/\.(mp4|m3u8|webm)(\?|$)/i.test(v)) {
+    best = Math.max(best, 50_000_000 + Math.min(v.length, 10_000));
+  } else if (v) {
+    best = Math.max(best, 40_000_000 + Math.min(v.length, 10_000));
+  }
+
+  const il = i.toLowerCase();
+  const onSnapCdn =
+    il.includes("sc-cdn.net") || il.includes("cf-st.") || il.includes("snapcdn");
+  if (i && onSnapCdn) {
+    const bolt = /\/aps\/bolt\//.test(il);
+    const heroDelivery = /\/d\//.test(il);
+    if (heroDelivery && !bolt) {
+      best = Math.max(best, 47_000_000 + Math.min(i.length, 10_000));
+    } else if (bolt) {
+      best = Math.max(best, 1_000_000 + Math.min(i.length, 5000));
+    } else {
+      best = Math.max(best, 42_000_000 + Math.min(i.length, 10_000));
+    }
+  } else if (i) {
+    best = Math.max(best, 35_000_000 + Math.min(i.length, 10_000));
+  }
+
+  return best;
+}
+
+/**
+ * Sort key: EU gallery rows with a real `mediaUrl` (or legacy `/d/…` preview) rank above logo-only cards.
+ * Used for API responses (including Supabase cache) and the competitor dashboard inline row.
+ */
+export function snapchatAdHeroMediaTier(ad: SnapchatAdCard): number {
+  if (ad.hasHeroMediaUrl === true) return 1;
+  const i = ad.img?.toLowerCase() ?? "";
+  if (i.includes("/d/") && !i.includes("/aps/bolt/")) return 1;
+  return 0;
+}
+
+export function sortSnapchatAdsForResponse(ads: SnapchatAdCard[]): SnapchatAdCard[] {
+  return [...ads].sort((a, b) => {
+    const tierDiff = snapchatAdHeroMediaTier(b) - snapchatAdHeroMediaTier(a);
+    if (tierDiff !== 0) return tierDiff;
+    const cre = snapchatAdCardCreativePriority(b) - snapchatAdCardCreativePriority(a);
+    if (cre !== 0) return cre;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+/** Canonical key match: ignores case and `_`/`-`/spaces (handles `campaign_start_date` etc.). */
+function snapKeyNorm(s: string): string {
+  return s.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+/** First property whose normalized key equals any `targetNorm` blob. */
+function snapPickFromRowIgnoreCase(row: Record<string, unknown>, targetNorm: string): unknown {
+  const tn = snapKeyNorm(targetNorm);
+  for (const [k, v] of Object.entries(row)) {
+    if (snapKeyNorm(k) === tn) return v;
+  }
+  return undefined;
+}
+
+/** Prefer canonical actor keys (`brandName`), then `firstString` lists. */
+function snapPickString(raw: Record<string, unknown>, ...candidates: string[]): string | undefined {
+  const tryVal = (v: unknown): string | undefined => {
+    if (typeof v === "string") {
+      const t = v.trim();
+      return t || undefined;
+    }
+    return undefined;
+  };
+  for (const k of candidates) {
+    const a = tryVal(raw[k]);
+    if (a) return a;
+    const b = tryVal(snapPickFromRowIgnoreCase(raw, k.replace(/_/g, "")));
+    if (b) return b;
+  }
+  return undefined;
+}
+
+function snapPickNumericLike(raw: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const k of keys) {
+    let v = raw[k];
+    if (v === undefined || v === null) v = snapPickFromRowIgnoreCase(raw, k.replace(/_/g, ""));
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim()) {
+      const cleaned = v.trim().replace(/,/g, "");
+      if (/^\d+$/.test(cleaned)) return Number(cleaned);
+      if (/^\d+\.\d+$/.test(cleaned)) return Number(cleaned);
+    }
+  }
+  return undefined;
+}
+
+function snapPickDate(raw: Record<string, unknown>, ...canonicalKeys: string[]): unknown {
+  for (const k of canonicalKeys) {
+    let v = raw[k];
+    if (v === undefined || v === null) v = snapPickFromRowIgnoreCase(raw, k.replace(/_/g, ""));
+    if (v !== undefined && v !== null && !(typeof v === "string" && !v.trim())) return v;
+  }
+  return undefined;
+}
+
+/** Normalize EU gallery–style ISO date-ish fields for display labels. */
+function formatSnapchatRowDate(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    const t = value.trim();
+    if (!t || /^n\/?a$/i.test(t)) return "N/A";
+    const d = new Date(t);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+    return t;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 1e12 ? value : value * 1000;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) {
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+  }
+  return null;
+}
+
+function formatSnapImpressionsLabel(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.round(value).toLocaleString("en-US");
+  }
+  if (typeof value === "string" && value.trim()) {
+    const t = value.trim().replace(/,/g, "");
+    if (/^\d+$/.test(t)) return Number(t).toLocaleString("en-US");
+    return value.trim();
+  }
+  return null;
+}
+
+export function snapchatDatasetItemToCard(
+  raw: Record<string, unknown>,
+  index: number,
+  ctx?: { brandName?: string }
+): SnapchatAdCard {
   const sid =
-    firstString(raw, ["adId", "ad_id", "adID", "id", "snapAdId", "adLibraryId", "uuid"]) || "";
+    snapPickString(raw, "adId", "AdId") ||
+    firstString(raw, ["ad_id", "adID", "id", "snapAdId", "adLibraryId", "uuid", "Ad ID"]) ||
+    "";
+
   const id = sid ? String(sid) : `snap-${index}`;
 
   const headline =
-    firstString(raw, ["headline", "title", "adTitle", "name", "brandName"]) || "Snapchat ad";
+    snapPickString(raw, "headline", "Headline") ||
+    firstString(raw, ["title", "adTitle", "AdTitle", "primaryText", "name"]) ||
+    snapPickString(raw, "brandName", "BrandName") ||
+    "Snapchat ad";
 
   const advertiser =
-    firstString(raw, ["advertiser", "advertiserName", "brandName", "companyName"]) || "Advertiser";
+    snapPickString(raw, "advertiserName", "AdvertiserName") ||
+    firstString(raw, ["advertiser", "Advertiser", "publisher", "Publisher", "companyName"]) ||
+    snapPickString(raw, "brandName", "BrandName") ||
+    "Advertiser";
 
   let videoUrl =
-    firstString(raw, ["videoUrl", "video_url", "mediaUrl", "creativeVideoUrl"]) || "";
+    firstString(raw, [
+      "videoUrl",
+      "video_url",
+      "VideoUrl",
+      "creativeVideoUrl",
+      "videoMP4Url",
+      "videoMp4Url",
+      "mp4Url",
+      "hlsUrl",
+      "snapVideoUrl",
+    ]) || "";
+
+  const profilePoster =
+    snapPickString(raw, "profileLogoUrl", "ProfileLogoUrl", "publisherLogoUrl", "logoUrl") || "";
+
   let img =
     firstString(raw, [
       "imageUrl",
+      "ImageUrl",
       "thumbnailUrl",
+      "ThumbnailUrl",
       "posterUrl",
+      "PosterUrl",
       "previewUrl",
+      "PreviewUrl",
+      "previewImageUrl",
       "creativeImageUrl",
+      "creativeUrl",
       "thumbnail",
       "image",
+      "screenshotUrl",
+      "snapImageUrl",
     ]) || "";
+
+  const mediaUrlFlat =
+    (typeof raw.mediaUrl === "string" ? raw.mediaUrl.trim() : "") ||
+    (typeof raw.MediaUrl === "string" ? raw.MediaUrl.trim() : "") ||
+    (() => {
+      const v = snapPickFromRowIgnoreCase(raw, "mediaUrl");
+      return typeof v === "string" ? v.trim() : "";
+    })();
+
+  const hasHeroMediaUrlField = Boolean(mediaUrlFlat);
+
+  /** Snapchat `mediaUrl` without `.mp4` is almost always a raster/web snapshot — preview with `<img>`, not `<video>`. */
+  if (mediaUrlFlat) {
+    if (looksLikeVideoFileUrl(mediaUrlFlat)) {
+      if (!videoUrl) videoUrl = mediaUrlFlat;
+      if (img && isLikelySnapProfileBoltAssetUrl(img)) img = "";
+    } else if (isLikelySnapCdnMediaUrl(mediaUrlFlat)) {
+      img = mediaUrlFlat;
+    } else if (!img) {
+      img = mediaUrlFlat;
+    }
+  }
 
   if (img && looksLikeVideoFileUrl(img)) {
     if (!videoUrl) videoUrl = img;
     img = "";
   }
 
+  if (!hasHeroMediaUrlField && !img) {
+    const snapPick = deepPickSnapHeroImageFromUnknown(raw);
+    if (snapPick) img = snapPick;
+  }
+
+  /** Profile Bolt logo preview only when the row exposes no hero `mediaUrl`. */
+  if (!hasHeroMediaUrlField && !img && profilePoster) img = profilePoster;
+
+  /**
+   * EU gallery `mediaUrl` without a video extension is a static snapshot — never layer a discovered
+   * MP4/HLS on top (browser shows `<video>` with Bolt poster + broken playback).
+   */
+  const euRasterHero =
+    hasHeroMediaUrlField && Boolean(mediaUrlFlat) && !looksLikeVideoFileUrl(mediaUrlFlat);
+
+  if (!videoUrl && !euRasterHero) {
+    const deepVid = deepFindHttpsVideoUrl(raw);
+    if (deepVid) videoUrl = deepVid;
+  }
+  if (euRasterHero) {
+    videoUrl = "";
+  }
+
+  const statusRaw = firstString(raw, ["status", "deliveryStatus", "Status", "adStatus", "state"]) || null;
+  const status = statusRaw ? statusRaw.toUpperCase() : null;
+
+  const brandAdvertised =
+    snapPickString(
+      raw,
+      "brandAdvertised",
+      "BrandAdvertised",
+      "advertisedBrand",
+      "AdvertisedBrand",
+      "AdvertisedBrandName",
+    ) ??
+    snapPickString(raw, "brandName", "BrandName") ??
+    firstString(raw, ["brand_advertised"]) ??
+    null;
+
+  const startRaw = snapPickDate(
+    raw,
+    "campaignStartDate",
+    "CampaignStartDate",
+    "adStartDate",
+    "AdStartDate",
+    "startDate",
+    "StartDate",
+    "ad_start_date",
+    "campaign_start_date",
+  );
+
+  const endRaw = snapPickDate(
+    raw,
+    "campaignEndDate",
+    "CampaignEndDate",
+    "adEndDate",
+    "AdEndDate",
+    "endDate",
+    "EndDate",
+    "ad_end_date",
+    "campaign_end_date",
+  );
+
+  const startDateLabel = formatSnapchatRowDate(startRaw) ?? null;
+  const endDateLabel = formatSnapchatRowDate(endRaw) ?? null;
+
+  const ctaLabel =
+    snapPickString(raw, "callToAction", "CallToAction") ??
+    firstString(raw, ["cta", "ctaText", "call_to_action", "CTA", "ctaLabel", "buttonText", "ButtonText"]) ??
+    null;
+
   const descParts: string[] = [];
-  const status = firstString(raw, ["status", "deliveryStatus"]);
-  if (status) descParts.push(status);
+  if (statusRaw) descParts.push(statusRaw);
   const paid = raw.paidReach ?? raw.paid_impressions ?? raw.estimatedAudience;
   if (typeof paid === "string" && paid.trim()) descParts.push(paid.trim());
+  const reviewSt = firstString(raw, ["reviewStatus", "ReviewStatus"]);
+  if (reviewSt) descParts.push(`Review: ${reviewSt}`);
   const desc =
     descParts.length > 0 ? descParts.join(" · ") : firstString(raw, ["body", "description"]) || "—";
 
   const landing =
-    firstString(raw, ["destinationUrl", "landingUrl", "websiteUrl", "callToActionUrl", "ctaUrl"]) || "";
+    snapPickString(raw, "destinationUrl", "landingUrl", "websiteUrl", "callToActionUrl", "ctaUrl") ||
+    firstString(raw, ["destination_url", "landing_url"]) ||
+    "";
   const urlHost =
     landing.replace(/^https?:\/\//, "").split("/")[0]?.slice(0, 48) ||
     advertiser.slice(0, 48).toLowerCase() ||
     "snapchat.com";
 
   const adUrl =
-    safeHttpsUrl(firstString(raw, ["adPreviewUrl", "previewUrlFull", "adUrl", "url"]) ?? "") ||
+    safeHttpsUrl(
+      snapPickString(raw, "adPreviewUrl", "previewUrlFull", "adUrl", "detailUrl", "galleryUrl", "url", "Url") ?? "",
+    ) ||
     safeHttpsUrl(landing) ||
     "https://www.snapchat.com/ads/about";
 
-  const euCountry = firstString(raw, ["country", "countryCode", "market"]);
+  const euCountry =
+    snapPickString(raw, "country", "countryCode", "market", "targetCountry", "TargetCountry", "euCountry") ||
+    firstString(raw, ["country_code", "eu_country"]);
 
-  let impressionsLabel: string | null = null;
-  const im =
-    typeof raw.impressions === "number"
-      ? String(raw.impressions)
-      : firstString(raw, ["impressions", "estimatedImpressions", "estimated_impressions"]);
-  if (im) impressionsLabel = im;
+  let impressionsLabel: string | null =
+    formatSnapImpressionsLabel(
+      snapPickNumericLike(
+        raw,
+        "impressionsTotal",
+        "ImpressionsTotal",
+        "totalImpressions",
+        "TotalImpressions",
+        "impressionsCountry",
+        "ImpressionsCountry",
+        "impressions",
+        "Impressions",
+        "paidImpressions",
+        "PaidImpressions",
+        "estimatedImpressions",
+      ),
+    ) ??
+    formatSnapImpressionsLabel(firstString(raw, ["estimated_impressions"])) ??
+    firstString(raw, ["reach"]) ??
+    null;
+
+  const bn = ctx?.brandName?.trim();
+  const advertiserMismatch =
+    Boolean(bn) && brandAdvertiserNameMismatchForCard(bn!, advertiser);
+
+  const suppressCreativeHeadline =
+    hasHeroMediaUrlField || /\bunreal\s+motion\b/i.test(headline.trim());
 
   return {
     id,
@@ -2054,5 +2802,13 @@ export function snapchatDatasetItemToCard(raw: Record<string, unknown>, index: n
     adUrl,
     euCountry,
     impressionsLabel,
+    status,
+    brandAdvertised: brandAdvertised ?? null,
+    startDateLabel,
+    endDateLabel,
+    ctaLabel: ctaLabel ?? null,
+    suppressCreativeHeadline,
+    hasHeroMediaUrl: hasHeroMediaUrlField,
+    ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }

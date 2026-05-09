@@ -1,4 +1,7 @@
-import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "./constants";
+import {
+  ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
+  ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+} from "./constants";
 /**
  * Extra POST `/api/ads/library` fields for per-platform Apify actors.
  */
@@ -66,27 +69,27 @@ function yMinusOneYearIso(): string {
 
 export function defaultScrapeRequestFields(): ScrapeRequestFields {
   return {
-    metaMaxAds: ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+    metaMaxAds: ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
     metaCountry: "US",
     metaStartDate: "",
     metaEndDate: "",
     metaSortBy: "impressions_desc",
-    linkedinMaxAds: ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+    linkedinMaxAds: ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
     linkedinDateRange: "past-year",
     linkedinCountryCode: "",
-    tiktokMaxAds: ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+    tiktokMaxAds: ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
     tiktokStartDate: yMinusOneYearIso(),
     tiktokEndDate: todayIso(),
-    microsoftMaxSearchResults: ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+    microsoftMaxSearchResults: ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
     microsoftCountryCode: "66",
     microsoftStartDate: "",
     microsoftEndDate: "",
-    pinterestMaxResults: ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+    pinterestMaxResults: ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
     pinterestStartDate: "",
     pinterestEndDate: "",
     pinterestGender: "ALL",
     pinterestAge: "ALL",
-    snapchatMaxItems: ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+    snapchatMaxItems: ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
     /** Single EU market only (no multi-country sweep). */
     snapchatCountry: "DE",
     snapchatStartDate: "",
@@ -102,17 +105,18 @@ function clampScrapeInt(n: unknown, cap: number, fallback: number): number {
   return Math.max(1, Math.min(Math.floor(x), cap));
 }
 
-/** Persisted session values may predate platform caps — keep counts aligned with `ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM`. */
+/** Persisted session values may predate platform caps — clamp to max `cap`, fall back to default on invalid. */
 export function normalizeScrapeRequestFieldsCaps(fields: ScrapeRequestFields): ScrapeRequestFields {
   const cap = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
+  const def = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
   return {
     ...fields,
-    metaMaxAds: clampScrapeInt(fields.metaMaxAds, cap, cap),
-    linkedinMaxAds: clampScrapeInt(fields.linkedinMaxAds, cap, cap),
-    tiktokMaxAds: clampScrapeInt(fields.tiktokMaxAds, cap, cap),
-    pinterestMaxResults: clampScrapeInt(fields.pinterestMaxResults, cap, cap),
-    snapchatMaxItems: clampScrapeInt(fields.snapchatMaxItems, cap, cap),
-    microsoftMaxSearchResults: clampScrapeInt(fields.microsoftMaxSearchResults, cap, cap),
+    metaMaxAds: clampScrapeInt(fields.metaMaxAds, cap, def),
+    linkedinMaxAds: clampScrapeInt(fields.linkedinMaxAds, cap, def),
+    tiktokMaxAds: clampScrapeInt(fields.tiktokMaxAds, cap, def),
+    pinterestMaxResults: clampScrapeInt(fields.pinterestMaxResults, cap, def),
+    snapchatMaxItems: clampScrapeInt(fields.snapchatMaxItems, cap, def),
+    microsoftMaxSearchResults: clampScrapeInt(fields.microsoftMaxSearchResults, cap, def),
   };
 }
 

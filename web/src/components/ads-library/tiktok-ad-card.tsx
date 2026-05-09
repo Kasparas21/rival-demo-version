@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Play } from "lucide-react";
 import type { TikTokAdCard as TikTokAdCardModel } from "@/lib/ad-library/normalize";
+import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
@@ -63,13 +64,17 @@ export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
   return (
     <article className="min-w-0 h-full flex flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
       <div className="space-y-3 shrink-0 px-4 pb-3 pt-4">
-        <div className="flex min-w-0 items-start gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <span className="shrink-0 rounded bg-[#38bdf8] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
             Ad
           </span>
-          <span className="min-w-0 truncate text-[15px] font-bold leading-tight text-[#0f172a]" title={ad.advertiser}>
+          <span
+            className="min-w-0 break-words text-[15px] font-bold leading-tight text-[#0f172a] [overflow-wrap:anywhere]"
+            title={ad.advertiser}
+          >
             {ad.advertiser}
           </span>
+          {ad.advertiserMismatch ? <UnverifiedSourceBadge /> : null}
         </div>
         <div className="space-y-1.5">
           <MetaRow label="First shown:" value={first} />

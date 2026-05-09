@@ -9,7 +9,6 @@ import {
   refineSnapchatWithBrand,
   normalizeDiscoveredIds,
   googleFaviconUrlForDomain,
-  pickBestFacebookPageUrl,
   type PlatformIdentifier,
   type SearchHit,
 } from "@/lib/discovery";
@@ -23,6 +22,9 @@ import {
   resolveBrandLogo,
   buildFieldConfidence,
   buildFieldPreviewUrls,
+  applyDiscoveredMetaPresentation,
+  finalizeLinkedInDiscovery,
+  buildRecommendedKeywords,
 } from "@/lib/competitor-discover-firecrawl";
 
 /** Vercel / long-running discovery (optional; ignored locally) */
@@ -44,6 +46,7 @@ export type DiscoverResponse = {
   fieldPreviewUrls?: Partial<Record<ChannelId, string>>;
   error?: string;
   warning?: string;
+  recommendedKeywords?: string[];
 };
 
 function parseTermHints(body: unknown): TermHint[] | null {
@@ -135,6 +138,11 @@ export async function POST(req: Request) {
       const domain = guessDomainForLimitedDiscovery(interpretation, query);
       const brandName = interpretation.primaryBrandName;
       const logoUrl = googleFaviconUrlForDomain(domain);
+      const rk = buildRecommendedKeywords({
+        brandName,
+        domain,
+        discoveredIds: { google: domain },
+      });
       return NextResponse.json({
         success: true,
         brand: {
@@ -143,6 +151,7 @@ export async function POST(req: Request) {
           logoUrl,
         },
         discoveredIds: { google: domain },
+        recommendedKeywords: rk,
         interpretation: {
           summary: interpretation.interpretationSummary,
           primaryBrandName: interpretation.primaryBrandName,
@@ -242,10 +251,19 @@ export async function POST(req: Request) {
           discoveredIds = { ...discoveredIds, meta: resolved };
         }
       }
-      const fbPageUrl = pickBestFacebookPageUrl(metaHits, scrapedDomain);
-      if (fbPageUrl) {
-        discoveredIds = { ...discoveredIds, metaPageUrl: fbPageUrl };
-      }
+      discoveredIds = applyDiscoveredMetaPresentation(discoveredIds, metaHits, scrapedDomain);
+    }
+
+    const linkedinSelected =
+      selectedChannels === null || selectedChannels.includes("linkedin");
+    if (linkedinSelected) {
+      discoveredIds = await finalizeLinkedInDiscovery(
+        app,
+        discoveredIds,
+        metaHits,
+        scraped?.links ?? [],
+        linkedinSelected
+      );
     }
 
     if (
@@ -259,6 +277,12 @@ export async function POST(req: Request) {
     }
 
     discoveredIds = normalizeDiscoveredIds(discoveredIds);
+
+    const recommendedKeywords = buildRecommendedKeywords({
+      brandName,
+      domain: scrapedDomain,
+      discoveredIds,
+    });
 
     const scrapeSucceeded = Boolean(scraped);
     const fieldConfidence = buildFieldConfidence(fromScrape, discoveredIds, scrapeSucceeded);
@@ -276,6 +300,7 @@ export async function POST(req: Request) {
         logoUrl,
       },
       discoveredIds,
+      recommendedKeywords,
       interpretation: {
         summary: interpretation.interpretationSummary,
         primaryBrandName: interpretation.primaryBrandName,

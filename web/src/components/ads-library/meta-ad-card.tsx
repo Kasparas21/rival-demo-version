@@ -5,6 +5,7 @@ import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
 import { safeHttpsUrl } from "@/lib/ad-library/normalize";
+import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
 function metaSiteLabel(ad: MetaAdCardModel, brandDomain: string): { destHttps: string | null; siteLabel: string } {
   const probe = (ad.destinationUrl || ad.subtext || "").trim();
@@ -83,7 +84,12 @@ export function MetaAdCard({
               <BrandLogoThumb src={ad.pageProfilePic || brand.logoUrl} alt="" className="bg-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-[15px] text-[#343434] break-words [overflow-wrap:anywhere]">{ad.pageName}</p>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="font-semibold text-[15px] text-[#343434] break-words [overflow-wrap:anywhere]">
+                  {ad.pageName}
+                </p>
+                {ad.advertiserMismatch ? <UnverifiedSourceBadge /> : null}
+              </div>
               <p className="text-[13px] text-[#6b7280] flex items-center gap-1.5 mt-0.5">
                 Sponsored <Globe className="w-3.5 h-3.5 text-[#9ca3af] shrink-0" />
               </p>
