@@ -1061,7 +1061,7 @@ function CompetitorDashboardBody({
           <nav className="flex gap-0 -mb-px overflow-x-auto">
             {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
-              const isDisabled = "disabled" in tab && tab.disabled;
+              const isDisabled = tab.disabled === true;
               const Icon = tab.icon;
               return (
                 <button
