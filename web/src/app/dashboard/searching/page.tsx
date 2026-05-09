@@ -48,6 +48,7 @@ import {
 } from "@/lib/ad-library/ad-library-region-prefs";
 import { inferAdLibraryRegionDefaults } from "@/lib/ad-library/infer-ad-library-regions-from-domain";
 import { readScrapeRequestFieldsFromStorage } from "@/lib/ad-library/scrape-request-fields";
+import { markPendingStrategyRefresh } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import {
   searchingFlowStorageKey,
   readSearchingFlowSnapshot,
@@ -504,10 +505,11 @@ function SearchingContent() {
         await Promise.all(
           adsPlatforms.map(async (p) => {
             try {
+              // Every discovery scan must hit Apify and refresh `ads_cache` / `scraped_ads`, not reuse TTL cache.
               const res = await fetch("/api/ads/library", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...payload, platforms: [p] }),
+                body: JSON.stringify({ ...payload, platforms: [p], skipCache: true }),
               });
               const json = (await res.json()) as AdsLibraryResponse | AdsLibraryPartialJson;
               mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
@@ -527,6 +529,10 @@ function SearchingContent() {
 
         const normalized = coerceAdsLibraryResponse(mergedAdsScanRef.current);
         writeAdsLibrarySessionCache(payloadKey, { response: normalized, httpOk: allHttpOk });
+
+        if (allHttpOk) {
+          markPendingStrategyRefresh(payload.brand.domain);
+        }
 
         try {
           const warmup = collectAdsLibraryWarmupUrls(normalized);

@@ -16,7 +16,11 @@ import {
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { enrichStrategyOverviewWithInsightLLM } from "@/lib/strategy-overview/insightNarratives";
 
-export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-8-brand-scale-spend";
+/**
+ * Bump this string whenever spend math, derivation logic, insight schema, or any stored payload
+ * shape changes — it is the server-side cache invalidation key for `competitor_strategy_overview`.
+ */
+export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-9-brand-scale-spend";
 
 const LOCK_TTL_MS = 300_000;
 /** If status is still "running" after this long, treat lock as orphaned (crashed serverless, etc.). */
@@ -335,7 +339,7 @@ export async function getCachedStrategyOverview(
 ): Promise<CompetitorStrategyOverviewPayload | null> {
   const { data } = await supabase
     .from("competitor_strategy_overview")
-    .select("payload, ai_model_version, source_scrape_batch_id")
+    .select("payload, ai_model_version, source_scrape_batch_id, computed_at")
     .eq("competitor_id", competitorId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -343,6 +347,23 @@ export async function getCachedStrategyOverview(
   if (!data?.payload || typeof data.payload !== "object") return null;
 
   if (data.ai_model_version !== STRATEGY_OVERVIEW_MODEL_VERSION) return null;
+
+  const { data: savedMeta } = await supabase
+    .from("saved_competitors")
+    .select("last_scraped_at")
+    .eq("id", competitorId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const lastScrapedMs = savedMeta?.last_scraped_at ? Date.parse(savedMeta.last_scraped_at) : NaN;
+  const computedMs = data.computed_at ? Date.parse(data.computed_at) : NaN;
+  if (
+    Number.isFinite(lastScrapedMs) &&
+    Number.isFinite(computedMs) &&
+    lastScrapedMs > computedMs
+  ) {
+    return null;
+  }
 
   const latestBatch = await getLatestScrapeBatchId(supabase, competitorId);
   if (latestBatch !== data.source_scrape_batch_id) return null;

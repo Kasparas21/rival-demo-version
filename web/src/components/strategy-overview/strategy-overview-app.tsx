@@ -4,6 +4,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BarChart3, Loader2, RefreshCw } from "lucide-react";
 
+import {
+  ADS_LIBRARY_UPDATED_EVENT,
+  pendingStrategyRefreshStorageKey,
+} from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { useStrategyOverviewUi, type StrategyViewMode } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyViewToggle } from "@/components/strategy-overview/strategy-view-toggle";
@@ -179,14 +183,52 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
     [clearPoll, domain]
   );
 
+  const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
+
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const handler: EventListener = (ev) => {
+      const detail = (ev as CustomEvent<{ domain?: string }>).detail;
+      const d = detail?.domain?.trim().toLowerCase() ?? "";
+      if (!d || d !== domainNorm) return;
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        void load(true);
+      }, 350);
+    };
+    window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, handler);
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, handler);
+    };
+  }, [domainNorm, load]);
+
   useEffect(() => {
     let cancelled = false;
+    const k = pendingStrategyRefreshStorageKey(domainNorm);
+    const pending = typeof window !== "undefined" ? window.sessionStorage.getItem(k) : null;
+    if (pending) {
+      try {
+        window.sessionStorage.removeItem(k);
+      } catch {
+        /* ignore */
+      }
+      const ts = Number(pending);
+      if (Number.isFinite(ts) && Date.now() - ts < 120_000) {
+        void load(true, () => cancelled);
+        return () => {
+          cancelled = true;
+          clearPoll();
+        };
+      }
+    }
     void load(false, () => cancelled);
     return () => {
       cancelled = true;
       clearPoll();
     };
-  }, [clearPoll, load]);
+  }, [clearPoll, load, domainNorm]);
 
   const emptyStrategy = useMemo(
     () =>

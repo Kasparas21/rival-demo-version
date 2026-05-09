@@ -26,6 +26,11 @@ import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions
 import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
 import { readGoogleAdDetailsPublicFlag } from "@/lib/ad-library/public-env-flags";
+import {
+  ADS_LIBRARY_UPDATED_EVENT,
+  markPendingStrategyRefresh,
+  type AdsLibraryUpdatedDetail,
+} from "@/lib/strategy-overview/ads-library-strategy-bridge";
 
 type Brand = { name: string; domain: string; logoUrl?: string };
 
@@ -218,6 +223,18 @@ export function useAdLibrary(
           setFetchError(json.error);
         } else if (!httpOk) {
           setFetchError("Request failed");
+        } else if (httpOk && typeof window !== "undefined") {
+          const d = brand.domain.trim();
+          markPendingStrategyRefresh(d);
+          try {
+            window.dispatchEvent(
+              new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+                detail: { domain: d },
+              })
+            );
+          } catch {
+            /* ignore */
+          }
         }
       } catch (e) {
         const aborted =
@@ -241,7 +258,7 @@ export function useAdLibrary(
         }
       }
     },
-    [payload, payloadKey]
+    [payload, payloadKey, brand.domain]
   );
 
   useEffect(() => {

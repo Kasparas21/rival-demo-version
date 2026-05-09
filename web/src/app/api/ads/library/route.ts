@@ -35,7 +35,9 @@ import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-opt
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import {
   computePlatformsToPersist,
+  countLibraryAdsForPlatform,
   persistScrapedAdsFromAdsLibraryResponse,
+  platformScrapeSucceeded,
 } from "@/lib/ad-library/persist-scraped-ads";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
@@ -542,16 +544,6 @@ export async function POST(req: Request): Promise<NextResponse> {
       out,
       nowIso: nowPersist,
     });
-    if (resolvedCompetitorId) {
-      void recomputeStrategyOverviewForCompetitor({
-        supabase,
-        userId,
-        competitorId: resolvedCompetitorId,
-        domainHint: domainNorm,
-      }).then((r) => {
-        if (!r.ok) console.warn("[api/ads/library] strategy overview recompute:", r.error);
-      });
-    }
   }
 
   if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
@@ -628,6 +620,24 @@ export async function POST(req: Request): Promise<NextResponse> {
         }
       }
     }
+  }
+
+  /** Refresh Strategy Map whenever ads are loaded (cache hit or fresh scrape) so derivation/spend stay current. */
+  const shouldRefreshStrategyOverview =
+    Boolean(userId && resolvedCompetitorId) &&
+    [...platformsRequested].some(
+      (p) => platformScrapeSucceeded(out, p) && countLibraryAdsForPlatform(p, out) > 0
+    );
+
+  if (shouldRefreshStrategyOverview && userId && resolvedCompetitorId) {
+    void recomputeStrategyOverviewForCompetitor({
+      supabase,
+      userId,
+      competitorId: resolvedCompetitorId,
+      domainHint: domainNorm,
+    }).then((r) => {
+      if (!r.ok) console.warn("[api/ads/library] strategy overview recompute:", r.error);
+    });
   }
 
   if (isPartial) {
