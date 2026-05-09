@@ -83,3 +83,18 @@ export function buildAdEvidenceText(adLib: AdsLibraryResponse | null, maxTotalCh
   if (out.length > maxTotalChars) out = `${out.slice(0, maxTotalChars - 20)}\n…(truncated)`;
   return out;
 }
+
+/** Grounding for brand comparison: competitor ads digest + workspace (your brand) digest. */
+export function buildDualBrandAdEvidenceText(
+  competitorLib: AdsLibraryResponse | null,
+  workspaceLib: AdsLibraryResponse | null,
+  maxTotalChars = 14_000
+): string {
+  const per = Math.max(3500, Math.floor(maxTotalChars / 2) - 80);
+  const competitorBlock =
+    `[COMPETITOR_ADS_LIBRARY]\n${buildAdEvidenceText(competitorLib, per)}`.trim();
+  const workspaceBlock = `[YOUR_BRAND_ADS_LIBRARY]\n${buildAdEvidenceText(workspaceLib, per)}`.trim();
+  let combined = `${competitorBlock}\n\n---\n\n${workspaceBlock}`.trim();
+  if (combined.length > maxTotalChars) combined = `${combined.slice(0, maxTotalChars - 20)}\n…(truncated)`;
+  return combined;
+}

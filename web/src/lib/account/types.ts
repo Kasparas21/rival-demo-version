@@ -11,6 +11,8 @@ export type SavedCompetitorPayload = {
   };
   pending?: boolean;
   lastScrapedAt?: string;
+  /** Persisted competitor row scraped as workspace brand (never shown in sidebar; excluded from competitor limits). */
+  isWorkspaceBrand?: boolean;
 };
 
 export type SavedSearchPayload = {

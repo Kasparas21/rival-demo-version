@@ -75,7 +75,8 @@ import {
 } from "@/lib/sidebar-competitors";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
 import { readScrapeRequestFieldsFromStorage } from "@/lib/ad-library/scrape-request-fields";
-import { buildAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
+import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
+import { scrapeHintsToPlatformIds } from "@/lib/onboarding/workspace-ads-setup";
 import type { BrandComparisonLlmResult } from "@/lib/brand-comparison/run-brand-comparison-llm";
 import { COMPETITOR_PAGE_TABS } from "@/components/dashboard/competitor/competitor-tabs-data";
 import {
@@ -696,6 +697,54 @@ function CompetitorDashboardBody({
   const adLibRef = useRef(adLib);
   adLibRef.current = adLib;
 
+  const workspaceAdsSetup = myBrand.adsSetup ?? null;
+  const workspaceSlugDiffers =
+    normalizeCompetitorSlug(brand.domain) !== normalizeCompetitorSlug(myBrand.domain ?? "");
+
+  const workspaceAdsPlatformsMemo = useMemo((): AdsLibraryPlatform[] => {
+    if (!workspaceAdsSetup?.channels?.length) return [];
+    return channelsQueryToAdsPlatforms(workspaceAdsSetup.channels);
+  }, [workspaceAdsSetup]);
+
+  const workspacePlatformIdsMemo = useMemo(() => {
+    if (!workspaceAdsSetup || !myBrand.domain?.trim()) return null as Record<string, string> | null;
+    const m = scrapeHintsToPlatformIds({
+      scrape: workspaceAdsSetup.scrape,
+      workspaceDomain: myBrand.domain!,
+      channels: workspaceAdsSetup.channels,
+    });
+    return Object.keys(m).length ? m : null;
+  }, [workspaceAdsSetup, myBrand.domain]);
+
+  const workspaceAdLibFetchEnabled =
+    activeTab === "comparison" &&
+    isConfirmed &&
+    Boolean(workspaceAdsSetup?.channels?.length) &&
+    Boolean(myBrand.domain?.trim()) &&
+    workspaceSlugDiffers &&
+    workspacePlatformIdsMemo != null;
+
+  const {
+    data: wsAdLib,
+    loading: wsAdLibLoading,
+  } = useAdLibrary(
+    {
+      name: myBrand.name,
+      domain: (myBrand.domain ?? "").trim() || "",
+      logoUrl: myBrand.logoUrl,
+    },
+    workspacePlatformIdsMemo,
+    workspaceAdsPlatformsMemo,
+    workspaceAdLibFetchEnabled,
+    tiktokRegion,
+    googleRegion,
+    scrapeFields,
+    pinterestCountry
+  );
+
+  const wsAdLibRef = useRef(wsAdLib);
+  wsAdLibRef.current = wsAdLib;
+
   const [comparison, setComparison] = useState<BrandComparisonLlmResult | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const [comparisonError, setComparisonError] = useState<string | null>(null);
@@ -705,6 +754,7 @@ function CompetitorDashboardBody({
     if (activeTab !== "comparison") return;
     if (!isConfirmed) return;
     if (adLibLoading) return;
+    if (workspaceAdLibFetchEnabled && wsAdLibLoading) return;
 
     let cancelled = false;
     setComparisonLoading(true);
@@ -712,6 +762,9 @@ function CompetitorDashboardBody({
 
     void (async () => {
       try {
+        const evidence = workspaceAdLibFetchEnabled
+          ? buildDualBrandAdEvidenceText(adLibRef.current, wsAdLibRef.current)
+          : buildAdEvidenceText(adLibRef.current);
         const res = await fetch("/api/brand-comparison", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -722,7 +775,7 @@ function CompetitorDashboardBody({
               domain: myBrand.domain,
               brandContext: myBrand.brandContext,
             },
-            adEvidence: buildAdEvidenceText(adLibRef.current),
+            adEvidence: evidence,
           }),
         });
         const json = (await res.json()) as {
@@ -754,6 +807,8 @@ function CompetitorDashboardBody({
     activeTab,
     isConfirmed,
     adLibLoading,
+    wsAdLibLoading,
+    workspaceAdLibFetchEnabled,
     brand.name,
     brand.domain,
     myBrand.name,
@@ -784,9 +839,10 @@ function CompetitorDashboardBody({
     const localPrev = loadSidebarCompetitors();
     const list = await fetchSavedCompetitorsFromAccount();
     if (list.length > 0) {
-      saveSidebarCompetitors(
-        mergeAccountSidebarRowsWithLocalLibraryContext(list as SidebarCompetitor[], localPrev)
+      const visible = (list as (SidebarCompetitor & { isWorkspaceBrand?: boolean })[]).filter(
+        (r) => !r.isWorkspaceBrand,
       );
+      saveSidebarCompetitors(mergeAccountSidebarRowsWithLocalLibraryContext(visible, localPrev));
     }
   }, []);
 

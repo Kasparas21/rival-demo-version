@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandProvider, type Brand } from "./brand-context";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
+import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
@@ -125,6 +126,7 @@ function mapApiBrandRow(row: {
   logo_url?: string | null;
   color?: string | null;
   brand_context?: string | null;
+  ads_profile_setup?: unknown | null;
 }): Brand {
   const name = row.name?.trim() || "Brand";
   const initials = name
@@ -137,6 +139,7 @@ function mapApiBrandRow(row: {
   const badge = initials.length > 0 ? initials.slice(0, 2) : name.slice(0, 2).toUpperCase() || "B";
   const ctx = row.brand_context?.trim();
   const dom = row.domain?.trim();
+  const adsSetup = parseAdsProfileSetup(row.ads_profile_setup ?? null);
   return {
     id: row.id,
     name,
@@ -145,6 +148,7 @@ function mapApiBrandRow(row: {
     color: row.color?.trim() || "#343434",
     ...(dom ? { domain: dom } : {}),
     ...(ctx ? { brandContext: ctx } : {}),
+    ...(adsSetup ? { adsSetup } : {}),
   };
 }
 
@@ -244,6 +248,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             color?: string | null;
             is_primary?: boolean;
             brand_context?: string | null;
+            ads_profile_setup?: unknown | null;
           }[];
         }) => {
           if (!d.ok || !d.brands?.length) {
@@ -332,10 +337,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       if (cancelled) return;
 
       if (remoteCompetitors.length > 0) {
-        const merged = mergeAccountSidebarRowsWithLocalLibraryContext(
-          remoteCompetitors as SidebarCompetitor[],
-          localCompetitors
+        const visibleRemote = (remoteCompetitors as (SidebarCompetitor & { isWorkspaceBrand?: boolean })[]).filter(
+          (r) => !r.isWorkspaceBrand,
         );
+        const merged = mergeAccountSidebarRowsWithLocalLibraryContext(visibleRemote, localCompetitors);
         saveSidebarCompetitors(merged);
         refreshSavedCompetitors();
         return;

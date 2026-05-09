@@ -1,0 +1,285 @@
+import type { ChannelId } from "@/components/channel-picker-modal";
+import { extractDomain, normalizeDiscoveredIds, parseSocialLinks } from "@/lib/discovery";
+import { hostToBrandLabel } from "@/lib/onboarding/host";
+import { socialNetworkBucket } from "@/lib/onboarding/social-profile-utils";
+
+/** Same scrape fields as onboarding workspace flow (homepage + ad libraries). */
+export type WorkspaceAdsScrapeHints = {
+  websiteUrl: string;
+  /** Must be Meta Ads Library URL (or numeric page id) — not a plain Facebook page */
+  metaAdsLibraryUrl: string;
+  /** Domain used for Google Ads Transparency Center (editable, no scheme) */
+  googleAdsDomain: string;
+  linkedInUrl: string;
+  /** TikTok Ads Library keyword / handle (bare or @) */
+  tiktokKeyword: string;
+  pinterestKeyword: string;
+  snapchatKeyword: string;
+  /** Hydrated from older saves / rival-shaped merges */
+  facebookUrl: string;
+  instagramUrl: string;
+  tikTokUrl: string;
+  youTubeUrl: string;
+};
+
+/** Persisted on `brands.ads_profile_setup` for workspace Ads Library / comparison evidence. */
+export type AdsProfileSetup = {
+  channels: ChannelId[];
+  adMarketCountryCodes: string[];
+  scrape: WorkspaceAdsScrapeHints;
+};
+
+export const ADS_PROFILE_SETUP_VERSION = 1 as const;
+
+function firstHrefForBucket(socials: Array<{ href: string }>, bucket: string): string {
+  for (const s of socials) {
+    if (socialNetworkBucket(s.href) === bucket) return s.href;
+  }
+  return "";
+}
+
+export function emptyWorkspaceScrapeRow(domain: string): WorkspaceAdsScrapeHints {
+  const h = domain.replace(/^www\./i, "").trim();
+  return {
+    websiteUrl: h ? `https://${h}` : "",
+    metaAdsLibraryUrl: "",
+    googleAdsDomain: h,
+    linkedInUrl: "",
+    tiktokKeyword: "",
+    pinterestKeyword: "",
+    snapchatKeyword: h ? hostToBrandLabel(h) : "",
+    facebookUrl: "",
+    instagramUrl: "",
+    tikTokUrl: "",
+    youTubeUrl: "",
+  };
+}
+
+/** Merge homepage social links into workspace scrape hints (prefill only when target field is empty). */
+export function mergeWorkspaceScrapeFromSocials(
+  workspaceDomain: string,
+  row: WorkspaceAdsScrapeHints,
+  socials: Array<{ href: string }>,
+): WorkspaceAdsScrapeHints {
+  const out = { ...row };
+  if (!out.websiteUrl.trim()) out.websiteUrl = `https://${workspaceDomain}`;
+  const siteDomain = extractDomain(out.websiteUrl.trim()) || workspaceDomain.replace(/^www\./i, "");
+  if (!out.googleAdsDomain.trim()) out.googleAdsDomain = siteDomain;
+
+  const fb = firstHrefForBucket(socials, "facebook");
+  const ig = firstHrefForBucket(socials, "instagram");
+  if (!out.facebookUrl.trim()) out.facebookUrl = fb;
+  if (!out.instagramUrl.trim()) out.instagramUrl = ig;
+  if (!out.metaAdsLibraryUrl.trim()) {
+    for (const s of socials) {
+      const h = s.href.trim();
+      const low = h.toLowerCase();
+      if (
+        low.includes("ads/library") &&
+        (low.includes("facebook.com") || low.includes("fb.com") || low.includes("m.facebook.com"))
+      ) {
+        out.metaAdsLibraryUrl = h;
+        break;
+      }
+    }
+  }
+
+  if (!out.linkedInUrl.trim()) out.linkedInUrl = firstHrefForBucket(socials, "linkedin");
+
+  const tt = firstHrefForBucket(socials, "tiktok");
+  if (!out.tikTokUrl.trim()) out.tikTokUrl = tt;
+  if (!out.tiktokKeyword.trim() && tt) {
+    const parsed = normalizeDiscoveredIds(parseSocialLinks([tt]));
+    if (parsed.tiktok) out.tiktokKeyword = parsed.tiktok.replace(/^@+/, "");
+  }
+
+  if (!out.youTubeUrl.trim()) out.youTubeUrl = firstHrefForBucket(socials, "youtube");
+
+  const pin = firstHrefForBucket(socials, "pinterest");
+  if (!out.pinterestKeyword.trim() && pin) {
+    try {
+      const u = new URL(pin);
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts[0]) out.pinterestKeyword = decodeURIComponent(parts[0]!);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (!out.snapchatKeyword.trim()) {
+    const snap = firstHrefForBucket(socials, "snapchat");
+    if (snap) {
+      try {
+        const u = new URL(snap);
+        const parts = u.pathname.split("/").filter(Boolean);
+        const addIdx = parts.indexOf("add");
+        if (addIdx >= 0 && parts[addIdx + 1]) {
+          out.snapchatKeyword = decodeURIComponent(parts[addIdx + 1]!);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!out.snapchatKeyword.trim()) out.snapchatKeyword = hostToBrandLabel(siteDomain || workspaceDomain);
+  }
+
+  return out;
+}
+
+export function adsProfileSetupV1(payload: AdsProfileSetup): Record<string, unknown> {
+  return {
+    version: ADS_PROFILE_SETUP_VERSION,
+    channels: payload.channels,
+    adMarketCountryCodes: payload.adMarketCountryCodes,
+    scrape: payload.scrape,
+  };
+}
+
+/** Best-effort TikTok display handle from legacy profile URL field. */
+function tiktokKeywordFromLegacyUrl(ttUrl: string): string {
+  const t = ttUrl.trim();
+  if (!t) return "";
+  const parsed = normalizeDiscoveredIds(parseSocialLinks([t]));
+  return parsed.tiktok ? parsed.tiktok.replace(/^@+/, "") : "";
+}
+
+function pinterestKeywordLegacy(pinUrlOrHandle: string): string {
+  const t = pinUrlOrHandle.trim();
+  if (!t) return "";
+  if (/pinterest\.com/i.test(t)) {
+    try {
+      const u = new URL(/^https?:\/\//i.test(t) ? t : `https://${t}`);
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts[0]) return decodeURIComponent(parts[0]!);
+    } catch {
+      /* ignore */
+    }
+  }
+  return t.replace(/^\/+/, "").replace(/^@+/, "");
+}
+
+export function parseAdsProfileSetup(raw: unknown): AdsProfileSetup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const channelsRaw = o.channels;
+  const marketsRaw = o.adMarketCountryCodes;
+  const scrapeRaw = o.scrape;
+  if (!Array.isArray(channelsRaw) || !Array.isArray(marketsRaw) || !scrapeRaw || typeof scrapeRaw !== "object") {
+    return null;
+  }
+  const scrape = scrapeRaw as Record<string, unknown>;
+  const str = (k: keyof WorkspaceAdsScrapeHints): string =>
+    typeof scrape[k] === "string" ? (scrape[k] as string).trim() : "";
+
+  const websiteUrl =
+    str("websiteUrl") || (typeof scrape.website_url === "string" ? scrape.website_url.trim() : "");
+  const fb = str("facebookUrl");
+  const ig = str("instagramUrl");
+  const ttUrl = str("tikTokUrl");
+  const metaAdsLibraryUrl = str("metaAdsLibraryUrl") || fb || ig;
+  const googleFromSite = websiteUrl ? extractDomain(websiteUrl) : "";
+
+  const channels = channelsRaw.filter((c): c is ChannelId =>
+    typeof c === "string" && ["meta", "google", "tiktok", "linkedin", "pinterest", "snapchat"].includes(c),
+  );
+  const adMarketCountryCodes = marketsRaw.filter((c): c is string => typeof c === "string" && c.trim().length > 0);
+
+  const tiktokKeyword = str("tiktokKeyword") || tiktokKeywordFromLegacyUrl(ttUrl);
+  const pinExtra =
+    typeof scrape.pinterestUrl === "string"
+      ? scrape.pinterestUrl.trim()
+      : typeof scrape.pinterest === "string"
+        ? (scrape.pinterest as string).trim()
+        : "";
+  const pinterestKeyword =
+    str("pinterestKeyword") || (pinExtra ? pinterestKeywordLegacy(pinExtra) : "");
+
+  return {
+    channels,
+    adMarketCountryCodes,
+    scrape: {
+      websiteUrl,
+      metaAdsLibraryUrl,
+      googleAdsDomain: str("googleAdsDomain") || googleFromSite,
+      linkedInUrl: str("linkedInUrl"),
+      tiktokKeyword,
+      pinterestKeyword,
+      snapchatKeyword:
+        str("snapchatKeyword") || (googleFromSite ? hostToBrandLabel(googleFromSite.replace(/^www\./i, "")) : ""),
+      facebookUrl: fb,
+      instagramUrl: ig,
+      tikTokUrl: ttUrl,
+      youTubeUrl: str("youTubeUrl"),
+    },
+  };
+}
+
+/** Map onboarding scrape URLs + domain into Ads Library identifiers (minimal subset). */
+export function scrapeHintsToPlatformIds(params: {
+  scrape: WorkspaceAdsScrapeHints;
+  workspaceDomain: string;
+  channels: ChannelId[];
+}): Record<string, string> {
+  const channels = new Set(params.channels);
+  const { scrape, workspaceDomain } = params;
+  const urls = [
+    scrape.metaAdsLibraryUrl.trim(),
+    scrape.facebookUrl.trim(),
+    scrape.instagramUrl.trim(),
+    scrape.linkedInUrl.trim(),
+    scrape.tikTokUrl.trim(),
+    scrape.youTubeUrl.trim(),
+    /** Allow keyword-only pinterest as discoverable URL */
+    scrape.pinterestKeyword.trim(),
+  ].filter(Boolean);
+  const parsed = normalizeDiscoveredIds(parseSocialLinks(urls));
+
+  const out: Record<string, string> = {};
+  const put = (k: string, v: string | undefined) => {
+    const t = typeof v === "string" ? v.trim() : "";
+    if (!t) return;
+    out[k] = t;
+  };
+
+  if (channels.has("meta")) {
+    put("meta", parsed.meta ?? parsed.metaPageUrl);
+    put("metaPageUrl", parsed.metaPageUrl ?? parsed.meta);
+  }
+
+  const googleDomain =
+    scrape.googleAdsDomain.trim() ||
+    (scrape.websiteUrl.trim() && extractDomain(scrape.websiteUrl.trim())) ||
+    workspaceDomain.replace(/^www\./i, "");
+  if (channels.has("google") && googleDomain) {
+    put("google", extractDomain(googleDomain) || googleDomain);
+  }
+
+  if (channels.has("tiktok")) {
+    const fromUrl = parsed.tiktok;
+    const kw = scrape.tiktokKeyword.trim();
+    if (fromUrl) put("tiktok", fromUrl);
+    else if (kw) put("tiktok", kw.startsWith("@") ? kw : `@${kw.replace(/^@+/, "")}`);
+  }
+
+  if (channels.has("linkedin")) put("linkedin", parsed.linkedin);
+
+  if (parsed.youtube?.trim()) put("youtube", parsed.youtube);
+
+  if (channels.has("pinterest")) {
+    const pk = scrape.pinterestKeyword.trim();
+    if (parsed.pinterest) put("pinterest", parsed.pinterest);
+    else if (pk) {
+      if (/pinterest\.com/i.test(pk)) put("pinterest", pk.startsWith("http") ? pk : `https://${pk}`);
+      else put("pinterest", `https://www.pinterest.com/${pk.replace(/^@+/, "").replace(/^\/+/, "")}`);
+    }
+  }
+
+  if (channels.has("snapchat")) {
+    const kw = scrape.snapchatKeyword.trim();
+    if (kw) {
+      put("snapchat", kw.startsWith("@") ? kw : `@${kw.replace(/^@+/, "")}`);
+    }
+  }
+
+  return out;
+}

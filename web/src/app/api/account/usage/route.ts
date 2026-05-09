@@ -22,7 +22,11 @@ export async function GET() {
   const yearMonthUtc = new Date().toISOString().slice(0, 7);
 
   const [competitorsRes, cacheRes, overviewRes, monthUsageRes, billing] = await Promise.all([
-    supabase.from("saved_competitors").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase
+      .from("saved_competitors")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_workspace_brand", false),
     supabase.from("ads_cache").select("ads_data").eq("user_id", userId),
     supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
     supabase

@@ -59,6 +59,7 @@ export type Database = {
           is_primary: boolean;
           /** Short “about” copy from onboarding scrape or edited in settings — used as brand context for AI/features. */
           brand_context: string | null;
+          ads_profile_setup: Json | null;
           created_at: string;
         };
         Insert: {
@@ -70,6 +71,7 @@ export type Database = {
           color?: string | null;
           is_primary?: boolean;
           brand_context?: string | null;
+          ads_profile_setup?: Json | null;
           created_at?: string;
         };
         Update: {
@@ -81,6 +83,7 @@ export type Database = {
           color?: string | null;
           is_primary?: boolean;
           brand_context?: string | null;
+          ads_profile_setup?: Json | null;
           created_at?: string;
         };
         Relationships: [];
@@ -96,6 +99,7 @@ export type Database = {
           brand_domain: string | null;
           brand_logo_url: string | null;
           pending: boolean;
+          is_workspace_brand: boolean;
           created_at: string;
           updated_at: string;
           last_scraped_at: string | null;
@@ -110,6 +114,7 @@ export type Database = {
           brand_domain?: string | null;
           brand_logo_url?: string | null;
           pending?: boolean;
+          is_workspace_brand?: boolean;
           created_at?: string;
           updated_at?: string;
           last_scraped_at?: string | null;
@@ -124,6 +129,7 @@ export type Database = {
           brand_domain?: string | null;
           brand_logo_url?: string | null;
           pending?: boolean;
+          is_workspace_brand?: boolean;
           created_at?: string;
           updated_at?: string;
           last_scraped_at?: string | null;

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext } from "react";
+import type { AdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 
 export type Brand = {
   id: string;
@@ -12,6 +13,8 @@ export type Brand = {
   domain?: string;
   /** Positioning / “about” copy from onboarding or settings — consumed by AI-style surfaces. */
   brandContext?: string;
+  /** Onboarding/workspace Ads Library identifiers (persisted on `brands.ads_profile_setup`). */
+  adsSetup?: AdsProfileSetup | null;
 };
 
 const BrandContext = createContext<Brand | null>(null);
