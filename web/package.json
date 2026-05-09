@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "seed:strategy-overview": "tsx scripts/seed-strategy-overview.ts",
+    "debug:spend-footprint": "tsx scripts/debug-spend-footprint.ts",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "analyze": "ANALYZE=true next build --webpack",

@@ -4,6 +4,7 @@ import {
   computeTrend,
   deriveBrandScale,
   deriveFunnelEdges,
+  deriveStrategyOverviewPayload,
   monthlyFirstSeenCounts,
   type ScrapedAdInput,
 } from "@/lib/strategy-overview/strategyDerivation";
@@ -161,5 +162,29 @@ describe("computeTrend", () => {
 
   it("returns flat for stable recent window", () => {
     expect(computeTrend([40, 40, 40, 40, 40, 45])).toBe("flat");
+  });
+});
+
+describe("deriveStrategyOverviewPayload live creative counts", () => {
+  const competitor = { name: "T", domain: "t.com", logoUrl: null as string | null };
+
+  it("uses distinct Meta creative ids for adCount, not raw row count", () => {
+    const now = new Date().toISOString();
+    const ads: ScrapedAdInput[] = Array.from({ length: 100 }, (_, i) => ({
+      id: `row-${i}`,
+      platform: "meta",
+      ad_text: "x",
+      format: "image",
+      first_seen_at: now,
+      last_seen_at: now,
+      ai_extracted_angle: null,
+      funnel_stage: null,
+      is_active: true,
+      raw_payload: { id: "same-archive-id" },
+    }));
+    const payload = deriveStrategyOverviewPayload(ads, competitor, null);
+    const meta = payload.map.platformNodes.find((n) => n.platform === "meta");
+    expect(meta?.adCount).toBe(1);
+    expect(payload.map.activeAdCount).toBe(1);
   });
 });
