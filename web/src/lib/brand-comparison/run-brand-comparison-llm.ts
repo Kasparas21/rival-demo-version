@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { openRouterChatText } from "@/lib/llm/openrouter";
+import { anthropicSonnet } from "@/lib/llm/anthropic";
 
 function stripJsonFences(text: string): string {
   let t = text.trim();
@@ -55,8 +55,8 @@ export async function runBrandComparisonLlm(params: {
     adEvidence,
   } = params;
 
-  if (!process.env.OPENROUTER_API_KEY?.trim()) {
-    return { ok: false, error: "OPENROUTER_API_KEY not configured" };
+  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+    return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
   }
 
   const userBits = [
@@ -71,12 +71,9 @@ export async function runBrandComparisonLlm(params: {
       ? `Competitor ad creative evidence (sampled from their Ads Library — only use this and brand names; do not invent metrics or platforms not shown):\n${adEvidence.trim()}`
       : "No competitor ad copy was provided. Compare at a high level using only the two brand names and any user-brand context. State clearly that you lack paid creative samples — do not invent specific performance numbers, CPMs, or channel mix percentages.";
 
-  const res = await openRouterChatText({
-    maxCompletionTokens: 2_000,
-    messages: [
-      {
-        role: "system",
-        content: `You compare TWO brands for a marketer:
+  const res = await anthropicSonnet({
+    maxTokens: 2_000,
+    systemPrompt: `You compare TWO brands for a marketer:
 - COMPETITOR: the company whose dashboard they are viewing (paid ads / GTM focus).
 - USER BRAND: the marketer's own company they track in this workspace.
 
@@ -96,7 +93,7 @@ Rules:
 - Use the real brand names from the user input in titles/body when natural.
 - No made-up percentages unless clearly framed as hypothetical ("you might…"). If evidence is thin, use cautious language.
 - JSON only.`,
-      },
+    messages: [
       {
         role: "user",
         content: `COMPETITOR (viewed on dashboard): ${competitorName} (${competitorDomain})

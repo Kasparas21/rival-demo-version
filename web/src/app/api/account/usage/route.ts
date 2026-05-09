@@ -69,6 +69,7 @@ export async function GET() {
     },
     billing: {
       hasAccess: billing.hasAccess,
+      isUnlimited: billing.isUnlimited,
       status: billing.status,
       planName: billing.planName,
       polarProductId: billing.polarProductId,

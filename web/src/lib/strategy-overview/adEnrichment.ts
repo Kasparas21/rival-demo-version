@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/types";
-import { openRouterChatText, resolveOpenRouterModel } from "@/lib/llm/openrouter";
+import { anthropicHaiku, HAIKU_MODEL } from "@/lib/llm/anthropic";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 
 const BATCH_MAX = 50;
@@ -43,9 +43,10 @@ type ModelRow = {
   body_theme?: string;
 };
 
-async function enrichBatchWithOpenRouter(
+async function enrichBatchWithClaude(
   items: EnrichItem[]
 ): Promise<{ rows: ModelRow[] | null; costUsd: number }> {
+  console.log("[enrich-trace] enrichBatch called, items=", items.length, "model=", HAIKU_MODEL);
   const userPrompt = `You analyze scraped paid ads. For each JSON object in "Ads" return ONE object with the SAME "id".
 
 Infer from the creative copy + platform + format:
@@ -67,22 +68,19 @@ ${JSON.stringify(items)}
 Return ONLY valid JSON array, no markdown:
 [{"id":"uuid","angle":"discount","angle_free_text":"","funnel_stage":"TOF","voice_tone":["promotional"],"headline_guess":"...","body_theme":"..."},...]`;
 
-  const out = await openRouterChatText({
-    messages: [
-      {
-        role: "system",
-        content:
-          "You label ads for marketing funnel analytics. Ground every funnel_stage and angle in the actual text fields—no generic claims. Short, specific outputs only.",
-      },
-      { role: "user", content: userPrompt },
-    ],
-    maxCompletionTokens: 4096,
+  console.log("[enrich-trace] sending to Anthropic");
+  const out = await anthropicHaiku({
+    systemPrompt:
+      "You label ads for marketing funnel analytics. Ground every funnel_stage and angle in the actual text fields—no generic claims. Short, specific outputs only.",
+    messages: [{ role: "user", content: userPrompt }],
+    maxTokens: 4096,
   });
+  console.log("[enrich-trace] Anthropic response ok=", out.ok, "error=", !out.ok ? out.error : "none");
 
-  const costUsd = out.ok && out.usage?.costUsd != null ? out.usage.costUsd : 0;
+  const costUsd = out.ok ? out.usage.costUsd : 0;
 
   if (!out.ok) {
-    console.error("[adEnrichment] OpenRouter error", out.error);
+    console.error("[adEnrichment] Anthropic error", out.error);
     return { rows: null, costUsd: 0 };
   }
 
@@ -139,7 +137,8 @@ export async function enrichScrapedAdsIfNeeded(
   failedBatch: number;
   usageCostUsd: number;
 }> {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  console.log("[enrich-trace] entered, total=", rows.length);
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   const total = rows.length;
   let skippedNoText = 0;
   let failedInvalid = 0;
@@ -208,10 +207,13 @@ export async function enrichScrapedAdsIfNeeded(
     toEnrich.push(r);
   }
 
-  const modelLabel = resolveOpenRouterModel();
+  console.log("[enrich-trace] toEnrich count=", toEnrich.length);
+  console.log("[enrich-trace] starting batch loop, batchMax=", BATCH_MAX);
+  const modelLabel = HAIKU_MODEL;
   let enriched = 0;
   for (let i = 0; i < toEnrich.length; i += BATCH_MAX) {
     const batch = toEnrich.slice(i, i + BATCH_MAX);
+    console.log("[enrich-trace] batch index=", i, "batch size=", batch.length);
 
     const items: EnrichItem[] = batch.map((r) => ({
       id: r.id,
@@ -220,7 +222,23 @@ export async function enrichScrapedAdsIfNeeded(
       platform: r.platform,
     }));
 
-    const { rows: results, costUsd } = await enrichBatchWithOpenRouter(items);
+    console.log("[enrich-trace] calling enrichBatch, items=", items.length);
+    let results: ModelRow[] | null;
+    let costUsd: number;
+    try {
+      const batchOut = await enrichBatchWithClaude(items);
+      results = batchOut.rows;
+      costUsd = batchOut.costUsd;
+      console.log(
+        "[enrich-trace] enrichBatch returned, rowCount=",
+        results?.length ?? "null",
+        "cost=",
+        costUsd
+      );
+    } catch (err) {
+      console.error("[enrich-trace] enrichBatch THREW", err);
+      continue;
+    }
     usageCostUsd += costUsd;
     const costStr = costUsd > 0 ? `$${costUsd.toFixed(4)}` : "n/a";
     console.log(`[enrichment] batch sent size=${batch.length} cost_estimate=${costStr}`);

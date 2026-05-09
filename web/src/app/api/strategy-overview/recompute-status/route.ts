@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
-import { getRecomputeLockRow, loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
+import { getRecomputeLockRow, healStaleStrategyRecomputeLockIfNeeded, loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 
 export async function GET(req: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
@@ -27,6 +27,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
+
+  await healStaleStrategyRecomputeLockIfNeeded(supabase, meta.competitorId);
 
   const row = await getRecomputeLockRow(supabase, meta.competitorId);
 

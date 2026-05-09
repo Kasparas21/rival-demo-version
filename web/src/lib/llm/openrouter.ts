@@ -85,13 +85,25 @@ export async function openRouterChatText(params: {
   const model = params.model ?? resolveOpenRouterModel();
 
   try {
-    const result = await client.chat.send({
+    const chatSend = client.chat.send({
       chatRequest: {
         model,
         maxCompletionTokens: params.maxCompletionTokens ?? 4096,
         messages: params.messages,
       },
     });
+
+    const OPENROUTER_CHAT_MS = 30_000;
+    const result = await Promise.race([
+      chatSend,
+      new Promise<"__openrouter_timeout__">((resolve) =>
+        setTimeout(() => resolve("__openrouter_timeout__"), OPENROUTER_CHAT_MS)
+      ),
+    ]);
+
+    if (result === "__openrouter_timeout__") {
+      return { ok: false, error: "OpenRouter timeout after 30s" };
+    }
 
     if (!result || typeof result !== "object" || !("choices" in result)) {
       return { ok: false, error: "Invalid OpenRouter response" };

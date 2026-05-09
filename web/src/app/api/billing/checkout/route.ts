@@ -1,23 +1,29 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { TrialInterval } from "@polar-sh/sdk/models/components/trialinterval";
 import { ensureUserProfile } from "@/lib/auth/profile";
 import { getAppUrl, getPolarEnv } from "@/lib/billing/config";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createPolarClient } from "@/lib/billing/polar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-async function createCheckoutRedirect() {
+async function createCheckoutRedirect(request: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    const loginUrl = new URL("/login", getAppUrl());
+    const loginUrl = new URL("/login", request.nextUrl.origin);
     loginUrl.searchParams.set("next", "/api/billing/checkout");
     return NextResponse.redirect(loginUrl);
   }
 
   await ensureUserProfile(supabase, user);
+
+  const billing = await getBillingEntitlement(supabase, user.id);
+  if (billing.isUnlimited) {
+    return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
+  }
 
   const { productId } = getPolarEnv();
   const appUrl = getAppUrl();
@@ -43,15 +49,15 @@ async function createCheckoutRedirect() {
   return NextResponse.redirect(checkout.url);
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    return await createCheckoutRedirect();
+    return await createCheckoutRedirect(request);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Could not create checkout.";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
-export async function POST() {
-  return GET();
+export async function POST(request: NextRequest) {
+  return GET(request);
 }

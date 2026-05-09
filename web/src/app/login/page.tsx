@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
@@ -29,10 +30,13 @@ export default async function LoginPage({
       .select("onboarding_completed")
       .eq("id", user.id)
       .maybeSingle();
+    const billing = await getBillingEntitlement(supabase, user.id);
+    const rawNext = safePostOnboardingPath ?? "/dashboard";
+    const dest = adminSkipCheckoutDestination(rawNext, billing.isUnlimited);
     if (!profile?.onboarding_completed) {
-      redirect(safePostOnboardingPath ? `/onboarding?next=${encodeURIComponent(safePostOnboardingPath)}` : "/onboarding");
+      redirect(dest !== "/dashboard" ? `/onboarding?next=${encodeURIComponent(dest)}` : "/onboarding");
     }
-    redirect(safePostOnboardingPath ?? "/dashboard");
+    redirect(dest);
   }
 
   return <LoginForm />;

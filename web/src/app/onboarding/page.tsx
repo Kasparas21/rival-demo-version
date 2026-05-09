@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
+import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -29,7 +30,6 @@ export default async function OnboardingPage({
 }) {
   const params = (await searchParams) ?? {};
   const nextPath = safeNextPath(firstParam(params.next));
-  const destinationAfterOnboarding = nextPath ? postOnboardingPath(nextPath) : "/dashboard";
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -44,6 +44,10 @@ export default async function OnboardingPage({
     .select("onboarding_completed, company_name, company_url")
     .eq("id", user.id)
     .maybeSingle();
+
+  const billing = await getBillingEntitlement(supabase, user.id);
+  const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard";
+  const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
 
   if (profile?.onboarding_completed) {
     redirect(destinationAfterOnboarding);

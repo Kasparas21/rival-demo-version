@@ -9,6 +9,7 @@ import {
 } from "@/lib/strategy-overview/recompute-strategy-overview";
 
 export const runtime = "nodejs";
+/** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Long strategy recompute may need Pro+ or a queue. */
 export const maxDuration = 300;
 
 export async function POST(req: Request): Promise<NextResponse> {

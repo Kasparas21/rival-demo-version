@@ -58,7 +58,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   });
 
   if (!out.ok) {
-    const status = out.error.includes("OPENROUTER_API_KEY") ? 503 : 502;
+    const status = out.error.includes("ANTHROPIC_API_KEY") ? 503 : 502;
     return NextResponse.json({ ok: false, error: out.error, model: out.model }, { status });
   }
 

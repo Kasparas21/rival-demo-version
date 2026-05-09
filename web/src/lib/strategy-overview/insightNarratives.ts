@@ -1,11 +1,11 @@
 /**
- * Single OpenRouter pass: strategic narratives for Strategy Insight cards + map tone/audience,
+ * Single Anthropic (Sonnet) pass: strategic narratives for Strategy Insight cards + map tone/audience,
  * grounded in derived metrics and sampled ad copy from scraped rows.
  */
 
 import { z } from "zod";
 
-import { openRouterChatText } from "@/lib/llm/openrouter";
+import { anthropicSonnet } from "@/lib/llm/anthropic";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { parseStage, type ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 
@@ -52,7 +52,7 @@ export async function enrichStrategyOverviewWithInsightLLM(
 ): Promise<{ payload: CompetitorStrategyOverviewPayload; usageCostUsd: number }> {
   let usageCostUsd = 0;
 
-  if (!process.env.OPENROUTER_API_KEY?.trim() || ads.length === 0) {
+  if (!process.env.ANTHROPIC_API_KEY?.trim() || ads.length === 0) {
     const n = enrichedAdsForSample(ads).length;
     console.log(`[insightLLM] sample size=${n} | enrichedOnly=true (skip: no key or zero ads)`);
     console.log(`[insightLLM] response valid=false`);
@@ -107,11 +107,8 @@ export async function enrichStrategyOverviewWithInsightLLM(
     spendBand: map.spendVsSimilar,
   };
 
-  const res = await openRouterChatText({
-    messages: [
-      {
-        role: "system",
-        content: `You are a performance marketing strategist analyzing a competitor's paid advertising strategy. You will receive a structured JSON digest of their ad activity and a sample of real ad creatives.
+  const res = await anthropicSonnet({
+    systemPrompt: `You are a performance marketing strategist analyzing a competitor's paid advertising strategy. You will receive a structured JSON digest of their ad activity and a sample of real ad creatives.
 
 CRITICAL RULES:
 - Every claim you make must be directly traceable to a specific ad in the sample or a metric in the digest. Do not generalize.
@@ -119,7 +116,7 @@ CRITICAL RULES:
 - Funnel stage assignments come from the pre-labeled 'funnel' field — trust those labels, do not re-classify.
 - Angle assignments come from the pre-labeled 'angle' field — use them to identify dominant patterns.
 - Output ONLY valid JSON matching the exact schema provided. No prose outside the JSON object.`,
-      },
+    messages: [
       {
         role: "user",
         content: `Analyze this competitor's paid social / search strategy.
@@ -149,13 +146,13 @@ Return ONLY valid JSON, no markdown. Each narrative value: 2–4 sentences, max 
 }`,
       },
     ],
-    maxCompletionTokens: 2800,
+    maxTokens: 2800,
   });
 
   usageCostUsd += res.ok && res.usage?.costUsd != null ? res.usage.costUsd : 0;
 
   if (!res.ok) {
-    console.warn("[insightLLM] OpenRouter:", res.error);
+    console.warn("[insightLLM] Anthropic:", res.error);
     console.log(`[insightLLM] response valid=false`);
     return { payload, usageCostUsd };
   }

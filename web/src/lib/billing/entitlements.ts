@@ -58,11 +58,15 @@ export async function getBillingEntitlement(
 
   const status = data?.status ?? "none";
   const isUnlimited = isManualAdminUnlimited(data?.raw_payload);
+  const hasAccess = isSubscriptionStatusAllowed(status) || isUnlimited;
+  const planName = isUnlimited
+    ? (data?.polar_product_name?.trim() || "Complimentary (admin)")
+    : (data?.polar_product_name ?? BILLING_PLAN_NAME);
 
   return {
-    hasAccess: isSubscriptionStatusAllowed(status),
+    hasAccess,
     status,
-    planName: data?.polar_product_name ?? BILLING_PLAN_NAME,
+    planName,
     polarProductId: data?.polar_product_id ?? null,
     polarCustomerId: data?.polar_customer_id ?? null,
     trialEnd: data?.trial_end ?? null,
@@ -71,6 +75,17 @@ export async function getBillingEntitlement(
     limits: isUnlimited ? ADMIN_BILLING_LIMITS : BILLING_LIMITS,
     isUnlimited,
   };
+}
+
+function isCheckoutOrBillingPath(path: string): boolean {
+  return path === "/checkout" || path === "/api/billing/checkout";
+}
+
+/**
+ * Internal admin accounts (`raw_payload.admin_unlimited`) should never be sent through Polar checkout.
+ */
+export function adminSkipCheckoutDestination(path: string, isUnlimited: boolean): string {
+  return isUnlimited && isCheckoutOrBillingPath(path) ? "/dashboard" : path;
 }
 
 export function remainingMonthlyScrapeRuns(

@@ -45,6 +45,7 @@ import {
 } from "@/lib/ad-library/competitor-cache-domain";
 
 export const runtime = "nodejs";
+/** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
 export const maxDuration = 300;
 
 const MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;

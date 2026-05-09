@@ -97,7 +97,7 @@ async function releaseRecomputeLock(
   token: string,
   opts?: { failed?: boolean; errorMessage?: string; enrichedAds?: number; totalAds?: number }
 ): Promise<void> {
-  const { error } = await supabase
+  const { error, data } = await supabase
     .from("strategy_recompute_locks")
     .update({
       owner_token: null,
@@ -109,10 +109,17 @@ async function releaseRecomputeLock(
       total_ads: opts?.totalAds ?? null,
     })
     .eq("competitor_id", competitorId)
-    .eq("owner_token", token);
+    .eq("owner_token", token)
+    .select("competitor_id");
 
   if (error) {
     console.warn("[recompute] lock release", error.message);
+    return;
+  }
+  if (!data?.length) {
+    console.warn(
+      `[recompute] lock release matched 0 rows competitorId=${competitorId} (owner_token mismatch or row replaced)`
+    );
   }
 }
 
@@ -389,6 +396,50 @@ export async function getRecomputeLockRow(
   return data ?? null;
 }
 
+/**
+ * If the row is still `running` but lock TTL expired or lock is older than ORPHAN_LOCK_AGE_MS,
+ * persist idle state so `acquireRecomputeLock` can succeed (ghost lock after hard runtime kill).
+ */
+export async function healStaleStrategyRecomputeLockIfNeeded(
+  supabase: SupabaseClient<Database>,
+  competitorId: string
+): Promise<boolean> {
+  const row = await getRecomputeLockRow(supabase, competitorId);
+  if (!row || row.status !== "running") return false;
+
+  const until = row.locked_until ? Date.parse(row.locked_until) : NaN;
+  const started = row.locked_at ? Date.parse(row.locked_at) : NaN;
+  const lockExpired = Number.isFinite(until) && until <= Date.now();
+  const lockTooOld = Number.isFinite(started) && Date.now() - started > ORPHAN_LOCK_AGE_MS;
+
+  if (!lockExpired && !lockTooOld) return false;
+
+  const { error, data } = await supabase
+    .from("strategy_recompute_locks")
+    .update({
+      owner_token: null,
+      locked_until: new Date(0).toISOString(),
+      status: "idle",
+      completed_at: new Date().toISOString(),
+      last_error: null,
+      enriched_ads: row.enriched_ads ?? null,
+      total_ads: row.total_ads ?? null,
+    })
+    .eq("competitor_id", competitorId)
+    .eq("status", "running")
+    .select("competitor_id");
+
+  if (error) {
+    console.warn("[recompute] heal stale lock failed", error.message);
+    return false;
+  }
+  if (!data?.length) {
+    return false;
+  }
+  console.log(`[recompute] healed stale/orphan lock competitorId=${competitorId}`);
+  return true;
+}
+
 export async function recomputeStrategyOverviewForCompetitor(params: {
   supabase: SupabaseClient<Database>;
   userId: string;
@@ -406,6 +457,8 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
   const staleMs = stealLock ? undefined : staleLockMs;
 
+  await healStaleStrategyRecomputeLockIfNeeded(supabase, competitorId);
+
   const locked = await acquireRecomputeLock(supabase, competitorId, token, {
     stealLock,
     staleLockMs: staleMs,
@@ -414,6 +467,17 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     return { ok: false, error: "Recompute already in progress for this competitor" };
   }
 
+  let lockReleased = false;
+  const markLockReleased = async (opts?: {
+    failed?: boolean;
+    errorMessage?: string;
+    enrichedAds?: number;
+    totalAds?: number;
+  }) => {
+    await releaseRecomputeLock(supabase, competitorId, token, opts);
+    lockReleased = true;
+  };
+
   let aiCostUsdTotal = 0;
 
   try {
@@ -421,7 +485,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     const meta = await loadSavedCompetitorForUser(supabase, userId, domainHint);
     if (!meta) {
-      await releaseRecomputeLock(supabase, competitorId, token, { failed: true, errorMessage: "no meta" });
+      await markLockReleased({ failed: true, errorMessage: "no meta" });
       return { ok: false, error: "Competitor not found" };
     }
 
@@ -447,7 +511,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       const durationMs = Date.now() - t0;
       console.log(`[recompute] complete → durationMs=${durationMs} | quality=${derivQ} | no_ads_found`);
 
-      await releaseRecomputeLock(supabase, competitorId, token, { enrichedAds: 0, totalAds: 0 });
+      await markLockReleased({ enrichedAds: 0, totalAds: 0 });
 
       const { error: upOverviewErr } = await supabase.from("competitor_strategy_overview").upsert(
         {
@@ -473,7 +537,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         domain: meta.brandDomain ?? meta.cacheDomain,
         logoUrl: meta.logoUrl,
       });
-      await releaseRecomputeLock(supabase, competitorId, token, { enrichedAds: 0, totalAds: 0 });
+      await markLockReleased({ enrichedAds: 0, totalAds: 0 });
       const { error: upOverviewErr } = await supabase.from("competitor_strategy_overview").upsert(
         {
           user_id: userId,
@@ -501,7 +565,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       .limit(1000);
 
     if (adsErr) {
-      await releaseRecomputeLock(supabase, competitorId, token, { failed: true, errorMessage: adsErr.message });
+      await markLockReleased({ failed: true, errorMessage: adsErr.message });
       return { ok: false, error: adsErr.message };
     }
 
@@ -533,6 +597,9 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     const enrichStats = await enrichScrapedAdsIfNeeded(supabase, userId, competitorId, enrichInputs);
     aiCostUsdTotal += enrichStats.usageCostUsd;
+    console.log(
+      `[recompute] post-enrichment competitorId=${competitorId} enriched=${enrichStats.enriched} needsEnrichment=${enrichStats.needsEnrichment} skippedNoText=${enrichStats.skippedNoText} failedBatch=${enrichStats.failedBatch} costUsd=${enrichStats.usageCostUsd.toFixed(4)}`
+    );
 
     const { count: enrichedStatusCount } = await supabase
       .from("scraped_ads")
@@ -602,7 +669,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     );
 
     if (upOverviewErr) {
-      await releaseRecomputeLock(supabase, competitorId, token, { failed: true, errorMessage: upOverviewErr.message });
+      await markLockReleased({ failed: true, errorMessage: upOverviewErr.message });
       return { ok: false, error: upOverviewErr.message };
     }
 
@@ -647,12 +714,25 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     const { error: cardErr } = await supabase.from("strategy_insights_cards").insert(inserts);
     if (cardErr) console.error("[recompute] strategy_insights_cards", cardErr.message);
 
-    await releaseRecomputeLock(supabase, competitorId, token, { enrichedAds: enrichedDb, totalAds: totalActive });
+    await markLockReleased({ enrichedAds: enrichedDb, totalAds: totalActive });
 
     return { ok: true, payload };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "recompute failed";
-    await releaseRecomputeLock(supabase, competitorId, token, { failed: true, errorMessage: msg });
+    console.error(`[recompute] catch competitorId=${competitorId}`, e);
+    if (!lockReleased) {
+      await releaseRecomputeLock(supabase, competitorId, token, { failed: true, errorMessage: msg }).catch(
+        () => undefined
+      );
+      lockReleased = true;
+    }
     return { ok: false, error: msg };
+  } finally {
+    if (!lockReleased) {
+      await releaseRecomputeLock(supabase, competitorId, token, {
+        failed: true,
+        errorMessage: "aborted_before_explicit_release",
+      }).catch(() => undefined);
+    }
   }
 }

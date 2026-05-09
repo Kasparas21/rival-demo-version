@@ -54,6 +54,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
 
   const [backgroundRecompute, setBackgroundRecompute] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loadGenerationRef = useRef(0);
 
   const clearPoll = useCallback(() => {
     if (pollRef.current) {
@@ -62,10 +63,9 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
     }
   }, []);
 
-  useEffect(() => () => clearPoll(), [clearPoll]);
-
   const load = useCallback(
-    async (force?: boolean) => {
+    async (force?: boolean, isCancelled?: () => boolean) => {
+      const myGeneration = ++loadGenerationRef.current;
       clearPoll();
       setLoading(true);
       setError(null);
@@ -73,6 +73,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
         const q = new URLSearchParams({ competitorDomain: domain });
         if (force) q.set("force", "1");
         const res = await fetch(`/api/strategy-overview/compiled?${q}`);
+        if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
         const json = (await res.json()) as {
           ok: boolean;
           error?: string;
@@ -81,30 +82,46 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
           recomputing?: boolean;
           staleWhileRecomputing?: boolean;
         };
+        if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
         if (!json.ok || !json.payload) {
+          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
           setPayload(null);
           setError(json.error ?? "Failed to load strategy overview");
           setCached(false);
           setBackgroundRecompute(false);
           return;
         }
+        if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
         setPayload(json.payload);
         setCached(json.cached === true);
 
         const shouldPoll = json.recomputing === true || json.staleWhileRecomputing === true;
         if (shouldPoll) {
+          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
           setBackgroundRecompute(true);
+          clearPoll();
+          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
           const triesRef = { n: 0 };
           pollRef.current = setInterval(() => {
             void (async () => {
               triesRef.n += 1;
               const maxPolls = 120;
               let done = triesRef.n >= maxPolls;
+              let statusFailed = false;
+              let failedMessage: string | null = null;
               try {
                 const st = await fetch(
                   `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(domain)}`
                 );
-                const sj = (await st.json()) as { ok?: boolean; status?: string };
+                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
+                const sj = (await st.json()) as {
+                  ok?: boolean;
+                  status?: string;
+                  error?: string | null;
+                };
+                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
+                statusFailed = sj.ok === true && sj.status === "failed";
+                failedMessage = sj.error?.trim() ?? null;
                 done =
                   triesRef.n >= maxPolls ||
                   (sj.ok === true && (sj.status === "idle" || sj.status === "failed"));
@@ -112,48 +129,71 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
                 done = triesRef.n >= maxPolls;
               }
               if (!done) return;
+              if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
 
               if (pollRef.current) {
                 clearInterval(pollRef.current);
                 pollRef.current = null;
               }
               setBackgroundRecompute(false);
+              if (statusFailed) {
+                setError(failedMessage || "Strategy recomputation failed");
+              }
 
               try {
                 const qQuiet = new URLSearchParams({ competitorDomain: domain });
                 const resQuiet = await fetch(`/api/strategy-overview/compiled?${qQuiet}`);
+                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
                 const jq = (await resQuiet.json()) as {
                   ok: boolean;
                   payload?: CompetitorStrategyOverviewPayload;
                   cached?: boolean;
                 };
+                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
                 if (jq.ok && jq.payload) {
                   setPayload(jq.payload);
                   setCached(jq.cached === true);
+                  setError(null);
                 }
               } catch {
                 /* ignore transient refresh errors */
               }
             })();
-          }, 3000);
+          }, 5000);
         } else {
+          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
           setBackgroundRecompute(false);
         }
       } catch {
+        if (myGeneration !== loadGenerationRef.current) return;
         setPayload(null);
         setError("Network error");
         setCached(false);
         setBackgroundRecompute(false);
       } finally {
-        setLoading(false);
+        if (myGeneration === loadGenerationRef.current) {
+          setLoading(false);
+        }
       }
     },
     [clearPoll, domain]
   );
 
   useEffect(() => {
-    queueMicrotask(() => void load(false));
-  }, [load]);
+    let cancelled = false;
+    void load(false, () => cancelled);
+    return () => {
+      cancelled = true;
+      clearPoll();
+    };
+  }, [clearPoll, load]);
+
+  const emptyStrategy = useMemo(
+    () =>
+      !!payload &&
+      (payload.pipelineStatus === "no_ads_found" || payload.map.activeAdCount === 0),
+    [payload]
+  );
 
   const mapKey = useMemo(() => {
     if (!payload) return "empty";
@@ -202,10 +242,10 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
 
       <StrategyViewToggle view={view} onChange={setView} />
 
-      {backgroundRecompute ? (
+      {backgroundRecompute && !emptyStrategy ? (
         <div className="mb-4 rounded-xl border border-indigo-200/90 bg-indigo-50/90 px-4 py-2.5 text-[13px] text-indigo-950 flex items-center gap-2">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-          Refreshing strategy overview in the background… this page will update when recomputation finishes.
+          Building strategy overview in the background… this page will update when recomputation finishes.
         </div>
       ) : null}
 
@@ -229,7 +269,17 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
         </div>
       ) : null}
 
-      {!loading && !error && payload && (payload.pipelineStatus === "no_ads_found" || payload.map.activeAdCount === 0) ? (
+      {!loading && !error && backgroundRecompute && emptyStrategy ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-4" aria-hidden />
+          <p className="text-[15px] font-semibold text-[#3f3f46]">Building strategy overview…</p>
+          <p className="mt-1.5 max-w-md text-[13px] text-[#71717a]">
+            Analyzing scraped ads and generating your funnel map. This usually takes under two minutes.
+          </p>
+        </div>
+      ) : null}
+
+      {!loading && !error && !backgroundRecompute && emptyStrategy ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f4f4f5] text-[#a1a1aa]">
             <BarChart3 className="h-6 w-6" />

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function SetupError({ message }: { message: string }) {
@@ -45,6 +46,11 @@ export default async function CheckoutPage() {
 
   if (!user) {
     redirect("/login?next=/api/billing/checkout");
+  }
+
+  const billing = await getBillingEntitlement(supabase, user.id);
+  if (billing.isUnlimited) {
+    redirect("/dashboard");
   }
 
   redirect("/api/billing/checkout");

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import { openRouterChatText } from "@/lib/llm/openrouter";
+import { anthropicHaiku } from "@/lib/llm/anthropic";
 import {
   parseStrategyCardsFromUnknown,
   type StrategyOverviewRequestBody,
@@ -127,16 +127,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     "Respond with ONLY a JSON array of 5 to 8 strategy cards. No markdown fences, no explanation.",
   ].join("\n");
 
-  const completion = await openRouterChatText({
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userContent },
-    ],
-    maxCompletionTokens: 2000,
+  const completion = await anthropicHaiku({
+    systemPrompt: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userContent }],
+    maxTokens: 2000,
   });
 
   if (!completion.ok) {
-    const status = completion.error.includes("OPENROUTER_API_KEY") ? 500 : 502;
+    const status = completion.error.includes("ANTHROPIC_API_KEY") ? 500 : 502;
     return NextResponse.json({ ok: false, error: completion.error }, { status });
   }
 

@@ -14,6 +14,7 @@ import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation"
 import type { Database } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
+/** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Long strategy recompute may need Pro+ or a queue. */
 export const maxDuration = 300;
 
 const USER_STALE_LOCK_MS = 90_000;

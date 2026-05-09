@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CookieOptions } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureUserProfile } from "@/lib/auth/profile";
+import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import type { Database } from "@/lib/supabase/types";
 
@@ -127,6 +128,10 @@ export async function GET(request: NextRequest) {
   const requestedNext = url.searchParams.get("next") ?? request.cookies.get("rival_oauth_next")?.value;
   const safeRequested = safeNextPath(requestedNext);
   const safePostOnboardingPath = safeRequested ? postOnboardingPath(safeRequested) : null;
+  const billing = await getBillingEntitlement(supabase, user.id);
+  const resolvedNext = safePostOnboardingPath
+    ? adminSkipCheckoutDestination(safePostOnboardingPath, billing.isUnlimited)
+    : null;
 
   const RESET_PASSWORD_PATH = "/reset-password";
 
@@ -135,8 +140,8 @@ export async function GET(request: NextRequest) {
     pathname = RESET_PASSWORD_PATH;
   } else if (!onboardingDone) {
     pathname = "/onboarding";
-  } else if (safePostOnboardingPath) {
-    pathname = safePostOnboardingPath;
+  } else if (resolvedNext) {
+    pathname = resolvedNext;
   } else {
     pathname = "/dashboard";
   }
@@ -145,8 +150,8 @@ export async function GET(request: NextRequest) {
   finalDest.pathname = pathname;
   finalDest.search = "";
   finalDest.hash = "";
-  if (!onboardingDone && safePostOnboardingPath && pathname !== RESET_PASSWORD_PATH) {
-    finalDest.searchParams.set("next", safePostOnboardingPath);
+  if (!onboardingDone && resolvedNext && pathname !== RESET_PASSWORD_PATH) {
+    finalDest.searchParams.set("next", resolvedNext);
   }
 
   const out = NextResponse.redirect(finalDest);

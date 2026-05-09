@@ -32,6 +32,7 @@ type UsageState = {
 
 type BillingState = {
   hasAccess: boolean;
+  isUnlimited: boolean;
   status: string;
   planName: string;
   polarProductId: string | null;
@@ -67,6 +68,7 @@ const emptyUsage: UsageState = {
 
 const emptyBilling: BillingState = {
   hasAccess: false,
+  isUnlimited: false,
   status: "none",
   planName: "Spy Rival Pro",
   polarProductId: null,
@@ -183,6 +185,7 @@ export default function SettingsPage() {
         if (u.billing) {
           setBilling({
             hasAccess: u.billing.hasAccess ?? false,
+            isUnlimited: u.billing.isUnlimited ?? false,
             status: u.billing.status ?? "none",
             planName: u.billing.planName ?? "Spy Rival Pro",
             polarProductId: u.billing.polarProductId ?? null,
@@ -466,29 +469,48 @@ export default function SettingsPage() {
               <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Subscription</h2>
               <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[#52525b]">
                 Status: <span className="font-semibold text-[#1a1a2e]">{labelStatus(billing.status)}</span>
-                {billing.status === "trialing"
-                  ? ` · Trial ends ${formatDate(billing.trialEnd)}`
-                  : billing.hasAccess
-                    ? ` · Renews ${formatDate(billing.currentPeriodEnd)}`
-                    : ""}
-                {billing.cancelAtPeriodEnd ? " · Cancels at period end" : ""}
+                {billing.isUnlimited ? (
+                  <> · Complimentary admin access — full product, no paywall.</>
+                ) : (
+                  <>
+                    {billing.status === "trialing"
+                      ? ` · Trial ends ${formatDate(billing.trialEnd)}`
+                      : billing.hasAccess
+                        ? ` · Renews ${formatDate(billing.currentPeriodEnd)}`
+                        : ""}
+                    {billing.cancelAtPeriodEnd ? " · Cancels at period end" : ""}
+                  </>
+                )}
               </p>
               <p className="mt-2 text-[12px] text-[#71717a]">
-                Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span> · Product:{" "}
-                {billing.polarProductId ?? "Not connected"} · Checkout and billing are handled by Polar.
+                Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span>
+                {!billing.isUnlimited ? (
+                  <>
+                    {" "}
+                    · Product: {billing.polarProductId ?? "Not connected"} · Checkout and billing are handled by Polar.
+                  </>
+                ) : null}
               </p>
             </div>
             <span
               className={`w-fit rounded-full px-3 py-1 text-[11px] font-semibold ${
-                billing.hasAccess ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                billing.isUnlimited
+                  ? "bg-sky-100 text-sky-800"
+                  : billing.hasAccess
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
               }`}
             >
-              {billing.hasAccess ? "Access enabled" : "Subscription required"}
+              {billing.isUnlimited ? "Admin access" : billing.hasAccess ? "Access enabled" : "Subscription required"}
             </span>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            {billing.hasAccess ? (
+            {billing.isUnlimited ? (
+              <p className="text-[13px] leading-relaxed text-[#52525b]">
+                No subscription or checkout needed — your account is enabled for full usage.
+              </p>
+            ) : billing.hasAccess ? (
               <a
                 href="/api/billing/portal"
                 className="rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"

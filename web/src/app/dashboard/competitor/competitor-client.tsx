@@ -881,7 +881,13 @@ function CompetitorDashboardBody({
   const pinterestAds = useMemo(() => adLib?.pinterest?.ads ?? [], [adLib?.pinterest?.ads]);
   const snapchatAds = useMemo(() => adLib?.snapchat?.ads ?? [], [adLib?.snapchat?.ads]);
   const filteredMetaAds = useMemo(() => {
-    return [...metaAds].sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+    const sorted = [...metaAds].sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+    const seen = new Set<string>();
+    return sorted.filter((ad) => {
+      if (seen.has(ad.id)) return false;
+      seen.add(ad.id);
+      return true;
+    });
   }, [metaAds]);
   const filteredGoogleRows = useMemo(() => {
     return [...googleRows].sort((a, b) => String(b.id).localeCompare(String(a.id)));
