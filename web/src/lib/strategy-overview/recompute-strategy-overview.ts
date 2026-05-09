@@ -147,6 +147,8 @@ function rowToInput(r: Database["public"]["Tables"]["scraped_ads"]["Row"]): Scra
     ai_extracted_angle: r.ai_extracted_angle,
     funnel_stage: r.funnel_stage,
     ai_enrichment_status: r.ai_enrichment_status ?? null,
+    is_active: r.is_active,
+    raw_payload: r.raw_payload,
   };
 }
 
@@ -293,13 +295,14 @@ export async function loadSavedCompetitorForUser(
   name: string;
   brandDomain: string | null;
   logoUrl: string | null;
+  lastScrapedAt: string | null;
 } | null> {
   const { competitorId, cacheDomain } = await resolveAdsCacheDomainForUser(supabase, userId, domainHint);
   if (!competitorId) return null;
 
   const { data: row } = await supabase
     .from("saved_competitors")
-    .select("id, name, brand_name, brand_domain, brand_logo_url, logo_url")
+    .select("id, name, brand_name, brand_domain, brand_logo_url, logo_url, last_scraped_at")
     .eq("id", competitorId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -312,6 +315,7 @@ export async function loadSavedCompetitorForUser(
     name: row.brand_name?.trim() || row.name,
     brandDomain: row.brand_domain,
     logoUrl: row.brand_logo_url ?? row.logo_url,
+    lastScrapedAt: row.last_scraped_at,
   };
 }
 
@@ -631,6 +635,15 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     const lowEnrichmentConfidence = totalActive > 0 && enrichmentRate < 0.5;
 
+    const footprintRows = (refreshed ?? []).map((r) => ({
+      id: r.id,
+      platform: r.platform,
+      first_seen_at: r.first_seen_at,
+      last_seen_at: r.last_seen_at,
+      is_active: r.is_active,
+      raw_payload: r.raw_payload,
+    }));
+
     let payload = deriveStrategyOverviewPayload(
       freshInputs,
       {
@@ -638,7 +651,16 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         domain: meta.brandDomain ?? meta.cacheDomain,
         logoUrl: meta.logoUrl,
       },
-      batchId
+      batchId,
+      {
+        spendV2: {
+          footprintRows,
+          competitorId,
+          userId,
+          brandDomain: meta.brandDomain,
+          lastScrapedAt: meta.lastScrapedAt,
+        },
+      }
     );
 
     payload = { ...payload, lowEnrichmentConfidence };

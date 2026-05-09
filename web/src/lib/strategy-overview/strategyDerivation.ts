@@ -1,4 +1,5 @@
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
+import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
 import type {
   ActivityLevel,
   CompetitorStrategyMeta,
@@ -12,8 +13,31 @@ import type {
   StrategyMapPayload,
   StrategyPlatform,
 } from "@/lib/strategy-overview/payload-types";
+import {
+  buildBrandFootprintFromAds,
+  estimateBrandMonthlySpend,
+  isSpendEstimatorV2Enabled,
+  loadEstimatorConfigFromEnv,
+  logSpendEstimateDebug,
+  LIVE_AD_RECENCY_DAYS,
+  liveCreativeGroupsPerPlatform,
+  type FootprintAdInput,
+  type SpendEstimate,
+} from "@/lib/spend-estimator";
 
 const STAGE_ORDER: FunnelStage[] = ["TOF", "MOF", "BOF"];
+
+export type DeriveStrategyOverviewOptions = {
+  spendV2?: {
+    footprintRows: FootprintAdInput[];
+    competitorId: string;
+    userId: string;
+    brandDomain: string | null;
+    lastScrapedAt: string | null;
+  };
+};
+
+export { normalizePlatform, deriveBrandScale } from "@/lib/strategy-overview/brand-scale-score";
 
 export type ScrapedAdInput = {
   id: string;
@@ -25,6 +49,9 @@ export type ScrapedAdInput = {
   ai_extracted_angle: string | null;
   funnel_stage: string | null;
   ai_enrichment_status?: string | null;
+  /** When set (recompute path), Strategy Map uses distinct live creatives; see live-creatives.ts */
+  is_active?: boolean;
+  raw_payload?: unknown;
 };
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -51,66 +78,6 @@ const DEFAULT_STAGE: Record<string, FunnelStage> = {
   google: "BOF",
   reddit: "TOF",
 };
-
-export function deriveBrandScale(
-  ads: ScrapedAdInput[],
-  byPlatform: Map<StrategyPlatform, ScrapedAdInput[]>
-): number {
-  if (ads.length === 0 || byPlatform.size === 0) return 0.5;
-
-  const platformCount = byPlatform.size;
-  const platformDiversity = Math.min(1.0, platformCount / 6);
-
-  const oldestAd = ads.reduce((min, a) =>
-    new Date(a.first_seen_at).getTime() < new Date(min.first_seen_at).getTime() ? a : min
-  );
-  const observationMonths = Math.max(
-    1,
-    (Date.now() - new Date(oldestAd.first_seen_at).getTime()) / (1000 * 60 * 60 * 24 * 30)
-  );
-  const adsPerMonth = ads.length / observationMonths;
-  const creativeVelocity = Math.min(1.0, adsPerMonth / 30);
-
-  const platformAdCounts = [...byPlatform.values()].map((list) => list.length);
-  const maxConcurrentOnAnyPlatform = Math.max(...platformAdCounts);
-  const concurrentScale = Math.min(1.0, maxConcurrentOnAnyPlatform / 50);
-
-  const avgActiveDays =
-    ads.reduce((sum, a) => {
-      const start = new Date(a.first_seen_at).getTime();
-      const end = new Date(a.last_seen_at).getTime();
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return sum + 30;
-      const days = Math.max(1, (end - start) / (1000 * 60 * 60 * 24) + 1);
-      return sum + Math.min(days, 365);
-    }, 0) / ads.length;
-  const longevity = Math.min(1.0, avgActiveDays / 90);
-
-  const compositeScore =
-    platformDiversity * 0.3 +
-    creativeVelocity * 0.3 +
-    concurrentScale * 0.25 +
-    longevity * 0.15;
-
-  return 0.5 + compositeScore * 4.5;
-}
-
-export function normalizePlatform(p: string): StrategyPlatform {
-  const x = p.toLowerCase().trim();
-  if (
-    x === "meta" ||
-    x === "google" ||
-    x === "linkedin" ||
-    x === "tiktok" ||
-    x === "microsoft" ||
-    x === "pinterest" ||
-    x === "snapchat" ||
-    x === "youtube" ||
-    x === "reddit"
-  ) {
-    return x;
-  }
-  return "meta";
-}
 
 export function parseStage(raw: string | null | undefined): FunnelStage | null {
   if (!raw?.trim()) return null;
@@ -336,7 +303,8 @@ function derivationQualityFromRate(rate: number): DerivationQuality {
 export function deriveStrategyOverviewPayload(
   ads: ScrapedAdInput[],
   competitor: CompetitorStrategyMeta,
-  sourceScrapeBatchId: string | null
+  sourceScrapeBatchId: string | null,
+  deriveOptions?: DeriveStrategyOverviewOptions
 ): CompetitorStrategyOverviewPayload {
   const activeAds = ads.filter((a) => a.id);
   const totalAds = activeAds.length;
@@ -358,30 +326,53 @@ export function deriveStrategyOverviewPayload(
     byPlatform.get(pl)!.push(a);
   }
 
+  const nowMs = Date.now();
+  const liveGroupsMap = liveCreativeGroupsPerPlatform(activeAds, nowMs, LIVE_AD_RECENCY_DAYS);
+
+  const byPlatformLive = new Map<StrategyPlatform, ScrapedAdInput[]>();
+  for (const [pl, list] of byPlatform) {
+    const groups = liveGroupsMap.get(pl) ?? [];
+    if (groups.length === 0) {
+      byPlatformLive.set(pl, []);
+      continue;
+    }
+    byPlatformLive.set(
+      pl,
+      groups.map((g) => ({
+        ...g.representative,
+        first_seen_at: new Date(g.firstSeenMinMs).toISOString(),
+        last_seen_at: new Date(g.lastSeenMaxMs).toISOString(),
+      }))
+    );
+  }
+
   let suppressEdgesReason: StrategyMapPayload["suppressEdgesReason"];
+  const totalLive = [...byPlatformLive.values()].reduce((s, l) => s + l.length, 0);
+  const sampleSize = totalLive > 0 ? totalLive : activeAds.length;
   if (byPlatform.size <= 1) suppressEdgesReason = "single_platform";
-  else if (activeAds.length < 5) suppressEdgesReason = "low_sample";
+  else if (sampleSize < 5) suppressEdgesReason = "low_sample";
 
   const stageByPlatform = new Map<StrategyPlatform, FunnelStage>();
   const nodes: PlatformNodePayload[] = [];
 
   let maxCount = 0;
-  for (const [, list] of byPlatform) {
+  for (const [, list] of byPlatformLive) {
     maxCount = Math.max(maxCount, list.length);
   }
 
-  const angleByPlatform = angleTokens(activeAds);
-  const enrByPl = enrichedAdsByPlatform(activeAds);
+  const adsForAngles = totalLive > 0 ? [...byPlatformLive.values()].flat() : activeAds;
+  const angleByPlatform = angleTokens(adsForAngles);
+  const enrByPl = enrichedAdsByPlatform(adsForAngles);
 
   const brandScaleScore = deriveBrandScale(activeAds, byPlatform);
   console.log(
     `[derivation] brandScaleScore=${brandScaleScore.toFixed(2)} competitor=${competitor.name} platforms=${byPlatform.size} ads=${activeAds.length}`
   );
 
-  for (const [pl, list] of byPlatform) {
-    const unclassifiedCount = list.filter((x) => parseStage(x.funnel_stage) == null).length;
-    const unclassifiedRatio = list.length > 0 ? unclassifiedCount / list.length : 0;
-    const classified = list.filter((x) => parseStage(x.funnel_stage) != null);
+  for (const [pl, liveList] of byPlatformLive) {
+    const unclassifiedCount = liveList.filter((x) => parseStage(x.funnel_stage) == null).length;
+    const unclassifiedRatio = liveList.length > 0 ? unclassifiedCount / liveList.length : 0;
+    const classified = liveList.filter((x) => parseStage(x.funnel_stage) != null);
     let stage: FunnelStage;
     if (unclassifiedRatio > 0.8) {
       stage = DEFAULT_STAGE[pl] ?? "MOF";
@@ -396,10 +387,11 @@ export function deriveStrategyOverviewPayload(
     stageByPlatform.set(pl, stage);
 
     const avgDays =
-      list.reduce((s, x) => s + activeDays(x.first_seen_at, x.last_seen_at), 0) / Math.max(1, list.length);
+      liveList.reduce((s, x) => s + activeDays(x.first_seen_at, x.last_seen_at), 0) /
+      Math.max(1, liveList.length);
     const spend = estimateMonthlySpendEur({
       platform: pl,
-      adCount: list.length,
+      adCount: liveList.length,
       avgActiveDays: avgDays,
       brandScaleScore,
     });
@@ -407,8 +399,8 @@ export function deriveStrategyOverviewPayload(
     nodes.push({
       platform: pl,
       label: PLATFORM_LABEL[pl] ?? pl,
-      adCount: list.length,
-      activityLevel: activityLevelForCount(list.length, maxCount),
+      adCount: liveList.length,
+      activityLevel: activityLevelForCount(liveList.length, maxCount),
       estSpendEur: spend.mid,
       estSpendEurLow: spend.low,
       estSpendEurHigh: spend.high,
@@ -419,10 +411,43 @@ export function deriveStrategyOverviewPayload(
 
   layoutNodes(nodes, stageByPlatform);
 
+  let spendEstimateV2: SpendEstimate | undefined;
+
+  if (isSpendEstimatorV2Enabled() && deriveOptions?.spendV2 && deriveOptions.spendV2.footprintRows.length > 0) {
+    const sv = deriveOptions.spendV2;
+    const fp = buildBrandFootprintFromAds(
+      sv.footprintRows,
+      {
+        competitorId: sv.competitorId,
+        userId: sv.userId,
+        brandName: competitor.name,
+        brandDomain: sv.brandDomain,
+        lastScrapedAt: sv.lastScrapedAt,
+      },
+      brandScaleScore
+    );
+    if (fp) {
+      const estConfig = loadEstimatorConfigFromEnv();
+      spendEstimateV2 = estimateBrandMonthlySpend(fp, estConfig);
+      logSpendEstimateDebug(`derive:${competitor.name}`, fp, estConfig);
+
+      for (const n of nodes) {
+        const st = fp.platform_stats.find((s) => s.platform === n.platform);
+        if (st) n.adCount = st.active_ads;
+        const row = spendEstimateV2.perPlatform.find((x) => x.platform === n.platform);
+        if (row) {
+          n.estSpendEur = row.mid;
+          n.estSpendEurLow = row.low;
+          n.estSpendEurHigh = row.high;
+        }
+      }
+    }
+  }
+
   const totalMid = nodes.reduce((s, n) => s + n.estSpendEur, 0);
   const totalLow = nodes.reduce((s, n) => s + (n.estSpendEurLow ?? n.estSpendEur), 0);
   const totalHigh = nodes.reduce((s, n) => s + (n.estSpendEurHigh ?? n.estSpendEur), 0);
-  const conf = dataConfidence(activeAds.length, brandScaleScore, enrichmentRate);
+  const conf = dataConfidence(totalLive > 0 ? totalLive : activeAds.length, brandScaleScore, enrichmentRate);
 
   let funnelEdges: FunnelEdgePayload[] = [];
   let edgeDetected = 0;
@@ -500,7 +525,7 @@ export function deriveStrategyOverviewPayload(
     platformNodes: nodes,
     funnelEdges,
     suppressEdgesReason,
-    activeAdCount: activeAds.length,
+    activeAdCount: totalLive > 0 ? totalLive : activeAds.length,
     platformCount: byPlatform.size,
     derivationQuality: derivQuality,
   };
@@ -624,5 +649,6 @@ export function deriveStrategyOverviewPayload(
     enrichedAdCount: enrichedCount,
     totalAdCount: totalAds,
     enrichmentRate,
+    ...(spendEstimateV2 ? { spendEstimateV2 } : {}),
   };
 }

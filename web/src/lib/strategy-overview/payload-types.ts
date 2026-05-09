@@ -3,6 +3,8 @@
  * Kept as TS types only — runtime validation is light at API boundary.
  */
 
+import type { SpendEstimate } from "@/lib/spend-estimator/types";
+
 export type FunnelStage = "TOF" | "MOF" | "BOF";
 
 export type ActivityLevel = "Very Low" | "Low" | "Medium" | "High" | "Very High";
@@ -156,6 +158,8 @@ export type CompetitorStrategyOverviewPayload = {
   map: StrategyMapPayload;
   insights: InsightCardsPayload;
   sourceScrapeBatchId: string | null;
+  /** Deterministic v2 model (when STRATEGY_SPEND_ESTIMATOR_V2=1); map totals may include legacy v1 for unsupported platforms (e.g. reddit). */
+  spendEstimateV2?: SpendEstimate;
   pipelineStatus?: PipelineStatus;
   derivationQuality?: DerivationQuality;
   enrichedAdCount?: number;
