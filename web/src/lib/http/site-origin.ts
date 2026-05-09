@@ -1,9 +1,15 @@
 import type { NextRequest } from "next/server";
 
-/** Public site origin for redirects and magic links (`https://…` or `http://localhost:…`). */
+/**
+ * Origin inferred from the incoming request (Host / `x-forwarded-*`).
+ * For auth callbacks and outbound email links prefer `getAppUrl()` from `@/lib/billing/config` so redirects match Supabase Auth allowlisting.
+ */
 export function siteOriginFromRequest(request: NextRequest): string {
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "localhost:3000";
-  const proto =
-    request.headers.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  return `${proto}://${host}`;
+  const rawHost =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    request.headers.get("host")?.trim() ??
+    "localhost:3000";
+  const protoHeader = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const proto = protoHeader || (rawHost.startsWith("localhost") || rawHost.startsWith("127.0.0.1") ? "http" : "https");
+  return `${proto}://${rawHost}`;
 }

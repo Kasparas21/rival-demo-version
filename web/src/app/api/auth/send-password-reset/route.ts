@@ -2,7 +2,8 @@ import { Resend } from "resend";
 import { NextResponse, type NextRequest } from "next/server";
 import { buildEmailTokenCallbackUrl } from "@/lib/auth/build-email-token-callback-url";
 import { getResendApiKey, getResendFromEmail } from "@/lib/email/resend-config";
-import { siteOriginFromRequest } from "@/lib/http/site-origin";
+import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
+import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
   }
 
-  const origin = siteOriginFromRequest(request);
+  const origin = authLinkOriginForRequest(request);
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(RESET_NEXT)}`;
 
   const admin = createSupabaseAdminClient();
@@ -37,13 +38,14 @@ export async function POST(request: NextRequest) {
     options: { redirectTo },
   });
 
-  if (linkError || !linkData?.properties?.hashed_token) {
+  const hashedToken = pickHashedTokenFromGenerateLinkProperties(linkData?.properties);
+  if (linkError || !hashedToken) {
     return NextResponse.json({ ok: true });
   }
 
   const resetUrl = buildEmailTokenCallbackUrl({
     origin,
-    hashedToken: linkData.properties.hashed_token,
+    hashedToken,
     otpType: "recovery",
     nextPath: RESET_NEXT,
   });

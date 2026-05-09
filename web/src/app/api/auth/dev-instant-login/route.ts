@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-import { siteOriginFromRequest } from "@/lib/http/site-origin";
+import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
+import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
 
 /**
  * Local-only instant email sign-in (uses service role). Off when DEV_INSTANT_EMAIL_LOGIN=false.
@@ -51,7 +52,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: createError.message }, { status: 400 });
   }
 
-  const redirectTo = `${siteOriginFromRequest(request)}/auth/callback?next=${encodeURIComponent(next)}`;
+  const appUrl = authLinkOriginForRequest(request);
+  const redirectTo = `${appUrl}/auth/callback?next=${encodeURIComponent(next)}`;
 
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "magiclink",
@@ -59,15 +61,16 @@ export async function POST(request: NextRequest) {
     options: { redirectTo },
   });
 
-  if (linkError || !linkData?.properties?.hashed_token) {
+  const hashedToken = pickHashedTokenFromGenerateLinkProperties(linkData?.properties);
+  if (linkError || !hashedToken) {
     return NextResponse.json(
       { error: linkError?.message ?? "Could not generate sign-in link" },
       { status: 500 }
     );
   }
 
-  const callback = new URL("/auth/callback", siteOriginFromRequest(request));
-  callback.searchParams.set("token_hash", linkData.properties.hashed_token);
+  const callback = new URL("/auth/callback", appUrl);
+  callback.searchParams.set("token_hash", hashedToken);
   callback.searchParams.set("type", "email");
   callback.searchParams.set("next", next);
 
