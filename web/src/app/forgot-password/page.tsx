@@ -35,7 +35,7 @@ export default async function ForgotPasswordPage({
       .select("onboarding_completed")
       .eq("id", user.id)
       .maybeSingle();
-    redirect(profile?.onboarding_completed ? "/dashboard" : "/onboarding");
+    redirect(profile?.onboarding_completed ? "/dashboard/spy" : "/onboarding");
   }
 
   return <ForgotPasswordForm initialEmail={initialEmail} />;

@@ -3,6 +3,7 @@ import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { tiktokApifyItemToCard } from "@/lib/ad-library/normalize";
+import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
 
 const DEFAULT_TIKTOK_ACTOR = "data_xplorer/tiktok-ads-library-pay-per-event";
 const MAX_TIMEOUT_SECS = 600;
@@ -24,12 +25,16 @@ function normalizeTikTokAdvertiserQueryToken(token: string): string {
 }
 
 /** Actor: queryType **1** = keyword, **2** = advertiser name/id, **url** = library URL. */
-function buildTikTokApifyQuery(params: { brandName: string; savedTiktok?: string | null }): {
+function buildTikTokApifyQuery(params: {
+  brandName: string;
+  brandDomain?: string;
+  savedTiktok?: string | null;
+}): {
   query: string;
   queryType: string;
 } {
   const raw = params.savedTiktok?.trim().replace(/^@+/, "") ?? "";
-  const brand = params.brandName.trim();
+  const searchBrand = effectiveCompetitorBrandLabel(params.brandName, params.brandDomain) || params.brandName.trim();
 
   if (raw && /^https?:\/\//i.test(raw)) {
     return { query: raw, queryType: "url" };
@@ -39,7 +44,7 @@ function buildTikTokApifyQuery(params: { brandName: string; savedTiktok?: string
   }
 
   /** Always `query_type=2`; **omit** `"` wrappers — TikTok’s `adv_name=%22Brand%22` often matches zero rows vs plain `adv_name=Brand`. */
-  const token = normalizeTikTokAdvertiserQueryToken(raw.length > 0 ? raw : brand);
+  const token = normalizeTikTokAdvertiserQueryToken(raw.length > 0 ? raw : searchBrand);
   if (!token.length) {
     return { query: "brand", queryType: "2" };
   }
@@ -64,6 +69,7 @@ function pickStartEndDates(startIn?: string, endIn?: string): { startDate: strin
 
 export async function scrapeTikTokAdsLibrary(params: {
   brandName: string;
+  brandDomain?: string;
   /** Saved TikTok Ads Library advertiser token / pasted library URL — same `query_type=2` exact‑match semantics as brand name unless URL or numeric id. */
   savedTiktok?: string | null;
   region?: string;
@@ -78,6 +84,7 @@ export async function scrapeTikTokAdsLibrary(params: {
 
   const { query, queryType } = buildTikTokApifyQuery({
     brandName: params.brandName,
+    brandDomain: params.brandDomain,
     savedTiktok: params.savedTiktok,
   });
 
@@ -113,6 +120,8 @@ export async function scrapeTikTokAdsLibrary(params: {
   );
 
   return items
-    .map((raw, i) => tiktokApifyItemToCard(raw, i, { brandName: params.brandName }))
+    .map((raw, i) =>
+      tiktokApifyItemToCard(raw, i, { brandName: params.brandName, brandDomain: params.brandDomain })
+    )
     .filter((c): c is TikTokAdCard => c !== null);
 }

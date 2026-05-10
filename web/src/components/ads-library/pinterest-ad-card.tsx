@@ -32,6 +32,12 @@ function humanizeLabel(raw: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** Omitted from Audience targeting — noisy for most users; scraping still receives full API payload. */
+function isHiddenPinterestTargetingRow(row: PinterestTargetingRow): boolean {
+  const n = row.label.trim().toLowerCase().replace(/\s+/g, "");
+  return n === "pinnerlisttypes" || n === "pinnerlisttype";
+}
+
 /**
  * Parses API summary strings (`A: x · B: y`) and legacy cache rows (`ages: … · countries: …`).
  */
@@ -54,7 +60,9 @@ function targetingRowsFromDesc(desc: string | undefined): PinterestTargetingRow[
     const labelRaw = part.slice(0, idx).trim();
     const value = part.slice(idx + 1).trim();
     if (!value || !labelRaw) continue;
-    rows.push({ label: humanizeLabel(labelRaw), value });
+    const row = { label: humanizeLabel(labelRaw), value };
+    if (isHiddenPinterestTargetingRow(row)) continue;
+    rows.push(row);
   }
   return rows;
 }
@@ -109,8 +117,8 @@ function FactsRow({
 
 export function PinterestAdCard({ ad }: { ad: PinterestAdCardModel }) {
   const targetingRows = useMemo(() => {
-    if (ad.targetingRows?.length) return ad.targetingRows;
-    return targetingRowsFromDesc(ad.desc);
+    const raw = ad.targetingRows?.length ? ad.targetingRows : targetingRowsFromDesc(ad.desc);
+    return raw.filter((row) => !isHiddenPinterestTargetingRow(row));
   }, [ad.desc, ad.targetingRows]);
 
   const unstructuredTargeting = useMemo(() => {

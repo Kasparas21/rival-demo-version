@@ -58,7 +58,7 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = profile?.onboarding_completed ? "/dashboard" : "/onboarding";
+    redirectUrl.pathname = profile?.onboarding_completed ? "/dashboard/spy" : "/onboarding";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }

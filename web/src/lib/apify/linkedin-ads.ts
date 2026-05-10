@@ -1,5 +1,6 @@
 import { runApifyActor } from "@/lib/apify/client";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
+import { canonicalLinkedInAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 import type { LinkedInAdItem } from "@/lib/ad-library/apify-raw-types";
 import { linkedInApifyItemToLegacyItem } from "@/lib/ad-library/normalize";
 
@@ -9,6 +10,16 @@ const MAX_TIMEOUT_SECS = 600;
 function normalizeHttpUrl(s: string): string {
   const t = s.trim();
   return t.startsWith("http") ? t : `https://${t}`;
+}
+
+/** Prefer domain label when display name is a useless default (fixes workspace user name as brand). */
+function linkedInKeywordSeed(brandName: string, keywordFallback?: string): string {
+  const raw = brandName.trim();
+  const brand = raw || "marketing";
+  const fb = keywordFallback?.trim();
+  if (!fb) return brand;
+  if (!raw || /^(admin|owner|user|test|competitor)$/i.test(raw)) return fb;
+  return brand;
 }
 
 function usesIvanVsLinkedInActor(actorId: string): boolean {
@@ -26,6 +37,7 @@ function usesDataXplorerLinkedInActor(actorId: string): boolean {
 function buildDataXplorerLinkedInInput(params: {
   brandName: string;
   linkedinUrl?: string;
+  keywordFallback?: string;
   maxAds: number;
   dateRange?: string;
   countryCode?: string;
@@ -35,6 +47,7 @@ function buildDataXplorerLinkedInInput(params: {
   const searchUrl = buildLinkedInAdLibraryRequestUrl({
     brandName: params.brandName,
     linkedinUrl: params.linkedinUrl,
+    keywordFallback: params.keywordFallback,
     dateRange: params.dateRange,
     countryCode: params.countryCode,
   });
@@ -55,6 +68,7 @@ function buildDataXplorerLinkedInInput(params: {
 function buildIvanVsLinkedInInput(params: {
   brandName: string;
   linkedinUrl?: string;
+  keywordFallback?: string;
   maxAds: number;
   dateRange?: string;
   countryCode?: string;
@@ -63,6 +77,7 @@ function buildIvanVsLinkedInInput(params: {
   const url = buildLinkedInAdLibraryRequestUrl({
     brandName: params.brandName,
     linkedinUrl: params.linkedinUrl,
+    keywordFallback: params.keywordFallback,
     dateRange: params.dateRange,
     countryCode: params.countryCode,
   });
@@ -80,9 +95,16 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
   linkedinUrl?: string;
   dateRange?: string;
   countryCode?: string;
+  /**
+   * When no LinkedIn URL is set, keyword search uses this instead of `brandName`
+   * (e.g. domain label "Acme" instead of user display name "Admin").
+   */
+  keywordFallback?: string;
 }): string {
-  const brand = params.brandName.trim() || "marketing";
-  const li = params.linkedinUrl?.trim();
+  const keywordSeed = linkedInKeywordSeed(params.brandName, params.keywordFallback);
+  const liRaw = params.linkedinUrl?.trim();
+  const liResolved = liRaw ? canonicalLinkedInAdLibraryUrl(liRaw) ?? liRaw : undefined;
+  const li = liResolved?.trim();
   const cc = params.countryCode?.trim();
   const dr = params.dateRange?.trim();
 
@@ -94,6 +116,10 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
     if (/linkedin\.com\/ad-library\/search\?/i.test(full)) {
       try {
         const u = new URL(full);
+        const owner = u.searchParams.get("accountOwner")?.trim();
+        if (owner && !u.searchParams.get("keyword")?.trim()) {
+          u.searchParams.set("keyword", owner);
+        }
         if (cc && cc.length === 2 && !u.searchParams.has("countries")) {
           u.searchParams.set("countries", cc.toUpperCase());
         }
@@ -106,7 +132,7 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
     if (/linkedin\.com\/company\//i.test(full)) {
       const m = full.match(/linkedin\.com\/company\/([^/?#]+)/i);
       const slug = m?.[1] ? decodeURIComponent(m[1].replace(/\/$/, "")) : "";
-      const keyword = slug ? slug.replace(/-/g, " ") : brand;
+      const keyword = slug ? slug.replace(/-/g, " ") : keywordSeed;
       const u = new URL("https://www.linkedin.com/ad-library/search");
       u.searchParams.set("keyword", keyword);
       if (cc && cc.length === 2) u.searchParams.set("countries", cc.toUpperCase());
@@ -116,7 +142,7 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
   }
 
   const u = new URL("https://www.linkedin.com/ad-library/search");
-  u.searchParams.set("keyword", brand);
+  u.searchParams.set("keyword", keywordSeed);
   if (cc && cc.length === 2) u.searchParams.set("countries", cc.toUpperCase());
   applyLinkedInDateOptionParam(u, dr);
   return u.toString();
@@ -144,6 +170,7 @@ const AUTOMATION_LAB_DATE_RANGES = new Set([
 function buildAutomationLabLinkedInInput(params: {
   brandName: string;
   linkedinUrl?: string;
+  keywordFallback?: string;
   maxAds: number;
   dateRange?: string;
   countryCode?: string;
@@ -162,8 +189,9 @@ function buildAutomationLabLinkedInInput(params: {
     base.countryCode = cc.length === 2 ? cc.toUpperCase() : cc;
   }
 
-  const li = params.linkedinUrl?.trim();
-  const brand = params.brandName.trim() || "marketing";
+  const liRaw = params.linkedinUrl?.trim();
+  const li = liRaw ? canonicalLinkedInAdLibraryUrl(liRaw) ?? liRaw : undefined;
+  const searchSeed = linkedInKeywordSeed(params.brandName, params.keywordFallback);
 
   if (li) {
     const full = normalizeHttpUrl(li);
@@ -178,16 +206,17 @@ function buildAutomationLabLinkedInInput(params: {
       };
     }
     if (/linkedin\.com\/ad-library\//i.test(full)) {
-      return { ...base, searchQuery: brand };
+      return { ...base, searchQuery: searchSeed };
     }
   }
 
-  return { ...base, searchQuery: brand };
+  return { ...base, searchQuery: searchSeed };
 }
 
 export async function scrapeLinkedInAdLibrary(params: {
   brandName: string;
   linkedinUrl?: string;
+  keywordFallback?: string;
   maxItems: number;
   dateRange?: string;
   countryCode?: string;
@@ -199,6 +228,7 @@ export async function scrapeLinkedInAdLibrary(params: {
     ? buildIvanVsLinkedInInput({
         brandName: params.brandName,
         linkedinUrl: params.linkedinUrl,
+        keywordFallback: params.keywordFallback,
         maxAds,
         dateRange: params.dateRange,
         countryCode: params.countryCode,
@@ -207,6 +237,7 @@ export async function scrapeLinkedInAdLibrary(params: {
       ? buildDataXplorerLinkedInInput({
           brandName: params.brandName,
           linkedinUrl: params.linkedinUrl,
+          keywordFallback: params.keywordFallback,
           maxAds,
           dateRange: params.dateRange,
           countryCode: params.countryCode,
@@ -215,6 +246,7 @@ export async function scrapeLinkedInAdLibrary(params: {
       : buildAutomationLabLinkedInInput({
           brandName: params.brandName,
           linkedinUrl: params.linkedinUrl,
+          keywordFallback: params.keywordFallback,
           maxAds,
           dateRange: params.dateRange,
           countryCode: params.countryCode,

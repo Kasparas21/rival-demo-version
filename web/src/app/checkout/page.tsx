@@ -50,7 +50,7 @@ export default async function CheckoutPage() {
 
   const billing = await getBillingEntitlement(supabase, user.id);
   if (billing.isUnlimited) {
-    redirect("/dashboard");
+    redirect("/dashboard/spy");
   }
 
   redirect("/api/billing/checkout");

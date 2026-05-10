@@ -522,7 +522,9 @@ function SearchingContent() {
                 body: JSON.stringify({ ...payload, platforms: [p], skipCache: true }),
               });
               const json = (await res.json()) as AdsLibraryResponse | AdsLibraryPartialJson;
-              mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
+              mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json, {
+                trustIncomingEmpty: true,
+              });
               if (!res.ok) allHttpOk = false;
               setPlatformStatuses((prev) => ({
                 ...prev,
@@ -719,7 +721,7 @@ function SearchingContent() {
               </div>
             )}
             <ManualIdentifiersForm
-              key={`${discoveredBrand?.domain ?? ""}__${discoveredBrand?.name ?? displayName}`}
+              key={flowKey}
               selectedChannels={selectedChannels}
               discoveredIds={discoveredIds}
               onSubmit={handleManualSubmit}

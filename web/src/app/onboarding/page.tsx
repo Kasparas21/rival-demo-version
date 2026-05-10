@@ -46,7 +46,7 @@ export default async function OnboardingPage({
     .maybeSingle();
 
   const billing = await getBillingEntitlement(supabase, user.id);
-  const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard";
+  const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard/spy";
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
 
   if (profile?.onboarding_completed) {

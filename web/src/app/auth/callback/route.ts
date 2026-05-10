@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
   } else if (resolvedNext) {
     pathname = resolvedNext;
   } else {
-    pathname = "/dashboard";
+    pathname = "/dashboard/spy";
   }
 
   const finalDest = request.nextUrl.clone();

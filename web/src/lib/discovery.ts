@@ -1,4 +1,8 @@
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
+import {
+  canonicalLinkedInAdLibraryUrl,
+  canonicalMetaAdsLibraryUrl,
+} from "@/lib/ad-library/canonical-library-url";
 
 export type { PlatformIdentifier };
 
@@ -227,16 +231,26 @@ export function parseSocialLinksFromHits(hits: SearchHit[]): Partial<PlatformIde
     } catch {
       fbHost = /facebook\.com|fb\.com|fb\.me/i.test(lower);
     }
-    if (!result.meta && fbHost) {
-      const idParam = url.match(/[?&](?:id|fbid)=(\d{10,22})\b/i);
-      if (idParam?.[1]) {
-        result.meta = idParam[1];
-      } else {
-        const pagesId = lower.match(/\/pages\/[^/]+\/(\d{10,22})(?:\/|\?|$)/);
-        if (pagesId?.[1]) result.meta = pagesId[1];
-        else {
-          const pathNum = lower.match(/facebook\.com\/(\d{15,22})(?:\/|\?|#|$)/);
-          if (pathNum?.[1]) result.meta = pathNum[1];
+    if (fbHost) {
+      if (lower.includes("ads/library")) {
+        const web = toFacebookWebUrl(url);
+        if (web && !result.metaPageUrl) {
+          result.metaPageUrl = canonicalMetaAdsLibraryUrl(web) ?? web;
+        }
+        const viewAll = url.match(/[?&]view_all_page_id=(\d{10,22})\b/i);
+        if (viewAll?.[1] && !result.meta) result.meta = viewAll[1];
+      }
+      if (!result.meta && !lower.includes("ads/library")) {
+        const idParam = url.match(/[?&](?:id|fbid)=(\d{10,22})\b/i);
+        if (idParam?.[1]) {
+          result.meta = idParam[1];
+        } else {
+          const pagesId = lower.match(/\/pages\/[^/]+\/(\d{10,22})(?:\/|\?|$)/);
+          if (pagesId?.[1]) result.meta = pagesId[1];
+          else {
+            const pathNum = lower.match(/facebook\.com\/(\d{15,22})(?:\/|\?|#|$)/);
+            if (pathNum?.[1]) result.meta = pathNum[1];
+          }
         }
       }
     }
@@ -288,7 +302,16 @@ export function parseSocialLinksFromHits(hits: SearchHit[]): Partial<PlatformIde
       }
     }
 
-    // LinkedIn
+    // LinkedIn — Ad Library (search/detail) URLs must pass through for Apify; company pages normalized.
+    if (!result.linkedin && /linkedin\.com\/ad-library\//i.test(lower)) {
+      try {
+        const u = new URL(normalizeSocialUrlCandidate(url));
+        const s = u.toString().split("#")[0];
+        result.linkedin = canonicalLinkedInAdLibraryUrl(s) ?? s;
+      } catch {
+        /* ignore */
+      }
+    }
     if (!result.linkedin && /linkedin\.com\/company\//i.test(lower)) {
       const m = lower.match(/linkedin\.com\/company\/([^/?#]+)/i);
       if (m?.[1]) result.linkedin = `https://www.linkedin.com/company/${m[1]}`;

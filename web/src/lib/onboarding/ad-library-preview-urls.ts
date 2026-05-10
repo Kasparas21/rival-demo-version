@@ -1,5 +1,10 @@
 /** Lightweight public-library preview targets for onboarding (mirrors competitor manual-ID patterns). */
 
+import {
+  canonicalLinkedInAdLibraryUrl,
+  canonicalMetaAdsLibraryUrl,
+} from "@/lib/ad-library/canonical-library-url";
+
 const META_LIBRARY_HOME = "https://www.facebook.com/ads/library/";
 const GOOGLE_TRANSPARENCY_HOME = "https://adstransparency.google.com/?region=any";
 const LINKEDIN_LIBRARY_HOME = "https://www.linkedin.com/ad-library/home";
@@ -24,7 +29,11 @@ export function isMetaAdsLibraryUrl(raw: string): boolean {
 
 export function buildMetaAdsLibraryPreviewUrl(metaInputTrimmed: string): string {
   const v = metaInputTrimmed.trim();
-  if (v && isMetaAdsLibraryUrl(v)) return normalizeUrl(v);
+  if (v && isMetaAdsLibraryUrl(v)) {
+    const canon = canonicalMetaAdsLibraryUrl(v);
+    if (canon) return canon;
+    return normalizeUrl(v);
+  }
   const digitsOnly = v.replace(/\D/g, "");
   if (/^[\d\s-]+$/.test(v) && digitsOnly.length >= 10 && digitsOnly.length <= 22) {
     return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(digitsOnly)}`;
@@ -42,7 +51,8 @@ export function buildLinkedInAdLibraryPreviewUrl(linkedinInputTrimmed: string): 
   const v = linkedinInputTrimmed.trim();
   if (v.toLowerCase().includes("linkedin.com/ad-library")) {
     try {
-      return new URL(normalizeUrl(v)).href;
+      const norm = normalizeUrl(v);
+      return canonicalLinkedInAdLibraryUrl(norm) ?? norm;
     } catch {
       /* fall through */
     }

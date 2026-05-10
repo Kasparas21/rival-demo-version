@@ -38,6 +38,107 @@ type ApifyRunResponse = {
 
 const APIFY_API_BASE = "https://api.apify.com/v2";
 
+/** Wall-clock wait budget after the run is created (avoids one long `waitForFinish` HTTP connection). */
+const RUN_POLL_INTERVAL_MS = 1500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTerminalApifyRunStatus(status: string | undefined): boolean {
+  const s = normalizeApifyRunStatus(status);
+  return s === "SUCCEEDED" || s === "FAILED" || s === "ABORTED" || s === "TIMED-OUT";
+}
+
+async function fetchActorRunSnapshot(runId: string, token: string): Promise<NonNullable<ApifyRunResponse["data"]>> {
+  const url = new URL(`${APIFY_API_BASE}/actor-runs/${encodeURIComponent(runId)}`);
+  url.searchParams.set("token", token);
+  let res: Response;
+  try {
+    res = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    throw new ApifyRunnerError(
+      `Apify run status fetch failed before completion: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+      error
+    );
+  }
+  const payload = await parseJson<ApifyRunResponse>(res);
+  if (!res.ok) {
+    throw new ApifyRunnerError(
+      `Apify run status fetch failed: ${payload ? JSON.stringify(payload) : `${res.status} ${res.statusText}`}`
+    );
+  }
+  const data = payload?.data;
+  if (!data?.id) {
+    throw new ApifyRunnerError("Apify run status response did not include a run id");
+  }
+  return data as NonNullable<ApifyRunResponse["data"]>;
+}
+
+async function resolveRunToTerminal(
+  runId: string,
+  token: string,
+  initial: NonNullable<ApifyRunResponse["data"]>,
+  waitSecs: number
+): Promise<NonNullable<ApifyRunResponse["data"]>> {
+  const deadline = Date.now() + Math.max(1, waitSecs) * 1000;
+  let current: NonNullable<ApifyRunResponse["data"]> = { ...initial, id: initial.id };
+
+  while (!isTerminalApifyRunStatus(current.status)) {
+    if (Date.now() >= deadline) {
+      throw new ApifyRunnerError(
+        `Apify actor run ${runId} did not finish within ${waitSecs}s (last status: ${current.status ?? "unknown"})`
+      );
+    }
+    await sleep(RUN_POLL_INTERVAL_MS);
+    const next = await fetchActorRunSnapshot(runId, token);
+    current = {
+      id: next.id,
+      status: next.status ?? current.status,
+      defaultDatasetId: next.defaultDatasetId ?? current.defaultDatasetId,
+    };
+  }
+
+  return current;
+}
+
+function normalizeApifyRunStatus(status: string | undefined): string {
+  return status?.trim().toUpperCase() ?? "";
+}
+
+/**
+ * FAILED runs are unusable; abort before hitting the dataset.
+ */
+function assertApifyRunNotFailed(runId: string, status: string | undefined): void {
+  const s = normalizeApifyRunStatus(status);
+  if (s === "FAILED") {
+    throw new ApifyRunnerError(
+      `Apify actor run ${runId} has status FAILED. See the run log in the Apify console for details.`
+    );
+  }
+  if (s === "TIMED-OUT") {
+    throw new ApifyRunnerError(
+      `Apify actor run ${runId} has status TIMED-OUT (exceeded the actor run timeout).`
+    );
+  }
+}
+
+/**
+ * Apify can mark a run ABORTED while the actor still finishes during graceful shutdown and writes rows.
+ * If the dataset is empty, surface an error; otherwise return items so the product works despite ABORTED status.
+ */
+function assertAbortedRunHasDatasetRows(runId: string, status: string | undefined, itemCount: number): void {
+  if (normalizeApifyRunStatus(status) !== "ABORTED") return;
+  if (itemCount > 0) return;
+  throw new ApifyRunnerError(
+    `Apify actor run ${runId} has status ABORTED with no dataset rows. ` +
+      `That status is set on Apify's side (UI stop, API abort, or platform behavior — this app does not call Apify's abort API). ` +
+      `Inspect the run in Apify or retry; if rows exist in the console, the actor may have been interrupted before export.`
+  );
+}
+
 function parseApifyDatasetItems<T>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
   if (payload && typeof payload === "object") {
@@ -81,6 +182,12 @@ async function parseJson<T>(response: Response): Promise<T | null> {
 /**
  * Run an Apify actor through the REST API and return all dataset items.
  * This avoids runtime issues from the SDK in Next.js dev/server bundles.
+ *
+ * Waits by **polling** run status instead of holding one long `waitForFinish` request, so a dropped browser
+ * or serverless connection to *our* API does not correlate with Apify cancelling the wait stream (which can
+ * show up as an "aborted" run in logs).
+ *
+ * If Apify returns ABORTED but the default dataset has rows (graceful shutdown), those rows are still returned.
  */
 export async function runApifyActor<T = Record<string, unknown>>(
   actorId: string,
@@ -92,7 +199,6 @@ export async function runApifyActor<T = Record<string, unknown>>(
 
   const runUrl = new URL(`${APIFY_API_BASE}/acts/${encodeURIComponent(actorId)}/runs`);
   runUrl.searchParams.set("token", token);
-  runUrl.searchParams.set("waitForFinish", String(waitSecs));
   if (options?.memoryMbytes) {
     runUrl.searchParams.set("memory", String(options.memoryMbytes));
   }
@@ -129,10 +235,15 @@ export async function runApifyActor<T = Record<string, unknown>>(
     );
   }
 
-  const runData = runPayload?.data;
+  let runData = runPayload?.data;
   if (!runData?.id) {
     throw new ApifyRunnerError("Actor run did not return a run id");
   }
+
+  const runId = runData.id;
+  runData = await resolveRunToTerminal(runId, token, runData, waitSecs);
+
+  assertApifyRunNotFailed(runId, runData.status);
 
   if (!runData.defaultDatasetId) {
     throw new ApifyRunnerError("Actor run finished without a default dataset");
@@ -170,9 +281,11 @@ export async function runApifyActor<T = Record<string, unknown>>(
   const rawPayload = (await datasetResponse.json()) as unknown;
   const items = parseApifyDatasetItems<T>(rawPayload);
 
+  assertAbortedRunHasDatasetRows(runId, runData.status, items.length);
+
   return {
     run: {
-      id: runData.id,
+      id: runId,
       status: runData.status,
       defaultDatasetId: runData.defaultDatasetId,
     },

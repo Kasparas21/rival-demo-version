@@ -8,7 +8,7 @@ export const ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM = 10;
 export const ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM = 100;
 
 /** Google Transparency `resultsLimit` when the client omits `googleResultsLimit`. */
-export const GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT = 10;
+export const GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT = 25;
 
 /** Upper bound passed to the Google Transparency actor (matches per-platform cap). */
 export const GOOGLE_ADS_LIBRARY_MAX_ITEMS = 100;

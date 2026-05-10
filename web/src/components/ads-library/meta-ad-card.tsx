@@ -1,11 +1,100 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Globe, MoreHorizontal, X } from "lucide-react";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
 import { safeHttpsUrl } from "@/lib/ad-library/normalize";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
+
+function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: boolean }) {
+  const [videoFailed, setVideoFailed] = useState(false);
+  const stream = ad.videoUrl?.trim() ?? "";
+  useEffect(() => {
+    setVideoFailed(false);
+  }, [ad.id, stream]);
+  const still = ad.img?.trim() ?? "";
+  /** Try native `<video>` first for Ad Library MP4s (`referrerPolicy` helps FB CDN). Fallback on `error`. */
+  const wantsVideo = Boolean(stream && ad.isVideo);
+  const maxH = compact ? "max-h-[300px]" : "max-h-[420px]";
+  const minH = compact ? "min-h-[120px]" : "min-h-[180px]";
+  const videoClass = `max-w-full w-auto h-auto ${maxH} rounded-lg object-contain bg-black`;
+
+  if (wantsVideo && !videoFailed) {
+    return (
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        poster={still || undefined}
+        className={compact ? `w-full h-full ${videoClass}` : videoClass}
+        src={stream}
+        onError={() => setVideoFailed(true)}
+        // DOM: HTMLVideoElement.referrerPolicy — @types/react VideoHTMLAttributes omit it in this project
+        {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
+      />
+    );
+  }
+
+  if (wantsVideo && videoFailed && still) {
+    return (
+      <div className={`relative flex w-full items-center justify-center ${compact ? "min-h-0" : ""}`}>
+        <img
+          src={still}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={`max-w-full ${maxH} w-auto h-auto object-contain ${compact ? "" : "object-center"}`}
+        />
+        <a
+          href={ad.adLibraryUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`absolute ${compact ? "bottom-2 left-2" : "bottom-3 left-3"} rounded-full bg-black/70 text-white text-[11px] px-2.5 py-1`}
+        >
+          Play on Meta
+        </a>
+      </div>
+    );
+  }
+
+  if (wantsVideo && videoFailed && !still) {
+    return (
+      <div
+        className={`flex w-full ${minH} flex-col items-center justify-center gap-2 px-4 text-center`}
+      >
+        <p className="text-[12px] text-[#6b7280]">Video didn&apos;t load in the browser. Open it on Meta.</p>
+        <a
+          href={ad.adLibraryUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full bg-[#1877f2] text-white text-[12px] font-semibold px-4 py-2 hover:bg-[#166fe5]"
+        >
+          Play on Meta
+        </a>
+      </div>
+    );
+  }
+
+  if (still) {
+    return (
+      <img
+        src={still}
+        alt=""
+        referrerPolicy="no-referrer"
+        className={`max-w-full ${maxH} w-auto h-auto object-contain ${compact ? "" : "object-center"}`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`flex w-full ${minH} items-center justify-center text-[12px] text-[#9ca3af] px-2 text-center`}
+    >
+      {compact ? "No preview" : "No creative preview"}
+    </div>
+  );
+}
 
 function metaSiteLabel(ad: MetaAdCardModel, brandDomain: string): { destHttps: string | null; siteLabel: string } {
   const probe = (ad.destinationUrl || ad.subtext || "").trim();
@@ -51,37 +140,27 @@ export function MetaAdCard({
       ) : null}
       <div className={`flex min-h-0 flex-1 ${viewMode === "list" ? "flex-row" : "flex-col"}`}>
         {viewMode === "list" ? (
-          <div className="relative w-56 shrink-0 bg-[#f3f4f6] border-r border-[#e5e7eb] flex items-center justify-center p-2 min-h-[220px]">
-            {ad.isVideo && ad.videoUrl ? (
-              <video
-                controls
-                playsInline
-                preload="metadata"
-                poster={ad.img || undefined}
-                className="w-full h-full max-h-[300px] rounded-lg object-contain bg-black"
-                src={ad.videoUrl}
-              />
-            ) : ad.img ? (
-              <img src={ad.img} alt="" className="max-w-full max-h-[300px] w-auto h-auto object-contain" />
-            ) : (
-              <div className="w-full min-h-[120px] flex items-center justify-center text-[12px] text-[#9ca3af] px-2 text-center">No preview</div>
-            )}
-            {ad.isVideo && !ad.videoUrl ? (
-              <a
-                href={ad.adLibraryUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="absolute bottom-2 left-2 rounded-full bg-black/70 text-white text-[11px] px-2.5 py-1"
-              >
-                Play on Meta
-              </a>
-            ) : null}
+            <div className="relative w-56 shrink-0 bg-[#f3f4f6] border-r border-[#e5e7eb] flex items-center justify-center p-2 min-h-[220px]">
+            <MetaCreativeMedia ad={ad} compact />
           </div>
         ) : null}
         <div className="flex-1 min-w-0 flex flex-col min-h-0">
           <div className="p-4 flex items-start gap-3 border-b border-[#f1f5f9]">
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-[#e5e7eb] bg-white">
-              <BrandLogoThumb src={ad.pageProfilePic || brand.logoUrl} alt="" className="bg-white" />
+              {(ad.pageProfilePic || brand.logoUrl)?.trim() ? (
+                <BrandLogoThumb
+                  src={(ad.pageProfilePic || brand.logoUrl).trim()}
+                  alt=""
+                  className="bg-white"
+                />
+              ) : (
+                <div
+                  className="flex size-full items-center justify-center bg-[#f3f4f6] text-[13px] font-semibold text-[#9ca3af]"
+                  aria-hidden
+                >
+                  {ad.pageName.trim().slice(0, 1).toUpperCase() || "?"}
+                </div>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -113,30 +192,7 @@ export function MetaAdCard({
           ) : null}
           {viewMode === "grid" && (
             <div className="relative w-full flex-1 min-h-[260px] bg-[#f3f4f6] border-y border-[#e5e7eb] flex items-center justify-center py-3 px-2">
-              {ad.isVideo && ad.videoUrl ? (
-                <video
-                  controls
-                  playsInline
-                  preload="metadata"
-                  poster={ad.img || undefined}
-                  className="max-w-full max-h-[420px] w-auto h-auto object-contain rounded-lg bg-black"
-                  src={ad.videoUrl}
-                />
-              ) : ad.img ? (
-                <img src={ad.img} alt="" className="max-w-full max-h-[420px] w-auto h-auto object-contain object-center" />
-              ) : (
-                <div className="w-full min-h-[180px] flex items-center justify-center text-[13px] text-[#9ca3af] px-4 text-center">No creative preview</div>
-              )}
-              {ad.isVideo && !ad.videoUrl ? (
-                <a
-                  href={ad.adLibraryUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="absolute bottom-3 left-3 rounded-full bg-black/70 text-white text-[11px] px-3 py-1.5"
-                >
-                  Play on Meta
-                </a>
-              ) : null}
+              <MetaCreativeMedia ad={ad} compact={false} />
             </div>
           )}
           <div className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]">

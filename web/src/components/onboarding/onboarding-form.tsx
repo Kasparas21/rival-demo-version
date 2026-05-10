@@ -38,6 +38,10 @@ import { brandSlugFromDomain } from "@/lib/discovery";
 import { socialNetworkBucket } from "@/lib/onboarding/social-profile-utils";
 import { validateIdentifierField } from "@/lib/validate-identifier-field";
 import {
+  canonicalLinkedInAdLibraryUrl,
+  canonicalMetaAdsLibraryUrl,
+} from "@/lib/ad-library/canonical-library-url";
+import {
   buildGoogleTransparencyPreviewUrl,
   buildLinkedInAdLibraryPreviewUrl,
   buildMetaAdsLibraryPreviewUrl,
@@ -46,7 +50,6 @@ import {
   buildTikTokAdsLibraryPreviewUrl,
 } from "@/lib/onboarding/ad-library-preview-urls";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
-import type { Json } from "@/lib/supabase/types";
 import {
   adsProfileSetupV1,
   emptyWorkspaceScrapeRow,
@@ -287,7 +290,7 @@ type CompetitorEnrichmentRow = {
   socials: { label: string; href: string; handle: string }[];
 };
 
-export function OnboardingForm({ userId, postOnboardingPath = "/dashboard", initialData }: Props) {
+export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", initialData }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -798,32 +801,39 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard", init
           ? ({ logo_url: logoFromInsights } as const)
           : {};
 
-      const brandPatchCore = {
+      const brandPatchBody = {
         name: primaryName,
         domain: companyHost,
         brand_context: brandInsights?.description?.trim() || null,
         ...logoUrlPatch,
+        ads_profile_setup: adsSetupJson,
       };
 
-      let brandError = (
-        await supabase
-          .from("brands")
-          .update({
-            ...brandPatchCore,
-            ads_profile_setup: adsSetupJson as Json,
-          })
-          .eq("user_id", userId)
-          .eq("is_primary", true)
-      ).error;
+      let brandRes = await fetch("/api/account/brands", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(brandPatchBody),
+      });
+      let brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
 
-      if (brandError && isMissingDbColumnError(brandError.message, "ads_profile_setup")) {
-        brandError = (
-          await supabase.from("brands").update(brandPatchCore).eq("user_id", userId).eq("is_primary", true)
-        ).error;
+      if (
+        !brandRes.ok &&
+        typeof brandJson.error === "string" &&
+        isMissingDbColumnError(brandJson.error, "ads_profile_setup")
+      ) {
+        const { ads_profile_setup: _drop, ...coreOnly } = brandPatchBody;
+        brandRes = await fetch("/api/account/brands", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(coreOnly),
+        });
+        brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
       }
 
-      if (brandError) {
-        setError(brandError.message);
+      if (!brandRes.ok || !brandJson.ok) {
+        setError(typeof brandJson.error === "string" ? brandJson.error : "Could not save workspace brand.");
         return;
       }
 
@@ -1239,6 +1249,14 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard", init
                       value={companyScrape.metaAdsLibraryUrl}
                       spellCheck={false}
                       onChange={(e) => patchCompanyScrape({ metaAdsLibraryUrl: e.target.value })}
+                      onBlur={() => {
+                        const v = companyScrape.metaAdsLibraryUrl.trim();
+                        if (!v) return;
+                        const canon = canonicalMetaAdsLibraryUrl(v);
+                        if (canon && canon !== v) {
+                          patchCompanyScrape({ metaAdsLibraryUrl: canon });
+                        }
+                      }}
                       className={`${workspaceAdProfileInputClass} w-full`}
                     />
                     {workspaceMetaInputError ? (
@@ -1306,6 +1324,14 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard", init
                       value={companyScrape.linkedInUrl}
                       spellCheck={false}
                       onChange={(e) => patchCompanyScrape({ linkedInUrl: e.target.value })}
+                      onBlur={() => {
+                        const v = companyScrape.linkedInUrl.trim();
+                        if (!v) return;
+                        const canon = canonicalLinkedInAdLibraryUrl(v);
+                        if (canon && canon !== v) {
+                          patchCompanyScrape({ linkedInUrl: canon });
+                        }
+                      }}
                       className={`${workspaceAdProfileInputClass} w-full`}
                     />
                     {workspaceLinkedInWarning ? (

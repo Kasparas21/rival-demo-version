@@ -49,24 +49,41 @@ import {
 } from "@/components/ads-library/unverified-source-overlay";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 import { META_ADS_INLINE_PREVIEW } from "@/lib/ad-library/constants";
+import {
+  canonicalLinkedInAdLibraryUrl,
+  canonicalMetaAdsLibraryUrl,
+} from "@/lib/ad-library/canonical-library-url";
 import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
+  extractYouTubeVideoId,
+  googleAdRowPreviewLikelihood,
   googleAdsExternalLinkLabel,
+  isUsableGoogleStillImagePreviewUrl,
+  youtubePosterCandidateUrls,
   youtubeThumbnailFromUrl,
   sortSnapchatAdsForResponse,
   sortTikTokAdsForResponse,
   type GoogleAdRow,
   type LinkedInAdCard,
 } from "@/lib/ad-library/normalize";
-import { fetchSavedCompetitorsFromAccount, saveCompetitorToAccount } from "@/lib/account/client";
-import type { SavedCompetitorPayload } from "@/lib/account/types";
+import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import { googleFaviconUrlForDomain } from "@/lib/discovery";
+import { RIVAL_BRANDS_UPDATED_EVENT } from "@/lib/account/profile-events";
+import { CHANNELS, type ChannelId, DEFAULT_SELECTED_CHANNELS } from "@/components/channel-picker-modal";
+import {
+  adsProfileSetupV1,
+  emptyWorkspaceScrapeRow,
+  scrapeHintsToPlatformIds,
+} from "@/lib/onboarding/workspace-ads-setup";
+import type { AdsProfileSetup, WorkspaceAdsScrapeHints } from "@/lib/onboarding/workspace-ads-setup";
 import {
   hoistLogoOntoRow,
   loadSidebarCompetitors,
   mergeAccountSidebarRowsWithLocalLibraryContext,
   normalizeCompetitorSlug,
   saveSidebarCompetitors,
+  sidebarCompetitorsWithoutWorkspaceRow,
   SIDEBAR_COMPETITORS_EVENT,
   shouldSuppressSidebarUpsertForSlug,
   slugsLikelySameCompany,
@@ -76,9 +93,34 @@ import {
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
 import { readScrapeRequestFieldsFromStorage } from "@/lib/ad-library/scrape-request-fields";
 import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
-import { scrapeHintsToPlatformIds } from "@/lib/onboarding/workspace-ads-setup";
+import { fetchSavedCompetitorsFromAccount, saveCompetitorToAccount } from "@/lib/account/client";
+import type { SavedCompetitorPayload } from "@/lib/account/types";
+import type { CompetitorPageBrand } from "@/lib/competitor-view-resolve";
 import type { BrandComparisonLlmResult } from "@/lib/brand-comparison/run-brand-comparison-llm";
-import { COMPETITOR_PAGE_TABS } from "@/components/dashboard/competitor/competitor-tabs-data";
+import type { MarketingImprovementLlmResult } from "@/lib/workspace/run-marketing-improvement-llm";
+import {
+  buildGoogleTransparencyPreviewUrl,
+  buildLinkedInAdLibraryPreviewUrl,
+  buildMetaAdsLibraryPreviewUrl,
+  buildPinterestAdsPreviewUrl,
+  buildSnapchatAdsGalleryPreviewUrl,
+  buildTikTokAdsLibraryPreviewUrl,
+} from "@/lib/onboarding/ad-library-preview-urls";
+import {
+  countryFlagEmoji,
+  DEFAULT_ONBOARDING_AD_MARKETS,
+  ONBOARDING_AD_MARKET_CODES,
+  ONBOARDING_AD_MARKETS,
+} from "@/lib/onboarding/ad-markets";
+import {
+  COMPETITOR_PAGE_TABS,
+  WORKSPACE_ADS_TAB,
+  WORKSPACE_MARKETING_IMPROVEMENTS_TAB,
+} from "@/components/dashboard/competitor/competitor-tabs-data";
+import {
+  ADS_LIBRARY_UPDATED_EVENT,
+  type AdsLibraryUpdatedDetail,
+} from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import {
   platformRefreshActionsRowClass,
   platformRefreshOnlyButtonClass,
@@ -90,6 +132,17 @@ import {
   readStoredTiktokRegion,
 } from "@/components/dashboard/competitor/competitor-session-readers";
 import { GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT } from "@/lib/ad-library/constants";
+
+function normalizeDomainHostForAdsEvent(input: string): string {
+  return (
+    input
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .split("/")[0] ?? ""
+  );
+}
 
 const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 xl:grid-cols-3";
 
@@ -203,8 +256,12 @@ function GoogleTransparencyCard({
     ad.adUrl || `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(brandDomain)}`;
   const linkCta = googleAdsExternalLinkLabel(href);
 
-  /** Prefer Transparency “Preview URL” for the creative (same as Google’s preview iframe source). */
-  const imageSrc = (ad.previewUrl?.trim() || ad.img || "").trim();
+  /** Prefer Transparency “Preview URL” only when it is a still image — `content.js` loaders are not valid `<img src>`. */
+  const rawPreview = (ad.previewUrl?.trim() || "").trim();
+  const rawImg = (ad.img || "").trim();
+  const imageSrc =
+    (isUsableGoogleStillImagePreviewUrl(rawPreview) ? rawPreview : "") ||
+    (isUsableGoogleStillImagePreviewUrl(rawImg) ? rawImg : "");
   const isFaviconOnly = Boolean(
     imageSrc.includes("google.com/s2/favicons") || imageSrc.includes("gstatic.com/favicon")
   );
@@ -331,7 +388,7 @@ function GoogleTransparencyCard({
   );
 }
 
-/** Video-style row from Google Transparency (YouTube creative) — poster + CTA like Meta/TikTok. */
+/** Video-style row from Google Transparency (YouTube creative) — poster + optional MP4; resilient to expired CDN / bad hqdefault. */
 function GoogleYoutubeAdCard({
   ad,
   brand,
@@ -339,28 +396,88 @@ function GoogleYoutubeAdCard({
   ad: Extract<GoogleAdRow, { type: "youtube" }>;
   brand: { name: string; domain: string; logoUrl?: string };
 }) {
-  const [posterFailed, setPosterFailed] = useState(false);
+  const [posterIdx, setPosterIdx] = useState(0);
+  const [videoDead, setVideoDead] = useState(false);
+  const [posterExhausted, setPosterExhausted] = useState(false);
+
+  const yid =
+    ad.youtubeVideoId?.trim() ||
+    extractYouTubeVideoId(ad.adUrl) ||
+    extractYouTubeVideoId(ad.thumbnail) ||
+    "";
+
+  const posterList = useMemo(() => {
+    const list: string[] = [];
+    const push = (u: string) => {
+      const t = u.trim();
+      if (t && !list.includes(t)) list.push(t);
+    };
+    const thumb = ad.thumbnail?.trim() || "";
+    if (thumb && isUsableGoogleStillImagePreviewUrl(thumb)) push(thumb);
+    const fromAdUrl = youtubeThumbnailFromUrl(ad.adUrl);
+    if (fromAdUrl) push(fromAdUrl);
+    if (yid) {
+      for (const u of youtubePosterCandidateUrls(yid)) push(u);
+    }
+    return list;
+  }, [ad.adUrl, ad.thumbnail, yid]);
+
   useEffect(() => {
-    setPosterFailed(false);
-  }, [ad.id]);
+    setPosterIdx(0);
+    setVideoDead(false);
+    setPosterExhausted(false);
+  }, [ad.id, ad.videoUrl, ad.thumbnail, yid]);
+
+  const activePoster = posterList[posterIdx] ?? "";
+  const videoSrc = (ad.videoUrl ?? "").trim();
+  const videoSrcNorm =
+    videoSrc.length > 0 && !videoSrc.includes("#") ? `${videoSrc}#t=0.01` : videoSrc;
 
   const href =
     ad.adUrl || `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(brand.domain)}`;
   const { primary: linkLabel } = googleAdsExternalLinkLabel(href);
-  const thumb = ad.thumbnail?.trim() || youtubeThumbnailFromUrl(ad.adUrl) || "";
-  const showPoster = Boolean(thumb) && !posterFailed;
+
+  const showVideoEl = Boolean(videoSrc) && !videoDead;
+  const canBumpPoster = posterIdx < posterList.length - 1;
 
   return (
     <article
       className={`flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] ${GOOGLE_ARTICLE_MIN_HEIGHT_CLASS}`}
     >
       <a href={href} target="_blank" rel="noopener noreferrer" className={YOUTUBE_MEDIA_FRAME_CLASS}>
-        {showPoster ? (
+        {showVideoEl ? (
+          <video
+            key={`${ad.id}-v-${posterIdx}`}
+            poster={activePoster || undefined}
+            src={videoSrcNorm}
+            muted
+            playsInline
+            preload="auto"
+            className="max-h-full max-w-full object-contain object-center bg-black"
+            onError={() => {
+              setVideoDead(true);
+              setPosterIdx(0);
+            }}
+            onLoadedData={(e) => {
+              try {
+                const el = e.currentTarget;
+                if (el.duration && Number.isFinite(el.duration)) {
+                  el.currentTime = Math.min(0.05, el.duration * 0.02);
+                }
+              } catch {
+                /* ignore */
+              }
+            }}
+          />
+        ) : activePoster && !posterExhausted ? (
           <img
-            src={thumb}
+            src={activePoster}
             alt=""
-            className="max-h-full max-w-full object-contain object-center"
-            onError={() => setPosterFailed(true)}
+            className="max-h-full max-w-full object-contain object-center bg-black"
+            onError={() => {
+              if (canBumpPoster) setPosterIdx((i) => i + 1);
+              else setPosterExhausted(true);
+            }}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] px-4 text-center">
@@ -518,6 +635,554 @@ function LinkedInFeedAdCard({
   );
 }
 
+function workspaceInitialMarkets(setup: AdsProfileSetup | null): { auto: boolean; codes: string[] } {
+  const raw =
+    setup?.adMarketCountryCodes?.filter((c) => typeof c === "string" && c.trim()) ?? [];
+  if (raw.length === 0) {
+    return { auto: true, codes: [] };
+  }
+  const normalized = [...new Set(raw.map((c) => c.trim().toUpperCase()))].sort();
+  const fullSorted = [...ONBOARDING_AD_MARKET_CODES].sort();
+  if (
+    normalized.length === fullSorted.length &&
+    fullSorted.every((c, i) => c === normalized[i])
+  ) {
+    return { auto: true, codes: [] };
+  }
+  return { auto: false, codes: normalized };
+}
+
+function workspacePreviewHrefForChannel(
+  id: ChannelId,
+  scrape: WorkspaceAdsScrapeHints,
+  workspaceDomain: string
+): string {
+  switch (id) {
+    case "meta":
+      return buildMetaAdsLibraryPreviewUrl(scrape.metaAdsLibraryUrl);
+    case "google":
+      return buildGoogleTransparencyPreviewUrl(scrape.googleAdsDomain, workspaceDomain);
+    case "linkedin":
+      return buildLinkedInAdLibraryPreviewUrl(scrape.linkedInUrl);
+    case "tiktok":
+      return buildTikTokAdsLibraryPreviewUrl(scrape.tiktokKeyword);
+    case "pinterest":
+      return buildPinterestAdsPreviewUrl(scrape.pinterestKeyword);
+    case "snapchat":
+      return buildSnapchatAdsGalleryPreviewUrl(scrape.snapchatKeyword);
+    default:
+      return "about:blank";
+  }
+}
+
+function WorkspaceAdSourcesPanel({
+  brandId,
+  domain,
+  initialSetup,
+  noBottomMargin,
+}: {
+  brandId: string;
+  domain: string;
+  initialSetup: AdsProfileSetup | null;
+  /** When embedded in a full tab, avoid extra bottom margin. */
+  noBottomMargin?: boolean;
+}) {
+  const baseDomain = normalizeCompetitorSlug(domain);
+  const [channels, setChannels] = useState<ChannelId[]>(() => {
+    const c = initialSetup?.channels;
+    return c?.length ? [...c] : [...DEFAULT_SELECTED_CHANNELS];
+  });
+  const [marketsAuto, setMarketsAuto] = useState(() => workspaceInitialMarkets(initialSetup).auto);
+  const [selectedMarketCodes, setSelectedMarketCodes] = useState<string[]>(() => {
+    const { auto, codes } = workspaceInitialMarkets(initialSetup);
+    return auto ? [] : codes;
+  });
+  const [scrape, setScrape] = useState<WorkspaceAdsScrapeHints>(() => {
+    if (initialSetup?.scrape) return { ...initialSetup.scrape };
+    return emptyWorkspaceScrapeRow(baseDomain);
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedFlash, setSavedFlash] = useState(false);
+  /** Full country flag strip — only after user expands (default: Auto, compact). */
+  const [showRegionFlags, setShowRegionFlags] = useState(false);
+
+  useEffect(() => {
+    const c = initialSetup?.channels;
+    setChannels(c?.length ? [...c] : [...DEFAULT_SELECTED_CHANNELS]);
+    const { auto, codes } = workspaceInitialMarkets(initialSetup);
+    setMarketsAuto(auto);
+    setSelectedMarketCodes(auto ? [] : codes);
+    setShowRegionFlags(false);
+    setScrape(
+      initialSetup?.scrape ? { ...initialSetup.scrape } : emptyWorkspaceScrapeRow(baseDomain),
+    );
+  }, [initialSetup, baseDomain]);
+
+  const marketSummaryLabel = useMemo(() => {
+    if (marketsAuto) {
+      return `All supported territories (${ONBOARDING_AD_MARKET_CODES.length} regions)`;
+    }
+    if (selectedMarketCodes.length === 0) {
+      return "Pick regions or switch back to Auto";
+    }
+    const tags = selectedMarketCodes
+      .map((c) => ONBOARDING_AD_MARKETS.find((m) => m.code === c)?.shortTag ?? c)
+      .slice(0, 8);
+    const more = selectedMarketCodes.length > 8 ? ` +${selectedMarketCodes.length - 8} more` : "";
+    return `${tags.join(", ")}${more}`;
+  }, [marketsAuto, selectedMarketCodes]);
+
+  const toggleChannel = (id: ChannelId) => {
+    setChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleMarketCode = (code: string) => {
+    setMarketsAuto(false);
+    setShowRegionFlags(true);
+    setSelectedMarketCodes((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+    );
+  };
+
+  const patchScrape = (patch: Partial<WorkspaceAdsScrapeHints>) => {
+    setScrape((s) => ({ ...s, ...patch }));
+  };
+
+  const onSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const adMarketCountryCodes = marketsAuto
+        ? [...ONBOARDING_AD_MARKET_CODES]
+        : [...selectedMarketCodes];
+      if (!marketsAuto && adMarketCountryCodes.length === 0) {
+        setError("Select at least one region below, or turn on Auto (all supported regions).");
+        setSaving(false);
+        return;
+      }
+      if (channels.length === 0) {
+        setError("Select at least one ad platform.");
+        setSaving(false);
+        return;
+      }
+      const payload: AdsProfileSetup = {
+        channels,
+        adMarketCountryCodes: [...adMarketCountryCodes].sort(),
+        scrape: { ...scrape },
+      };
+      const body: { id?: string; ads_profile_setup: Record<string, unknown> } = {
+        ads_profile_setup: adsProfileSetupV1(payload),
+      };
+      if (brandId && brandId !== "_workspace") {
+        body.id = brandId;
+      }
+      const res = await fetch("/api/account/brands", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setError(json.error ?? "Save failed");
+        return;
+      }
+      setSavedFlash(true);
+      window.setTimeout(() => setSavedFlash(false), 2000);
+      window.dispatchEvent(new Event(RIVAL_BRANDS_UPDATED_EVENT));
+    } catch {
+      setError("Network error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputClass =
+    "mt-1.5 w-full rounded-xl border border-sky-200/70 bg-white/95 px-3.5 py-2.5 text-[13px] font-medium text-sky-950 placeholder:text-sky-900/40 outline-none shadow-[inset_0_1px_2px_rgba(255,255,255,0.85)] transition-[border-color,box-shadow] focus:border-sky-500 focus:ring-2 focus:ring-sky-300/35";
+
+  /** Basics row: same visual height as the compact Ad markets bar */
+  const basicsInputClass =
+    "mt-1.5 box-border h-[42px] w-full rounded-xl border border-sky-200/70 bg-white/95 px-3.5 py-0 text-[13px] font-medium leading-normal text-sky-950 placeholder:text-sky-900/40 outline-none shadow-[inset_0_1px_2px_rgba(255,255,255,0.85)] transition-[border-color,box-shadow] focus:border-sky-500 focus:ring-2 focus:ring-sky-300/35";
+
+  type PlatformFieldSpec = {
+    label: string;
+    hint?: string;
+    placeholder?: string;
+    value: string;
+    onChange: (v: string) => void;
+    id: string;
+  };
+
+  const fieldByChannel = (id: ChannelId): PlatformFieldSpec | null => {
+    switch (id) {
+      case "meta":
+        return {
+          id: "rival-ws-meta",
+          label: "Meta Ads Library URL",
+          hint: "Use an Ad Library search URL—not a Facebook Page link.",
+          placeholder: "https://www.facebook.com/ads/library/...",
+          value: scrape.metaAdsLibraryUrl,
+          onChange: (v) => patchScrape({ metaAdsLibraryUrl: v }),
+        };
+      case "google":
+        return {
+          id: "rival-ws-google",
+          label: "Google Ads domain",
+          hint: "Domain in Google Ads Transparency (usually your site root).",
+          value: scrape.googleAdsDomain,
+          onChange: (v) => patchScrape({ googleAdsDomain: v }),
+        };
+      case "linkedin":
+        return {
+          id: "rival-ws-li",
+          label: "LinkedIn Ad Library URL",
+          hint: "Ad Library search or company/advertiser link.",
+          value: scrape.linkedInUrl,
+          onChange: (v) => patchScrape({ linkedInUrl: v }),
+        };
+      case "tiktok":
+        return {
+          id: "rival-ws-tt",
+          label: "TikTok keyword",
+          hint: "What we pass to TikTok Ads Library search.",
+          value: scrape.tiktokKeyword,
+          onChange: (v) => patchScrape({ tiktokKeyword: v }),
+        };
+      case "pinterest":
+        return {
+          id: "rival-ws-pin",
+          label: "Pinterest search keyword",
+          hint: "Keyword-style match in Pinterest transparency.",
+          value: scrape.pinterestKeyword,
+          onChange: (v) => patchScrape({ pinterestKeyword: v }),
+        };
+      case "snapchat":
+        return {
+          id: "rival-ws-snap",
+          label: "Snapchat keyword",
+          hint: "Gallery search term for your brand.",
+          value: scrape.snapchatKeyword,
+          onChange: (v) => patchScrape({ snapchatKeyword: v }),
+        };
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      className={`relative overflow-hidden rounded-[20px] border border-sky-200/65 bg-gradient-to-b from-white via-sky-50/35 to-amber-50/25 shadow-[0_10px_40px_rgba(14,116,144,0.07)] ${
+        noBottomMargin ? "" : "mb-6"
+      }`}
+    >
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-sky-400/90 via-sky-300/50 to-amber-300/70"
+        aria-hidden
+      />
+      <div className="relative px-4 py-3.5 sm:px-5 sm:py-4">
+        <div className="min-w-0 pl-1">
+          <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-sky-800/90">Your workspace</p>
+          <p className="mt-0.5 text-[15px] font-bold leading-snug tracking-[-0.02em] text-sky-950">
+            Ad library connections
+          </p>
+          <p className="mt-1 max-w-[52rem] text-[12px] leading-snug text-sky-900/65">
+            Saved on your account—not the same flow as confirming a competitor during Spy. Set the links and handles
+            your account uses to find <span className="font-semibold text-sky-900/80">your</span> brand in each ad
+            library. The Ads Library tab is for browsing creatives and refreshing scrapes—keep configuration here so it
+            stays easy to scan.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-5 border-t border-sky-200/50 px-4 py-5 sm:px-5 sm:py-6">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-sky-900/75">Basics</p>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
+            <div className="min-w-0">
+              <label className="block text-[11px] font-semibold text-sky-900/85" htmlFor="rival-ws-site">
+                Website URL
+              </label>
+              <input
+                id="rival-ws-site"
+                className={basicsInputClass}
+                value={scrape.websiteUrl}
+                onChange={(e) => patchScrape({ websiteUrl: e.target.value })}
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0">
+                <p className="text-[11px] font-semibold text-sky-900/85">Ad markets</p>
+                <p className="text-[10px] leading-tight text-sky-900/50">
+                  <span className="hidden sm:inline">Auto unless you pick countries.</span>
+                </p>
+              </div>
+              <p className="mt-0.5 text-[10px] text-sky-900/50 sm:hidden">
+                Auto by default — open Countries… to customize.
+              </p>
+
+              {!showRegionFlags ? (
+                <div
+                  className="mt-1.5 flex min-h-[42px] w-full flex-wrap items-center gap-2 rounded-xl border border-sky-200/70 bg-white/80 px-3 py-1.5 sm:flex-nowrap sm:gap-3"
+                  title={marketSummaryLabel}
+                >
+                  <p className="min-w-0 flex-1 truncate text-[13px] leading-tight text-sky-950">
+                    <span className="font-semibold">{marketsAuto ? "Auto" : "Custom"}</span>
+                    <span className="font-normal text-sky-800/70"> · {marketSummaryLabel}</span>
+                  </p>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {marketsAuto ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMarketsAuto(false);
+                          setShowRegionFlags(true);
+                          setSelectedMarketCodes((p) =>
+                            p.length ? p : [...DEFAULT_ONBOARDING_AD_MARKETS],
+                          );
+                        }}
+                        className="rounded-lg border border-sky-300/90 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-sky-950 shadow-sm transition-colors hover:bg-sky-50/90"
+                      >
+                        Countries…
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setShowRegionFlags(true)}
+                          className="rounded-lg border border-sky-300/90 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-sky-950 shadow-sm transition-colors hover:bg-sky-50/90"
+                        >
+                          Edit…
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMarketsAuto(true);
+                            setShowRegionFlags(false);
+                            setSelectedMarketCodes([]);
+                          }}
+                          className="rounded-lg border border-sky-200/80 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-900 hover:bg-sky-100/90"
+                        >
+                          Auto
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {showRegionFlags ? (
+                <div className="mt-3 min-w-0 space-y-2">
+                  <div className="relative">
+                    <div
+                      className="flex max-w-full flex-nowrap gap-1 overflow-x-auto overscroll-x-contain scroll-smooth rounded-xl border border-sky-200/60 bg-white/70 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5"
+                      role="group"
+                      aria-label="Ad markets"
+                    >
+                      <span className="inline-flex shrink-0 snap-start items-center">
+                        <button
+                          type="button"
+                          title="Use all supported regions"
+                          aria-pressed={marketsAuto}
+                          onClick={() => {
+                            setMarketsAuto(true);
+                            setSelectedMarketCodes([]);
+                            setShowRegionFlags(false);
+                          }}
+                          className={`inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                            marketsAuto
+                              ? "border-sky-700 bg-sky-700 text-white shadow-sm"
+                              : "border-sky-200/90 bg-white/90 text-sky-800 hover:bg-sky-50"
+                          }`}
+                        >
+                          <span className="text-[0.85rem] leading-none" aria-hidden>
+                            🌐
+                          </span>
+                          Auto
+                        </button>
+                      </span>
+                      {ONBOARDING_AD_MARKETS.map((m) => {
+                        const on = !marketsAuto && selectedMarketCodes.includes(m.code);
+                        return (
+                          <button
+                            key={m.code}
+                            type="button"
+                            disabled={marketsAuto}
+                            aria-pressed={on}
+                            aria-disabled={marketsAuto}
+                            title={m.label}
+                            onClick={() => toggleMarketCode(m.code)}
+                            className={`inline-flex shrink-0 snap-start items-center gap-0.5 rounded-lg border px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
+                              marketsAuto
+                                ? "cursor-not-allowed border-sky-100/90 bg-sky-50/60 text-sky-800/35"
+                                : on
+                                  ? "border-sky-600/50 bg-sky-600 text-white shadow-sm"
+                                  : "border-sky-200/80 bg-white/85 text-sky-900/75 hover:border-sky-300 hover:bg-white"
+                            }`}
+                          >
+                            <span className="text-[0.85rem] leading-none" aria-hidden>
+                              {countryFlagEmoji(m.code)}
+                            </span>
+                            {m.shortTag}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowRegionFlags(false)}
+                      className="text-[11px] font-semibold text-sky-800 underline underline-offset-2 hover:text-sky-950"
+                    >
+                      Collapse list
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-sky-900/75">
+            Platforms you track
+          </p>
+          <p className="mt-0.5 text-[12px] text-sky-900/60">
+            Toggle networks—connection fields below appear only for platforms you enable.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-sky-200/60 bg-white/60 p-2">
+            {CHANNELS.map(({ id, name, Logo }) => {
+              const on = channels.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => toggleChannel(id)}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
+                    on
+                      ? "border-sky-400/90 bg-sky-500/15 text-sky-950 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]"
+                      : "border-transparent bg-white/90 text-sky-900/45 hover:bg-sky-50/90 hover:text-sky-900"
+                  }`}
+                >
+                  <Logo className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                  {name.replace(" ads", "")}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-sky-900/75">
+            Per-platform identifiers
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+            {CHANNELS.filter((c) => channels.includes(c.id)).map((ch) => {
+              const spec = fieldByChannel(ch.id);
+              if (!spec) return null;
+              const previewHref = workspacePreviewHrefForChannel(ch.id, scrape, baseDomain);
+              return (
+                <div
+                  key={ch.id}
+                  className="relative flex min-h-0 flex-col rounded-2xl border border-dashed border-sky-300/55 bg-white/75 px-3.5 pb-3.5 pt-3 shadow-[0_2px_12px_rgba(14,116,144,0.04)] sm:px-4 sm:pb-4 sm:pt-3.5"
+                >
+                  <div
+                    className="pointer-events-none absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-gradient-to-b from-sky-500 to-sky-400/85"
+                    aria-hidden
+                  />
+                  <div className="flex items-start justify-between gap-2 pl-1.5">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-100/90 to-amber-50/80 shadow-sm">
+                        <ch.Logo className="h-4 w-4 text-sky-950" />
+                      </div>
+                      <div className="min-w-0 pt-0.5">
+                        <p className="text-[13px] font-bold leading-tight text-sky-950">{ch.name}</p>
+                        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-sky-700/55">
+                          Your brand · workspace
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={previewHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Preview in new tab"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-sky-200/80 bg-sky-50/90 px-2 py-1 text-[11px] font-semibold text-sky-900 transition-colors hover:bg-sky-100 sm:mt-0.5"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                      Preview
+                    </a>
+                  </div>
+                  <div className="mt-3 pl-1.5">
+                    <label className="block text-[11px] font-semibold text-sky-900/75" htmlFor={spec.id}>
+                      {spec.label}
+                    </label>
+                    <input
+                      id={spec.id}
+                      className={inputClass}
+                      value={spec.value}
+                      onChange={(e) => spec.onChange(e.target.value)}
+                      onBlur={() => {
+                        if (spec.id === "rival-ws-meta") {
+                          const v = scrape.metaAdsLibraryUrl.trim();
+                          if (!v) return;
+                          const c = canonicalMetaAdsLibraryUrl(v);
+                          if (c && c !== v) patchScrape({ metaAdsLibraryUrl: c });
+                          return;
+                        }
+                        if (spec.id === "rival-ws-li") {
+                          const v = scrape.linkedInUrl.trim();
+                          if (!v) return;
+                          const c = canonicalLinkedInAdLibraryUrl(v);
+                          if (c && c !== v) patchScrape({ linkedInUrl: c });
+                        }
+                      }}
+                      placeholder={spec.placeholder}
+                    />
+                    {spec.hint ? (
+                      <p className="mt-1.5 text-[11px] leading-snug text-sky-800/55">{spec.hint}</p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {channels.length === 0 ? (
+            <p className="mt-3 rounded-xl border border-dashed border-sky-200/80 bg-sky-50/40 px-3 py-2.5 text-[12px] text-sky-900/65">
+              Turn on at least one platform above to add connection details.
+            </p>
+          ) : null}
+        </div>
+
+        {error ? (
+          <p className="text-[12px] font-medium text-[#b42318]" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <button
+            type="button"
+            onClick={() => void onSave()}
+            disabled={saving}
+            className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-sky-800 px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(14,116,144,0.25)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 sm:w-auto"
+          >
+            {saving ? "Saving…" : "Save connections"}
+          </button>
+          <div className="flex items-center justify-center gap-2 sm:justify-end">
+            {savedFlash ? (
+              <span className="text-[12px] font-semibold text-emerald-700">Saved to your brand</span>
+            ) : (
+              <span className="text-[11px] text-sky-900/45">Changes apply to your workspace only.</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const tabs = COMPETITOR_PAGE_TABS;
 
 type CompetitorDashboardBodyProps = {
@@ -542,22 +1207,125 @@ function CompetitorDashboardBody({
     setSidebarSnapshot(loadSidebarCompetitors());
   }, [canonicalHost, sidebarEpoch]);
 
-  const { brand, platformIds, channelsParam: channelsFromResolver, isConfirmed } = useMemo(
-    () =>
-      resolveCompetitorViewFromSidebar(
-        canonicalHost,
-        {
-          brandParam,
-          idsParam,
-          channelsParam: channelsQuery,
-          confirmedParam,
-        },
-        sidebarSnapshot === undefined ? [] : sidebarSnapshot
-      ),
-    [canonicalHost, brandParam, idsParam, channelsQuery, confirmedParam, sidebarEpoch, sidebarSnapshot]
-  );
+  const myBrand = useActiveBrand();
+
+  const { brand, platformIds, channelsFromResolver, isConfirmed, isOwnWorkspace } = useMemo(() => {
+    const base = resolveCompetitorViewFromSidebar(
+      canonicalHost,
+      {
+        brandParam,
+        idsParam,
+        channelsParam: channelsQuery,
+        confirmedParam,
+      },
+      sidebarSnapshot === undefined ? [] : sidebarSnapshot
+    );
+
+    const own =
+      Boolean(myBrand.domain?.trim()) &&
+      normalizeCompetitorSlug(canonicalHost) === normalizeCompetitorSlug(myBrand.domain ?? "");
+
+    if (!own) {
+      return {
+        isOwnWorkspace: false as const,
+        brand: base.brand,
+        platformIds: base.platformIds,
+        channelsFromResolver: base.channelsParam,
+        isConfirmed: base.isConfirmed,
+      };
+    }
+
+    const adsSetup = myBrand.adsSetup ?? null;
+    const wsDomain = myBrand.domain!.trim();
+    const normDomain = normalizeCompetitorSlug(wsDomain);
+
+    let nextPlatformIds: Record<string, string> | null =
+      base.platformIds && Object.keys(base.platformIds).length > 0 ? { ...base.platformIds } : null;
+    if (adsSetup?.channels?.length) {
+      const fromHints = scrapeHintsToPlatformIds({
+        scrape: adsSetup.scrape,
+        workspaceDomain: wsDomain,
+        channels: adsSetup.channels,
+      });
+      if (Object.keys(fromHints).length > 0) {
+        nextPlatformIds = { ...(nextPlatformIds ?? {}), ...fromHints };
+      }
+    }
+    if (nextPlatformIds && Object.keys(nextPlatformIds).length === 0) {
+      nextPlatformIds = null;
+    }
+
+    let channelsFromResolver = base.channelsParam;
+    if (!channelsFromResolver.trim() && adsSetup?.channels?.length) {
+      channelsFromResolver = adsSetup.channels.join(",");
+    }
+
+    let nextConfirmed = base.isConfirmed;
+    if (!nextConfirmed && adsSetup?.channels?.length) {
+      nextConfirmed = true;
+    }
+
+    const logoUrl =
+      myBrand.logoUrl?.trim() || googleFaviconUrlForDomain(normDomain);
+
+    const mergedBrand: CompetitorPageBrand = {
+      name: myBrand.name,
+      domain: normDomain,
+      logoUrl,
+      handle: normDomain.split(".")[0] ?? myBrand.name.toLowerCase().replace(/\s+/g, ""),
+      color: myBrand.color ?? "#6366f1",
+    };
+
+    return {
+      isOwnWorkspace: true as const,
+      brand: mergedBrand,
+      platformIds: nextPlatformIds,
+      channelsFromResolver,
+      isConfirmed: nextConfirmed,
+    };
+  }, [
+    canonicalHost,
+    brandParam,
+    idsParam,
+    channelsQuery,
+    confirmedParam,
+    sidebarEpoch,
+    sidebarSnapshot,
+    myBrand.id,
+    myBrand.domain,
+    myBrand.name,
+    myBrand.logoUrl,
+    myBrand.color,
+    myBrand.adsSetup,
+  ]);
+
+  const pageTabs = useMemo(() => {
+    const base = isOwnWorkspace ? tabs.filter((t) => t.id !== "comparison") : tabs;
+    if (!isOwnWorkspace) return base;
+    const adsIdx = base.findIndex((t) => t.id === "ads library");
+    const next = [...base];
+    next.splice(
+      adsIdx >= 0 ? adsIdx + 1 : 0,
+      0,
+      WORKSPACE_ADS_TAB,
+      WORKSPACE_MARKETING_IMPROVEMENTS_TAB,
+    );
+    return next;
+  }, [isOwnWorkspace]);
 
   const [activeTab, setActiveTab] = useState("ads library");
+
+  useEffect(() => {
+    if (isOwnWorkspace && activeTab === "comparison") {
+      setActiveTab("ads library");
+    }
+  }, [isOwnWorkspace, activeTab]);
+
+  useEffect(() => {
+    if (!isOwnWorkspace && activeTab === "marketing improvements") {
+      setActiveTab("ads library");
+    }
+  }, [isOwnWorkspace, activeTab]);
   const [visibleAdPlatforms, setVisibleAdPlatforms] = useState<AdsLibraryPlatform[] | null>(null);
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [googleAdsModalOpen, setGoogleAdsModalOpen] = useState(false);
@@ -570,6 +1338,8 @@ function CompetitorDashboardBody({
   const [pinterestCountry, setPinterestCountry] = useState(readStoredPinterestCountry);
   const [googleRegion, setGoogleRegion] = useState(readStoredGoogleRegion);
   const [accountLastScrapedAt, setAccountLastScrapedAt] = useState<string | null>(null);
+  /** Bumps every minute so `getTimeAgo` in the header stays fresh while the page is open. */
+  const [lastScrapeRelativeTick, setLastScrapeRelativeTick] = useState(0);
 
   /** Apify-backed platforms to fetch — from resolver `channels` (discovery / sidebar); omit = all API-backed platforms */
   const adsPlatforms: AdsLibraryPlatform[] = useMemo(() => {
@@ -578,6 +1348,12 @@ function CompetitorDashboardBody({
     }
     return channelsQueryToAdsPlatforms(channelsFromResolver.split(","));
   }, [channelsFromResolver]);
+
+  /** Page/API “brand name” can be the logged-in display name (e.g. Admin); prefer domain-derived label for UI + ad matching copy. */
+  const competitorDisplayLabel = useMemo(
+    () => effectiveCompetitorBrandLabel(brand.name, brand.domain) || brand.name,
+    [brand.name, brand.domain],
+  );
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -593,8 +1369,6 @@ function CompetitorDashboardBody({
     const days = Math.floor(hours / 24);
     return `${days}d ago`;
   };
-
-  const myBrand = useActiveBrand();
 
   /** Stable id map — avoids effect loops when resolver returns a fresh object after each sidebar bump. */
   const platformIdsFingerprint = useMemo(() => {
@@ -612,6 +1386,7 @@ function CompetitorDashboardBody({
     // so SSR matches the first client paint. Running `upsertSidebarCompetitor` in that state would merge
     // `confirmed: false` (and drop ids) into the real localStorage row — permanently disabling Ad Library.
     if (sidebarSnapshot === undefined) return;
+    if (isOwnWorkspace) return;
 
     const domainSlug = normalizeCompetitorSlug(brand.domain);
     if (shouldSuppressSidebarUpsertForSlug(domainSlug)) return;
@@ -663,6 +1438,7 @@ function CompetitorDashboardBody({
     channelsFromResolver,
     isConfirmed,
     platformIdsFingerprint,
+    isOwnWorkspace,
   ]);
 
   const {
@@ -750,6 +1526,15 @@ function CompetitorDashboardBody({
   const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [comparisonRefresh, setComparisonRefresh] = useState(0);
 
+  const [marketingCoach, setMarketingCoach] = useState<{
+    coaching: MarketingImprovementLlmResult;
+    competitorsConsidered: { name: string; domain: string }[];
+    model: string;
+  } | null>(null);
+  const [marketingCoachLoading, setMarketingCoachLoading] = useState(false);
+  const [marketingCoachError, setMarketingCoachError] = useState<string | null>(null);
+  const [marketingCoachRefresh, setMarketingCoachRefresh] = useState(0);
+
   useEffect(() => {
     if (activeTab !== "comparison") return;
     if (!isConfirmed) return;
@@ -818,7 +1603,88 @@ function CompetitorDashboardBody({
     comparisonRefresh,
   ]);
 
-  const readAccountLastScraped = useCallback(() => {
+  useEffect(() => {
+    if (activeTab !== "marketing improvements") return;
+    if (!isOwnWorkspace) return;
+
+    let cancelled = false;
+    setMarketingCoachLoading(true);
+    setMarketingCoachError(null);
+
+    void (async () => {
+      try {
+        const res = await fetch("/api/workspace/marketing-improvement", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userBrandName: myBrand.name,
+            userBrandDomain: myBrand.domain ?? "",
+            userBrandContext: myBrand.brandContext ?? "",
+          }),
+        });
+        const json = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          coaching?: MarketingImprovementLlmResult;
+          competitorsConsidered?: { name: string; domain: string }[];
+          model?: string;
+        };
+        if (cancelled) return;
+        if (!res.ok || !json.ok || !json.coaching) {
+          setMarketingCoach(null);
+          setMarketingCoachError(json.error ?? "Coaching request failed");
+          return;
+        }
+        setMarketingCoach({
+          coaching: json.coaching,
+          competitorsConsidered: json.competitorsConsidered ?? [],
+          model: json.model ?? "",
+        });
+      } catch {
+        if (!cancelled) {
+          setMarketingCoach(null);
+          setMarketingCoachError("Network error");
+        }
+      } finally {
+        if (!cancelled) setMarketingCoachLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    isOwnWorkspace,
+    myBrand.name,
+    myBrand.domain,
+    myBrand.brandContext,
+    marketingCoachRefresh,
+  ]);
+
+  const readAccountLastScraped = useCallback(async () => {
+    if (isOwnWorkspace) {
+      try {
+        const qs =
+          myBrand.id && myBrand.id !== "default"
+            ? `?brandId=${encodeURIComponent(myBrand.id)}`
+            : "";
+        const res = await fetch(`/api/account/workspace-last-scrape${qs}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          setAccountLastScrapedAt(null);
+          return;
+        }
+        const json = (await res.json()) as { lastScrapedAt?: string | null };
+        setAccountLastScrapedAt(json.lastScrapedAt ?? null);
+      } catch {
+        setAccountLastScrapedAt(null);
+      }
+      return;
+    }
     const list = loadSidebarCompetitors();
     const bdom = brand.domain.trim().toLowerCase();
     const row = list.find(
@@ -827,24 +1693,44 @@ function CompetitorDashboardBody({
         (c.brand?.domain != null && slugsLikelySameCompany(c.slug, brand.domain))
     );
     setAccountLastScrapedAt(row?.lastScrapedAt ?? null);
-  }, [brand.domain, brand.name]);
+  }, [isOwnWorkspace, brand.domain, brand.name, myBrand.id]);
 
   useEffect(() => {
-    readAccountLastScraped();
+    void readAccountLastScraped();
     window.addEventListener(SIDEBAR_COMPETITORS_EVENT, readAccountLastScraped);
     return () => window.removeEventListener(SIDEBAR_COMPETITORS_EVENT, readAccountLastScraped);
   }, [readAccountLastScraped]);
+
+  useEffect(() => {
+    if (!accountLastScrapedAt) return;
+    const id = window.setInterval(() => setLastScrapeRelativeTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, [accountLastScrapedAt]);
+
+  useEffect(() => {
+    if (!isOwnWorkspace) return;
+    const onAdsLibUpdated = (ev: Event) => {
+      const ce = ev as CustomEvent<AdsLibraryUpdatedDetail>;
+      const incoming = normalizeDomainHostForAdsEvent(ce.detail?.domain ?? "");
+      const current = normalizeDomainHostForAdsEvent(brand.domain);
+      if (!incoming || !current || incoming !== current) return;
+      void readAccountLastScraped();
+    };
+    window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, onAdsLibUpdated);
+    return () => window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, onAdsLibUpdated);
+  }, [isOwnWorkspace, brand.domain, readAccountLastScraped]);
 
   const syncSavedCompetitorsFromAccount = useCallback(async () => {
     const localPrev = loadSidebarCompetitors();
     const list = await fetchSavedCompetitorsFromAccount();
     if (list.length > 0) {
-      const visible = (list as (SidebarCompetitor & { isWorkspaceBrand?: boolean })[]).filter(
-        (r) => !r.isWorkspaceBrand,
+      const visible = sidebarCompetitorsWithoutWorkspaceRow(
+        list as SidebarCompetitor[],
+        myBrand.domain?.trim() || null,
       );
       saveSidebarCompetitors(mergeAccountSidebarRowsWithLocalLibraryContext(visible, localPrev));
     }
-  }, []);
+  }, [myBrand.domain]);
 
   const fetchMeta = adsPlatforms.includes("meta");
   const fetchGoogle = adsPlatforms.includes("google");
@@ -906,7 +1792,11 @@ function CompetitorDashboardBody({
     });
   }, [metaAds]);
   const filteredGoogleRows = useMemo(() => {
-    return [...googleRows].sort((a, b) => String(b.id).localeCompare(String(a.id)));
+    return [...googleRows].sort((a, b) => {
+      const d = googleAdRowPreviewLikelihood(b) - googleAdRowPreviewLikelihood(a);
+      if (d !== 0) return d;
+      return String(b.id).localeCompare(String(a.id));
+    });
   }, [googleRows]);
   const filteredLinkedInAds = useMemo(() => {
     return [...linkedinAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
@@ -1048,24 +1938,74 @@ function CompetitorDashboardBody({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col w-full">
+    <div
+      className={`flex min-h-0 flex-1 flex-col w-full ${
+        isOwnWorkspace
+          ? "bg-[linear-gradient(180deg,rgba(224,242,254,0.14)_0%,transparent_min(32%,420px))]"
+          : ""
+      }`}
+    >
       {/* Top Header */}
-      <div className="shrink-0 bg-white/70 backdrop-blur-xl border-b border-white/60 shadow-[0_1px_0_rgba(255,255,255,0.5)]">
+      <div
+        className={`relative shrink-0 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)] border-b ${
+          isOwnWorkspace
+            ? "border-sky-200/90 bg-gradient-to-br from-sky-50/95 via-amber-50/30 to-white/[0.92]"
+            : "border-white/60 bg-white/70"
+        }`}
+      >
+        {isOwnWorkspace ? (
+          <div
+            className="pointer-events-none absolute left-0 top-5 bottom-5 w-1 rounded-r-full bg-sky-500/85"
+            aria-hidden
+          />
+        ) : null}
         {/* Brand identity + status */}
-        <div className="px-6 sm:px-8 lg:px-10 pt-6 sm:pt-7 pb-0">
+        <div className={`px-6 sm:px-8 lg:px-10 pt-6 sm:pt-7 pb-0 ${isOwnWorkspace ? "pl-7 sm:pl-9" : ""}`}>
           <div className="flex items-start justify-between gap-4 mb-5">
             <div className="flex items-center gap-4 min-w-0">
-              <div className="w-12 h-12 shrink-0 overflow-hidden rounded-2xl border border-[#e0e3e8] shadow-sm">
-                <BrandLogoThumb src={brand.logoUrl} alt={brand.name} className="bg-white" />
+              <div
+                className={`w-12 h-12 shrink-0 overflow-hidden rounded-2xl shadow-sm ${
+                  isOwnWorkspace
+                    ? "border-2 border-sky-200/90 ring-2 ring-sky-100/80"
+                    : "border border-[#e0e3e8]"
+                }`}
+              >
+                <BrandLogoThumb src={brand.logoUrl} alt={competitorDisplayLabel} className="bg-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-[22px] sm:text-[26px] font-bold text-[#343434] tracking-[-0.02em] truncate">{brand.name}</h1>
+                <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                  <h1 className="text-[22px] sm:text-[26px] font-bold text-[#343434] tracking-[-0.02em] truncate">
+                    {competitorDisplayLabel}
+                  </h1>
+                  {isOwnWorkspace ? (
+                    <span className="shrink-0 rounded-full bg-sky-600/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-sky-900">
+                      Your brand
+                    </span>
+                  ) : null}
+                </div>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <Clock className="w-3.5 h-3.5 text-[#a1a1aa]" />
-                  <span className="text-[13px] text-[#71717a]">
-                    {accountLastScrapedAt
-                      ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
-                      : "Not yet scraped"}
+                  <Clock
+                    className={`w-3.5 h-3.5 shrink-0 ${isOwnWorkspace ? "text-sky-700/70" : "text-[#a1a1aa]"}`}
+                  />
+                  <span
+                    className={`text-[13px] ${isOwnWorkspace ? "text-sky-900/80" : "text-[#71717a]"}`}
+                    title={
+                      accountLastScrapedAt
+                        ? new Date(accountLastScrapedAt).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })
+                        : undefined
+                    }
+                  >
+                    {void lastScrapeRelativeTick}
+                    {isOwnWorkspace
+                      ? accountLastScrapedAt
+                        ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
+                        : "Scrape your ads from the Ads Library tab"
+                      : accountLastScrapedAt
+                        ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
+                        : "Not yet scraped"}
                   </span>
                 </div>
               </div>
@@ -1074,7 +2014,7 @@ function CompetitorDashboardBody({
 
           {/* Tab navigation */}
           <nav className="flex gap-0 -mb-px overflow-x-auto">
-            {tabs.map((tab) => {
+            {pageTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               const isDisabled = tab.disabled === true;
               const Icon = tab.icon;
@@ -1093,17 +2033,25 @@ function CompetitorDashboardBody({
                     isDisabled
                       ? "cursor-not-allowed border-transparent text-[#b8beca] opacity-60"
                       : isActive
-                      ? "border-[#343434] text-[#343434]"
-                      : "border-transparent text-[#6b7280] hover:text-[#343434] hover:border-[#DDF1FD]"
+                        ? isOwnWorkspace
+                          ? "border-sky-600 text-slate-900"
+                          : "border-[#343434] text-[#343434]"
+                        : "border-transparent text-[#6b7280] hover:text-[#343434] hover:border-[#DDF1FD]"
                   } ${tab.id === "AI insight" ? "" : ""}`}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 ${
-                    isDisabled
-                      ? "text-[#b8beca]"
-                      : isActive
-                      ? tab.id === "AI insight" ? "text-amber-500" : "text-[#343434]"
-                      : "text-[#9ca3af]"
-                  }`} />
+                  <Icon
+                    className={`w-4 h-4 shrink-0 ${
+                      isDisabled
+                        ? "text-[#b8beca]"
+                        : isActive
+                          ? tab.id === "AI insight"
+                            ? "text-amber-500"
+                            : isOwnWorkspace
+                              ? "text-sky-700"
+                              : "text-[#343434]"
+                          : "text-[#9ca3af]"
+                    }`}
+                  />
                   {tab.label}
                   {isDisabled ? <Lock className="h-3.5 w-3.5 shrink-0 text-[#b8beca]" aria-hidden /> : null}
                 </button>
@@ -1114,6 +2062,162 @@ function CompetitorDashboardBody({
       </div>
 
       {/* Tab Content Areas */}
+      {activeTab === "workspace ads" && isOwnWorkspace ? (
+        <div className="flex-1 overflow-y-auto bg-transparent">
+          <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
+            <WorkspaceAdSourcesPanel
+              brandId={myBrand.id}
+              domain={myBrand.domain ?? brand.domain}
+              initialSetup={myBrand.adsSetup ?? null}
+              noBottomMargin
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {activeTab === "marketing improvements" && isOwnWorkspace ? (
+        <div className="flex-1 overflow-y-auto bg-transparent">
+          <div className="mx-auto max-w-[900px] px-6 py-8 sm:px-8 lg:px-10 animate-in fade-in duration-200">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[18px] font-semibold text-sky-950">How your marketing can improve</h2>
+                <p className="mt-0.5 max-w-[40rem] text-[14px] text-sky-900/75">
+                  We scan cached ad creative from every competitor you follow, compare patterns to your workspace, and
+                  suggest what to push on vs what to leave alone.
+                </p>
+                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-sky-800/80">
+                  AI-generated · uses your Ads Library cache (refresh rivals so evidence stays fresh)
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={marketingCoachLoading}
+                onClick={() => {
+                  setMarketingCoach(null);
+                  setMarketingCoachRefresh((n) => n + 1);
+                }}
+                className="inline-flex items-center gap-2 rounded-full border border-sky-200/90 bg-white px-3 py-1.5 text-[12px] font-medium text-sky-950 shadow-sm hover:bg-sky-50 disabled:opacity-50"
+              >
+                {marketingCoachLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Refresh coaching
+              </button>
+            </div>
+
+            {marketingCoachLoading ? (
+              <div className="flex items-center justify-center gap-2 py-20 text-[14px] text-sky-900/70">
+                <Loader2 className="h-5 w-5 animate-spin shrink-0" />
+                Synthesizing across your watched brands…
+              </div>
+            ) : marketingCoachError ? (
+              <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
+                {marketingCoachError}
+                <button
+                  type="button"
+                  className="mt-2 block text-[13px] font-medium text-amber-900 underline"
+                  onClick={() => setMarketingCoachRefresh((n) => n + 1)}
+                >
+                  Try again
+                </button>
+              </div>
+            ) : marketingCoach ? (
+              <div className="space-y-5">
+                {marketingCoach.competitorsConsidered.length > 0 ? (
+                  <div className="rounded-2xl border border-sky-200/70 bg-white/80 px-4 py-3 shadow-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900/70">Included rivals</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {marketingCoach.competitorsConsidered.map((c) => (
+                        <span
+                          key={`${c.domain}-${c.name}`}
+                          className="rounded-full border border-sky-200/80 bg-sky-50/80 px-2.5 py-1 text-[12px] font-medium text-sky-950"
+                        >
+                          {c.name}
+                          {c.domain ? ` · ${c.domain}` : ""}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="rounded-2xl border border-sky-300/50 bg-gradient-to-br from-white via-sky-50/40 to-amber-50/30 p-5 shadow-[0_8px_30px_rgba(14,116,144,0.08)]">
+                  <p className="text-[15px] font-semibold leading-snug text-sky-950">Summary</p>
+                  <p className="mt-2 text-[14px] leading-relaxed text-sky-950/85 whitespace-pre-wrap">
+                    {marketingCoach.coaching.executiveSummary}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-emerald-800/90">
+                    Lean into (improve)
+                  </p>
+                  <div className="space-y-3">
+                    {marketingCoach.coaching.improve.map((item, i) => (
+                      <div
+                        key={`imp-${i}`}
+                        className="rounded-2xl border border-emerald-200/70 bg-emerald-50/40 px-4 py-3.5 shadow-sm"
+                      >
+                        <h3 className="text-[14px] font-semibold text-emerald-950">{item.title}</h3>
+                        {item.groundedIn ? (
+                          <p className="mt-1 text-[12px] font-medium text-emerald-900/70">{item.groundedIn}</p>
+                        ) : null}
+                        <p className="mt-2 text-[14px] leading-relaxed text-emerald-950/90 whitespace-pre-wrap">
+                          {item.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-sky-800/90">
+                    Keep doing (do not overhaul)
+                  </p>
+                  <div className="space-y-3">
+                    {marketingCoach.coaching.keepDoing.map((item, i) => (
+                      <div
+                        key={`kd-${i}`}
+                        className="rounded-2xl border border-sky-200/80 bg-white/90 px-4 py-3.5 shadow-sm"
+                      >
+                        <h3 className="text-[14px] font-semibold text-sky-950">{item.title}</h3>
+                        <p className="mt-2 text-[14px] leading-relaxed text-sky-900/85 whitespace-pre-wrap">
+                          {item.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-amber-900/90">
+                    Avoid chasing
+                  </p>
+                  <div className="space-y-3">
+                    {marketingCoach.coaching.doNotChase.map((item, i) => (
+                      <div
+                        key={`dnc-${i}`}
+                        className="rounded-2xl border border-amber-200/80 bg-amber-50/50 px-4 py-3.5 shadow-sm"
+                      >
+                        <h3 className="text-[14px] font-semibold text-amber-950">{item.title}</h3>
+                        <p className="mt-2 text-[14px] leading-relaxed text-amber-950/90 whitespace-pre-wrap">
+                          {item.detail}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {marketingCoach.model ? (
+                  <p className="text-center text-[11px] text-sky-900/50">Model: {marketingCoach.model}</p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {activeTab === 'ads library' && (
         <div className="flex-1 overflow-y-auto bg-transparent">
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
@@ -1728,7 +2832,7 @@ function CompetitorDashboardBody({
                           ) : (
                             <>
                               {snapchatAds.length} ad{snapchatAds.length === 1 ? "" : "s"} from Snapchat’s EU
-                              Transparency Gallery, matched using “{brand.name}” and {brand.domain}.
+                              Transparency Gallery, matched using “{competitorDisplayLabel}” and {brand.domain}.
                             </>
                           )}
                           {adLib?.snapchat?.error && snapchatAds.length === 0
@@ -1843,7 +2947,7 @@ function CompetitorDashboardBody({
               <div>
                 <h2 className="text-[18px] font-semibold text-[#343434]">Comparison to Your Brand</h2>
                 <p className="text-[14px] text-[#71717a] mt-0.5">
-                  How <span className="font-medium text-[#3f3f46]">{brand.name}</span> stacks up against{" "}
+                  How <span className="font-medium text-[#3f3f46]">{competitorDisplayLabel}</span> stacks up against{" "}
                   <span className="font-medium text-[#3f3f46]">{myBrand.name}</span>
                 </p>
                 <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-indigo-600/90">
@@ -1896,9 +3000,9 @@ function CompetitorDashboardBody({
                   <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
                     <div className="flex items-center gap-3 mb-4">
                       <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-[#e0e3e8] shadow-sm">
-                        <BrandLogoThumb src={brand.logoUrl} alt={brand.name} className="bg-white" />
+                        <BrandLogoThumb src={brand.logoUrl} alt={competitorDisplayLabel} className="bg-white" />
                       </div>
-                      <p className="text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">{brand.name}</p>
+                      <p className="text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">{competitorDisplayLabel}</p>
                     </div>
                     <p className="text-[22px] font-bold text-[#343434] tracking-tight leading-tight">
                       {comparison.competitorArchetype.headline}
@@ -1958,7 +3062,7 @@ function CompetitorDashboardBody({
       {activeTab === 'AI insight' && (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <AIInsightChat
-            competitorName={brand.name}
+            competitorName={competitorDisplayLabel}
             competitorDomain={brand.domain}
             myBrandName={myBrand.name}
             myBrandBadge={myBrand.badge}

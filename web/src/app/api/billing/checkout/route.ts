@@ -22,7 +22,7 @@ async function createCheckoutRedirect(request: NextRequest) {
 
   const billing = await getBillingEntitlement(supabase, user.id);
   if (billing.isUnlimited) {
-    return NextResponse.redirect(new URL("/dashboard", request.nextUrl.origin));
+    return NextResponse.redirect(new URL("/dashboard/spy", request.nextUrl.origin));
   }
 
   const { productId } = getPolarEnv();

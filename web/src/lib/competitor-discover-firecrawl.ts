@@ -22,6 +22,7 @@ import {
   type SearchHit,
 } from "@/lib/discovery";
 import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
+import { buildMetaAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
 
 export const DISCOVER_FIRECRAWL_TIMEOUT_MS = 55_000;
@@ -225,10 +226,7 @@ export async function tryResolveMetaPageIdFromFacebookUrls(
   return undefined;
 }
 
-export function buildMetaAdLibraryUrl(viewAllPageId: string): string {
-  const id = viewAllPageId.replace(/\D/g, "");
-  return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(id)}`;
-}
+export { buildMetaAdLibraryUrl };
 
 export function isMetaAdLibraryUrl(url: string): boolean {
   const low = url.toLowerCase();

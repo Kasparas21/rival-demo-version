@@ -63,6 +63,10 @@ export type GoogleCompanyAdItem = {
   /** Google Ads Transparency “Preview URL” (displayads-formats… / tpc.googlesyndication…). Prefer for `<img>`. */
   previewUrl?: string | null;
   imageUrl?: string | null;
+  /** First YouTube watch/embed id found anywhere in the raw creative payload (for poster thumbnails). */
+  youtubeVideoId?: string | null;
+  /** Direct MP4/WebM (`googlevideo.com/videoplayback`, etc.) from `videoUrl` or nested payload. */
+  creativeVideoUrl?: string | null;
   firstShown?: string;
   lastShown?: string;
   headline?: string | null;

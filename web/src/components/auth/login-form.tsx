@@ -41,7 +41,7 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const next = safeAuthNextPath(searchParams.get("next"), "/login") ?? "/dashboard";
+  const next = safeAuthNextPath(searchParams.get("next"), "/login") ?? "/dashboard/spy";
   const urlAuthError = searchParams.get("error");
   const notice = searchParams.get("notice");
   const rawNextQuery = searchParams.get("next");

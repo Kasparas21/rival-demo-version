@@ -32,7 +32,7 @@ export default async function SignupPage({
     if (!profile?.onboarding_completed) {
       redirect(safePostOnboardingPath ? `/onboarding?next=${encodeURIComponent(safePostOnboardingPath)}` : "/onboarding");
     }
-    redirect(safePostOnboardingPath ?? "/dashboard");
+    redirect(safePostOnboardingPath ?? "/dashboard/spy");
   }
 
   return <SignupForm />;

@@ -11,6 +11,15 @@ function normalizeHttpUrl(s: string): string {
   return t.startsWith("http") ? t : `https://${t}`;
 }
 
+function linkedInKeywordSeed(brandName: string, keywordFallback?: string): string {
+  const raw = brandName.trim();
+  const brand = raw || "marketing";
+  const fb = keywordFallback?.trim();
+  if (!fb) return brand;
+  if (!raw || /^(admin|owner|user|test|competitor)$/i.test(raw)) return fb;
+  return brand;
+}
+
 /**
  * automation-lab/linkedin-ad-library-scraper: requires `searchQuery` or `advertiserUrls`.
  */
@@ -25,6 +34,7 @@ const LINKEDIN_DATE_RANGES = new Set([
 function buildLinkedInActorInput(params: {
   brandName: string;
   linkedinUrl?: string;
+  keywordFallback?: string;
   maxAds: number;
   dateRange?: string;
   countryCode?: string;
@@ -44,7 +54,7 @@ function buildLinkedInActorInput(params: {
   }
 
   const li = params.linkedinUrl?.trim();
-  const brand = params.brandName.trim() || "marketing";
+  const searchSeed = linkedInKeywordSeed(params.brandName, params.keywordFallback);
 
   if (li) {
     const full = normalizeHttpUrl(li);
@@ -59,16 +69,17 @@ function buildLinkedInActorInput(params: {
       };
     }
     if (/linkedin\.com\/ad-library\//i.test(full)) {
-      return { ...base, searchQuery: brand };
+      return { ...base, searchQuery: searchSeed };
     }
   }
 
-  return { ...base, searchQuery: brand };
+  return { ...base, searchQuery: searchSeed };
 }
 
 export async function scrapeLinkedInAdLibrary(params: {
   brandName: string;
   linkedinUrl?: string;
+  keywordFallback?: string;
   maxItems: number;
   dateRange?: string;
   countryCode?: string;
@@ -79,6 +90,7 @@ export async function scrapeLinkedInAdLibrary(params: {
   const input = buildLinkedInActorInput({
     brandName: params.brandName,
     linkedinUrl: params.linkedinUrl,
+    keywordFallback: params.keywordFallback,
     maxAds,
     dateRange: params.dateRange,
     countryCode: params.countryCode,

@@ -112,6 +112,12 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
 
   const brandName = body.brand?.name?.trim() || "Competitor";
   const domain = cleanDomain(body.brand?.domain || "");
+  const linkedinKeywordFallback = (() => {
+    if (!domain) return undefined;
+    const part = domain.split(".")[0] ?? "";
+    if (!part) return undefined;
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  })();
   const ids: Ids = body.ids ?? {};
   const metaStatus = body.metaStatus === "ALL" ? "ALL" : "ACTIVE";
   const metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_META_MAX_ADS, MAX_ADS));
@@ -316,6 +322,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
         const raw = await scrapeLinkedInAdLibrary({
           brandName,
           linkedinUrl: ids.linkedin,
+          keywordFallback: linkedinKeywordFallback,
           maxItems: linkedinMaxAds,
           dateRange: linkedinDateRange,
           countryCode: linkedinCountryCode || undefined,

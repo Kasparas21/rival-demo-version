@@ -85,7 +85,7 @@ function isCheckoutOrBillingPath(path: string): boolean {
  * Internal admin accounts (`raw_payload.admin_unlimited`) should never be sent through Polar checkout.
  */
 export function adminSkipCheckoutDestination(path: string, isUnlimited: boolean): string {
-  return isUnlimited && isCheckoutOrBillingPath(path) ? "/dashboard" : path;
+  return isUnlimited && isCheckoutOrBillingPath(path) ? "/dashboard/spy" : path;
 }
 
 export function remainingMonthlyScrapeRuns(

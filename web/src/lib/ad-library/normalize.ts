@@ -4,6 +4,23 @@ import type {
   GoogleCompanyAdItem,
   LinkedInAdItem,
 } from "@/lib/ad-library/apify-raw-types";
+import {
+  cleanDomainHost,
+  effectiveCompetitorBrandLabel,
+  junkUserBrandDisplayName,
+} from "@/lib/ad-library/competitor-brand-display";
+
+/** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
+export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
+  const u = url?.trim().toLowerCase() ?? "";
+  if (!u) return false;
+  return (
+    u.includes("fbcdn.net") ||
+    u.includes("facebook.com") ||
+    u.includes("fb.com/") ||
+    u.includes("fb.watch")
+  );
+}
 
 /** Safe http(s) href for ad destination links; null if `text` is not a valid URL. */
 export function safeHttpsUrl(text: string): string | null {
@@ -77,6 +94,10 @@ export type GoogleAdRow =
       channel: string;
       views: string;
       thumbnail: string;
+      /** Resolved 11-char YouTube id when found in the scraper payload (poster fallbacks). */
+      youtubeVideoId?: string | null;
+      /** Direct creative video URL (e.g. MP4) when available — used for first-frame preview in the app. */
+      videoUrl?: string | null;
       adUrl: string;
       format?: string;
     };
@@ -191,14 +212,31 @@ function normalizeBrandAdvertiserString(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-/** True when normalized names have no mutual substring relationship (wrong-brand heuristic). */
-function brandAdvertiserNameMismatchForCard(brandName: string, advertiserNameFromPayload: string): boolean {
-  const b = normalizeBrandAdvertiserString(brandName);
+/** True when normalized advertiser string doesn’t match any expected competitor label (name + domain hints). */
+function brandAdvertiserNameMismatchForCard(
+  brandName: string,
+  advertiserNameFromPayload: string,
+  domainHint?: string
+): boolean {
+  const candidates: string[] = [];
+  const bn = brandName.trim();
+  if (bn && !junkUserBrandDisplayName(bn)) candidates.push(bn);
+  const host = cleanDomainHost(domainHint);
+  if (host) {
+    candidates.push(effectiveCompetitorBrandLabel(undefined, host));
+    const seg = host.split(".")[0];
+    if (seg) candidates.push(seg);
+  }
+  const normalizedKeys = [...new Set(candidates.map(normalizeBrandAdvertiserString).filter(Boolean))];
+
   const a = normalizeBrandAdvertiserString(advertiserNameFromPayload);
-  if (!b || !a) return false;
+  if (!a) return false;
   if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiserNameFromPayload.trim())) return false;
-  if (a === b) return false;
-  if (a.includes(b) || b.includes(a)) return false;
+  if (normalizedKeys.length === 0) return false;
+
+  for (const c of normalizedKeys) {
+    if (a === c || a.includes(c) || c.includes(a)) return false;
+  }
   return true;
 }
 
@@ -240,7 +278,17 @@ function cleanMetaText(value: string): string {
  */
 export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
   if (!raw || typeof raw !== "object") return {};
-  const o = raw as Record<string, unknown>;
+  const row = raw as Record<string, unknown>;
+  /** Crawlee / Apify dataset rows often store the payload under `json`. */
+  const nestedJson = row.json;
+  let o: Record<string, unknown>;
+  if (nestedJson && typeof nestedJson === "object" && !Array.isArray(nestedJson)) {
+    const inner = nestedJson as Record<string, unknown>;
+    const { json: _omitJson, ...rest } = row;
+    o = { ...inner, ...rest };
+  } else {
+    o = row;
+  }
   const unwrap =
     typeof o.adsLibraryItem === "object" && o.adsLibraryItem !== null && !Array.isArray(o.adsLibraryItem)
       ? (o.adsLibraryItem as Record<string, unknown>)
@@ -328,6 +376,28 @@ function baseObjSnapshotFromActor(baseObj: Record<string, unknown>): unknown {
   return undefined;
 }
 
+function snapshotHasRenderableCreative(s: FacebookAdSnapshot): boolean {
+  const c = s.cards?.[0];
+  if (
+    c &&
+    (c.original_image_url ||
+      c.resized_image_url ||
+      c.video_preview_image_url ||
+      c.video_hd_url ||
+      c.video_sd_url)
+  ) {
+    return true;
+  }
+  const img0 = s.images?.[0];
+  if (img0 && (img0.original_image_url || img0.resized_image_url)) return true;
+  const v0 = s.videos?.[0];
+  if (v0 && (v0.video_preview_image_url || v0.video_hd_url || v0.video_sd_url)) return true;
+  const rec = s as Record<string, unknown>;
+  if (typeof rec.image_url === "string" && rec.image_url.trim()) return true;
+  if (typeof rec.imageUrl === "string" && rec.imageUrl.trim()) return true;
+  return false;
+}
+
 function augmentSnapshotFromFlattenedCreative(
   baseObj: Record<string, unknown>,
   snap: FacebookAdSnapshot | undefined
@@ -346,6 +416,19 @@ function augmentSnapshotFromFlattenedCreative(
         ? baseObj.resizedImageUrl.trim()
         : "";
 
+  const anyTopImage =
+    (typeof baseObj.image_url === "string" ? baseObj.image_url.trim() : "") ||
+    (typeof baseObj.imageUrl === "string" ? baseObj.imageUrl.trim() : "") ||
+    (typeof baseObj.thumbnail_url === "string" ? baseObj.thumbnail_url.trim() : "") ||
+    (typeof baseObj.thumbnailUrl === "string" ? baseObj.thumbnailUrl.trim() : "") ||
+    (typeof baseObj.creative_image_url === "string" ? baseObj.creative_image_url.trim() : "") ||
+    (typeof baseObj.creativeImageUrl === "string" ? baseObj.creativeImageUrl.trim() : "") ||
+    (typeof baseObj.media_url === "string" ? baseObj.media_url.trim() : "") ||
+    (typeof baseObj.mediaUrl === "string" ? baseObj.mediaUrl.trim() : "") ||
+    "";
+
+  const flatCreativeUrl = orig || resized || anyTopImage;
+
   const titleFlat =
     typeof baseObj.title === "string"
       ? baseObj.title.trim()
@@ -360,19 +443,44 @@ function augmentSnapshotFromFlattenedCreative(
       const t = cleanMetaText(flatBody);
       if (t) next.body = { ...(snap.body || {}), text: t };
     }
+    if (!snapshotHasRenderableCreative(next) && flatCreativeUrl) {
+      next.images = [{ original_image_url: flatCreativeUrl, resized_image_url: flatCreativeUrl }];
+    }
+    const snapRec = next as Record<string, unknown>;
+    const snapOnlyImage =
+      (typeof snapRec.image_url === "string" ? snapRec.image_url.trim() : "") ||
+      (typeof snapRec.imageUrl === "string" ? snapRec.imageUrl.trim() : "") ||
+      "";
+    if (!snapshotHasRenderableCreative(next) && snapOnlyImage) {
+      next.images = [{ original_image_url: snapOnlyImage, resized_image_url: snapOnlyImage }];
+    }
+    const topPic =
+      firstStringFromRecord(baseObj, [
+        "page_profile_picture_url",
+        "pageProfilePictureUrl",
+        "profile_picture_url",
+        "profilePictureUrl",
+        "page_picture_url",
+        "pagePictureUrl",
+        "picture",
+      ]) ||
+      (typeof snapRec.page_profile_picture_url === "string" ? snapRec.page_profile_picture_url.trim() : "");
+    if (topPic && !next.page_profile_picture_url) {
+      next.page_profile_picture_url = topPic;
+    }
     return next;
   }
 
   const body = flatBody;
-  const hasAny = Boolean(orig || resized || titleFlat || body);
+  const hasAny = Boolean(flatCreativeUrl || titleFlat || body);
   if (!hasAny) return undefined;
 
   return {
     title: titleFlat || undefined,
     caption: titleFlat || undefined,
     body: body ? { text: body } : undefined,
-    ...(orig || resized
-      ? { images: [{ original_image_url: orig || resized, resized_image_url: resized || orig }] }
+    ...(flatCreativeUrl
+      ? { images: [{ original_image_url: flatCreativeUrl, resized_image_url: flatCreativeUrl }] }
       : {}),
   };
 }
@@ -400,20 +508,57 @@ function flattenBodyTextFromBaseObj(baseObj: Record<string, unknown>): string {
   return cleaned.reduce((best, cur) => (cur.length > best.length ? cur : best));
 }
 
+function firstStringFromRecord(o: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
 function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; isVideo: boolean } {
   if (!snap) return { url: "", isVideo: false };
+  const snapLoose = snap as Record<string, unknown>;
+  const directStill = firstStringFromRecord(snapLoose, [
+    "image_url",
+    "imageUrl",
+    "picture",
+    "full_picture",
+    "fullPicture",
+  ]);
+  if (directStill) return { url: directStill, isVideo: false };
+
   const fmt = (snap.display_format || "").toUpperCase();
-  const card = snap.cards?.[0];
-  if (card?.video_preview_image_url) {
-    return { url: card.video_preview_image_url, isVideo: true };
+
+  for (const rawCard of snap.cards ?? []) {
+    const cardLoose = rawCard as Record<string, unknown>;
+    const looseStill = firstStringFromRecord(cardLoose, [
+      "image_url",
+      "imageUrl",
+      "image_uri",
+      "imageUri",
+      "link_image",
+      "linkImage",
+      "picture",
+      "full_picture",
+      "thumbnail_uri",
+      "thumbnailUri",
+    ]);
+    if (looseStill) return { url: looseStill, isVideo: false };
+
+    const c = rawCard as NonNullable<FacebookAdSnapshot["cards"]>[number];
+    if (c?.video_preview_image_url) {
+      return { url: c.video_preview_image_url, isVideo: true };
+    }
+    if (c?.video_hd_url || c?.video_sd_url) {
+      return { url: c.video_preview_image_url || "", isVideo: true };
+    }
+    const cardImage = c?.resized_image_url || c?.original_image_url || "";
+    if (cardImage) {
+      return { url: cardImage, isVideo: false };
+    }
   }
-  if (card?.video_hd_url || card?.video_sd_url) {
-    return { url: card.video_preview_image_url || "", isVideo: true };
-  }
-  const cardImage = card?.resized_image_url || card?.original_image_url || "";
-  if (cardImage) {
-    return { url: cardImage, isVideo: false };
-  }
+
   const v = snap.videos?.[0];
   if (v?.video_preview_image_url) {
     return { url: v.video_preview_image_url, isVideo: true };
@@ -428,9 +573,10 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
 
 function pickMetaVideoUrl(snap: FacebookAdLibraryItem["snapshot"]): string | undefined {
   if (!snap) return undefined;
-  const card = snap.cards?.[0];
-  const fromCard = card?.video_hd_url || card?.video_sd_url;
-  if (fromCard) return fromCard;
+  for (const card of snap.cards ?? []) {
+    const fromCard = card?.video_hd_url || card?.video_sd_url;
+    if (fromCard) return fromCard;
+  }
   const first = snap.videos?.[0];
   const fromSnapshot = first?.video_hd_url || first?.video_sd_url;
   return fromSnapshot || undefined;
@@ -658,7 +804,7 @@ export function facebookItemToMetaCard(
     subtext,
     ...(destinationUrl ? { destinationUrl } : {}),
     ...(linkDescOut ? { linkDescription: linkDescOut } : {}),
-    img: img || snap?.page_profile_picture_url || "",
+    img: img || "",
     isVideo,
     adLibraryUrl,
     startedAt: item.start_date,
@@ -698,6 +844,27 @@ export function isGoogleFaviconUrl(url: string): boolean {
   return /google\.com\/s2\/favicons|gstatic\.com\/favicon/i.test(url);
 }
 
+/**
+ * Google Transparency “preview” links are often HTML/JS loaders (`…/ads/preview/content.js?…`), not raster images.
+ * Those must not be passed to `<img src>` — use `videoUrl` / playable URLs instead.
+ */
+export function isGoogleTransparencyScriptPreviewUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  if (u.includes("/ads/preview/content.js")) return true;
+  if (u.includes("content.js?") || u.endsWith("content.js")) return true;
+  return false;
+}
+
+/** Suitable for `<img src>` on Google / YouTube ad cards (excludes script loaders and video streams). */
+export function isUsableGoogleStillImagePreviewUrl(url: string): boolean {
+  const t = url.trim();
+  if (!t || !/^https?:\/\//i.test(t)) return false;
+  if (isGoogleTransparencyScriptPreviewUrl(t)) return false;
+  if (/googlevideo\.com\/videoplayback/i.test(t)) return false;
+  if (/\.(mp4|webm|m3u8)(\?|$)/i.test(t)) return false;
+  return true;
+}
+
 /** Extract YouTube video id from watch / embed / shorts / youtu.be URLs. */
 export function extractYouTubeVideoId(url: string): string | null {
   if (!url?.trim()) return null;
@@ -714,6 +881,67 @@ export function extractYouTubeVideoId(url: string): string | null {
 export function youtubeThumbnailFromUrl(url: string): string | null {
   const id = extractYouTubeVideoId(url);
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null;
+}
+
+function extractFirstYouTubeVideoIdDeep(obj: unknown, depth = 0): string | null {
+  if (depth > 10 || obj === null || obj === undefined) return null;
+  if (typeof obj === "string") {
+    return extractYouTubeVideoId(obj);
+  }
+  if (Array.isArray(obj)) {
+    for (const x of obj) {
+      const id = extractFirstYouTubeVideoIdDeep(x, depth + 1);
+      if (id) return id;
+    }
+    return null;
+  }
+  if (typeof obj === "object") {
+    for (const v of Object.values(obj)) {
+      const id = extractFirstYouTubeVideoIdDeep(v, depth + 1);
+      if (id) return id;
+    }
+  }
+  return null;
+}
+
+/** MP4/WebM (or googlevideo.com) URLs — playable in `<video>` for a first-frame preview. */
+function findFirstGoogleVideoFileUrl(obj: unknown, depth = 0): string | null {
+  if (depth > 8 || obj === null || obj === undefined) return null;
+  if (typeof obj === "string") {
+    const s = obj.trim();
+    if (!/^https?:\/\//i.test(s) || s.length < 12) return null;
+    if (/\.(mp4|webm)(\?|$)/i.test(s)) return s;
+    if (/googlevideo\.com\/videoplayback\?/i.test(s)) return s;
+    if (/googlevideo\.com\//i.test(s) && (/videoplayback|\.mp4|\.webm/i.test(s))) return s;
+    return null;
+  }
+  if (Array.isArray(obj)) {
+    for (const x of obj) {
+      const u = findFirstGoogleVideoFileUrl(x, depth + 1);
+      if (u) return u;
+    }
+    return null;
+  }
+  if (typeof obj === "object") {
+    for (const v of Object.values(obj)) {
+      const u = findFirstGoogleVideoFileUrl(v, depth + 1);
+      if (u) return u;
+    }
+  }
+  return null;
+}
+
+export function youtubePosterUrlFromVideoId(videoId: string): string {
+  return `https://img.youtube.com/vi/${videoId.trim()}/hqdefault.jpg`;
+}
+
+/** Multiple static thumbnail URLs — hqdefault 404s on some shorts/unlisted; fall back through qualities. */
+export function youtubePosterCandidateUrls(videoId: string): string[] {
+  const id = videoId.trim();
+  if (!id) return [];
+  return (["hqdefault", "mqdefault", "sddefault", "default"] as const).map(
+    (q) => `https://img.youtube.com/vi/${id}/${q}.jpg`
+  );
 }
 
 /** Human label for outbound links on Google / YouTube ad cards (matches Meta/TikTok CTA style). */
@@ -748,8 +976,9 @@ function findFirstGoogleCreativeImageUrl(obj: unknown, depth = 0): string | null
       /googleusercontent|displayads-formats|ggpht\.com|gstatic\.com|doubleclick|googleadservices|googlesyndication|storage\.googleapis|ytimg\.com|ggpht/i.test(
         s
       )
-    )
-      return s;
+    ) {
+      return isUsableGoogleStillImagePreviewUrl(s) ? s : null;
+    }
     return null;
   }
   if (Array.isArray(obj)) {
@@ -828,7 +1057,10 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
       if (!(k in o)) continue;
       const v = o[k];
       if (v === null) return null;
-      if (typeof v === "string" && v.trim()) return v.trim();
+      if (typeof v === "string" && v.trim()) {
+        const t = v.trim();
+        if (isUsableGoogleStillImagePreviewUrl(t)) return t;
+      }
     }
     const imageUrls = o.imageUrls;
     if (Array.isArray(imageUrls) && typeof imageUrls[0] === "string" && imageUrls[0].trim()) {
@@ -877,7 +1109,16 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
     advertiserId: pick(["advertiserId", "advertiser_id", "advertiserID"]),
     creativeId: pick(["creativeId", "creative_id", "creativeID"]) || creativeFromId,
     format: pick(["format", "adFormat", "ad_format", "creativeFormat", "creative_format"]),
-    adUrl: pick(["adUrl", "ad_url", "url", "transparencyUrl", "transparency_url", "permalink"]),
+    adUrl: pick([
+      "adUrl",
+      "ad_url",
+      "adLibraryUrl",
+      "ad_library_url",
+      "url",
+      "transparencyUrl",
+      "transparency_url",
+      "permalink",
+    ]),
     advertiserName: pick([
       "advertiserName",
       "advertiser_name",
@@ -893,6 +1134,17 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
     headline: pick(["headline", "longHeadline", "long_headline"]),
     description: pick(["description", "body", "snippet", "text"]),
     title: pick(["title", "adTitle", "ad_title"]),
+    youtubeVideoId: extractFirstYouTubeVideoIdDeep(o) ?? null,
+    creativeVideoUrl:
+      pick(["videoUrl", "video_url", "videoURL", "creativeVideoUrl", "creative_video_url"]) ||
+      (() => {
+        const va = o.videoUrls;
+        if (!Array.isArray(va)) return undefined;
+        const first = va.find((x): x is string => typeof x === "string" && x.trim().length > 0);
+        return first?.trim();
+      })() ||
+      findFirstGoogleVideoFileUrl(o) ||
+      null,
   };
 }
 
@@ -977,11 +1229,17 @@ export function googleItemToRow(
 
   /** Include `index` so keys stay unique when the API returns duplicate advertiser/creative pairs. */
   const id = `${advertiserId ?? "ad"}-${creativeId ?? "cr"}-${index}`;
-  const format = (item.format || "").toLowerCase();
   const fromHeadline =
     item.headline?.trim() || item.title?.trim() || item.description?.trim()?.slice(0, 120);
 
-  if (format === "video" || /youtube\.com|youtu\.be/i.test(adUrl)) {
+  /** YouTube-style card: any video creative kind, Transparency links, or a resolved YouTube id / video file. */
+  const useYoutubeCard =
+    googleCreativeFormatKind(item.format) === "video" ||
+    /youtube\.com|youtu\.be/i.test(adUrl) ||
+    Boolean(item.youtubeVideoId?.trim()) ||
+    Boolean(item.creativeVideoUrl?.trim());
+
+  if (useYoutubeCard) {
     const title =
       fromHeadline ||
       (item.advertiserName && displayDomain
@@ -989,7 +1247,29 @@ export function googleItemToRow(
         : item.advertiserName || displayDomain || (creativeId ? `Video ad (${creativeId})` : "Video ad"));
     const pu = item.previewUrl?.trim() || "";
     const iu = item.imageUrl?.trim() || "";
-    const nested = findFirstGoogleCreativeImageUrl(item as unknown);
+    const nestedRaw = findFirstGoogleCreativeImageUrl(item as unknown);
+    const nested =
+      nestedRaw &&
+      !isGoogleFaviconUrl(nestedRaw) &&
+      isUsableGoogleStillImagePreviewUrl(nestedRaw)
+        ? nestedRaw
+        : null;
+    let yid =
+      item.youtubeVideoId?.trim() ||
+      extractYouTubeVideoId(adUrl) ||
+      extractYouTubeVideoId(pu) ||
+      extractYouTubeVideoId(iu) ||
+      "";
+    if (!yid) {
+      for (const s of [item.description, item.headline, item.title, fromHeadline]) {
+        if (typeof s !== "string") continue;
+        const id = extractYouTubeVideoId(s);
+        if (id) {
+          yid = id;
+          break;
+        }
+      }
+    }
     const ytFromFields = [
       adUrl,
       pu,
@@ -1002,11 +1282,18 @@ export function googleItemToRow(
       .find(Boolean);
 
     let thumb = "";
-    if (iu && !isGoogleFaviconUrl(iu)) thumb = iu;
-    else if (pu && findFirstGoogleCreativeImageUrl(pu)) thumb = pu;
-    else if (nested && !isGoogleFaviconUrl(nested)) thumb = nested;
-    else if (ytFromFields) thumb = ytFromFields;
-    else thumb = youtubeThumbnailFromUrl(adUrl) || "";
+    if (yid) thumb = youtubePosterUrlFromVideoId(yid);
+    if (!thumb && iu && !isGoogleFaviconUrl(iu) && isUsableGoogleStillImagePreviewUrl(iu)) thumb = iu;
+    if (!thumb && pu && isUsableGoogleStillImagePreviewUrl(pu) && findFirstGoogleCreativeImageUrl(pu)) thumb = pu;
+    if (!thumb && nested) thumb = nested;
+    if (!thumb && ytFromFields) thumb = ytFromFields;
+    if (!thumb) thumb = youtubeThumbnailFromUrl(adUrl) || "";
+
+    const videoFile =
+      item.creativeVideoUrl?.trim() ||
+      (pu && findFirstGoogleVideoFileUrl(pu) ? pu : null) ||
+      (iu && findFirstGoogleVideoFileUrl(iu) ? iu : null) ||
+      "";
 
     return {
       type: "youtube",
@@ -1015,6 +1302,8 @@ export function googleItemToRow(
       channel: item.advertiserName || cleanHost(displayDomain) || "Advertiser",
       views: item.lastShown ? `Updated ${item.lastShown.slice(0, 10)}` : "Google Ads Transparency",
       thumbnail: thumb,
+      youtubeVideoId: yid || null,
+      videoUrl: videoFile || null,
       adUrl,
       format: item.format || "video",
     };
@@ -1076,6 +1365,35 @@ export function googleItemToRow(
     lastShownLabel,
     previewUrl,
   };
+}
+
+/**
+ * Heuristic: higher = more likely to show a real thumbnail or first video frame in the UI.
+ * Sort descending so inline dashboard slots favor creatives with playable/static preview assets.
+ * (CDN expiry / CORS can still make a high score row fail at runtime.)
+ */
+export function googleAdRowPreviewLikelihood(row: GoogleAdRow): number {
+  if (row.type === "youtube") {
+    let s = 0;
+    if (row.videoUrl?.trim()) s += 50;
+    if (row.youtubeVideoId?.trim()) s += 30;
+    const th = row.thumbnail?.trim() || "";
+    if (th) {
+      if (isUsableGoogleStillImagePreviewUrl(th)) s += 20;
+      else if (/^https:\/\/img\.youtube\.com\/vi\//i.test(th)) s += 20;
+    }
+    if (!row.youtubeVideoId?.trim() && row.adUrl && youtubeThumbnailFromUrl(row.adUrl)) s += 10;
+    return s;
+  }
+  const preview = row.previewUrl?.trim() || "";
+  const img = row.img?.trim() || "";
+  let s = 0;
+  if (preview && isUsableGoogleStillImagePreviewUrl(preview)) s += 40;
+  if (img && !isGoogleFaviconUrl(img)) {
+    if (isUsableGoogleStillImagePreviewUrl(img)) s += 40;
+    else s += 8;
+  }
+  return s;
 }
 
 export function linkedInItemToCard(
@@ -2070,7 +2388,7 @@ function pinterestReachSummary(reach: unknown): string | null {
 export function pinterestDatasetItemToCard(
   raw: Record<string, unknown>,
   index: number,
-  ctx?: { brandName?: string }
+  ctx?: { brandName?: string; brandDomain?: string }
 ): PinterestAdCard {
   const pinId = raw.id ?? raw.Id ?? raw.pinId;
   const id = pinId != null ? String(pinId) : `pin-${index}`;
@@ -2078,8 +2396,12 @@ export function pinterestDatasetItemToCard(
   const headline =
     firstString(raw, ["title", "Title", "headline", "Headline"]) || "Pinterest ad";
 
-  const advertiser =
+  let advertiser =
     firstString(raw, ["advertiserName", "AdvertiserName", "advertiser"]) || "Advertiser";
+  if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiser.trim())) {
+    const fb = effectiveCompetitorBrandLabel(ctx?.brandName, ctx?.brandDomain);
+    if (fb) advertiser = fb;
+  }
 
   let videoUrl =
     firstString(raw, ["videoUrl", "VideoUrl", "video_url", "mp4Url", "transcodedVideoUrl"]) ||
@@ -2141,9 +2463,10 @@ export function pinterestDatasetItemToCard(
     safeHttpsUrl(productUrl) ||
     "https://www.pinterest.com/";
 
-  const bn = ctx?.brandName?.trim();
+  const bn = ctx?.brandName?.trim() ?? "";
   const advertiserMismatch =
-    Boolean(bn) && brandAdvertiserNameMismatchForCard(bn!, advertiser);
+    (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+    brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
 
   return {
     id,
@@ -2334,13 +2657,17 @@ export function sortTikTokAdsForResponse(ads: TikTokAdCard[]): TikTokAdCard[] {
 export function tiktokApifyItemToCard(
   raw: Record<string, unknown>,
   index: number,
-  ctx?: { brandName?: string }
+  ctx?: { brandName?: string; brandDomain?: string }
 ): TikTokAdCard | null {
   const id =
     firstString(raw, ["adId", "ad_id", "AD ID", "id"]) ?? `tt-${index}`;
-  const advertiser =
+  let advertiser =
     firstString(raw, ["advertiserName", "Advertiser Name", "ad_sponsor", "Ad Sponsor"]) ??
     "Advertiser";
+  if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiser.trim())) {
+    const fb = effectiveCompetitorBrandLabel(ctx?.brandName, ctx?.brandDomain);
+    if (fb) advertiser = fb;
+  }
   const headline = firstString(raw, ["headline", "Headline"]) ?? advertiser;
   const desc =
     firstString(raw, ["description", "body", "copy"]) ??
@@ -2386,9 +2713,10 @@ export function tiktokApifyItemToCard(
   const lastShown = lastRaw ? formatTikTokUiDate(lastRaw) : null;
   const uniqueUsersSeen = pickTikTokAudience(raw) ?? null;
 
-  const bn = ctx?.brandName?.trim();
+  const bn = ctx?.brandName?.trim() ?? "";
   const advertiserMismatch =
-    Boolean(bn) && brandAdvertiserNameMismatchForCard(bn!, advertiser);
+    (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+    brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
 
   return {
     id: String(id),
@@ -2580,7 +2908,7 @@ function formatSnapImpressionsLabel(value: unknown): string | null {
 export function snapchatDatasetItemToCard(
   raw: Record<string, unknown>,
   index: number,
-  ctx?: { brandName?: string }
+  ctx?: { brandName?: string; brandDomain?: string }
 ): SnapchatAdCard {
   const sid =
     snapPickString(raw, "adId", "AdId") ||
@@ -2595,11 +2923,15 @@ export function snapchatDatasetItemToCard(
     snapPickString(raw, "brandName", "BrandName") ||
     "Snapchat ad";
 
-  const advertiser =
+  let advertiser =
     snapPickString(raw, "advertiserName", "AdvertiserName") ||
     firstString(raw, ["advertiser", "Advertiser", "publisher", "Publisher", "companyName"]) ||
     snapPickString(raw, "brandName", "BrandName") ||
     "Advertiser";
+  if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiser.trim())) {
+    const fb = effectiveCompetitorBrandLabel(ctx?.brandName, ctx?.brandDomain);
+    if (fb) advertiser = fb;
+  }
 
   let videoUrl =
     firstString(raw, [
@@ -2784,9 +3116,10 @@ export function snapchatDatasetItemToCard(
     firstString(raw, ["reach"]) ??
     null;
 
-  const bn = ctx?.brandName?.trim();
+  const bn = ctx?.brandName?.trim() ?? "";
   const advertiserMismatch =
-    Boolean(bn) && brandAdvertiserNameMismatchForCard(bn!, advertiser);
+    (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+    brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
 
   const suppressCreativeHeadline =
     hasHeroMediaUrlField || /\bunreal\s+motion\b/i.test(headline.trim());

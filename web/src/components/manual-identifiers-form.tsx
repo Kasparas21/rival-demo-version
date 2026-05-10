@@ -24,6 +24,12 @@ import {
   type RegionChipOption,
 } from "@/components/ad-library/single-select-flag-chip-row";
 import { validateIdentifierField } from "@/lib/validate-identifier-field";
+import {
+  buildMetaAdLibraryUrl,
+  canonicalLinkedInAdLibraryUrl,
+  canonicalMetaAdsLibraryUrl,
+  extractMetaAdsLibraryPageId,
+} from "@/lib/ad-library/canonical-library-url";
 
 /** “All markets” / world options first; then ISO 3166-1 alpha-2 A–Z (same order on every platform row). */
 function compareRegionChipValue(a: string, b: string): number {
@@ -162,8 +168,8 @@ function rowHeadingLabel(fieldId: ChannelId, fieldLabelWebsite: string, channelN
 }
 
 /**
- * Preview target for each row — prefers server-provided URLs, then current input / domain falls back,
- * then a sensible library landing page so every platform always has Preview.
+ * Preview target for each row — when the user has typed something usable, that wins so Preview matches
+ * the box; otherwise fall back to server-provided URLs, then domain / generic library home pages.
  */
 function buildRowPreviewUrl(
   fieldId: ChannelId,
@@ -180,17 +186,27 @@ function buildRowPreviewUrl(
 
   switch (fieldId) {
     case "meta": {
-      if (fromServer?.startsWith("http") && isFacebookAdLibraryUrl(fromServer)) return fromServer;
-      if (/^https?:\/\//i.test(v)) {
+      if (v) {
+        const canon = canonicalMetaAdsLibraryUrl(v);
+        if (canon) return canon;
         const url = ensureHttp(v);
         if (isFacebookAdLibraryUrl(url)) return url;
+        const digits = v.replace(/\D/g, "");
+        if (
+          digits.length >= 10 &&
+          digits.length <= 22 &&
+          /^[\d\s-]+$/.test(v.replace(/[^\d\s-]/g, ""))
+        ) {
+          return buildMetaAdLibraryUrl(digits);
+        }
       }
+      if (fromServer?.startsWith("http") && isFacebookAdLibraryUrl(fromServer)) return fromServer;
       return "https://www.facebook.com/ads/library/";
     }
     case "google": {
-      if (fromServer?.startsWith("http")) return fromServer;
       const domRaw = (v && isValidDomain(v) ? normalizeDomain(v) : "") || domainFallback;
       if (domRaw && isValidDomain(domRaw)) return `https://${normalizeDomain(domRaw)}`;
+      if (fromServer?.startsWith("http")) return fromServer;
       return "https://www.google.com/ads/transparency/";
     }
     case "linkedin": {
@@ -203,9 +219,9 @@ function buildRowPreviewUrl(
     case "pinterest":
       return "https://ads.pinterest.com/ads-repository/";
     case "snapchat": {
+      if (v.trim()) return buildSnapchatAdsGalleryPreviewUrl(v.trim());
       if (fromServer?.startsWith("http")) return fromServer;
-      const advertiser =
-        v.trim() || advertiserKeywordFromDomain(domainFallback);
+      const advertiser = advertiserKeywordFromDomain(domainFallback);
       return buildSnapchatAdsGalleryPreviewUrl(advertiser || undefined);
     }
     default:
@@ -401,22 +417,6 @@ const CHANNEL_FIELDS: {
   },
 ];
 
-/** Stable signature for discovery payloads when the parent swaps competitors or refetches IDs. */
-function discoveryFingerprint(ids: Partial<PlatformIdentifier>): string {
-  const parts: string[] = [];
-  if (ids.meta) parts.push(`meta:${ids.meta}`);
-  if (ids.metaPageUrl) parts.push(`metaPageUrl:${ids.metaPageUrl}`);
-  const rest = CHANNEL_FIELDS.filter((f) => f.id !== "meta")
-    .map((f) => {
-      const v = ids[f.id];
-      return typeof v === "string" && v.length > 0 ? `${f.id}:${v}` : null;
-    })
-    .filter((s): s is string => s != null);
-  rest.sort((a, b) => a.localeCompare(b));
-  parts.sort((a, b) => a.localeCompare(b));
-  return [...parts, ...rest].join("|");
-}
-
 /** Display strings seeded from discovery; Auto-found shows only while each input still matches its snapshot. */
 function autoFoundDisplaySnapshot(ids: Partial<PlatformIdentifier>): Partial<Record<ChannelId, string>> {
   const fields: Partial<Record<ChannelId, string>> = {};
@@ -551,15 +551,19 @@ function DiscoveryTextInput({
   );
 }
 
-function buildMetaAdLibraryUrl(pageIdDigits: string): string {
-  const id = pageIdDigits.replace(/\D/g, "");
-  return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(id)}`;
-}
-
 /** Split Meta row into numeric id vs facebook URL for API payload */
 function mergeMetaFromInput(raw: string): Pick<PlatformIdentifier, "meta" | "metaPageUrl"> {
   const t = raw.trim();
   if (!t) return { meta: undefined, metaPageUrl: undefined };
+
+  const canon = canonicalMetaAdsLibraryUrl(t);
+  if (canon) {
+    return {
+      meta: extractMetaAdsLibraryPageId(canon),
+      metaPageUrl: canon,
+    };
+  }
+
   const low = t.toLowerCase();
   const adLib =
     low.includes("facebook.com/ads/library") ||
@@ -567,22 +571,6 @@ function mergeMetaFromInput(raw: string): Pick<PlatformIdentifier, "meta" | "met
     low.includes("m.facebook.com/ads/library");
   if (adLib) {
     const normalized = normalizeUrl(t);
-    try {
-      const u = new URL(normalized);
-      const qpid = u.searchParams.get("view_all_page_id") ?? "";
-      const digitsFromQ = qpid.replace(/\D/g, "");
-      if (digitsFromQ.length >= 10 && digitsFromQ.length <= 22) {
-        return {
-          meta: digitsFromQ,
-          metaPageUrl:
-            /\bview_all_page_id=/i.test(normalized)
-              ? normalized
-              : buildMetaAdLibraryUrl(digitsFromQ),
-        };
-      }
-    } catch {
-      /* use metaPageUrl only */
-    }
     return { meta: undefined, metaPageUrl: normalized };
   }
   if (low.includes("facebook.com") || low.includes("fb.com") || low.includes("fb.me")) {
@@ -619,28 +607,14 @@ export function ManualIdentifiersForm({
   const [errors, setErrors] = useState<Partial<Record<ChannelId, string>>>({});
   const [warnings, setWarnings] = useState<Partial<Record<ChannelId, string>>>({});
 
-  const competitorKey = useMemo(
-    () =>
-      [
-        competitorLabel,
-        competitorDomain ?? "",
-        discoveryFingerprint(discoveredIds),
-        (recommendedKeywords ?? []).join("\u029e"),
-        [...selectedChannels].sort().join(","),
-      ].join("\0"),
-    [competitorLabel, competitorDomain, discoveredIds, recommendedKeywords, selectedChannels]
-  );
-
+  /** Keeps TikTok / Pinterest / Google / etc. in sync when discovery updates; never overwrites `metaDisplay` (user may have pasted a different Ad Library URL). */
   useEffect(() => {
     setIdentifiers(buildManualIdentifierSeed(discoveredIds, recommendedKeywords, selectedChannels));
-    setMetaDisplay(discoveredIds.metaPageUrl ?? discoveredIds.meta ?? "");
-    setErrors({});
-    setWarnings({});
-  }, [competitorKey]);
+  }, [discoveredIds, recommendedKeywords, selectedChannels]);
 
   const autoFoundDisplaySnap = useMemo(
     () => autoFoundDisplaySnapshot(discoveredIds),
-    [competitorKey, discoveredIds]
+    [discoveredIds]
   );
 
   const fieldsToShow = CHANNEL_FIELDS.filter((f) => selectedChannels.includes(f.id));
@@ -820,10 +794,12 @@ export function ManualIdentifiersForm({
     }
 
     if (channelId === "linkedin" && /linkedin\.com/i.test(nextVal)) {
+      const canon = canonicalLinkedInAdLibraryUrl(nextVal);
       const norm = normalizeUrl(nextVal);
-      if (norm !== nextVal) {
-        nextVal = norm;
-        setIdentifiers((prev) => ({ ...prev, linkedin: norm }));
+      const chosen = canon ?? norm;
+      if (chosen !== nextVal) {
+        nextVal = chosen;
+        setIdentifiers((prev) => ({ ...prev, linkedin: chosen }));
       }
     }
 

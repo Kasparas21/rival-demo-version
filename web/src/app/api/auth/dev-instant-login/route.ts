@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
 
-  const nextRaw = typeof body.next === "string" ? body.next : "/dashboard";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+  const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
+  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
 
   const admin = createSupabaseAdminClient();
 

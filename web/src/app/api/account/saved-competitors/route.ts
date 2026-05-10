@@ -4,7 +4,7 @@ import type { SavedCompetitorPayload } from "@/lib/account/types";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
+import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function normalizeCompetitor(input: SavedCompetitorPayload): SavedCompetitorPayload {
   const base: SavedCompetitorPayload = {
@@ -59,7 +59,19 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const competitors = (data ?? []).map((row) => ({
+  const { data: primaryBrand } = await supabase
+    .from("brands")
+    .select("domain")
+    .eq("user_id", user.id)
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const workspaceDomain = primaryBrand?.domain?.trim() || null;
+
+  const competitors = (data ?? [])
+    .map((row) => ({
     slug: row.slug,
     name: row.name,
     ...(row.logo_url ? { logoUrl: row.logo_url } : {}),
@@ -75,7 +87,8 @@ export async function GET() {
     pending: row.pending,
     ...(row.last_scraped_at ? { lastScrapedAt: row.last_scraped_at } : {}),
     ...(row.is_workspace_brand === true ? { isWorkspaceBrand: true } : {}),
-  }));
+  }))
+    .filter((row) => !isSidebarRowLikelyWorkspaceBrand(row as SidebarCompetitor, workspaceDomain));
 
   return NextResponse.json({ competitors });
 }

@@ -2,7 +2,13 @@ import { redirect } from "next/navigation";
 import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
-import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
+import {
+  firstParam,
+  postOnboardingPath,
+  safeAuthNextPath,
+  type SearchParams,
+} from "@/lib/auth/auth-page-helpers";
+import { DASHBOARD_HOME_PATH, isGenericDashboardLanding } from "@/lib/dashboard/default-home";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function LoginPage({
@@ -31,10 +37,12 @@ export default async function LoginPage({
       .eq("id", user.id)
       .maybeSingle();
     const billing = await getBillingEntitlement(supabase, user.id);
-    const rawNext = safePostOnboardingPath ?? "/dashboard";
+    const rawNext = safePostOnboardingPath ?? DASHBOARD_HOME_PATH;
     const dest = adminSkipCheckoutDestination(rawNext, billing.isUnlimited);
     if (!profile?.onboarding_completed) {
-      redirect(dest !== "/dashboard" ? `/onboarding?next=${encodeURIComponent(dest)}` : "/onboarding");
+      redirect(
+        !isGenericDashboardLanding(dest) ? `/onboarding?next=${encodeURIComponent(dest)}` : "/onboarding",
+      );
     }
     redirect(dest);
   }

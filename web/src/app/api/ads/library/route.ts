@@ -47,6 +47,7 @@ import {
 } from "@/lib/ad-library/persist-scraped-ads";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
+import { hostToBrandLabel } from "@/lib/onboarding/host";
 import {
   resolveAdsCacheDomainForUser,
   savedCompetitorDomainOrFilter,
@@ -81,6 +82,55 @@ function cleanDomain(d: string): string {
 
 function isCacheablePlatform(p: AdsLibraryPlatform): p is CacheablePlatform {
   return (CACHEABLE_PLATFORMS as readonly string[]).includes(p);
+}
+
+type AdsCachePickRow = {
+  platform: string;
+  ads_data: unknown;
+  competitor_domain: string;
+  scraped_at: string;
+};
+
+/**
+ * `readDomains` can return multiple DB keys (slug vs registrable domain). Without ordering, PostgREST may
+ * return two rows per platform; the last iterated row used to win arbitrarily (sometimes an empty stale row).
+ */
+function pickBestAdsCacheHitsByPlatform(rows: AdsCachePickRow[], preferredDomain: string): Map<CacheablePlatform, unknown> {
+  const pref = preferredDomain.trim().toLowerCase();
+  const bestRow = new Map<CacheablePlatform, AdsCachePickRow>();
+  for (const row of rows) {
+    const pl = row.platform;
+    if (!pl || !isCacheablePlatform(pl as AdsLibraryPlatform)) continue;
+    const cp = pl as CacheablePlatform;
+    const prev = bestRow.get(cp);
+    if (!prev) {
+      bestRow.set(cp, row);
+      continue;
+    }
+    const rDom = String(row.competitor_domain ?? "")
+      .trim()
+      .toLowerCase();
+    const pDom = String(prev.competitor_domain ?? "")
+      .trim()
+      .toLowerCase();
+    const rPref = pref.length > 0 && rDom === pref;
+    const pPref = pref.length > 0 && pDom === pref;
+    if (rPref && !pPref) {
+      bestRow.set(cp, row);
+      continue;
+    }
+    if (!rPref && pPref) continue;
+    const rTime = Date.parse(row.scraped_at);
+    const pTime = Date.parse(prev.scraped_at);
+    if (!Number.isNaN(rTime) && !Number.isNaN(pTime) && rTime > pTime) {
+      bestRow.set(cp, row);
+    } else if (Number.isNaN(pTime) && !Number.isNaN(rTime)) {
+      bestRow.set(cp, row);
+    }
+  }
+  const out = new Map<CacheablePlatform, unknown>();
+  for (const [p, r] of bestRow) out.set(p, r.ads_data);
+  return out;
 }
 
 function countScrapedAdsForPlatform(platform: AdsLibraryPlatform, out: AdsLibraryResponse): number {
@@ -176,6 +226,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const brandName = body.brand?.name?.trim() || "Competitor";
   const domain = cleanDomain(body.brand?.domain || "");
+  const linkedinKeywordFallback = domain ? hostToBrandLabel(domain) : undefined;
   const ids: Ids = body.ids ?? {};
   const metaStatus = body.metaStatus === "ALL" ? "ALL" : "ACTIVE";
   const metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_ADS, MAX_ADS));
@@ -308,16 +359,14 @@ export async function POST(req: Request): Promise<NextResponse> {
       if (platformsToCheck.length > 0 && adsCacheReadDomains.length > 0) {
         const { data: cachedRows } = await supabase
           .from("ads_cache")
-          .select("platform, ads_data")
+          .select("platform, ads_data, competitor_domain, scraped_at")
           .eq("user_id", userId)
           .in("competitor_domain", adsCacheReadDomains)
           .in("platform", platformsToCheck)
           .gt("expires_at", new Date().toISOString());
-        for (const row of cachedRows ?? []) {
-          const pl = row.platform;
-          if (pl && isCacheablePlatform(pl as AdsLibraryPlatform)) {
-            platformCacheHits.set(pl as CacheablePlatform, row.ads_data);
-          }
+        const picked = pickBestAdsCacheHitsByPlatform((cachedRows ?? []) as AdsCachePickRow[], adsCacheDomain);
+        for (const [p, data] of picked) {
+          platformCacheHits.set(p, data);
         }
       }
       platformsNeedingScrape = new Set(platformsRequested);
@@ -438,6 +487,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         const raw = await scrapeLinkedInAdLibrary({
           brandName,
           linkedinUrl: ids.linkedin,
+          keywordFallback: linkedinKeywordFallback,
           maxItems: linkedinMaxAds,
           dateRange: linkedinDateRange,
           countryCode: linkedinCountryCode || undefined,
@@ -454,6 +504,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       try {
         out.tiktok.ads = await scrapeTikTokAdsLibrary({
           brandName,
+          brandDomain: domain || undefined,
           savedTiktok: typeof ids.tiktok === "string" ? ids.tiktok : undefined,
           region: tiktokRegion,
           maxAds: tiktokMaxAds,
@@ -498,7 +549,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         });
         out.pinterest.ads = rows
           .slice(0, pinterestMaxResults)
-          .map((raw, i) => pinterestDatasetItemToCard(raw, i, { brandName }));
+          .map((raw, i) => pinterestDatasetItemToCard(raw, i, { brandName, brandDomain: domain }));
       } catch (e) {
         out.pinterest.error =
           e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Pinterest ads failed";
@@ -532,7 +583,7 @@ export async function POST(req: Request): Promise<NextResponse> {
         out.snapchat.ads = [...raw]
           .sort((a, b) => snapchatDatasetRowMediaPriority(b) - snapchatDatasetRowMediaPriority(a))
           .slice(0, snapchatMaxItems)
-          .map((row, i) => snapchatDatasetItemToCard(row, i, { brandName }));
+          .map((row, i) => snapchatDatasetItemToCard(row, i, { brandName, brandDomain: domain }));
       } catch (e) {
         out.snapchat.error =
           e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Snapchat ads failed";

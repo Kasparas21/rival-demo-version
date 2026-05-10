@@ -374,6 +374,34 @@ export function coerceSidebarCompetitorUrlHost(c: Pick<SidebarCompetitor, "slug"
   return normalizeCompetitorSlug(one || raw);
 }
 
+type SidebarRowWithWorkspaceFlag = SidebarCompetitor & { isWorkspaceBrand?: boolean };
+
+/**
+ * Whether this sidebar row represents the user's own workspace brand (Spy / sidebar should not list it as a "competitor").
+ * Uses `isWorkspaceBrand` when present, and falls back to matching the workspace domain to slug / brand.domain.
+ */
+export function isSidebarRowLikelyWorkspaceBrand(
+  row: SidebarRowWithWorkspaceFlag,
+  workspaceDomain: string | null | undefined,
+): boolean {
+  if (row.isWorkspaceBrand === true) return true;
+  const ws = normalizeCompetitorSlug(String(workspaceDomain ?? "").trim());
+  if (!ws) return false;
+  const rowHost = coerceSidebarCompetitorUrlHost(row);
+  const brandDom = row.brand?.domain?.trim() ? normalizeCompetitorSlug(row.brand.domain) : "";
+  if (rowHost === ws || brandDom === ws) return true;
+  if (slugsLikelySameCompany(row.slug, ws)) return true;
+  if (brandDom && slugsLikelySameCompany(brandDom, ws)) return true;
+  return false;
+}
+
+export function sidebarCompetitorsWithoutWorkspaceRow(
+  rows: SidebarCompetitor[],
+  workspaceDomain: string | null | undefined,
+): SidebarCompetitor[] {
+  return rows.filter((r) => !isSidebarRowLikelyWorkspaceBrand(r, workspaceDomain));
+}
+
 /**
  * After DELETE from the sidebar, the competitor route can still be mounted for a frame — its
  * `useEffect` calls `upsertSidebarCompetitor` and would re-insert the row. Suppress upserts for

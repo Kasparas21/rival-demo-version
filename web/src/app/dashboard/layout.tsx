@@ -20,19 +20,24 @@ import {
   normalizeCompetitorSlug,
   removeSidebarCompetitor,
   saveSidebarCompetitors,
+  sidebarCompetitorsWithoutWorkspaceRow,
   SIDEBAR_COMPETITORS_EVENT,
   SIDEBAR_COMPETITORS_STORAGE_KEY,
   suppressSidebarUpsertAfterRemoval,
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
-import { competitorHostFromDashboardPathname } from "@/lib/competitor-dashboard-url";
+import {
+  buildCompetitorDashboardPath,
+  competitorHostFromDashboardPathname,
+} from "@/lib/competitor-dashboard-url";
+import { isGenericDashboardLanding } from "@/lib/dashboard/default-home";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   deleteSavedCompetitorFromAccount,
   fetchSavedCompetitorsFromAccount,
   syncCompetitorsToAccount,
 } from "@/lib/account/client";
-import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
+import { RIVAL_BRANDS_UPDATED_EVENT, RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 
 const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
@@ -177,11 +182,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     rowSlugNav: string;
   } | null>(null);
 
-  const sidebarCompetitorRows = useMemo(
-    () => dedupeSidebarCompetitors(savedCompetitors),
-    [savedCompetitors]
-  );
-
   const refreshSavedCompetitors = useCallback(() => {
     setSavedCompetitors(loadSidebarCompetitors());
   }, []);
@@ -274,6 +274,27 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       );
   }, []);
 
+  const goToBrandHub = useCallback(
+    (brand: Brand) => {
+      setIsBrandMenuOpen(false);
+      const domain = brand.domain?.trim();
+      if (!domain) {
+        router.push("/dashboard/settings", { scroll: false });
+        return;
+      }
+      const base = buildCompetitorDashboardPath(domain);
+      const channels = brand.adsSetup?.channels;
+      const q = new URLSearchParams();
+      if (channels?.length) {
+        q.set("channels", channels.join(","));
+        q.set("confirmed", "1");
+      }
+      const qs = q.toString();
+      router.push(qs ? `${base}?${qs}` : base, { scroll: false });
+    },
+    [router],
+  );
+
   useEffect(() => {
     refreshUserProfile();
   }, [refreshUserProfile]);
@@ -290,6 +311,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     window.addEventListener(RIVAL_PROFILE_UPDATED_EVENT, sync);
     return () => window.removeEventListener(RIVAL_PROFILE_UPDATED_EVENT, sync);
   }, [refreshUserProfile, refreshBrands]);
+
+  useEffect(() => {
+    const onBrands = () => {
+      refreshBrands();
+    };
+    window.addEventListener(RIVAL_BRANDS_UPDATED_EVENT, onBrands);
+    return () => window.removeEventListener(RIVAL_BRANDS_UPDATED_EVENT, onBrands);
+  }, [refreshBrands]);
 
   useEffect(() => {
     setProfileAvatarFailed(false);
@@ -336,11 +365,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
       if (cancelled) return;
 
+      const workspaceDomain = brands[0]?.domain?.trim() || null;
+
       if (remoteCompetitors.length > 0) {
-        const visibleRemote = (remoteCompetitors as (SidebarCompetitor & { isWorkspaceBrand?: boolean })[]).filter(
-          (r) => !r.isWorkspaceBrand,
+        const visibleRemote = sidebarCompetitorsWithoutWorkspaceRow(
+          remoteCompetitors as SidebarCompetitor[],
+          workspaceDomain,
         );
-        const merged = mergeAccountSidebarRowsWithLocalLibraryContext(visibleRemote, localCompetitors);
+        let merged = mergeAccountSidebarRowsWithLocalLibraryContext(visibleRemote, localCompetitors);
+        merged = sidebarCompetitorsWithoutWorkspaceRow(merged, workspaceDomain);
         saveSidebarCompetitors(merged);
         refreshSavedCompetitors();
         return;
@@ -356,7 +389,17 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshSavedCompetitors]);
+  }, [refreshSavedCompetitors, brands]);
+
+  useEffect(() => {
+    const ws = brands[0]?.domain?.trim() || null;
+    if (!ws) return;
+    const cur = loadSidebarCompetitors();
+    const next = sidebarCompetitorsWithoutWorkspaceRow(cur, ws);
+    if (next.length === cur.length) return;
+    saveSidebarCompetitors(next);
+    refreshSavedCompetitors();
+  }, [brands, refreshSavedCompetitors]);
 
   useEffect(() => {
     if (activeBrandId) localStorage.setItem("rival_active_brand", activeBrandId);
@@ -388,6 +431,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     if (b) return b;
     return workspaceFallbackBrand;
   }, [activeBrandId, brands, workspaceFallbackBrand]);
+
+  const sidebarCompetitorRows = useMemo(() => {
+    const deduped = dedupeSidebarCompetitors(savedCompetitors);
+    return sidebarCompetitorsWithoutWorkspaceRow(deduped, activeBrand.domain);
+  }, [savedCompetitors, activeBrand.domain]);
   const pathCompetitorHost = competitorHostFromDashboardPathname(pathname);
   const queryCompetitorHost = searchParams.get("url")?.trim();
   const activeCompetitorSlug =
@@ -483,8 +531,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <button
               type="button"
               onClick={() => {
-                setSidebarCollapsed(false);
-                if (canSwitchBrand) setIsBrandMenuOpen(true);
+                if (canSwitchBrand) {
+                  setSidebarCollapsed(false);
+                  setIsBrandMenuOpen(true);
+                  return;
+                }
+                goToBrandHub(activeBrand);
               }}
               className="size-11 shrink-0 rounded-xl overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[#DDF1FD] active:scale-[0.97] transition-all mx-auto shadow-sm"
               title={activeBrand.name}
@@ -527,7 +579,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <ChevronDown className={`w-4 h-4 shrink-0 transition-transform text-[color:var(--rival-muted)] ${isBrandMenuOpen ? "rotate-180" : ""}`} />
             </button>
           ) : (
-            <div className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-white/50 border border-white/60 shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
+            <button
+              type="button"
+              onClick={() => goToBrandHub(activeBrand)}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-white/50 border border-white/60 shadow-[0_2px_8px_rgba(0,0,0,0.03)] text-left hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/35"
+            >
               {activeBrand.logoUrl ? (
                 <div className="h-[36px] w-[36px] shrink-0 overflow-hidden rounded-[10px] border border-white/60 shadow-sm">
                   <BrandLogoThumb src={activeBrand.logoUrl} alt={activeBrand.name} className="bg-white" />
@@ -544,7 +600,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <span className="block text-[14px] font-semibold text-[#343434] truncate">{activeBrand.name}</span>
                 <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
               </div>
-            </div>
+            </button>
           )}
 
           {isBrandMenuOpen && canSwitchBrand && (
@@ -588,6 +644,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     <span className="text-[13px] font-medium truncate flex-1 min-w-0">{b.name}</span>
                   </button>
                 ))}
+              </div>
+              <div className="mx-2 mt-1 border-t border-[#e8e8e8]/90 pt-1.5">
+                <button
+                  type="button"
+                  onClick={() => goToBrandHub(activeBrand)}
+                  className="w-full rounded-xl px-3 py-2 text-left text-[12px] font-medium text-[#52525b] transition-colors hover:bg-[#DDF1FD]/20 hover:text-[#343434]"
+                >
+                  Brand workspace
+                </button>
               </div>
             </div>
           )}
@@ -899,7 +964,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           className="relative z-10 flex h-full min-h-0 w-full flex-1 flex-col"
           onClick={() => setIsBrandMenuOpen(false)}
         >
-          {showWelcome && pathname === "/dashboard" ? (
+          {showWelcome && isGenericDashboardLanding(pathname) ? (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="mx-4 w-full max-w-[480px] rounded-3xl bg-white p-10 text-center shadow-[0_8px_40px_rgba(0,0,0,0.1)]">
                 <RivalLogoImg className="mx-auto mb-6 h-7 w-auto max-w-[160px] object-contain" />

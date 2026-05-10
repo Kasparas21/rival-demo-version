@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Password required" }, { status: 400 });
   }
 
-  const nextRaw = typeof body.next === "string" ? body.next : "/dashboard";
+  const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
   const next =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard";
+    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
 
   const origin = authLinkOriginForRequest(request);
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;

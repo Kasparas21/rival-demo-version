@@ -1,4 +1,9 @@
 import type { ChannelId } from "@/components/channel-picker-modal";
+import {
+  canonicalLinkedInAdLibraryUrl,
+  canonicalMetaAdsLibraryUrl,
+  extractMetaAdsLibraryPageId,
+} from "@/lib/ad-library/canonical-library-url";
 import { extractDomain, normalizeDiscoveredIds, parseSocialLinks } from "@/lib/discovery";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { socialNetworkBucket } from "@/lib/onboarding/social-profile-utils";
@@ -78,13 +83,19 @@ export function mergeWorkspaceScrapeFromSocials(
         low.includes("ads/library") &&
         (low.includes("facebook.com") || low.includes("fb.com") || low.includes("m.facebook.com"))
       ) {
-        out.metaAdsLibraryUrl = h;
+        const canon = canonicalMetaAdsLibraryUrl(h) ?? h;
+        out.metaAdsLibraryUrl = canon;
         break;
       }
     }
   }
 
-  if (!out.linkedInUrl.trim()) out.linkedInUrl = firstHrefForBucket(socials, "linkedin");
+  if (!out.linkedInUrl.trim()) {
+    const li = firstHrefForBucket(socials, "linkedin");
+    if (li) {
+      out.linkedInUrl = canonicalLinkedInAdLibraryUrl(li) ?? li;
+    }
+  }
 
   const tt = firstHrefForBucket(socials, "tiktok");
   if (!out.tikTokUrl.trim()) out.tikTokUrl = tt;
@@ -159,6 +170,14 @@ function pinterestKeywordLegacy(pinUrlOrHandle: string): string {
 }
 
 export function parseAdsProfileSetup(raw: unknown): AdsProfileSetup | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    try {
+      raw = JSON.parse(raw) as unknown;
+    } catch {
+      return null;
+    }
+  }
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const channelsRaw = o.channels;
@@ -176,7 +195,7 @@ export function parseAdsProfileSetup(raw: unknown): AdsProfileSetup | null {
   const fb = str("facebookUrl");
   const ig = str("instagramUrl");
   const ttUrl = str("tikTokUrl");
-  const metaAdsLibraryUrl = str("metaAdsLibraryUrl") || fb || ig;
+  const metaAdsLibraryUrl = str("metaAdsLibraryUrl");
   const googleFromSite = websiteUrl ? extractDomain(websiteUrl) : "";
 
   const channels = channelsRaw.filter((c): c is ChannelId =>
@@ -242,8 +261,40 @@ export function scrapeHintsToPlatformIds(params: {
   };
 
   if (channels.has("meta")) {
-    put("meta", parsed.meta ?? parsed.metaPageUrl);
-    put("metaPageUrl", parsed.metaPageUrl ?? parsed.meta);
+    const direct = scrape.metaAdsLibraryUrl.trim();
+    if (direct) {
+      const normalized = /^https?:\/\//i.test(direct) ? direct : `https://${direct}`;
+      const low = normalized.toLowerCase();
+      if (
+        (low.includes("facebook.com") || low.includes("fb.com")) &&
+        !low.includes("instagram.com")
+      ) {
+        const canon = canonicalMetaAdsLibraryUrl(direct) ?? canonicalMetaAdsLibraryUrl(normalized);
+        if (canon) {
+          put("metaPageUrl", canon);
+          const pid = extractMetaAdsLibraryPageId(direct) ?? extractMetaAdsLibraryPageId(normalized);
+          if (pid) put("meta", pid);
+        } else {
+          put("metaPageUrl", normalized);
+        }
+      }
+    }
+    if (!out.meta && !out.metaPageUrl) {
+      const pm = parsed.meta ?? parsed.metaPageUrl;
+      const purl = parsed.metaPageUrl ?? parsed.meta;
+      const canonM = pm ? canonicalMetaAdsLibraryUrl(String(pm)) : null;
+      const canonU = purl ? canonicalMetaAdsLibraryUrl(String(purl)) : null;
+      const canon = canonM ?? canonU;
+      if (canon) {
+        put("metaPageUrl", canon);
+        const pid =
+          extractMetaAdsLibraryPageId(String(pm ?? "")) ?? extractMetaAdsLibraryPageId(String(purl ?? ""));
+        if (pid) put("meta", pid);
+      } else {
+        put("meta", parsed.meta ?? parsed.metaPageUrl);
+        put("metaPageUrl", parsed.metaPageUrl ?? parsed.meta);
+      }
+    }
   }
 
   const googleDomain =
@@ -261,7 +312,24 @@ export function scrapeHintsToPlatformIds(params: {
     else if (kw) put("tiktok", kw.startsWith("@") ? kw : `@${kw.replace(/^@+/, "")}`);
   }
 
-  if (channels.has("linkedin")) put("linkedin", parsed.linkedin);
+  if (channels.has("linkedin")) {
+    const direct = scrape.linkedInUrl.trim();
+    if (direct) {
+      const normalized = /^https?:\/\//i.test(direct) ? direct : `https://${direct}`;
+      const low = normalized.toLowerCase();
+      if (low.includes("linkedin.com")) {
+        const canon = canonicalLinkedInAdLibraryUrl(direct) ?? canonicalLinkedInAdLibraryUrl(normalized);
+        put("linkedin", canon ?? normalized);
+      }
+    }
+    if (!out.linkedin) {
+      const pli = parsed.linkedin;
+      if (pli) {
+        const canon = canonicalLinkedInAdLibraryUrl(String(pli));
+        put("linkedin", canon ?? String(pli).trim());
+      }
+    }
+  }
 
   if (parsed.youtube?.trim()) put("youtube", parsed.youtube);
 

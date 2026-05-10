@@ -4,6 +4,7 @@ import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
+import { buildMetaAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 
 const DEFAULT_FACEBOOK_ADS_ACTOR = "curious_coder/facebook-ads-library-scraper";
 const DEFAULT_MAX_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
@@ -38,6 +39,11 @@ function buildKeywordSearchUrl(
   return `https://www.facebook.com/ads/library/?${params.toString()}`;
 }
 
+function normalizeFacebookHref(raw: string): string {
+  const t = raw.trim();
+  return t.startsWith("http") ? t : `https://${t}`;
+}
+
 function buildInputUrls(
   ids: { meta?: string; metaPageUrl?: string },
   brandName: string,
@@ -47,19 +53,32 @@ function buildInputUrls(
   endDateIso?: string
 ): Array<{ url: string }> {
   const urls = new Set<string>();
-  const metaPageUrl = ids.metaPageUrl?.trim();
-  const meta = ids.meta?.trim();
+  const pageRaw = ids.metaPageUrl?.trim();
+  const metaRaw = ids.meta?.trim();
+  const pageHref = pageRaw ? normalizeFacebookHref(pageRaw) : "";
+  const metaHref = metaRaw ? normalizeFacebookHref(metaRaw) : "";
 
-  if (metaPageUrl && isFacebookPageUrl(metaPageUrl)) {
-    urls.add(metaPageUrl.startsWith("http") ? metaPageUrl : `https://${metaPageUrl}`);
-  }
-
-  if (meta && isFacebookPageUrl(meta)) {
-    urls.add(meta.startsWith("http") ? meta : `https://${meta}`);
+  /** When both `meta` and `metaPageUrl` are Ad Library links (e.g. stale id vs user paste), Apify must not scrape two URLs — `metaPageUrl` wins. */
+  if (pageHref && isFacebookPageUrl(pageHref) && /ads\/library/i.test(pageHref)) {
+    urls.add(pageHref);
+  } else {
+    if (pageHref && isFacebookPageUrl(pageHref)) urls.add(pageHref);
+    if (metaHref && isFacebookPageUrl(metaHref)) {
+      urls.add(metaHref);
+    } else if (metaRaw) {
+      const digits = metaRaw.replace(/\D/g, "");
+      if (
+        digits.length >= 10 &&
+        digits.length <= 22 &&
+        /^[\d\s-]+$/.test(metaRaw.replace(/[^\d\s-]/g, ""))
+      ) {
+        urls.add(buildMetaAdLibraryUrl(digits));
+      }
+    }
   }
 
   const keyword = brandName.trim();
-  if (keyword) {
+  if (keyword && urls.size === 0) {
     urls.add(buildKeywordSearchUrl(keyword, activeStatus, country, startDateIso, endDateIso));
   }
 

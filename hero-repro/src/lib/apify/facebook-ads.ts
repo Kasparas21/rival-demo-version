@@ -57,7 +57,7 @@ function buildInputUrls(
   }
 
   const keyword = brandName.trim();
-  if (keyword) {
+  if (keyword && urls.size === 0) {
     urls.add(buildKeywordSearchUrl(keyword, activeStatus, country, startDateIso, endDateIso));
   }
 

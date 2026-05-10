@@ -213,7 +213,9 @@ export function useAdLibrary(
 
         let mergedState: AdsLibraryResponse | null = null;
         setData((prev) => {
-          const merged = mergeAdsLibraryState(prev, json);
+          const merged = mergeAdsLibraryState(prev, json, {
+            trustIncomingEmpty: opts?.skipCache === true,
+          });
           mergedState = merged;
           return merged;
         });

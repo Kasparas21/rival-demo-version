@@ -30,7 +30,7 @@ const glassInputField =
 export function SignupForm() {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const next = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard";
+  const next = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard/spy";
   const urlAuthError = searchParams.get("error");
   const rawNextQuery = searchParams.get("next");
   const loginHref = rawNextQuery ? `/login?next=${encodeURIComponent(rawNextQuery)}` : "/login";
@@ -63,7 +63,7 @@ export function SignupForm() {
     setInfoMessage(null);
     setGoogleError(null);
 
-    const effectiveNext = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard";
+    const effectiveNext = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard/spy";
 
     const res = await fetch("/api/auth/sign-up-email", {
       method: "POST",
