@@ -23,6 +23,16 @@ function postOnboardingPath(path: string): string {
   return path === "/checkout" ? "/api/billing/checkout" : path;
 }
 
+/** After onboarding, land on dashboard with pricing overlay (client picks up `pricing=1`). */
+function withPostOnboardingPricingQuery(path: string, attach: boolean): string {
+  if (!attach) return path;
+  if (!path.startsWith("/dashboard")) return path;
+  if (path.startsWith("/api/")) return path;
+  const q = path.indexOf("?");
+  if (q === -1) return `${path}?pricing=1`;
+  return `${path}&pricing=1`;
+}
+
 export default async function OnboardingPage({
   searchParams,
 }: {
@@ -48,9 +58,14 @@ export default async function OnboardingPage({
   const billing = await getBillingEntitlement(supabase, user.id);
   const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard/spy";
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
+  const showPricingAfterOnboarding = !billing.hasAccess && !billing.isUnlimited;
+  const destinationWithOptionalPricing = withPostOnboardingPricingQuery(
+    destinationAfterOnboarding,
+    showPricingAfterOnboarding,
+  );
 
   if (profile?.onboarding_completed) {
-    redirect(destinationAfterOnboarding);
+    redirect(destinationWithOptionalPricing);
   }
 
   return (
@@ -64,7 +79,7 @@ export default async function OnboardingPage({
             <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
           </Link>
         </div>
-        <OnboardingForm initialData={profile} postOnboardingPath={destinationAfterOnboarding} userId={user.id} />
+        <OnboardingForm initialData={profile} postOnboardingPath={destinationWithOptionalPricing} userId={user.id} />
       </div>
     </RivalVideoShell>
   );

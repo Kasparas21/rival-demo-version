@@ -5,7 +5,7 @@ import Link from "next/link";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 
 /** Feature checklist (brand green `#95C14B`, matches `--rival-success`) */
-function BrandCheckLi({ children }: { children: React.ReactNode }) {
+export function BrandCheckLi({ children }: { children: React.ReactNode }) {
   return (
     <li className="flex gap-3 text-sm text-[#1a1a1a]">
       <svg className="mt-0.5 size-5 shrink-0 text-[#95C14B]" viewBox="0 0 20 20" fill="none" aria-hidden>
@@ -17,7 +17,7 @@ function BrandCheckLi({ children }: { children: React.ReactNode }) {
   );
 }
 
-function BlackCta({ children }: { children: React.ReactNode }) {
+export function BlackCta({ children }: { children: React.ReactNode }) {
   return (
     <Link
       href="/checkout"
@@ -28,7 +28,7 @@ function BlackCta({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AccentCta({ children }: { children: React.ReactNode }) {
+export function AccentCta({ children }: { children: React.ReactNode }) {
   return (
     <Link
       href="/checkout"
@@ -39,13 +39,13 @@ function AccentCta({ children }: { children: React.ReactNode }) {
   );
 }
 
-type Billing = "monthly" | "annual";
+export type BillingPeriod = "monthly" | "annual";
 
-function PricingBlock({
+export function PricingBlock({
   billing,
   listMonthlyUsd,
 }: {
-  billing: Billing;
+  billing: BillingPeriod;
   listMonthlyUsd: number;
 }) {
   const annualFull = Math.round(listMonthlyUsd * 12);
@@ -82,7 +82,7 @@ function PricingBlock({
 }
 
 export function LandingPricing() {
-  const [billing, setBilling] = useState<Billing>("monthly");
+  const [billing, setBilling] = useState<BillingPeriod>("monthly");
 
   return (
     <section className="overflow-hidden py-16 text-center sm:py-24">

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { ApifyRunnerError } from "@/lib/apify/client";
 import { scrapeFacebookAds } from "@/lib/apify/facebook-ads";
-import { buildGoogleSearchTerms, scrapeGoogleAdsTransparency } from "@/lib/apify/google-ads";
+import { scrapeGoogleAdsTransparency } from "@/lib/apify/google-ads";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { scrapeLinkedInAdLibrary } from "@/lib/apify/linkedin-ads";
 import { scrapePinterestAdsLibrary } from "@/lib/apify/pinterest-ads";
 import { scrapeTikTokAdsLibrary } from "@/lib/apify/tiktok-ads";
@@ -76,7 +77,7 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
     pinterestEndDate?: string;
     pinterestGender?: string;
     pinterestAge?: string;
-    /** When true, Google Apify actor uses skipDetails: false (slower, richer fields). */
+    /** Legacy flag; current Google actor (`lurkapi/google-ads-scraper`) has no client-side detail toggle. */
     googleGetAdDetails?: boolean;
     /** TikTok Ads Library actor — must be one of the allowed region codes (default `all`). */
     tiktokRegion?: string;
@@ -142,8 +143,6 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
   const pinterestEndDate = body.pinterestEndDate?.trim();
   const pinterestGender = body.pinterestGender?.trim();
   const pinterestAge = body.pinterestAge?.trim();
-  /** Default true so Apify returns creative images; client can send `false` to save credits. */
-  const googleDetails = body.googleGetAdDetails !== false;
   const tiktokRegion = normalizeTikTokAdsRegion(body.tiktokRegion);
   const googleRegion = normalizeGoogleAdsRegion(body.googleRegion);
   const googleResultsLimit = normalizeGoogleAdsResultsLimit(body.googleResultsLimit);
@@ -297,21 +296,26 @@ export async function POST(req: Request): Promise<NextResponse<AdsLibraryRespons
     (async () => {
       if (!platformsRequested.has("google") || !platformsNeedingScrape.has("google")) return;
       try {
-        const dom = ids.google?.trim() ? cleanDomain(ids.google) : domain;
-        if (!dom) {
-          out.google.error = "No domain for Google ads";
+        const rawGoogle = ids.google?.trim() ?? "";
+        const queryDom = domain;
+
+        const transparencyCanon = canonicalGoogleAdsTransparencyStartUrl(rawGoogle);
+        if (!transparencyCanon) {
+          out.google.error =
+            rawGoogle.trim().length > 0
+              ? "Google Ads requires a Transparency advertiser URL with /advertiser/AR… in it (copy it from the advertiser page address bar). Domain search URLs (?domain=) are not supported."
+              : "No Google advertiser URL — paste https://adstransparency.google.com/advertiser/AR… from Transparency Center.";
           return;
         }
-        const terms = buildGoogleSearchTerms(dom, brandName);
         const rows = await scrapeGoogleAdsTransparency({
-          searchTerms: terms,
-          region: googleRegion,
+          startUrls: [transparencyCanon],
           resultsLimit: googleResultsLimit,
-          skipDetails: !googleDetails,
+          region: googleRegion,
         });
+
         out.google.rows = rows
           .slice(0, googleResultsLimit)
-          .map((item, i) => googleItemToRow(item, i, { queryDomain: dom }));
+          .map((item, i) => googleItemToRow(item, i, { queryDomain: queryDom }));
       } catch (e) {
         out.google.error = e instanceof Error ? e.message : "Google ads failed";
       }

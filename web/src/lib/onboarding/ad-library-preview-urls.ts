@@ -4,6 +4,7 @@ import {
   canonicalLinkedInAdLibraryUrl,
   canonicalMetaAdsLibraryUrl,
 } from "@/lib/ad-library/canonical-library-url";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 
 const META_LIBRARY_HOME = "https://www.facebook.com/ads/library/";
 const GOOGLE_TRANSPARENCY_HOME = "https://adstransparency.google.com/?region=any";
@@ -13,10 +14,6 @@ function normalizeUrl(value: string): string {
   const v = value.trim();
   if (!v) return v;
   return /^https?:\/\//i.test(v) ? v.replace(/\/+$/, "") : `https://${v.replace(/^\/+/u, "")}`;
-}
-
-function sanitizeDomain(domain: string): string {
-  return domain.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0] ?? "";
 }
 
 export function isMetaAdsLibraryUrl(raw: string): boolean {
@@ -41,10 +38,11 @@ export function buildMetaAdsLibraryPreviewUrl(metaInputTrimmed: string): string 
   return META_LIBRARY_HOME;
 }
 
-export function buildGoogleTransparencyPreviewUrl(domainInput: string, fallbackHost: string): string {
-  const d = sanitizeDomain(domainInput) || sanitizeDomain(fallbackHost);
-  if (!d) return GOOGLE_TRANSPARENCY_HOME;
-  return `${GOOGLE_TRANSPARENCY_HOME}&domain=${encodeURIComponent(d.replace(/^www\./i, ""))}`;
+export function buildGoogleTransparencyPreviewUrl(transparencyInputTrimmed: string): string {
+  const v = transparencyInputTrimmed.trim();
+  const fromAdvertiser = canonicalGoogleAdsTransparencyStartUrl(v);
+  if (fromAdvertiser) return fromAdvertiser;
+  return GOOGLE_TRANSPARENCY_HOME;
 }
 
 export function buildLinkedInAdLibraryPreviewUrl(linkedinInputTrimmed: string): string {

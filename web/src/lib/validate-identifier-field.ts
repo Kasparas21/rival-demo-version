@@ -1,4 +1,5 @@
 import type { ChannelId } from "@/components/channel-picker-modal";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
 
 export type ValidateIdentifierResult =
@@ -57,7 +58,14 @@ export function validateIdentifierField(fieldId: ChannelId, value: string): Vali
       }
       return { valid: true };
     }
-    case "google":
+    case "google": {
+      if (canonicalGoogleAdsTransparencyStartUrl(v)) return { valid: true };
+      return {
+        valid: false,
+        error:
+          "That link doesn’t include a Transparency advertiser ID (…/advertiser/AR…). Open Google Ads Transparency Center, search for the brand, then open any creative or ad — copy the URL from that page’s address bar and paste it here. Don’t use only a shop domain or a ?domain= search results page.",
+      };
+    }
     case "tiktok":
     case "pinterest":
     case "snapchat":

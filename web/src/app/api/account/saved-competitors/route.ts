@@ -191,19 +191,6 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
-  const entitlement = await getBillingEntitlement(supabase, user.id);
-  if (!entitlement.hasAccess) {
-    return NextResponse.json(
-      {
-        ok: false,
-        code: "subscription_required",
-        error: "Start your subscription to save monitored competitors.",
-        checkoutUrl: "/checkout",
-      },
-      { status: 402 },
-    );
-  }
-  const maxWatchedCompetitors = entitlement.limits.maxWatchedCompetitors;
 
   const body = (await request.json()) as {
     competitor?: SavedCompetitorPayload;
@@ -221,12 +208,32 @@ export async function POST(request: Request) {
   }
 
   const normalizedRaw = payload.map(normalizeCompetitor).filter((item) => item.slug && item.name);
+  if (normalizedRaw.length === 0) {
+    return NextResponse.json({ error: "No competitors provided" }, { status: 400 });
+  }
+
   const workspaceItems = normalizedRaw.filter((item) => item.isWorkspaceBrand === true);
   const competitorItemsRaw = normalizedRaw.filter((item) => item.isWorkspaceBrand !== true);
 
   if (workspaceItems.length > 1) {
     return NextResponse.json({ error: "At most one workspace brand competitor is allowed." }, { status: 400 });
   }
+
+  const entitlement = await getBillingEntitlement(supabase, user.id);
+  /** Let new users finish onboarding: persist workspace brand row without a paid plan. Rivals still require access. */
+  const workspaceBrandOnly = workspaceItems.length === 1 && competitorItemsRaw.length === 0;
+  if (!entitlement.hasAccess && !workspaceBrandOnly) {
+    return NextResponse.json(
+      {
+        ok: false,
+        code: "subscription_required",
+        error: "Start your subscription to save monitored competitors.",
+        checkoutUrl: "/checkout",
+      },
+      { status: 402 },
+    );
+  }
+  const maxWatchedCompetitors = entitlement.limits.maxWatchedCompetitors;
 
   const existingResult = await fetchExistingSavedRows(supabase, user.id);
   if (!existingResult.ok) {

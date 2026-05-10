@@ -22,6 +22,7 @@ import {
   type SearchHit,
 } from "@/lib/discovery";
 import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { buildMetaAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
 
@@ -138,7 +139,6 @@ export function documentToScrapeResult(
     ...hrefFromHtml.filter(Boolean),
   ];
   const discoveredIds = parseSocialLinks(links);
-  discoveredIds.google = domain;
   const logoUrl =
     doc.metadata?.ogImage ??
     doc.metadata?.favicon ??
@@ -635,8 +635,10 @@ export function buildFieldPreviewUrls(
   const linkHits: SearchHit[] = [...metaHits, ...scrapeLinks.map((url) => ({ url }))];
   const out: Partial<Record<ChannelId, string>> = {};
 
-  if (discovered.google) {
-    out.google = `https://${discovered.google.replace(/^www\./, "")}`;
+  const gRaw = discovered.google?.trim();
+  if (gRaw) {
+    const canon = canonicalGoogleAdsTransparencyStartUrl(gRaw);
+    if (canon) out.google = canon;
   }
 
   const metaPage = discovered.metaPageUrl?.trim();

@@ -30,6 +30,8 @@ import {
   canonicalMetaAdsLibraryUrl,
   extractMetaAdsLibraryPageId,
 } from "@/lib/ad-library/canonical-library-url";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
+import { buildGoogleTransparencyPreviewUrl } from "@/lib/onboarding/ad-library-preview-urls";
 
 /** “All markets” / world options first; then ISO 3166-1 alpha-2 A–Z (same order on every platform row). */
 function compareRegionChipValue(a: string, b: string): number {
@@ -72,17 +74,6 @@ export type PlatformIdentifier = {
   pinterestAdvertiserName?: string;
   snapchat?: string;
 };
-
-function isValidDomain(value: string): boolean {
-  if (!value.trim()) return true;
-  const v = value.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-  return /^[a-z0-9][a-z0-9-]*\.[a-z]{2,}$/i.test(v);
-}
-
-function normalizeDomain(value: string): string {
-  const v = value.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-  return v || value.trim();
-}
 
 function normalizeUrl(value: string): string {
   const v = value.trim();
@@ -141,6 +132,10 @@ function buildManualIdentifierSeed(
   const next: PlatformIdentifier = { ...discoveredIds };
   delete next.meta;
   delete next.metaPageUrl;
+  const g = typeof next.google === "string" ? next.google.trim() : "";
+  if (g && !canonicalGoogleAdsTransparencyStartUrl(g)) {
+    delete next.google;
+  }
 
   const kwFirst = recommendedKeywords?.[0]?.trim() ?? "";
   for (const ch of KEYWORD_CHANNEL_IDS) {
@@ -158,9 +153,7 @@ function buildManualIdentifierSeed(
   return next;
 }
 
-type FieldValidator = (value: string) => { valid: boolean; message?: string; normalize?: (v: string) => string };
-
-/** Primary row title: “Website” for Google; short platform name from channel config otherwise. */
+/** Primary row title: Google uses `field.label`; short platform name from channel config otherwise. */
 function rowHeadingLabel(fieldId: ChannelId, fieldLabelWebsite: string, channelName?: string): string {
   if (fieldId === "google") return fieldLabelWebsite;
   if (!channelName) return fieldId;
@@ -204,10 +197,13 @@ function buildRowPreviewUrl(
       return "https://www.facebook.com/ads/library/";
     }
     case "google": {
-      const domRaw = (v && isValidDomain(v) ? normalizeDomain(v) : "") || domainFallback;
-      if (domRaw && isValidDomain(domRaw)) return `https://${normalizeDomain(domRaw)}`;
-      if (fromServer?.startsWith("http")) return fromServer;
-      return "https://www.google.com/ads/transparency/";
+      if (v) return buildGoogleTransparencyPreviewUrl(v);
+      const server = fromServer?.trim() ?? "";
+      if (server.startsWith("http")) {
+        const canonSrv = canonicalGoogleAdsTransparencyStartUrl(server);
+        if (canonSrv) return canonSrv;
+      }
+      return buildGoogleTransparencyPreviewUrl("");
     }
     case "linkedin": {
       if (v && /linkedin\.com\/ad-library/i.test(v)) return normalizeUrl(v);
@@ -354,7 +350,6 @@ const CHANNEL_FIELDS: {
   placeholder: string;
   tip?: string;
   helperText?: string;
-  validator?: FieldValidator;
 }[] = [
   {
     id: "meta",
@@ -367,16 +362,14 @@ const CHANNEL_FIELDS: {
   },
   {
     id: "google",
-    label: "Website",
-    labelSub: "Domain (Google Ads)",
-    labelTitle: "Main site domain used for Google Ads lookup",
-    placeholder: "nike.com",
-    tip: "Primary domain only—no https:// needed.",
-    validator: (v) => ({
-      valid: isValidDomain(v),
-      message: "Enter a domain like nike.com (no http:// needed)",
-      normalize: normalizeDomain,
-    }),
+    label: "Google Ads",
+    labelSub: "URL with Advertiser ID",
+    labelTitle:
+      "URL from Google Ads Transparency Center that includes …/advertiser/AR… in the path.",
+    placeholder: "https://adstransparency.google.com/advertiser/AR…",
+    tip: "Creative or ad detail URLs work — we shorten them to …/advertiser/AR… automatically.",
+    helperText:
+      "URL from Google Ads Transparency Center that includes …/advertiser/AR… in the path.",
   },
   {
     id: "tiktok",
@@ -470,7 +463,7 @@ function isScrollWideValue(v: string): boolean {
     /https?:\/\//i.test(t) ||
     /\.(com|co|ai|io|net|org)\//i.test(t) ||
     /^facebook\.|^www\.facebook|^linkedin\.|^www\.linkedin/i.test(t) ||
-    /facebook\.com|linkedin\.com|tiktok\.com|twitter\.com|x\.com|youtube\.com|pinterest\.com/i.test(
+    /facebook\.com|linkedin\.com|tiktok\.com|twitter\.com|x\.com|youtube\.com|pinterest\.com|adstransparency\.google/i.test(
       t
     )
   );
@@ -646,11 +639,6 @@ export function ManualIdentifiersForm({
   const blockingErrorForChannel = useCallback((channelId: ChannelId, value: string): string | null => {
     const v = value.trim();
     if (!v) return null;
-    if (channelId === "google") {
-      const field = CHANNEL_FIELDS.find((f) => f.id === "google");
-      const result = field?.validator?.(v);
-      return result?.valid === false ? result.message ?? "Invalid domain" : null;
-    }
     const idv = validateIdentifierField(channelId, v);
     if (!idv.valid && "error" in idv) return idv.error;
     return null;
@@ -803,15 +791,11 @@ export function ManualIdentifiersForm({
       }
     }
 
-    const field = CHANNEL_FIELDS.find((f) => f.id === channelId);
-    if (field?.validator) {
-      const result = field.validator(nextVal);
-      if (result.normalize) {
-        const normalized = result.normalize(nextVal);
-        if (normalized !== nextVal) {
-          nextVal = normalized;
-          setIdentifiers((prev) => ({ ...prev, [channelId]: normalized }));
-        }
+    if (channelId === "google") {
+      const canon = canonicalGoogleAdsTransparencyStartUrl(nextVal);
+      if (canon && canon !== nextVal) {
+        nextVal = canon;
+        setIdentifiers((prev) => ({ ...prev, google: canon }));
       }
     }
 

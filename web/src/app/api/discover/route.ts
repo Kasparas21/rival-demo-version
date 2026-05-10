@@ -141,7 +141,7 @@ export async function POST(req: Request) {
       const rk = buildRecommendedKeywords({
         brandName,
         domain,
-        discoveredIds: { google: domain },
+        discoveredIds: {},
       });
       return NextResponse.json({
         success: true,
@@ -150,7 +150,7 @@ export async function POST(req: Request) {
           domain,
           logoUrl,
         },
-        discoveredIds: { google: domain },
+        discoveredIds: {},
         recommendedKeywords: rk,
         interpretation: {
           summary: interpretation.interpretationSummary,
@@ -187,7 +187,7 @@ export async function POST(req: Request) {
       scrapedDomain = scraped.domain;
     } else {
       scrapedDomain = extractDomain(landingUrl);
-      fromScrape = { google: scrapedDomain };
+      fromScrape = {};
       scrapeLogo = undefined;
       warning =
         "We couldn't load that site automatically (it may block bots or be down). " +

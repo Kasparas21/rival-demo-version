@@ -27,6 +27,7 @@ import {
   type SearchHit,
 } from "@/lib/discovery";
 import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 
 const TIMEOUT_MS = 55_000;
 
@@ -117,7 +118,6 @@ function documentToScrapeResult(
     ...extractLinksFromContent(doc.markdown ?? ""),
   ];
   const discoveredIds = parseSocialLinks(links);
-  discoveredIds.google = domain;
   const logoUrl =
     doc.metadata?.ogImage ??
     doc.metadata?.favicon ??
@@ -499,8 +499,10 @@ function buildFieldPreviewUrls(
   const linkHits: SearchHit[] = [...metaHits, ...scrapeLinks.map((url) => ({ url }))];
   const out: Partial<Record<ChannelId, string>> = {};
 
-  if (discovered.google) {
-    out.google = `https://${discovered.google.replace(/^www\./, "")}`;
+  const gRaw = discovered.google?.trim();
+  if (gRaw) {
+    const canon = canonicalGoogleAdsTransparencyStartUrl(gRaw);
+    if (canon) out.google = canon;
   }
 
   if (discovered.metaPageUrl) {
@@ -591,7 +593,7 @@ export async function POST(req: Request) {
           domain,
           logoUrl,
         },
-        discoveredIds: { google: domain },
+        discoveredIds: {},
         interpretation: {
           summary: interpretation.interpretationSummary,
           primaryBrandName: interpretation.primaryBrandName,
@@ -627,7 +629,7 @@ export async function POST(req: Request) {
       scrapedDomain = scraped.domain;
     } else {
       scrapedDomain = extractDomain(landingUrl);
-      fromScrape = { google: scrapedDomain };
+      fromScrape = {};
       scrapeLogo = undefined;
       warning =
         "We couldn't load that site automatically (it may block bots or be down). " +

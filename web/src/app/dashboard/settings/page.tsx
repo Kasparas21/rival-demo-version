@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 
 type ProfileState = {
@@ -274,6 +275,7 @@ export default function SettingsPage() {
 
   const handleSignOut = async () => {
     setSigningOut(true);
+    clearSidebarCompetitorsStorageForSignOut();
     try {
       await fetch("/auth/sign-out", { method: "POST", credentials: "same-origin" });
     } catch {

@@ -186,3 +186,31 @@ export function writeScrapeRequestFieldsToStorage(fields: ScrapeRequestFields): 
     /* ignore */
   }
 }
+
+/** First valid market from workspace settings (ISO2 or ALL). */
+export function primaryWorkspaceAdMarketIso2(codes: string[] | undefined | null): string | null {
+  if (!codes?.length) return null;
+  for (const raw of codes) {
+    const c = String(raw).trim().toUpperCase();
+    if (!c) continue;
+    if (c === "ALL" || c === "ANYWHERE") return "ALL";
+    if (/^[A-Z]{2}$/.test(c)) return c;
+  }
+  return null;
+}
+
+/**
+ * When the user sets ad markets on their workspace brand, those must drive Meta/Apify `metaCountry`,
+ * not the global scrape-settings default (often US).
+ */
+export function mergeScrapeFieldsWithWorkspaceMarkets(
+  base: ScrapeRequestFields,
+  adMarketCountryCodes: string[] | undefined | null
+): ScrapeRequestFields {
+  const primary = primaryWorkspaceAdMarketIso2(adMarketCountryCodes);
+  if (!primary) return base;
+  return {
+    ...base,
+    metaCountry: primary,
+  };
+}

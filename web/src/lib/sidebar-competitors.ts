@@ -5,6 +5,36 @@ import { googleFaviconUrlForDomain } from "@/lib/discovery";
 export const SIDEBAR_COMPETITORS_EVENT = "rival_sidebar_competitors";
 export const SIDEBAR_COMPETITORS_STORAGE_KEY = "rival_sidebar_competitors_v2";
 const STORAGE_V1 = "rival_competitors";
+/** Tracks which Supabase user last owned `SIDEBAR_COMPETITORS_STORAGE_KEY` — prevents cross-account leakage on shared browsers. */
+const SIDEBAR_STORAGE_OWNER_KEY = "rival_sidebar_competitors_owner_v1";
+
+export function ensureSidebarStorageBelongsToUser(userId: string): void {
+  if (typeof window === "undefined" || !userId) return;
+  try {
+    const prev = localStorage.getItem(SIDEBAR_STORAGE_OWNER_KEY);
+    if (prev && prev !== userId) {
+      localStorage.removeItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
+      localStorage.removeItem(STORAGE_V1);
+      window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
+    }
+    localStorage.setItem(SIDEBAR_STORAGE_OWNER_KEY, userId);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Call on sign-out so the next login never inherits the previous session’s sidebar list. */
+export function clearSidebarCompetitorsStorageForSignOut(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
+    localStorage.removeItem(STORAGE_V1);
+    localStorage.removeItem(SIDEBAR_STORAGE_OWNER_KEY);
+    window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
 
 export type SidebarCompetitorBrand = {
   name: string;

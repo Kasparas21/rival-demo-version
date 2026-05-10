@@ -1108,7 +1108,7 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
   return {
     advertiserId: pick(["advertiserId", "advertiser_id", "advertiserID"]),
     creativeId: pick(["creativeId", "creative_id", "creativeID"]) || creativeFromId,
-    format: pick(["format", "adFormat", "ad_format", "creativeFormat", "creative_format"]),
+    format: pick(["format", "adFormat", "ad_format", "creativeFormat", "creative_format", "type"]),
     adUrl: pick([
       "adUrl",
       "ad_url",

@@ -11,9 +11,11 @@ import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar"
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
 import {
   buildCompetitorSidebarHref,
+  clearSidebarCompetitorsStorageForSignOut,
   coerceSidebarCompetitorUrlHost,
   competitorSidebarShowsLoadingSkeleton,
   dedupeSidebarCompetitors,
+  ensureSidebarStorageBelongsToUser,
   loadSidebarCompetitors,
   mergeAccountSidebarRowsWithLocalLibraryContext,
   MAX_WATCHED_COMPETITORS,
@@ -38,6 +40,8 @@ import {
   syncCompetitorsToAccount,
 } from "@/lib/account/client";
 import { RIVAL_BRANDS_UPDATED_EVENT, RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
+import { PostOnboardingPricingOverlay } from "@/components/billing/post-onboarding-pricing-overlay";
+import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dashboard-mock";
 
 const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
@@ -360,6 +364,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const syncAccountCompetitors = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData.user?.id;
+      if (!uid) return;
+
+      ensureSidebarStorageBelongsToUser(uid);
+
       const localCompetitors = loadSidebarCompetitors();
       const remoteCompetitors = await fetchSavedCompetitorsFromAccount();
 
@@ -389,7 +399,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshSavedCompetitors, brands]);
+  }, [refreshSavedCompetitors, brands, supabase]);
 
   useEffect(() => {
     const ws = brands[0]?.domain?.trim() || null;
@@ -438,6 +448,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, [savedCompetitors, activeBrand.domain]);
   const pathCompetitorHost = competitorHostFromDashboardPathname(pathname);
   const queryCompetitorHost = searchParams.get("url")?.trim();
+  const pricingGate = searchParams.get("pricing") === "1";
   const activeCompetitorSlug =
     pathCompetitorHost || (queryCompetitorHost ? normalizeCompetitorSlug(queryCompetitorHost) : "");
 
@@ -488,6 +499,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   );
 
   const handleSignOut = async () => {
+    clearSidebarCompetitorsStorageForSignOut();
     try {
       await fetch("/auth/sign-out", { method: "POST", credentials: "same-origin" });
     } catch {
@@ -964,7 +976,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           className="relative z-10 flex h-full min-h-0 w-full flex-1 flex-col"
           onClick={() => setIsBrandMenuOpen(false)}
         >
-          {showWelcome && isGenericDashboardLanding(pathname) ? (
+          {!pricingGate && showWelcome && isGenericDashboardLanding(pathname) ? (
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 backdrop-blur-sm">
               <div className="mx-4 w-full max-w-[480px] rounded-3xl bg-white p-10 text-center shadow-[0_8px_40px_rgba(0,0,0,0.1)]">
                 <RivalLogoImg className="mx-auto mb-6 h-7 w-auto max-w-[160px] object-contain" />
@@ -997,10 +1009,29 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           ) : null}
           <BrandProvider brand={activeBrand}>
-            <div className="rival-dashboard-route-shell flex min-h-0 min-w-0 flex-1 flex-col">
-              {children}
+            <div className="relative z-[6] flex min-h-0 min-w-0 flex-1 flex-col">
+              {pricingGate ? (
+                <div
+                  className="pointer-events-none absolute inset-0 z-0 overflow-hidden motion-reduce:blur-none"
+                  aria-hidden
+                >
+                  <div className="h-full blur-[1.5px] motion-reduce:blur-none">
+                    <PricingGateDashboardMock />
+                  </div>
+                </div>
+              ) : null}
+              <div
+                className={`rival-dashboard-route-shell relative z-10 flex min-h-0 min-w-0 flex-1 flex-col ${
+                  pricingGate
+                    ? "opacity-[0.38] blur-[3px] saturate-[0.88] motion-reduce:opacity-50 motion-reduce:blur-none motion-reduce:saturate-100"
+                    : ""
+                }`}
+              >
+                {children}
+              </div>
             </div>
           </BrandProvider>
+          {pricingGate ? <PostOnboardingPricingOverlay /> : null}
         </div>
       </main>
 

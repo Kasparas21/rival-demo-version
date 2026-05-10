@@ -304,7 +304,6 @@ function documentToBrandPreview(
 
   const links = linkCandidates;
   const discoveredIds = parseSocialLinks(links);
-  discoveredIds.google = domain;
 
   return {
     resolvedUrl,

@@ -1,4 +1,5 @@
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 
 export type { PlatformIdentifier };
 
@@ -329,6 +330,12 @@ export function parseSocialLinksFromHits(hits: SearchHit[]): Partial<PlatformIde
     if (!result.snapchat && /snapchat\.com\/add\//i.test(lower)) {
       const m = lower.match(/snapchat\.com\/add\/([a-z0-9._-]{2,40})/i);
       if (m?.[1]) result.snapchat = `@${m[1]}`;
+    }
+
+    // Google Ads Transparency — canonical advertiser URL only (parsed from links if present)
+    if (!result.google && /adstransparency\.google\.com/i.test(lower)) {
+      const canon = canonicalGoogleAdsTransparencyStartUrl(url);
+      if (canon) result.google = canon;
     }
 
     // Google Merchant / Shopping — rare in URLs; titles sometimes cite "Merchant ID"

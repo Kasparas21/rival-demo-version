@@ -36,12 +36,6 @@ type ApifyRunResponse = {
   };
 };
 
-type ApifyDatasetItemsResponse<T> = {
-  data?: {
-    items?: T[];
-  };
-};
-
 const APIFY_API_BASE = "https://api.apify.com/v2";
 
 /** Wall-clock wait budget after the run is created (avoids one long `waitForFinish` HTTP connection). */
@@ -153,6 +147,30 @@ function requireApifyToken(): string {
   return token;
 }
 
+function parseApifyDatasetItems<T>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === "object") {
+    const o = payload as Record<string, unknown>;
+    if (Array.isArray(o.items)) return o.items as T[];
+    if (Array.isArray(o.data)) return o.data as T[];
+  }
+  return [];
+}
+
+/**
+ * Crawlee / Apify dataset rows frequently wrap the crawler record under `json`.
+ * Merge once so downstream normalizers see advertiser/headline at the top level.
+ */
+export function flattenApifyDatasetRecord(row: Record<string, unknown>): Record<string, unknown> {
+  const nested = row.json;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const inner = nested as Record<string, unknown>;
+    const { json: _omit, ...rest } = row;
+    return { ...inner, ...rest };
+  }
+  return row;
+}
+
 async function parseJson<T>(response: Response): Promise<T | null> {
   try {
     return (await response.json()) as T;
@@ -259,9 +277,10 @@ export async function runApifyActor<T = Record<string, unknown>>(
     );
   }
 
-  const items = (await datasetResponse.json()) as T[];
+  const rawPayload = (await datasetResponse.json()) as unknown;
+  const items = parseApifyDatasetItems<T>(rawPayload);
 
-  assertAbortedRunHasDatasetRows(runId, runData.status, Array.isArray(items) ? items.length : 0);
+  assertAbortedRunHasDatasetRows(runId, runData.status, items.length);
 
   return {
     run: {

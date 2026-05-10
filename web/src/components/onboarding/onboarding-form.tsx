@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Check, ExternalLink, Link2, Loader2, X } from "lucide-react";
+import { Building2, Check, ExternalLink, Loader2, X } from "lucide-react";
 import {
   GoogleLogo,
   LinkedInLogo,
@@ -9,11 +9,6 @@ import {
   SnapchatLogo,
   TikTokLogo,
 } from "@/components/platform-logos";
-import { FacebookLogo } from "@/components/icons/facebook-logo";
-import { InstagramMark } from "@/components/icons/instagram-mark";
-import { LinkedInMark } from "@/components/icons/linkedin-mark";
-import { TikTokMark } from "@/components/icons/tiktok-mark";
-import { SocialProfileIcon } from "@/components/onboarding/social-profile-icon";
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { glassInputClass } from "@/components/ui/glass-styles";
@@ -23,7 +18,6 @@ import {
   hostToBrandLabel,
   isPlausiblePublicHostname,
   MAX_COMPANY_INPUT_CHARS,
-  MAX_ONBOARDING_COMPETITORS,
   normalizedWorkspaceHost,
   sanitizeCompanyUrlInput,
 } from "@/lib/onboarding/host";
@@ -35,12 +29,12 @@ import {
   ONBOARDING_AD_MARKET_CODES,
 } from "@/lib/onboarding/ad-markets";
 import { brandSlugFromDomain } from "@/lib/discovery";
-import { socialNetworkBucket } from "@/lib/onboarding/social-profile-utils";
 import { validateIdentifierField } from "@/lib/validate-identifier-field";
 import {
   canonicalLinkedInAdLibraryUrl,
   canonicalMetaAdsLibraryUrl,
 } from "@/lib/ad-library/canonical-library-url";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import {
   buildGoogleTransparencyPreviewUrl,
   buildLinkedInAdLibraryPreviewUrl,
@@ -64,15 +58,13 @@ const workspaceAdProfileInputClass = `${glassInputClass} rounded-xl px-3 py-1.5 
 const onboardingLibraryPreviewLinkClass =
   "inline-flex shrink-0 items-center gap-1 border border-transparent px-1 py-0.5 text-[11px] font-semibold text-[#1e6fa8] transition hover:bg-[#f8fcff] hover:text-[#155a8a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6fa8]/30 focus-visible:ring-offset-1";
 
-const TOTAL_ONBOARD_STEPS = 7;
+const TOTAL_ONBOARD_STEPS = 5;
 /** step indices */
 const STEP_WEBSITE = 0;
 const STEP_BRAND = 1;
 const STEP_WORKSPACE_CHANNELS = 2;
 const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
-const STEP_RIVAL_MARKETS = 5;
-const STEP_RIVAL_SCRAPE = 6;
 
 function defaultWorkspaceAdMarketCodes(hostname: string): string[] {
   const inferred = inferAdMarketFromHostname(hostname);
@@ -205,66 +197,6 @@ function AdMarketChips({
   );
 }
 
-type CompetitorScrapeInputs = {
-  websiteUrl: string;
-  facebookUrl: string;
-  instagramUrl: string;
-  tikTokUrl: string;
-  linkedInUrl: string;
-  youTubeUrl: string;
-  snapchatKeyword: string;
-};
-
-function emptyScrapeRow(domain: string): CompetitorScrapeInputs {
-  return {
-    websiteUrl: `https://${domain}`,
-    facebookUrl: "",
-    instagramUrl: "",
-    tikTokUrl: "",
-    linkedInUrl: "",
-    youTubeUrl: "",
-    snapchatKeyword: hostToBrandLabel(domain),
-  };
-}
-
-function firstHrefForBucket(socials: Array<{ href: string }>, bucket: string): string {
-  for (const s of socials) {
-    if (socialNetworkBucket(s.href) === bucket) return s.href;
-  }
-  return "";
-}
-
-function mergeScrapeFromSocials(
-  domain: string,
-  row: CompetitorScrapeInputs,
-  socials: Array<{ href: string }>,
-): CompetitorScrapeInputs {
-  const out = { ...row };
-  if (!out.websiteUrl.trim()) out.websiteUrl = `https://${domain}`;
-  if (!out.facebookUrl.trim()) out.facebookUrl = firstHrefForBucket(socials, "facebook");
-  if (!out.instagramUrl.trim()) out.instagramUrl = firstHrefForBucket(socials, "instagram");
-  if (!out.tikTokUrl.trim()) out.tikTokUrl = firstHrefForBucket(socials, "tiktok");
-  if (!out.linkedInUrl.trim()) out.linkedInUrl = firstHrefForBucket(socials, "linkedin");
-  if (!out.youTubeUrl.trim()) out.youTubeUrl = firstHrefForBucket(socials, "youtube");
-  if (!out.snapchatKeyword.trim()) {
-    const snap = firstHrefForBucket(socials, "snapchat");
-    if (snap) {
-      try {
-        const u = new URL(snap);
-        const parts = u.pathname.split("/").filter(Boolean);
-        const addIdx = parts.indexOf("add");
-        if (addIdx >= 0 && parts[addIdx + 1]) {
-          out.snapchatKeyword = decodeURIComponent(parts[addIdx + 1]!);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    if (!out.snapchatKeyword.trim()) out.snapchatKeyword = hostToBrandLabel(domain);
-  }
-  return out;
-}
-
 type Props = {
   userId: string;
   postOnboardingPath?: string;
@@ -286,10 +218,6 @@ type BrandInsightsPayload = {
   message?: string;
 };
 
-type CompetitorEnrichmentRow = {
-  socials: { label: string; href: string; handle: string }[];
-};
-
 export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", initialData }: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -298,7 +226,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
   const finishInFlightRef = useRef(false);
   /** Last website host seen when advancing from step 0 — invalidates caches when edited */
   const lastContinueFromWebsiteHostRef = useRef<string>("");
-  const competitorEnrichmentKeyRef = useRef<string | null>(null);
 
   const [companyUrl, setCompanyUrl] = useState(() =>
     sanitizeCompanyUrlInput(initialData?.company_url ?? "")
@@ -307,45 +234,34 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
   const [brandLoading, setBrandLoading] = useState(false);
   const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(null);
 
-  const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
-  const [manualCompetitor, setManualCompetitor] = useState("");
-
-  const [competitorEnrichment, setCompetitorEnrichment] = useState<Record<string, CompetitorEnrichmentRow>>({});
-  const [competitorEnrichmentLoading, setCompetitorEnrichmentLoading] = useState(false);
-  /** Per-rival ad markets (union is persisted for scraping). With no rivals, defaults are applied at finish (see DEFAULT_ONBOARDING_AD_MARKETS). */
-  const [competitorAdMarkets, setCompetitorAdMarkets] = useState<Record<string, string[]>>({});
-  /** Full market picker expanded for one competitor host */
-  const [adMarketsExpandedFor, setAdMarketsExpandedFor] = useState<string | null>(null);
-  /** Editable ad-library / scraper hints (step 3) */
-  const [competitorScrapeInputs, setCompetitorScrapeInputs] = useState<
-    Record<string, CompetitorScrapeInputs>
-  >({});
-  /** Workspace (your ads) — same ads-library surface as rivals */
+  /** Workspace (your ads) */
   const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(() => CHANNELS.map((c) => c.id));
   const [workspaceAdMarketCodes, setWorkspaceAdMarketCodes] = useState<string[]>([]);
   /** When true, all supported ISO markets apply (exclusive with manual country picks). */
   const [workspaceMarketsGlobal, setWorkspaceMarketsGlobal] = useState(false);
+  /**
+   * When true, workspace regions use `defaultWorkspaceAdMarketCodes` (domain inference, else US) —
+   * compact step UI shows "Auto" until the user opens the picker.
+   */
+  const [workspaceMarketsAuto, setWorkspaceMarketsAuto] = useState(true);
+  const [workspaceMarketsPickerExpanded, setWorkspaceMarketsPickerExpanded] = useState(false);
   const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => emptyWorkspaceScrapeRow(""));
   const workspaceSocialMergedSigRef = useRef("");
-  const socialEnrichmentSigRef = useRef<Record<string, string>>({});
 
-  const effectiveWorkspaceMarketCodes = useMemo(
-    () =>
-      workspaceMarketsGlobal ? [...ONBOARDING_AD_MARKET_CODES] : workspaceAdMarketCodes,
-    [workspaceMarketsGlobal, workspaceAdMarketCodes],
-  );
+  const normalizedCompany = useMemo(() => normalizedWorkspaceHost(companyUrl.trim()), [companyUrl]);
+
+  const effectiveWorkspaceMarketCodes = useMemo(() => {
+    if (workspaceMarketsGlobal) return [...ONBOARDING_AD_MARKET_CODES];
+    if (workspaceMarketsAuto) return defaultWorkspaceAdMarketCodes(normalizedCompany);
+    return workspaceAdMarketCodes;
+  }, [workspaceMarketsGlobal, workspaceMarketsAuto, workspaceAdMarketCodes, normalizedCompany]);
 
   const unionAdMarketCodes = useMemo(() => {
     const u = new Set<string>();
     for (const c of effectiveWorkspaceMarketCodes) u.add(c);
-    for (const h of selectedCompetitors) {
-      for (const c of competitorAdMarkets[h] ?? []) u.add(c);
-    }
     if (u.size === 0) return [...DEFAULT_ONBOARDING_AD_MARKETS];
     return [...u];
-  }, [effectiveWorkspaceMarketCodes, selectedCompetitors, competitorAdMarkets]);
-
-  const normalizedCompany = useMemo(() => normalizedWorkspaceHost(companyUrl.trim()), [companyUrl]);
+  }, [effectiveWorkspaceMarketCodes]);
   const faviconEligible = normalizedCompany.includes(".") && normalizedCompany.length <= 253;
   const debouncedCompanyHost = useDebounced(normalizedCompany, 450);
   const debouncedEligibleForFavicon =
@@ -370,6 +286,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
   }, []);
 
   const toggleWorkspaceCountryMarket = useCallback((code: string) => {
+    setWorkspaceMarketsAuto(false);
     setWorkspaceMarketsGlobal(false);
     setWorkspaceAdMarketCodes((prev) =>
       prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
@@ -382,6 +299,13 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
     const r = validateIdentifierField("meta", v);
     return r.valid || !("error" in r) ? null : r.error;
   }, [companyScrape.metaAdsLibraryUrl]);
+
+  const workspaceGoogleInputError = useMemo(() => {
+    const v = companyScrape.googleAdsTransparencyUrl.trim();
+    if (!v) return null;
+    const r = validateIdentifierField("google", v);
+    return r.valid || !("error" in r) ? null : r.error;
+  }, [companyScrape.googleAdsTransparencyUrl]);
 
   const workspaceLinkedInWarning = useMemo(() => {
     const v = companyScrape.linkedInUrl.trim();
@@ -400,13 +324,11 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
 
   const workspaceChannelsValid = workspaceChannels.length > 0;
   const workspaceMarketsComplete =
-    workspaceChannels.length === 0 || workspaceMarketsGlobal || workspaceAdMarketCodes.length > 0;
+    workspaceChannels.length === 0 ||
+    workspaceMarketsGlobal ||
+    workspaceAdMarketCodes.length > 0 ||
+    workspaceMarketsAuto;
   const workspaceChannelSet = useMemo(() => new Set(workspaceChannels), [workspaceChannels]);
-
-  const step2MarketsComplete = useMemo(() => {
-    if (selectedCompetitors.length === 0) return true;
-    return selectedCompetitors.every((h) => (competitorAdMarkets[h] ?? []).length > 0);
-  }, [selectedCompetitors, competitorAdMarkets]);
 
   const handleCompanyChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setCompanyUrl(sanitizeCompanyUrlInput(e.target.value));
@@ -431,9 +353,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
       if (!companyLooksValid || !hostNoWww) return base;
 
       const patch: Partial<WorkspaceAdsScrapeHints> = {};
-      if (workspaceChannels.includes("google") && !base.googleAdsDomain.trim()) {
-        patch.googleAdsDomain = hostNoWww;
-      }
       const kwBase = workspaceAutoKeywordSlug.trim();
       if (workspaceChannels.includes("tiktok") && !base.tiktokKeyword.trim() && kwBase) {
         patch.tiktokKeyword = kwBase;
@@ -507,82 +426,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
     return () => ac.abort();
   }, [step, normalizedCompany, brandInsights]);
 
-  /** Firecrawl scrape for added rival domains — homepage social links only */
-  useEffect(() => {
-    if (step !== STEP_RIVAL_MARKETS && step !== STEP_RIVAL_SCRAPE) return;
-
-    const sel = [...selectedCompetitors].filter(Boolean).sort();
-    const key = `${normalizedCompany}|${sel.join(";")}`;
-    if (sel.length === 0) {
-      competitorEnrichmentKeyRef.current = null;
-      return;
-    }
-    if (competitorEnrichmentKeyRef.current === key) {
-      return;
-    }
-
-    const ac = new AbortController();
-
-    async function enrich() {
-      setCompetitorEnrichmentLoading(true);
-      try {
-        const res = await fetch("/api/onboarding/competitor-enrichment", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ domains: sel }),
-          signal: ac.signal,
-        });
-        const data = (await res.json()) as {
-          ok?: boolean;
-          byDomain?: Record<string, CompetitorEnrichmentRow>;
-        };
-        if (ac.signal.aborted || !data.ok || !data.byDomain) return;
-        competitorEnrichmentKeyRef.current = key;
-        const slim: Record<string, CompetitorEnrichmentRow> = {};
-        for (const [d, row] of Object.entries(data.byDomain)) {
-          slim[d] = { socials: row.socials ?? [] };
-        }
-        setCompetitorEnrichment(slim);
-      } finally {
-        if (!ac.signal.aborted) setCompetitorEnrichmentLoading(false);
-      }
-    }
-
-    void enrich();
-    return () => ac.abort();
-  }, [step, normalizedCompany, selectedCompetitors]);
-
-  useEffect(() => {
-    if (step !== STEP_RIVAL_MARKETS && step !== STEP_RIVAL_SCRAPE) return;
-    setCompetitorScrapeInputs((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const d of selectedCompetitors) {
-        if (!next[d]) {
-          next[d] = emptyScrapeRow(d);
-          changed = true;
-        }
-        const socials = competitorEnrichment[d]?.socials ?? [];
-        const sig = socials.map((s) => s.href).sort().join("|");
-        const prevSig = socialEnrichmentSigRef.current[d] ?? "";
-        if (sig === prevSig) continue;
-        socialEnrichmentSigRef.current[d] = sig;
-        const merged = mergeScrapeFromSocials(d, next[d]!, socials);
-        next[d] = merged;
-        changed = true;
-      }
-      for (const k of Object.keys(next)) {
-        if (!selectedCompetitors.includes(k)) {
-          delete next[k];
-          delete socialEnrichmentSigRef.current[k];
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [step, selectedCompetitors, competitorEnrichment]);
-
   const continueFromWebsite = () => {
     if (saving) return;
     setError(null);
@@ -603,81 +446,16 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
 
     if (hostMismatch || websiteEdited) {
       setBrandInsights(null);
-      competitorEnrichmentKeyRef.current = null;
-      setCompetitorEnrichment({});
-      setSelectedCompetitors([]);
-      setCompetitorAdMarkets({});
-      setCompetitorScrapeInputs({});
-      socialEnrichmentSigRef.current = {};
-      setAdMarketsExpandedFor(null);
       setWorkspaceChannels(CHANNELS.map((c) => c.id));
       setWorkspaceAdMarketCodes([]);
       setWorkspaceMarketsGlobal(false);
+      setWorkspaceMarketsAuto(true);
+      setWorkspaceMarketsPickerExpanded(false);
       workspaceSocialMergedSigRef.current = "";
       setCompanyScrape(emptyWorkspaceScrapeRow(normalizedCompany));
     }
     setStep(1);
   };
-
-  const toggleCompetitor = useCallback((d: string) => {
-    const host = normalizedWorkspaceHost(d);
-    if (!isPlausiblePublicHostname(host) || host === normalizedCompany) return;
-    setSelectedCompetitors((prev) => {
-      if (prev.includes(host)) {
-        setCompetitorAdMarkets((m) => {
-          const rest = { ...m };
-          delete rest[host];
-          return rest;
-        });
-        setAdMarketsExpandedFor((cur) => (cur === host ? null : cur));
-        return prev.filter((x) => x !== host);
-      }
-      if (prev.length >= MAX_ONBOARDING_COMPETITORS) return prev;
-      setCompetitorAdMarkets((m) => {
-        const inferred = inferAdMarketFromHostname(host);
-        return { ...m, [host]: inferred ? [inferred] : [] };
-      });
-      return [...prev, host];
-    });
-  }, [normalizedCompany]);
-
-  const addManualCompetitor = useCallback(() => {
-    setError(null);
-    const host = normalizedWorkspaceHost(manualCompetitor);
-    if (!isPlausiblePublicHostname(host)) {
-      setError("Enter a valid competitor domain.");
-      return;
-    }
-    if (host === normalizedCompany) {
-      setError("Pick a competitor that isn’t your own site.");
-      return;
-    }
-    setSelectedCompetitors((prev) => {
-      if (prev.includes(host)) return prev;
-      if (prev.length >= MAX_ONBOARDING_COMPETITORS) return prev;
-      setCompetitorAdMarkets((m) => {
-        const inferred = inferAdMarketFromHostname(host);
-        return { ...m, [host]: inferred ? [inferred] : [] };
-      });
-      return [...prev, host];
-    });
-    setManualCompetitor("");
-  }, [manualCompetitor, normalizedCompany]);
-
-  const toggleCompetitorAdMarket = useCallback((host: string, code: string) => {
-    setCompetitorAdMarkets((prev) => {
-      const cur = prev[host] ?? [];
-      const nextList = cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code];
-      return { ...prev, [host]: nextList };
-    });
-  }, []);
-
-  const patchCompetitorScrape = useCallback((domain: string, patch: Partial<CompetitorScrapeInputs>) => {
-    setCompetitorScrapeInputs((prev) => ({
-      ...prev,
-      [domain]: { ...(prev[domain] ?? emptyScrapeRow(domain)), ...patch },
-    }));
-  }, []);
 
   const finish = async () => {
     if (finishInFlightRef.current) return;
@@ -693,8 +471,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
         return;
       }
 
-      const hosts = selectedCompetitors.filter((h) => h !== companyHost).slice(0, MAX_ONBOARDING_COMPETITORS);
-
       if (!workspaceChannelsValid) {
         setError("Pick at least one platform where your brand runs ads.");
         setStep(STEP_WORKSPACE_CHANNELS);
@@ -702,23 +478,27 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
       }
 
       if (!workspaceMarketsComplete) {
-        setError("Pick Global or at least one region for your own ads.");
+        setError("Pick Global, use Auto, or select at least one region for your own ads.");
+        setWorkspaceMarketsAuto(true);
         setWorkspaceMarketsGlobal(false);
-        setWorkspaceAdMarketCodes((prev) =>
-          prev.length > 0 ? prev : defaultWorkspaceAdMarketCodes(companyHost),
-        );
+        setWorkspaceAdMarketCodes([]);
+        setWorkspaceMarketsPickerExpanded(true);
         setStep(STEP_WORKSPACE_MARKETS);
         return;
       }
 
-      if (hosts.length > 0) {
-        for (const h of hosts) {
-          const codes = competitorAdMarkets[h] ?? [];
-          if (codes.length === 0) {
-            setError(`Choose at least one ad market for ${h}.`);
-            setStep(STEP_RIVAL_MARKETS);
-            return;
-          }
+      if (workspaceChannels.includes("google")) {
+        const gv = companyScrape.googleAdsTransparencyUrl.trim();
+        if (!gv) {
+          setError("Add a Google Ads Transparency URL that includes …/advertiser/AR… in the path.");
+          setStep(STEP_WORKSPACE_SCRAPE);
+          return;
+        }
+        const gre = validateIdentifierField("google", gv);
+        if (!gre.valid && "error" in gre) {
+          setError(gre.error);
+          setStep(STEP_WORKSPACE_SCRAPE);
+          return;
         }
       }
 
@@ -729,10 +509,18 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
       const logoFromInsights = brandInsights?.logoUrl?.trim() || null;
 
       const siteHostNoWww = companyHost.replace(/^www\./i, "");
+      let scrapePersist = companyScrape;
+      const gtCanon =
+        workspaceChannels.includes("google") && companyScrape.googleAdsTransparencyUrl.trim()
+          ? canonicalGoogleAdsTransparencyStartUrl(companyScrape.googleAdsTransparencyUrl.trim())
+          : null;
+      if (gtCanon && gtCanon !== companyScrape.googleAdsTransparencyUrl.trim()) {
+        scrapePersist = { ...companyScrape, googleAdsTransparencyUrl: gtCanon };
+      }
+
       const scrapeForPersist: WorkspaceAdsScrapeHints = {
-        ...companyScrape,
+        ...scrapePersist,
         websiteUrl: `https://${siteHostNoWww}`,
-        googleAdsDomain: (companyScrape.googleAdsDomain.trim() || siteHostNoWww).trim(),
       };
 
       const adsSetupJson = adsProfileSetupV1({
@@ -752,15 +540,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
         },
         adMarketCountryCodes: resolvedAdMarketCodes,
         primarySocials: brandInsights?.socials ?? [],
-        competitors: selectedCompetitors
-          .filter((h) => h !== companyHost)
-          .slice(0, MAX_ONBOARDING_COMPETITORS)
-          .map((d) => ({
-            domain: d,
-            socials: competitorEnrichment[d]?.socials ?? [],
-            adMarketCountryCodes: [...(competitorAdMarkets[d] ?? [])].sort(),
-            scrape: competitorScrapeInputs[d] ?? emptyScrapeRow(d),
-          })),
+        competitors: [],
       };
       try {
         sessionStorage.setItem(`rival.onboarding_hints.v1.${userId}`, JSON.stringify(hintPayload));
@@ -852,15 +632,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
           },
           isWorkspaceBrand: true as const,
         },
-        ...hosts.map((domain) => {
-          const label = hostToBrandLabel(domain);
-          return {
-            slug: domain,
-            name: label,
-            pending: false,
-            brand: { name: label, domain },
-          };
-        }),
       ];
 
       try {
@@ -904,8 +675,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
     "Your platforms",
     "Your regions",
     "Your profiles",
-    "Rival regions",
-    "Rivals",
   ];
   const totalSteps = TOTAL_ONBOARD_STEPS;
 
@@ -913,7 +682,13 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
     if (saving) return;
     setError(null);
     if (step === STEP_BRAND) setStep(STEP_WEBSITE);
-    else if (step > STEP_BRAND) setStep(step - 1);
+    else if (step > STEP_BRAND) {
+      const prev = step - 1;
+      if (prev === STEP_WORKSPACE_MARKETS) {
+        setWorkspaceMarketsPickerExpanded(false);
+      }
+      setStep(prev);
+    }
   };
 
   return (
@@ -1092,7 +867,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
               <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Your ad platforms</h1>
               <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">
                 Tell us everywhere you actively run ads. We scrape those libraries to map the angles, creatives, and
-                offers your company&apos;s pushing right now—which powers strategy comparisons vs rivals.
+                offers your company&apos;s pushing right now—which powers competitive strategy inside Rival.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1130,9 +905,10 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
               type="button"
               onClick={() => {
                 setError(null);
-                setWorkspaceAdMarketCodes((prev) =>
-                  workspaceMarketsGlobal ? [] : prev.length > 0 ? prev : defaultWorkspaceAdMarketCodes(normalizedCompany),
-                );
+                setWorkspaceMarketsPickerExpanded(false);
+                setWorkspaceMarketsAuto(true);
+                setWorkspaceMarketsGlobal(false);
+                setWorkspaceAdMarketCodes([]);
                 setStep(STEP_WORKSPACE_MARKETS);
               }}
               disabled={saving || !workspaceChannelsValid}
@@ -1152,40 +928,84 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
               </p>
             </div>
             <div className="space-y-2">
-              {!workspaceMarketsGlobal && workspaceAdMarketCodes.length === 0 ? (
-                <p className="text-[10px] text-amber-900/85">Pick Global or at least one country.</p>
-              ) : null}
-              <AdMarketChips
-                selectedCodes={workspaceMarketsGlobal ? [] : workspaceAdMarketCodes}
-                onToggle={toggleWorkspaceCountryMarket}
-                leadingSlot={
+              {!workspaceMarketsPickerExpanded ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-gray-200/70 bg-white/40 px-3 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] backdrop-blur-md">
+                  {workspaceMarketsAuto ? (
+                    <span className="text-[12px] font-semibold tracking-tight text-gray-900">Auto</span>
+                  ) : workspaceMarketsGlobal ? (
+                    <span className="inline-flex items-center gap-0.5 rounded-md border border-gray-900/25 bg-gray-900/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                      <span className="text-[0.85rem] leading-none" aria-hidden>
+                        🌐
+                      </span>
+                      Global
+                    </span>
+                  ) : (
+                    <MarketCodesSummary codes={workspaceAdMarketCodes} />
+                  )}
                   <button
                     type="button"
-                    title="Include every supported territory"
-                    aria-pressed={workspaceMarketsGlobal}
-                    onClick={() => {
-                      setWorkspaceMarketsGlobal((was) => {
-                        if (!was) {
-                          setWorkspaceAdMarketCodes([]);
-                          return true;
-                        }
-                        setWorkspaceAdMarketCodes([]);
-                        return false;
-                      });
-                    }}
-                    className={`inline-flex shrink-0 items-center gap-0.5 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
-                      workspaceMarketsGlobal
-                        ? "border-gray-900/40 bg-gray-900 text-white shadow-sm"
-                        : "border-gray-200/80 bg-white/35 text-gray-600 backdrop-blur-sm hover:bg-white/55 hover:text-gray-900"
-                    }`}
+                    onClick={() => setWorkspaceMarketsPickerExpanded(true)}
+                    className="text-[11px] font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2 hover:decoration-gray-500"
                   >
-                    <span className="text-[0.85rem] leading-none" aria-hidden>
-                      🌐
-                    </span>
-                    Global
+                    Change
                   </button>
-                }
-              />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {!workspaceMarketsGlobal && !workspaceMarketsAuto && workspaceAdMarketCodes.length === 0 ? (
+                    <p className="text-[10px] text-amber-900/85">
+                      Pick Global, go back to Auto, or select at least one country.
+                    </p>
+                  ) : null}
+                  <AdMarketChips
+                    selectedCodes={workspaceMarketsGlobal ? [] : workspaceAdMarketCodes}
+                    onToggle={toggleWorkspaceCountryMarket}
+                    leadingSlot={
+                      <button
+                        type="button"
+                        title="Include every supported territory"
+                        aria-pressed={workspaceMarketsGlobal}
+                        onClick={() => {
+                          setWorkspaceMarketsGlobal((was) => {
+                            if (!was) {
+                              setWorkspaceMarketsAuto(false);
+                              setWorkspaceAdMarketCodes([]);
+                              return true;
+                            }
+                            setWorkspaceMarketsAuto(true);
+                            setWorkspaceAdMarketCodes([]);
+                            return false;
+                          });
+                        }}
+                        className={`inline-flex shrink-0 items-center gap-0.5 rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                          workspaceMarketsGlobal
+                            ? "border-gray-900/40 bg-gray-900 text-white shadow-sm"
+                            : "border-gray-200/80 bg-white/35 text-gray-600 backdrop-blur-sm hover:bg-white/55 hover:text-gray-900"
+                        }`}
+                      >
+                        <span className="text-[0.85rem] leading-none" aria-hidden>
+                          🌐
+                        </span>
+                        Global
+                      </button>
+                    }
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!workspaceMarketsGlobal && workspaceAdMarketCodes.length === 0) {
+                          setWorkspaceMarketsAuto(true);
+                        }
+                        setWorkspaceMarketsPickerExpanded(false);
+                      }}
+                      className="text-[10px] font-semibold text-gray-500 hover:text-gray-900"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <button
               type="button"
@@ -1207,7 +1027,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
               <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Your ad profiles</h1>
               <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">
                 We scrape each Ads Library endpoint you authorize so we can map the creatives, hooks, and funnels your
-                company is leaning on—which feeds strategy benchmarks vs rivals.&nbsp;
+                company is leaning on—which feeds benchmarks and planning in Rival.&nbsp;
                 <span className="font-semibold text-gray-800">
                   Your site domain is already on file from step one—we don&apos;t need it again here.
                 </span>
@@ -1270,10 +1090,12 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <GoogleLogo className="size-3.5 shrink-0" />
-                        Google Transparency domain
+                        Google Ads — URL with Advertiser ID
                       </div>
                       <a
-                        href={buildGoogleTransparencyPreviewUrl(companyScrape.googleAdsDomain, workspaceSiteHostNoWww)}
+                        href={buildGoogleTransparencyPreviewUrl(
+                          companyScrape.googleAdsTransparencyUrl.trim(),
+                        )}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Preview in new tab"
@@ -1283,15 +1105,33 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                         Preview
                       </a>
                     </div>
+                    <p className="text-[10px] leading-snug text-gray-500">
+                      URL from&nbsp;
+                      <span className="font-semibold text-gray-700">Google Ads Transparency Center</span>
+                      &nbsp;that includes&nbsp;
+                      <span className="font-semibold text-gray-700">…/advertiser/AR…</span>
+                      &nbsp;in the path.
+                    </p>
                     <input
                       type="text"
-                      placeholder="yoursite.com"
-                      value={companyScrape.googleAdsDomain}
+                      placeholder="https://adstransparency.google.com/advertiser/AR…"
+                      value={companyScrape.googleAdsTransparencyUrl}
                       spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ googleAdsDomain: e.target.value })}
+                      onChange={(e) => patchCompanyScrape({ googleAdsTransparencyUrl: e.target.value })}
+                      onBlur={() => {
+                        const v = companyScrape.googleAdsTransparencyUrl.trim();
+                        if (!v) return;
+                        const canon = canonicalGoogleAdsTransparencyStartUrl(v);
+                        if (canon && canon !== v) {
+                          patchCompanyScrape({ googleAdsTransparencyUrl: canon });
+                        }
+                      }}
                       className={`${workspaceAdProfileInputClass} w-full font-mono`}
                       autoComplete="off"
                     />
+                    {workspaceGoogleInputError ? (
+                      <p className="text-[10px] font-semibold leading-snug text-red-700">{workspaceGoogleInputError}</p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1440,339 +1280,17 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 ) : null}
 
                 <p className="rounded-lg border border-white/55 bg-white/40 px-2 py-1.5 text-[11px] text-gray-600 backdrop-blur-sm">
-                  Matching these fingerprints is what unlocks scraping your brand&apos;s own ads—not just competitor
-                  pages.&nbsp;You can refine them anytime from dashboard competitor settings.
+                  Matching these fingerprints unlocks scraping your brand&apos;s own ads. You can add competitors and
+                  refine these anytime from the dashboard.
                 </p>
               </div>
             </div>
-
-            <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse sm:justify-stretch">
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  setStep(STEP_RIVAL_MARKETS);
-                }}
-                disabled={saving}
-                className="w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 sm:flex-1"
-              >
-                Add rivals (optional) →
-              </button>
-              <button
-                type="button"
-                onClick={() => void finish()}
-                disabled={saving}
-                className="w-full rounded-full border border-gray-300/90 bg-white/70 py-3.5 text-[14px] font-semibold text-gray-900 shadow-sm transition hover:bg-white sm:flex-1"
-              >
-                {saving ? "Finishing…" : "Finish without rivals"}
-              </button>
-            </div>
-          </>
-        ) : null}
-
-        {step === STEP_RIVAL_MARKETS ? (
-          <>
-            <div className="mb-5">
-              <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Rivals &amp; regions</h1>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">
-                Pick where to look for ads. You&apos;ll confirm social URLs on the next screen.
-              </p>
-            </div>
-
-            {competitorEnrichmentLoading && selectedCompetitors.length > 0 ? (
-              <p className="mb-2 flex items-center gap-1.5 text-[11px] text-gray-500">
-                <Loader2 className="size-3 shrink-0 animate-spin text-emerald-700/70 motion-reduce:animate-none" />
-                Scanning competitor homepages…
-              </p>
-            ) : null}
-
-            {selectedCompetitors.length > 0 ? (
-              <div className="mb-4 overflow-hidden rounded-lg border border-emerald-200/80 bg-emerald-50/40">
-                <ul className="divide-y divide-emerald-200/50">
-                  {selectedCompetitors.map((d) => {
-                    const picked = competitorAdMarkets[d] ?? [];
-                    const summaryOnly = picked.length > 0 && adMarketsExpandedFor !== d;
-
-                    return (
-                      <li key={`detail-${d}`} className="px-2 py-2 sm:px-2.5">
-                        <div className="flex items-start gap-2">
-                          <DomainFavicon domain={d} className="size-6 shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline gap-2">
-                              <span className="break-all text-[12px] font-semibold text-gray-900">{d}</span>
-                              <button
-                                type="button"
-                                onClick={() => toggleCompetitor(d)}
-                                className="ms-auto shrink-0 rounded p-0.5 text-[13px] leading-none text-gray-400 hover:bg-black/5 hover:text-gray-700"
-                                aria-label={`Remove ${d}`}
-                              >
-                                ×
-                              </button>
-                            </div>
-
-                            {summaryOnly ? (
-                              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <MarketCodesSummary codes={picked} />
-                                <button
-                                  type="button"
-                                  onClick={() => setAdMarketsExpandedFor(d)}
-                                  className="text-[10px] font-semibold text-gray-900 underline decoration-gray-300 underline-offset-2"
-                                >
-                                  Change regions
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="mt-1.5 space-y-1">
-                                {picked.length === 0 ? (
-                                  <p className="text-[10px] text-amber-900/85">Pick at least one region.</p>
-                                ) : null}
-                                <AdMarketChips
-                                  selectedCodes={picked}
-                                  onToggle={(code) => toggleCompetitorAdMarket(d, code)}
-                                />
-                                {picked.length > 0 && adMarketsExpandedFor === d ? (
-                                  <div className="flex justify-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => setAdMarketsExpandedFor(null)}
-                                      className="text-[10px] font-semibold text-gray-500 hover:text-gray-900"
-                                    >
-                                      Done
-                                    </button>
-                                  </div>
-                                ) : null}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <p className="border-t border-emerald-200/50 px-2 py-1.5 text-[10px] text-emerald-900/70">
-                  {unionAdMarketCodes.length} region{unionAdMarketCodes.length === 1 ? "" : "s"} total
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mb-2">
-              <label htmlFor="onb-manual-comp" className="mb-1 block text-[12px] font-semibold text-gray-800">
-                Add rival
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-                <div className="flex min-w-0 flex-1 items-center gap-2">
-                  {manualCompetitor.trim() && isPlausiblePublicHostname(normalizedWorkspaceHost(manualCompetitor)) ? (
-                    <DomainFavicon domain={normalizedWorkspaceHost(manualCompetitor)} className="size-9" />
-                  ) : (
-                    <div className="size-9 shrink-0 rounded-lg border border-dashed border-gray-300/80 bg-gray-50/80" />
-                  )}
-                  <input
-                    id="onb-manual-comp"
-                    type="text"
-                    placeholder="competitor.com"
-                    value={manualCompetitor}
-                    spellCheck={false}
-                    enterKeyHint="done"
-                    maxLength={MAX_COMPANY_INPUT_CHARS}
-                    onChange={(e) =>
-                      setManualCompetitor(sanitizeCompanyUrlInput(e.target.value))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void addManualCompetitor();
-                      }
-                    }}
-                    className={`${glassInputClass} min-w-0 flex-1`}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void addManualCompetitor()}
-                  disabled={
-                    selectedCompetitors.length >= MAX_ONBOARDING_COMPETITORS || saving
-                  }
-                  className="shrink-0 rounded-full bg-white/55 px-4 py-2.5 text-[13px] font-semibold text-gray-900 ring-1 ring-white/70 backdrop-blur-sm transition hover:bg-white/85 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Add
-                </button>
-              </div>
-              <p className="mt-1.5 text-[11px] text-gray-500">
-                Optional · {selectedCompetitors.length}/{MAX_ONBOARDING_COMPETITORS}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setError(null);
-                setStep(STEP_RIVAL_SCRAPE);
-              }}
-              disabled={saving || !step2MarketsComplete}
-              className="mt-5 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
-            >
-              Continue →
-            </button>
-          </>
-        ) : null}
-
-        {step === STEP_RIVAL_SCRAPE ? (
-          <>
-            <div className="mb-5">
-              <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Ad sources</h1>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">
-                These power social and search ad discovery. We pre-fill what we find on each competitor&apos;s
-                homepage—edit anything that looks off.
-              </p>
-            </div>
-
-            {selectedCompetitors.length === 0 ? (
-              <p className="mb-4 rounded-xl border border-gray-200/80 bg-gray-50/60 px-3 py-2.5 text-[13px] text-gray-700">
-                You didn&apos;t add rivals—that&apos;s fine. Your workspace ad settings stay as you set them earlier.
-              </p>
-            ) : (
-              <div className="mb-4 space-y-4">
-                {selectedCompetitors.map((d) => {
-                  const row = competitorScrapeInputs[d] ?? emptyScrapeRow(d);
-                  const suf = `scrape_${d.replace(/[^a-z0-9]+/gi, "_")}`;
-                  return (
-                    <div
-                      key={`scrape-${d}`}
-                      className="rounded-xl border border-gray-200/80 bg-white/55 px-3 py-3 shadow-sm"
-                    >
-                      <div className="mb-3 flex items-center gap-2">
-                        <DomainFavicon domain={d} className="size-8 shrink-0" />
-                        <span className="min-w-0 break-all text-[13px] font-semibold text-gray-900">{d}</span>
-                      </div>
-
-                      <div className="space-y-2.5">
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <Link2 className="size-3.5 shrink-0 text-gray-500" aria-hidden />
-                            Website
-                          </div>
-                          <input
-                            type="text"
-                            value={row.websiteUrl}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { websiteUrl: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                            autoComplete="url"
-                          />
-                        </div>
-
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <FacebookLogo idSuffix={`${suf}_fb`} className="size-3.5 shrink-0" />
-                            Facebook page
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="https://www.facebook.com/…"
-                            value={row.facebookUrl}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { facebookUrl: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <InstagramMark className="size-3.5 shrink-0" />
-                            Instagram
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Profile URL"
-                            value={row.instagramUrl}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { instagramUrl: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <TikTokMark className="size-3.5 shrink-0 text-gray-900" />
-                            TikTok
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="https://www.tiktok.com/@…"
-                            value={row.tikTokUrl}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { tikTokUrl: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <LinkedInMark className="size-3.5 shrink-0" />
-                            LinkedIn company
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Company page URL (LinkedIn Ads)"
-                            value={row.linkedInUrl}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { linkedInUrl: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <SocialProfileIcon
-                              href="https://www.youtube.com/"
-                              className="size-3.5 shrink-0 text-red-600"
-                            />
-                            YouTube
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Channel or @handle URL"
-                            value={row.youTubeUrl}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { youTubeUrl: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="mb-0.5 flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                            <SocialProfileIcon
-                              href="https://www.snapchat.com/add"
-                              className="size-3.5 shrink-0"
-                            />
-                            Snapchat keyword
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Brand or @username for Snap Ads Library"
-                            value={row.snapchatKeyword}
-                            spellCheck={false}
-                            onChange={(e) => patchCompetitorScrape(d, { snapchatKeyword: e.target.value })}
-                            className={`${glassInputClass} mt-0.5 w-full text-[13px]`}
-                          />
-                        </div>
-
-                        <p className="rounded-lg bg-gray-50/90 px-2 py-1.5 text-[11px] text-gray-600">
-                          <span className="font-semibold text-gray-800">Google Ads</span> uses this domain:{" "}
-                          <span className="font-mono text-[11px] text-gray-800">{d}</span>
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
             <button
               type="button"
               onClick={() => void finish()}
               disabled={saving}
-              className="mt-5 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+              className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
               {saving ? "Setting up…" : "Get started →"}
             </button>

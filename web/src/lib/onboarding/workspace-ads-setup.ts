@@ -4,6 +4,7 @@ import {
   canonicalMetaAdsLibraryUrl,
   extractMetaAdsLibraryPageId,
 } from "@/lib/ad-library/canonical-library-url";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { extractDomain, normalizeDiscoveredIds, parseSocialLinks } from "@/lib/discovery";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { socialNetworkBucket } from "@/lib/onboarding/social-profile-utils";
@@ -13,7 +14,9 @@ export type WorkspaceAdsScrapeHints = {
   websiteUrl: string;
   /** Must be Meta Ads Library URL (or numeric page id) — not a plain Facebook page */
   metaAdsLibraryUrl: string;
-  /** Domain used for Google Ads Transparency Center (editable, no scheme) */
+  /** Google Ads Transparency Center advertiser (or creative) URL — preferred over legacy domain search */
+  googleAdsTransparencyUrl: string;
+  /** Legacy: domain passed to Google Transparency search terms */
   googleAdsDomain: string;
   linkedInUrl: string;
   /** TikTok Ads Library keyword / handle (bare or @) */
@@ -48,7 +51,8 @@ export function emptyWorkspaceScrapeRow(domain: string): WorkspaceAdsScrapeHints
   return {
     websiteUrl: h ? `https://${h}` : "",
     metaAdsLibraryUrl: "",
-    googleAdsDomain: h,
+    googleAdsTransparencyUrl: "",
+    googleAdsDomain: "",
     linkedInUrl: "",
     tiktokKeyword: "",
     pinterestKeyword: "",
@@ -69,7 +73,6 @@ export function mergeWorkspaceScrapeFromSocials(
   const out = { ...row };
   if (!out.websiteUrl.trim()) out.websiteUrl = `https://${workspaceDomain}`;
   const siteDomain = extractDomain(out.websiteUrl.trim()) || workspaceDomain.replace(/^www\./i, "");
-  if (!out.googleAdsDomain.trim()) out.googleAdsDomain = siteDomain;
 
   const fb = firstHrefForBucket(socials, "facebook");
   const ig = firstHrefForBucket(socials, "instagram");
@@ -213,13 +216,22 @@ export function parseAdsProfileSetup(raw: unknown): AdsProfileSetup | null {
   const pinterestKeyword =
     str("pinterestKeyword") || (pinExtra ? pinterestKeywordLegacy(pinExtra) : "");
 
+  const rawTransparency = str("googleAdsTransparencyUrl");
+  const rawGoogleDomain = str("googleAdsDomain");
+  const migratedTransparency =
+    !rawTransparency && rawGoogleDomain ? canonicalGoogleAdsTransparencyStartUrl(rawGoogleDomain) : null;
+  const googleAdsTransparencyUrl = rawTransparency || migratedTransparency || "";
+  const googleAdsDomain =
+    migratedTransparency ? "" : rawGoogleDomain || (!googleAdsTransparencyUrl ? googleFromSite : "");
+
   return {
     channels,
     adMarketCountryCodes,
     scrape: {
       websiteUrl,
       metaAdsLibraryUrl,
-      googleAdsDomain: str("googleAdsDomain") || googleFromSite,
+      googleAdsTransparencyUrl,
+      googleAdsDomain,
       linkedInUrl: str("linkedInUrl"),
       tiktokKeyword,
       pinterestKeyword,
@@ -297,12 +309,9 @@ export function scrapeHintsToPlatformIds(params: {
     }
   }
 
-  const googleDomain =
-    scrape.googleAdsDomain.trim() ||
-    (scrape.websiteUrl.trim() && extractDomain(scrape.websiteUrl.trim())) ||
-    workspaceDomain.replace(/^www\./i, "");
-  if (channels.has("google") && googleDomain) {
-    put("google", extractDomain(googleDomain) || googleDomain);
+  const googleTransparencyCanon = canonicalGoogleAdsTransparencyStartUrl(scrape.googleAdsTransparencyUrl.trim());
+  if (channels.has("google") && googleTransparencyCanon) {
+    put("google", googleTransparencyCanon);
   }
 
   if (channels.has("tiktok")) {

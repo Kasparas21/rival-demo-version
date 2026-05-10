@@ -4,6 +4,7 @@ import React, { useState, useRef, useLayoutEffect, useMemo, useCallback, useId }
 import { ExternalLink } from "lucide-react";
 import { CHANNELS, type ChannelId } from "./channel-picker-modal";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 
 export type PlatformIdentifier = {
@@ -40,12 +41,6 @@ function isValidUrl(value: string): boolean {
   }
 }
 
-function isValidDomain(value: string): boolean {
-  if (!value.trim()) return true;
-  const v = value.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-  return /^[a-z0-9][a-z0-9-]*\.[a-z]{2,}$/i.test(v);
-}
-
 function isValidMetaPageId(value: string): boolean {
   if (!value.trim()) return true;
   const d = value.replace(/\s/g, "");
@@ -75,11 +70,6 @@ function isValidLinkedInUrl(value: string): boolean {
   const v = value.trim().toLowerCase();
   if (!v.includes("linkedin.com")) return false;
   return isValidUrl(v);
-}
-
-function normalizeDomain(value: string): string {
-  const v = value.trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-  return v || value.trim();
 }
 
 function normalizeUrl(value: string): string {
@@ -158,6 +148,23 @@ function DoubleCheckHelpBadge({ fieldId }: { fieldId: string }) {
   );
 }
 
+const GOOGLE_TRANSPARENCY_LIBRARY_PREVIEW = "https://adstransparency.google.com/?region=any";
+
+/** Matches web manual-identifiers: empty / invalid input opens Transparency home — never the competitor domain. */
+function googleAdsPreviewHref(inputValue: string, serverGooglePreview?: string): string {
+  const v = inputValue.trim();
+  if (v) {
+    const canon = canonicalGoogleAdsTransparencyStartUrl(v);
+    return canon ?? GOOGLE_TRANSPARENCY_LIBRARY_PREVIEW;
+  }
+  const s = serverGooglePreview?.trim() ?? "";
+  if (s.startsWith("http")) {
+    const canon = canonicalGoogleAdsTransparencyStartUrl(s);
+    if (canon) return canon;
+  }
+  return GOOGLE_TRANSPARENCY_LIBRARY_PREVIEW;
+}
+
 const CHANNEL_FIELDS: {
   id: ChannelId;
   label: string;
@@ -180,14 +187,15 @@ const CHANNEL_FIELDS: {
   },
   {
     id: "google",
-    label: "Website domain",
-    labelSub: "Used for Google Ads & domain checks",
-    placeholder: "e.g. nike.com",
-    hint: "Your competitor's main website domain for Google Ads lookup",
+    label: "Google Ads",
+    labelSub: "URL with Advertiser ID",
+    placeholder: "https://adstransparency.google.com/advertiser/AR…",
+    hint: "URL from Google Ads Transparency Center that includes …/advertiser/AR… in the path.",
     validator: (v) => ({
-      valid: isValidDomain(v),
-      message: "Enter a domain like nike.com (no http:// needed)",
-      normalize: normalizeDomain,
+      valid: !v.trim() || canonicalGoogleAdsTransparencyStartUrl(v) !== null,
+      message:
+        "That link doesn’t include a Transparency advertiser ID (…/advertiser/AR…). Open Google Ads Transparency Center, search for the brand, then open any creative or ad — copy the URL from that page’s address bar and paste it here. Don’t use only a shop domain or a ?domain= search results page.",
+      normalize: (val) => canonicalGoogleAdsTransparencyStartUrl(val.trim()) ?? val.trim(),
     }),
   },
   {
@@ -304,7 +312,7 @@ function isScrollWideValue(v: string): boolean {
     /https?:\/\//i.test(t) ||
     /\.(com|co|ai|io|net|org)\//i.test(t) ||
     /^facebook\.|^www\.facebook|^linkedin\.|^www\.linkedin/i.test(t) ||
-    /facebook\.com|linkedin\.com|reddit\.com|tiktok\.com|twitter\.com|x\.com|youtube\.com|pinterest\.com/i.test(
+    /facebook\.com|linkedin\.com|reddit\.com|tiktok\.com|twitter\.com|x\.com|youtube\.com|pinterest\.com|adstransparency\.google/i.test(
       t
     )
   );
@@ -415,6 +423,10 @@ export function ManualIdentifiersForm({
     const rest = { ...discoveredIds };
     delete rest.meta;
     delete rest.metaPageUrl;
+    const g = typeof rest.google === "string" ? rest.google.trim() : "";
+    if (g && !canonicalGoogleAdsTransparencyStartUrl(g)) {
+      delete rest.google;
+    }
     return rest;
   });
   const [metaDisplay, setMetaDisplay] = useState(
@@ -617,10 +629,12 @@ export function ManualIdentifiersForm({
               const previewUrl =
                 field.id === "meta"
                   ? fieldPreviewUrls.meta
-                  : fieldPreviewUrls[field.id];
+                  : field.id === "google"
+                    ? googleAdsPreviewHref(value, fieldPreviewUrls.google)
+                    : fieldPreviewUrls[field.id];
               const showPreview =
                 Boolean(previewUrl?.startsWith("http")) &&
-                (wasDiscovered || Boolean(value.trim()));
+                (wasDiscovered || Boolean(value.trim()) || field.id === "google");
 
               const autoFoundSnap = autoFoundDisplaySnap[field.id] ?? "";
               const showAutoFoundBadge =

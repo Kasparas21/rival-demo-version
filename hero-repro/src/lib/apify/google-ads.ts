@@ -1,9 +1,10 @@
-import { runApifyActor } from "@/lib/apify/client";
+import { flattenApifyDatasetRecord, runApifyActor } from "@/lib/apify/client";
 import { GOOGLE_ADS_LIBRARY_MAX_ITEMS } from "@/lib/ad-library/constants";
 import type { GoogleCompanyAdItem } from "@/lib/ad-library/apify-raw-types";
 import { normalizeGoogleApiItem } from "@/lib/ad-library/normalize";
 
-const DEFAULT_GOOGLE_ACTOR = "6A1ur9FZtzzUuwWtx";
+/** Default: `lurkapi/google-ads-scraper`. Override with `APIFY_GOOGLE_ADS_ACTOR`. */
+const DEFAULT_GOOGLE_ACTOR = "lurkapi/google-ads-scraper";
 const MAX_TIMEOUT_SECS = 3600;
 
 /**
@@ -18,37 +19,53 @@ function readGoogleAdsMemoryMbytes(): number {
   return Math.min(n, 8192);
 }
 
-function cleanDomain(d: string): string {
-  return d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || d;
-}
-
 /**
- * Google Ads Transparency via Apify. Pass domain and/or brand in searchTerms.
+ * Google Ads Transparency via Apify (`lurkapi/google-ads-scraper`).
+ * Pass Transparency advertiser/creative URLs or `?domain=` listing URLs in `startUrls`.
+ * Paid add-ons (OCR, landing pages, etc.) stay off by default to limit cost.
  */
 export async function scrapeGoogleAdsTransparency(params: {
-  searchTerms: string[];
-  region?: string;
+  startUrls: string[];
   resultsLimit: number;
-  skipDetails: boolean;
-  startUrls?: string[];
+  region?: string;
 }): Promise<GoogleCompanyAdItem[]> {
   const actorId = process.env.APIFY_GOOGLE_ADS_ACTOR?.trim() || DEFAULT_GOOGLE_ACTOR;
-  const terms = params.searchTerms.map((t) => t.trim()).filter(Boolean);
-  const urls = (params.startUrls ?? []).map((u) => u.trim()).filter(Boolean);
+  const urls = params.startUrls.map((u) => u.trim()).filter(Boolean);
 
-  if (terms.length === 0 && urls.length === 0) {
-    throw new Error("At least one search term or start URL is required for Google ads");
+  if (urls.length === 0) {
+    throw new Error("At least one Transparency Center URL is required for Google ads");
   }
 
   const limit = Math.max(1, Math.min(params.resultsLimit, GOOGLE_ADS_LIBRARY_MAX_ITEMS));
 
   const input: Record<string, unknown> = {
+    fastMode: false,
+    includeFormatImage: true,
+    includeFormatText: true,
+    includeFormatVideo: true,
+    includeLandingPage: false,
+    includeMediaDownload: false,
+    includeOcr: false,
+    includeRegionEnrichment: false,
+    includeTargetingLocations: false,
+    maxAdsPerAdvertiser: limit,
+    outputDescription: true,
+    outputDestinationUrl: true,
+    outputHeadline: true,
+    outputRegionStats: true,
+    outputTargeting: true,
+    outputVariants: true,
+    politicalAdsOnly: false,
+    proxyConfig: {
+      useApifyProxy: true,
+      apifyProxyGroups: [] as string[],
+    },
     region: params.region?.trim() || "anywhere",
-    resultsLimit: limit,
-    skipDetails: params.skipDetails,
+    shouldDownloadPreviews: false,
+    startUrls: urls.map((url) => ({ url })),
+    maxAdvertisersPerDomain: 1,
+    platform: "any",
   };
-  if (urls.length) input.startUrls = urls;
-  if (terms.length) input.searchTerms = terms;
 
   const { items } = await runApifyActor<Record<string, unknown>>(
     actorId,
@@ -61,14 +78,11 @@ export async function scrapeGoogleAdsTransparency(params: {
     }
   );
 
-  return items.map((raw) => normalizeGoogleApiItem(raw) as GoogleCompanyAdItem);
-}
-
-export function buildGoogleSearchTerms(domain: string, brandName: string): string[] {
-  const d = cleanDomain(domain);
-  const terms = new Set<string>();
-  if (d) terms.add(d);
-  const n = brandName.trim();
-  if (n && n.toLowerCase() !== d.toLowerCase()) terms.add(n);
-  return [...terms];
+  return items.map((raw) => {
+    const row =
+      raw && typeof raw === "object" && !Array.isArray(raw)
+        ? flattenApifyDatasetRecord(raw as Record<string, unknown>)
+        : {};
+    return normalizeGoogleApiItem(row) as GoogleCompanyAdItem;
+  });
 }

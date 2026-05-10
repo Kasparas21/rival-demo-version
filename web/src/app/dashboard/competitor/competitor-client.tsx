@@ -53,6 +53,7 @@ import {
   canonicalLinkedInAdLibraryUrl,
   canonicalMetaAdsLibraryUrl,
 } from "@/lib/ad-library/canonical-library-url";
+import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
@@ -91,7 +92,10 @@ import {
   upsertSidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
-import { readScrapeRequestFieldsFromStorage } from "@/lib/ad-library/scrape-request-fields";
+import {
+  mergeScrapeFieldsWithWorkspaceMarkets,
+  readScrapeRequestFieldsFromStorage,
+} from "@/lib/ad-library/scrape-request-fields";
 import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
 import { fetchSavedCompetitorsFromAccount, saveCompetitorToAccount } from "@/lib/account/client";
 import type { SavedCompetitorPayload } from "@/lib/account/types";
@@ -661,7 +665,7 @@ function workspacePreviewHrefForChannel(
     case "meta":
       return buildMetaAdsLibraryPreviewUrl(scrape.metaAdsLibraryUrl);
     case "google":
-      return buildGoogleTransparencyPreviewUrl(scrape.googleAdsDomain, workspaceDomain);
+      return buildGoogleTransparencyPreviewUrl(scrape.googleAdsTransparencyUrl.trim());
     case "linkedin":
       return buildLinkedInAdLibraryPreviewUrl(scrape.linkedInUrl);
     case "tiktok":
@@ -698,7 +702,14 @@ function WorkspaceAdSourcesPanel({
     return auto ? [] : codes;
   });
   const [scrape, setScrape] = useState<WorkspaceAdsScrapeHints>(() => {
-    if (initialSetup?.scrape) return { ...initialSetup.scrape };
+    if (initialSetup?.scrape) {
+      const s = initialSetup.scrape;
+      return {
+        ...s,
+        googleAdsTransparencyUrl: s.googleAdsTransparencyUrl ?? "",
+        googleAdsDomain: s.googleAdsDomain ?? "",
+      };
+    }
     return emptyWorkspaceScrapeRow(baseDomain);
   });
   const [saving, setSaving] = useState(false);
@@ -715,7 +726,13 @@ function WorkspaceAdSourcesPanel({
     setSelectedMarketCodes(auto ? [] : codes);
     setShowRegionFlags(false);
     setScrape(
-      initialSetup?.scrape ? { ...initialSetup.scrape } : emptyWorkspaceScrapeRow(baseDomain),
+      initialSetup?.scrape
+        ? {
+            ...initialSetup.scrape,
+            googleAdsTransparencyUrl: initialSetup.scrape.googleAdsTransparencyUrl ?? "",
+            googleAdsDomain: initialSetup.scrape.googleAdsDomain ?? "",
+          }
+        : emptyWorkspaceScrapeRow(baseDomain),
     );
   }, [initialSetup, baseDomain]);
 
@@ -828,10 +845,12 @@ function WorkspaceAdSourcesPanel({
       case "google":
         return {
           id: "rival-ws-google",
-          label: "Google Ads domain",
-          hint: "Domain in Google Ads Transparency (usually your site root).",
-          value: scrape.googleAdsDomain,
-          onChange: (v) => patchScrape({ googleAdsDomain: v }),
+          label: "URL with Advertiser ID",
+          hint:
+            "URL from Google Ads Transparency Center that includes …/advertiser/AR… in the path.",
+          placeholder: "https://adstransparency.google.com/advertiser/AR…",
+          value: scrape.googleAdsTransparencyUrl,
+          onChange: (v) => patchScrape({ googleAdsTransparencyUrl: v }),
         };
       case "linkedin":
         return {
@@ -869,6 +888,10 @@ function WorkspaceAdSourcesPanel({
         return null;
     }
   };
+
+  const googleTransparencyNeedsFix =
+    scrape.googleAdsTransparencyUrl.trim().length > 0 &&
+    canonicalGoogleAdsTransparencyStartUrl(scrape.googleAdsTransparencyUrl.trim()) === null;
 
   return (
     <div
@@ -1120,7 +1143,11 @@ function WorkspaceAdSourcesPanel({
                     </label>
                     <input
                       id={spec.id}
-                      className={inputClass}
+                      className={
+                        spec.id === "rival-ws-google" && googleTransparencyNeedsFix
+                          ? `${inputClass} border-amber-400/90 ring-1 ring-amber-300/50`
+                          : inputClass
+                      }
                       value={spec.value}
                       onChange={(e) => spec.onChange(e.target.value)}
                       onBlur={() => {
@@ -1129,6 +1156,13 @@ function WorkspaceAdSourcesPanel({
                           if (!v) return;
                           const c = canonicalMetaAdsLibraryUrl(v);
                           if (c && c !== v) patchScrape({ metaAdsLibraryUrl: c });
+                          return;
+                        }
+                        if (spec.id === "rival-ws-google") {
+                          const v = scrape.googleAdsTransparencyUrl.trim();
+                          if (!v) return;
+                          const c = canonicalGoogleAdsTransparencyStartUrl(scrape.googleAdsTransparencyUrl);
+                          if (c && c !== v) patchScrape({ googleAdsTransparencyUrl: c });
                           return;
                         }
                         if (spec.id === "rival-ws-li") {
@@ -1142,6 +1176,15 @@ function WorkspaceAdSourcesPanel({
                     />
                     {spec.hint ? (
                       <p className="mt-1.5 text-[11px] leading-snug text-sky-800/55">{spec.hint}</p>
+                    ) : null}
+                    {spec.id === "rival-ws-google" && googleTransparencyNeedsFix ? (
+                      <p className="mt-1.5 text-[11px] leading-snug font-medium text-amber-900/95" role="alert">
+                        That link doesn&apos;t include a Transparency advertiser ID (
+                        <span className="font-mono text-[10px]">…/advertiser/AR…</span>). Open Google Ads
+                        Transparency Center, search for your company, then open any creative or ad — copy the URL from
+                        that page&apos;s address bar and paste it here. Don&apos;t use only your shop domain or a{' '}
+                        <span className="font-mono text-[10px]">?domain=</span> search results page.
+                      </p>
                     ) : null}
                   </div>
                 </div>
@@ -1334,6 +1377,20 @@ function CompetitorDashboardBody({
   const [pinterestAdsModalOpen, setPinterestAdsModalOpen] = useState(false);
   const [snapchatAdsModalOpen, setSnapchatAdsModalOpen] = useState(false);
   const [scrapeFields] = useState<ScrapeRequestFields>(() => readScrapeRequestFieldsFromStorage());
+
+  /** Workspace "Ad markets" (e.g. LT) must override session default scrape country for the user's own brand. */
+  const effectiveScrapeFields = useMemo(
+    () =>
+      isOwnWorkspace
+        ? mergeScrapeFieldsWithWorkspaceMarkets(scrapeFields, myBrand.adsSetup?.adMarketCountryCodes)
+        : scrapeFields,
+    [isOwnWorkspace, scrapeFields, myBrand.adsSetup?.adMarketCountryCodes]
+  );
+
+  const workspaceScrapeFields = useMemo(
+    () => mergeScrapeFieldsWithWorkspaceMarkets(scrapeFields, myBrand.adsSetup?.adMarketCountryCodes),
+    [scrapeFields, myBrand.adsSetup?.adMarketCountryCodes]
+  );
   const [tiktokRegion, setTiktokRegion] = useState(readStoredTiktokRegion);
   const [pinterestCountry, setPinterestCountry] = useState(readStoredPinterestCountry);
   const [googleRegion, setGoogleRegion] = useState(readStoredGoogleRegion);
@@ -1466,7 +1523,7 @@ function CompetitorDashboardBody({
     isConfirmed,
     tiktokRegion,
     googleRegion,
-    scrapeFields,
+    effectiveScrapeFields,
     pinterestCountry
   );
 
@@ -1514,7 +1571,7 @@ function CompetitorDashboardBody({
     workspaceAdLibFetchEnabled,
     tiktokRegion,
     googleRegion,
-    scrapeFields,
+    workspaceScrapeFields,
     pinterestCountry
   );
 
