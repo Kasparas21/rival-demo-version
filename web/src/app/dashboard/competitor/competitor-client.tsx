@@ -96,11 +96,10 @@ import {
   mergeScrapeFieldsWithWorkspaceMarkets,
   readScrapeRequestFieldsFromStorage,
 } from "@/lib/ad-library/scrape-request-fields";
-import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
+import { ComparisonPage } from "@/components/comparison/comparison-page";
 import { fetchSavedCompetitorsFromAccount, saveCompetitorToAccount } from "@/lib/account/client";
 import type { SavedCompetitorPayload } from "@/lib/account/types";
 import type { CompetitorPageBrand } from "@/lib/competitor-view-resolve";
-import type { BrandComparisonLlmResult } from "@/lib/brand-comparison/run-brand-comparison-llm";
 import type { MarketingImprovementLlmResult } from "@/lib/workspace/run-marketing-improvement-llm";
 import {
   buildGoogleTransparencyPreviewUrl,
@@ -1530,59 +1529,6 @@ function CompetitorDashboardBody({
   const adLibRef = useRef(adLib);
   adLibRef.current = adLib;
 
-  const workspaceAdsSetup = myBrand.adsSetup ?? null;
-  const workspaceSlugDiffers =
-    normalizeCompetitorSlug(brand.domain) !== normalizeCompetitorSlug(myBrand.domain ?? "");
-
-  const workspaceAdsPlatformsMemo = useMemo((): AdsLibraryPlatform[] => {
-    if (!workspaceAdsSetup?.channels?.length) return [];
-    return channelsQueryToAdsPlatforms(workspaceAdsSetup.channels);
-  }, [workspaceAdsSetup]);
-
-  const workspacePlatformIdsMemo = useMemo(() => {
-    if (!workspaceAdsSetup || !myBrand.domain?.trim()) return null as Record<string, string> | null;
-    const m = scrapeHintsToPlatformIds({
-      scrape: workspaceAdsSetup.scrape,
-      workspaceDomain: myBrand.domain!,
-      channels: workspaceAdsSetup.channels,
-    });
-    return Object.keys(m).length ? m : null;
-  }, [workspaceAdsSetup, myBrand.domain]);
-
-  const workspaceAdLibFetchEnabled =
-    activeTab === "comparison" &&
-    isConfirmed &&
-    Boolean(workspaceAdsSetup?.channels?.length) &&
-    Boolean(myBrand.domain?.trim()) &&
-    workspaceSlugDiffers &&
-    workspacePlatformIdsMemo != null;
-
-  const {
-    data: wsAdLib,
-    loading: wsAdLibLoading,
-  } = useAdLibrary(
-    {
-      name: myBrand.name,
-      domain: (myBrand.domain ?? "").trim() || "",
-      logoUrl: myBrand.logoUrl,
-    },
-    workspacePlatformIdsMemo,
-    workspaceAdsPlatformsMemo,
-    workspaceAdLibFetchEnabled,
-    tiktokRegion,
-    googleRegion,
-    workspaceScrapeFields,
-    pinterestCountry
-  );
-
-  const wsAdLibRef = useRef(wsAdLib);
-  wsAdLibRef.current = wsAdLib;
-
-  const [comparison, setComparison] = useState<BrandComparisonLlmResult | null>(null);
-  const [comparisonLoading, setComparisonLoading] = useState(false);
-  const [comparisonError, setComparisonError] = useState<string | null>(null);
-  const [comparisonRefresh, setComparisonRefresh] = useState(0);
-
   const [marketingCoach, setMarketingCoach] = useState<{
     coaching: MarketingImprovementLlmResult;
     competitorsConsidered: { name: string; domain: string }[];
@@ -1591,74 +1537,6 @@ function CompetitorDashboardBody({
   const [marketingCoachLoading, setMarketingCoachLoading] = useState(false);
   const [marketingCoachError, setMarketingCoachError] = useState<string | null>(null);
   const [marketingCoachRefresh, setMarketingCoachRefresh] = useState(0);
-
-  useEffect(() => {
-    if (activeTab !== "comparison") return;
-    if (!isConfirmed) return;
-    if (adLibLoading) return;
-    if (workspaceAdLibFetchEnabled && wsAdLibLoading) return;
-
-    let cancelled = false;
-    setComparisonLoading(true);
-    setComparisonError(null);
-
-    void (async () => {
-      try {
-        const evidence = workspaceAdLibFetchEnabled
-          ? buildDualBrandAdEvidenceText(adLibRef.current, wsAdLibRef.current)
-          : buildAdEvidenceText(adLibRef.current);
-        const res = await fetch("/api/brand-comparison", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            competitor: { name: brand.name, domain: brand.domain },
-            userBrand: {
-              name: myBrand.name,
-              domain: myBrand.domain,
-              brandContext: myBrand.brandContext,
-            },
-            adEvidence: evidence,
-          }),
-        });
-        const json = (await res.json()) as {
-          ok?: boolean;
-          error?: string;
-          comparison?: BrandComparisonLlmResult;
-        };
-        if (cancelled) return;
-        if (!res.ok || !json.ok || !json.comparison) {
-          setComparison(null);
-          setComparisonError(json.error ?? "Comparison failed");
-          return;
-        }
-        setComparison(json.comparison);
-      } catch {
-        if (!cancelled) {
-          setComparison(null);
-          setComparisonError("Network error");
-        }
-      } finally {
-        if (!cancelled) setComparisonLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    activeTab,
-    isConfirmed,
-    adLibLoading,
-    wsAdLibLoading,
-    workspaceAdLibFetchEnabled,
-    brand.name,
-    brand.domain,
-    myBrand.name,
-    myBrand.id,
-    myBrand.domain,
-    myBrand.brandContext,
-    comparisonRefresh,
-  ]);
 
   useEffect(() => {
     if (activeTab !== "marketing improvements") return;
@@ -2999,119 +2877,20 @@ function CompetitorDashboardBody({
 
       {activeTab === 'comparison' && (
         <div className="flex-1 overflow-y-auto bg-transparent">
-          <div className="px-6 sm:px-8 lg:px-10 py-8 max-w-[860px] mx-auto w-full animate-in fade-in duration-200">
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-[18px] font-semibold text-[#343434]">Comparison to Your Brand</h2>
-                <p className="text-[14px] text-[#71717a] mt-0.5">
-                  How <span className="font-medium text-[#3f3f46]">{competitorDisplayLabel}</span> stacks up against{" "}
-                  <span className="font-medium text-[#3f3f46]">{myBrand.name}</span>
-                </p>
-                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-indigo-600/90">
-                  AI-generated · same OpenRouter model as Strategy Insights
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={!isConfirmed || comparisonLoading || adLibLoading}
-                onClick={() => {
-                  setComparison(null);
-                  setComparisonRefresh((n) => n + 1);
-                }}
-                className="inline-flex items-center gap-2 rounded-full border border-[#e4e4e7] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3f3f46] shadow-sm hover:bg-[#fafafa] disabled:opacity-50"
-              >
-                {comparisonLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                Refresh analysis
-              </button>
-            </div>
-
-            {!isConfirmed ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
-                Confirm this competitor (finish discovery / sidebar sync) to run a grounded comparison with your Ads
-                Library data.
-              </div>
-            ) : adLibLoading ? (
-              <div className="flex items-center justify-center gap-2 py-20 text-[14px] text-[#71717a]">
-                <Loader2 className="h-5 w-5 animate-spin shrink-0" />
-                Loading ads for comparison…
-              </div>
-            ) : comparisonLoading ? (
-              <div className="flex items-center justify-center gap-2 py-20 text-[14px] text-[#71717a]">
-                <Loader2 className="h-5 w-5 animate-spin shrink-0" />
-                Comparing brands…
-              </div>
-            ) : comparisonError ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
-                {comparisonError}
-                <button
-                  type="button"
-                  className="mt-2 block text-[13px] font-medium underline"
-                  onClick={() => setComparisonRefresh((n) => n + 1)}
-                >
-                  Try again
-                </button>
-              </div>
-            ) : comparison ? (
-              <>
-                <div className="grid grid-cols-2 gap-3 mb-5">
-                  <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-[#e0e3e8] shadow-sm">
-                        <BrandLogoThumb src={brand.logoUrl} alt={competitorDisplayLabel} className="bg-white" />
-                      </div>
-                      <p className="text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">{competitorDisplayLabel}</p>
-                    </div>
-                    <p className="text-[22px] font-bold text-[#343434] tracking-tight leading-tight">
-                      {comparison.competitorArchetype.headline}
-                    </p>
-                    <p className="text-[13px] text-[#71717a] mt-1.5">{comparison.competitorArchetype.subtitle}</p>
-                  </div>
-                  <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/60 shadow-sm">
-                        {myBrand.logoUrl ? (
-                          <BrandLogoThumb src={myBrand.logoUrl} alt={myBrand.name} className="bg-white" />
-                        ) : (
-                          <div
-                            className="w-full h-full flex items-center justify-center text-white text-[12px] font-bold"
-                            style={{ backgroundColor: myBrand.color ?? "#343434" }}
-                          >
-                            {myBrand.badge}
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">{myBrand.name}</p>
-                    </div>
-                    <p className="text-[22px] font-bold text-[#343434] tracking-tight leading-tight">
-                      {comparison.userArchetype.headline}
-                    </p>
-                    <p className="text-[13px] text-[#71717a] mt-1.5">{comparison.userArchetype.subtitle}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-                    <h3 className="text-[14px] font-semibold text-[#343434] mb-2.5">{comparison.theirAdvantage.title}</h3>
-                    <p className="text-[14px] text-[#52525b] leading-relaxed whitespace-pre-wrap">{comparison.theirAdvantage.body}</p>
-                  </div>
-
-                  <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 p-5 shadow-[0_4px_24px_rgba(0,0,0,0.02)]">
-                    <h3 className="text-[14px] font-semibold text-[#343434] mb-2.5">{comparison.yourAdvantage.title}</h3>
-                    <p className="text-[14px] text-[#52525b] leading-relaxed whitespace-pre-wrap">{comparison.yourAdvantage.body}</p>
-                  </div>
-
-                  <div className="bg-[#DDF1FD]/40 rounded-2xl border border-[#DDF1FD] p-5">
-                    <div className="flex items-center gap-2 mb-2.5">
-                      <div className="w-6 h-6 rounded-md bg-[#343434] flex items-center justify-center shrink-0">
-                        <Sparkles className="w-3 h-3 text-white" />
-                      </div>
-                      <h3 className="text-[14px] font-semibold text-[#343434]">{comparison.recommendation.title}</h3>
-                    </div>
-                    <p className="text-[14px] text-[#343434]/90 leading-relaxed whitespace-pre-wrap">{comparison.recommendation.body}</p>
-                  </div>
-                </div>
-              </>
-            ) : null}
+          <div className="px-6 sm:px-8 lg:px-10 py-8 w-full max-w-[1400px] mx-auto animate-in fade-in duration-200">
+            <ComparisonPage
+              isConfirmed={isConfirmed}
+              competitorDisplayLabel={competitorDisplayLabel}
+              competitor={{ name: brand.name, domain: brand.domain, logoUrl: brand.logoUrl }}
+              workspace={{
+                name: myBrand.name,
+                domain: myBrand.domain ?? null,
+                logoUrl: myBrand.logoUrl ?? null,
+                brandContext: myBrand.brandContext,
+                color: myBrand.color,
+                badge: myBrand.badge,
+              }}
+            />
           </div>
         </div>
       )}

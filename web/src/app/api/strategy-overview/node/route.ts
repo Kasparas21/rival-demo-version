@@ -9,11 +9,8 @@ const PLATFORMS = new Set<string>([
   "google",
   "linkedin",
   "tiktok",
-  "microsoft",
   "pinterest",
   "snapchat",
-  "youtube",
-  "reddit",
 ]);
 
 export async function GET(req: Request): Promise<NextResponse> {

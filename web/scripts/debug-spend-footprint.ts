@@ -146,6 +146,7 @@ async function main(): Promise<void> {
   const byPlatform = new Map<string, ScrapedAdInput[]>();
   for (const a of inputs) {
     const pl = normalizePlatform(a.platform);
+    if (!pl) continue;
     if (!byPlatform.has(pl)) byPlatform.set(pl, []);
     byPlatform.get(pl)!.push(a);
   }

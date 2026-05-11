@@ -29,7 +29,8 @@ function getClient(): Anthropic | null {
   if (cachedClient) return cachedClient;
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) return null;
-  cachedClient = new Anthropic({ apiKey });
+  /** Default SDK timeout can be tight on cold serverless connections; enrichment batches need a healthy margin. */
+  cachedClient = new Anthropic({ apiKey, timeout: 120_000 });
   return cachedClient;
 }
 
@@ -73,42 +74,34 @@ async function callAnthropic(params: {
     return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
   }
 
-  const timeoutPromise = new Promise<AnthropicChatTextResult>((resolve) => {
-    setTimeout(() => resolve({ ok: false, error: "Anthropic timeout after 30s" }), 30_000);
-  });
+  const createParams: Anthropic.Messages.MessageCreateParams = {
+    model: params.model,
+    max_tokens: params.maxTokens,
+    messages: params.messages,
+  };
+  if (params.systemPrompt) {
+    createParams.system = params.systemPrompt;
+  }
 
-  const requestPromise = (async (): Promise<AnthropicChatTextResult> => {
-    const createParams: Anthropic.Messages.MessageCreateParams = {
-      model: params.model,
-      max_tokens: params.maxTokens,
-      messages: params.messages,
-    };
-    if (params.systemPrompt) {
-      createParams.system = params.systemPrompt;
-    }
-
-    try {
-      const response = await client.messages.create(createParams);
-      return messageFromResponse(params.model, response);
-    } catch (err) {
-      if (err instanceof RateLimitError) {
-        await new Promise((r) => setTimeout(r, 1500));
-        try {
-          const response = await client.messages.create(createParams);
-          return messageFromResponse(params.model, response);
-        } catch (retryErr) {
-          return {
-            ok: false,
-            error: retryErr instanceof Error ? retryErr.message : "Retry failed",
-          };
-        }
+  try {
+    const response = await client.messages.create(createParams);
+    return messageFromResponse(params.model, response);
+  } catch (err) {
+    if (err instanceof RateLimitError) {
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const response = await client.messages.create(createParams);
+        return messageFromResponse(params.model, response);
+      } catch (retryErr) {
+        return {
+          ok: false,
+          error: retryErr instanceof Error ? retryErr.message : "Retry failed",
+        };
       }
-      const msg = err instanceof Error ? err.message : "Anthropic request failed";
-      return { ok: false, error: msg };
     }
-  })();
-
-  return Promise.race([requestPromise, timeoutPromise]);
+    const msg = err instanceof Error ? err.message : "Anthropic request failed";
+    return { ok: false, error: msg };
+  }
 }
 
 export async function anthropicHaiku(params: {

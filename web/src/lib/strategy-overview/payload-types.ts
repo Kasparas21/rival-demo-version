@@ -22,11 +22,8 @@ export type StrategyPlatform =
   | "google"
   | "linkedin"
   | "tiktok"
-  | "microsoft"
   | "pinterest"
-  | "snapchat"
-  | "youtube"
-  | "reddit";
+  | "snapchat";
 
 export type CompetitorStrategyMeta = {
   name: string;
@@ -97,58 +94,160 @@ export type StrategyMapPayload = {
 };
 
 export type InsightCardBase = {
-  aiNarrative: string;
+  title: string;
+  subtitle: string;
+  tooltip: string;
+  /** Optional one-line insight; usually filled by the Sonnet narrative pass. */
+  aiNarrative?: string | null;
   lastUpdated: string;
   dataConfidence: DataConfidence;
   aiNarrativeSource?: NarrativeSource;
 };
 
-export type FunnelArchitectureCard = InsightCardBase & {
-  layers: {
+export type FunnelDistributionCard = InsightCardBase & {
+  stages: {
     stage: FunnelStage;
+    adCount: number;
+    sharePct: number;
     platforms: string[];
-    dropOffPct: number | null;
     exampleSnippet: string | null;
   }[];
+  totalClassified: number;
+  totalAds: number;
+  insufficientData: boolean;
 };
 
 export type BudgetAllocationCard = InsightCardBase & {
-  segments: { platform: StrategyPlatform; label: string; pct: number; estSpendEur: number }[];
+  segments: {
+    platform: StrategyPlatform;
+    label: string;
+    pct: number;
+    estSpendEur: number;
+    adCount: number;
+  }[];
+  totalEstSpendEur: number;
   insight: string;
 };
 
-export type CreativeCadenceCard = InsightCardBase & {
-  months: string[];
-  launches: number[];
+export type LibraryActivityTimelineCard = InsightCardBase & {
+  months: {
+    month: string;
+    launchCount: number;
+    detectionCount: number;
+  }[];
+  dataQuality: {
+    realLaunchPct: number;
+    qualityLabel: "high" | "medium" | "low";
+    warning: string | null;
+  };
 };
 
-export type AudienceSignalMapCard = InsightCardBase & {
-  signals: { label: string; strength: number }[];
+export type AdFormatMixCard = InsightCardBase & {
+  formats: {
+    format: string;
+    count: number;
+    sharePct: number;
+  }[];
 };
 
 export type AngleClusteringCard = InsightCardBase & {
-  rows: { angle: string; adCount: number; longevityScore: number }[];
+  angles: {
+    angle: string;
+    adCount: number;
+    sharePct: number;
+    exampleSnippet: string | null;
+  }[];
+  unclassifiedPct: number;
+  insufficientData: boolean;
 };
 
-export type VoiceToneFingerprintCard = InsightCardBase & {
-  competitor: { formal: number; emotional: number };
+export type VoiceTonePositionCard = InsightCardBase & {
+  competitor: {
+    formal: number;
+    emotional: number;
+    confidence: number;
+    insufficientData: boolean;
+  } | null;
   userBrand: { formal: number; emotional: number } | null;
+  sampleSize: number;
 };
 
-export type PerformancePulseCard = InsightCardBase & {
-  weeks: string[];
-  volume: number[];
-  trend: "up" | "down" | "flat";
+export type PlatformFootprintCard = InsightCardBase & {
+  platforms: {
+    platform: StrategyPlatform;
+    label: string;
+    activeAds: number;
+    estSpendEur: number;
+    funnelStage: FunnelStage;
+    spendShare: number;
+    /** Earliest `first_seen_at` among active ads on this platform (ISO), for “Active since” UI. */
+    earliestFirstSeenAt?: string | null;
+  }[];
+  totalActiveAds: number;
+  totalEstSpendEur: number;
+  platformCount: number;
+};
+
+/** Per-platform weekly launch/first-seen buckets (normalized), for Comparison sparklines. */
+export type SpendTrendByPlatformInsight = {
+  platform: StrategyPlatform;
+  weekBuckets: number[];
+  direction: "up" | "down" | "flat";
+  pctChange: number;
+};
+
+/** Per-platform voice averages for Comparison to Your Brand (optional on cached payloads). */
+export type VoiceToneByPlatformInsight = {
+  platform: StrategyPlatform;
+  formal: number;
+  emotional: number;
+  confidence: number;
+  sampleSize: number;
+};
+
+/** Angle × platform rollups for comparison panels. */
+export type AnglesByPlatformInsight = {
+  angle: string;
+  totalCount: number;
+  platforms: StrategyPlatform[];
+  platformCounts: Partial<Record<StrategyPlatform, number>>;
+  avgLifespanDays: number;
+};
+
+/** Test rate and lifespan per platform for comparison velocity matrix. */
+export type TestingVelocityByPlatformInsight = {
+  platform: StrategyPlatform;
+  newIn30: number;
+  totalActive: number;
+  testRate: number;
+  avgLifespanDays: number;
+};
+
+export type AudienceInferenceSegment = {
+  name: string;
+  confidence: number;
+  signals: string[];
+};
+
+/** Cached Sonnet audience inference (Comparison + Strategy recompute). */
+export type AudienceInferenceResult = {
+  segments: AudienceInferenceSegment[];
+  primarySegmentName: string;
+  summary: string;
 };
 
 export type InsightCardsPayload = {
-  funnel_architecture: FunnelArchitectureCard;
+  platform_footprint: PlatformFootprintCard;
   budget_allocation: BudgetAllocationCard;
-  creative_cadence: CreativeCadenceCard;
-  audience_signal_map: AudienceSignalMapCard;
+  library_activity_timeline: LibraryActivityTimelineCard;
+  funnel_distribution: FunnelDistributionCard;
   angle_clustering: AngleClusteringCard;
-  voice_tone_fingerprint: VoiceToneFingerprintCard;
-  performance_pulse: PerformancePulseCard;
+  voice_tone_position: VoiceTonePositionCard;
+  ad_format_mix: AdFormatMixCard;
+  voice_tone_by_platform?: VoiceToneByPlatformInsight[];
+  angles_by_platform?: AnglesByPlatformInsight[];
+  testing_velocity_by_platform?: TestingVelocityByPlatformInsight[];
+  spend_trend_by_platform?: SpendTrendByPlatformInsight[];
 };
 
 export type PipelineStatus = "ok" | "no_ads_found";
@@ -158,7 +257,7 @@ export type CompetitorStrategyOverviewPayload = {
   map: StrategyMapPayload;
   insights: InsightCardsPayload;
   sourceScrapeBatchId: string | null;
-  /** Deterministic v2 model (when STRATEGY_SPEND_ESTIMATOR_V2=1); map totals may include legacy v1 for unsupported platforms (e.g. reddit). */
+  /** Deterministic v2 model (when STRATEGY_SPEND_ESTIMATOR_V2=1). Legacy rows (e.g. youtube) are excluded at derivation. */
   spendEstimateV2?: SpendEstimate;
   pipelineStatus?: PipelineStatus;
   derivationQuality?: DerivationQuality;
@@ -167,6 +266,16 @@ export type CompetitorStrategyOverviewPayload = {
   enrichmentRate?: number;
   lowEnrichmentConfidence?: boolean;
   insufficientEnrichedAds?: boolean;
+  /** Cached per brand; invalidated with strategy model version / recompute. */
+  audience_inference?: AudienceInferenceResult | null;
 };
 
-export type StrategyInsightCardType = keyof InsightCardsPayload;
+/** Keys persisted in `strategy_insights_cards` — excludes comparison-only insight augmentations. */
+export type StrategyInsightCardType =
+  | "platform_footprint"
+  | "budget_allocation"
+  | "library_activity_timeline"
+  | "funnel_distribution"
+  | "angle_clustering"
+  | "voice_tone_position"
+  | "ad_format_mix";

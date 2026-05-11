@@ -59,6 +59,7 @@ function groupByPlatformAndKey<T extends RowWithCreativePayload>(rows: T[]): Map
   const m = new Map<StrategyPlatform, Map<string, T[]>>();
   for (const row of rows) {
     const pl = normalizePlatform(row.platform);
+    if (!pl) continue;
     const key = extractStableCreativeKey(row.platform, row.raw_payload, row.id);
     if (!m.has(pl)) m.set(pl, new Map());
     const inner = m.get(pl)!;

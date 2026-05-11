@@ -6,12 +6,10 @@
 export type SupportedPlatform =
   | "meta"
   | "google"
-  | "youtube"
   | "tiktok"
   | "linkedin"
   | "pinterest"
-  | "snapchat"
-  | "microsoft";
+  | "snapchat";
 
 export type PlatformStats = {
   platform: SupportedPlatform;

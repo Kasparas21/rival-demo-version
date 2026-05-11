@@ -13,14 +13,11 @@ export function hasImpressionBandInPayload(raw: unknown, platform: SupportedPlat
       return typeof o.impressionsIndex === "number" && Number.isFinite(o.impressionsIndex);
     case "tiktok":
       return typeof o.uniqueUsersSeen === "string" && o.uniqueUsersSeen.trim().length > 0;
-    case "microsoft":
-      return typeof o.impressionsRange === "string" && o.impressionsRange.trim().length > 0;
     case "pinterest":
       return typeof o.reachSummary === "string" && o.reachSummary.trim().length > 0;
     case "snapchat":
       return typeof o.impressionsLabel === "string" && o.impressionsLabel.trim().length > 0;
     case "google":
-    case "youtube":
     case "linkedin":
     default:
       return false;

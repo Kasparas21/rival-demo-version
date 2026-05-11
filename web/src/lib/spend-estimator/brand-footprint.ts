@@ -12,15 +12,13 @@ import { hasImpressionBandInPayload } from "@/lib/spend-estimator/impression-ban
 import { liveCreativeGroupsPerPlatform } from "@/lib/spend-estimator/live-creatives";
 import type { BrandFootprint, FootprintAdInput, PlatformStats, SupportedPlatform } from "@/lib/spend-estimator/types";
 
-const SUPPORTED: ReadonlySet<string> = new Set<SupportedPlatform>([
+const SUPPORTED: ReadonlySet<string | SupportedPlatform> = new Set<SupportedPlatform>([
   "meta",
   "google",
-  "youtube",
   "tiktok",
   "linkedin",
   "pinterest",
   "snapchat",
-  "microsoft",
 ]);
 
 export function toSupportedPlatform(platform: string): SupportedPlatform | null {
@@ -205,6 +203,7 @@ export async function computeBrandFootprint(params: {
   const byPlScale = new Map<StrategyPlatform, typeof brandAdsForScale>();
   for (const a of brandAdsForScale) {
     const pl = normalizePlatform(a.platform);
+    if (!pl) continue;
     if (!byPlScale.has(pl)) byPlScale.set(pl, []);
     byPlScale.get(pl)!.push(a);
   }

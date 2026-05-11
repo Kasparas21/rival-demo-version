@@ -7,22 +7,19 @@ export type BrandScaleAdInput = {
   last_seen_at: string;
 };
 
-export function normalizePlatform(p: string): StrategyPlatform {
+export function normalizePlatform(p: string): StrategyPlatform | null {
   const x = p.toLowerCase().trim();
   if (
     x === "meta" ||
     x === "google" ||
-    x === "linkedin" ||
     x === "tiktok" ||
-    x === "microsoft" ||
+    x === "linkedin" ||
     x === "pinterest" ||
-    x === "snapchat" ||
-    x === "youtube" ||
-    x === "reddit"
+    x === "snapchat"
   ) {
     return x;
   }
-  return "meta";
+  return null;
 }
 
 export function deriveBrandScale(

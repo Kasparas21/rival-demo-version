@@ -12,6 +12,10 @@ import type {
   SpendBand,
   StrategyMapPayload,
   StrategyPlatform,
+  AnglesByPlatformInsight,
+  SpendTrendByPlatformInsight,
+  TestingVelocityByPlatformInsight,
+  VoiceToneByPlatformInsight,
 } from "@/lib/strategy-overview/payload-types";
 import {
   buildBrandFootprintFromAds,
@@ -27,6 +31,81 @@ import {
 
 const STAGE_ORDER: FunnelStage[] = ["TOF", "MOF", "BOF"];
 
+const DERIVATION_PLATFORM_ORDER: StrategyPlatform[] = [
+  "meta",
+  "google",
+  "tiktok",
+  "linkedin",
+  "pinterest",
+  "snapchat",
+];
+
+function earliestFirstSeenIsoForPlatform(ads: ScrapedAdInput[], pl: StrategyPlatform): string | null {
+  let min: number | null = null;
+  for (const a of ads) {
+    const p = normalizePlatform(a.platform);
+    if (p !== pl) continue;
+    const t = Date.parse(a.first_seen_at);
+    if (!Number.isFinite(t)) continue;
+    if (min === null || t < min) min = t;
+  }
+  return min === null ? null : new Date(min).toISOString();
+}
+
+function launchTimeMsForTrend(ad: ScrapedAdInput): number {
+  const raw = ad.ai_extracted_launch_date?.trim();
+  if (raw) {
+    const t = Date.parse(raw);
+    if (Number.isFinite(t)) return t;
+  }
+  return Date.parse(ad.first_seen_at);
+}
+
+/** Per-platform weekly ad launch / first-seen counts, normalized 0–100 for sparklines. */
+export function computeSpendTrendByPlatform(ads: ScrapedAdInput[], weeks = 12): SpendTrendByPlatformInsight[] {
+  const now = Date.now();
+  const weekMs = 7 * 86_400_000;
+  const platformMap = new Map<StrategyPlatform, ScrapedAdInput[]>();
+
+  for (const ad of ads) {
+    const platform = normalizePlatform(ad.platform);
+    if (!platform) continue;
+    if (!platformMap.has(platform)) platformMap.set(platform, []);
+    platformMap.get(platform)!.push(ad);
+  }
+
+  const out: SpendTrendByPlatformInsight[] = [];
+
+  for (const [platform, list] of platformMap.entries()) {
+    const buckets = new Array(weeks).fill(0);
+    for (const ad of list) {
+      const launchTime = launchTimeMsForTrend(ad);
+      if (!Number.isFinite(launchTime)) continue;
+      const weeksAgo = Math.floor((now - launchTime) / weekMs);
+      if (weeksAgo >= 0 && weeksAgo < weeks) {
+        buckets[weeks - 1 - weeksAgo] += 1;
+      }
+    }
+
+    const max = Math.max(1, ...buckets);
+    const normalized = buckets.map((b) => Math.round((b / max) * 100));
+
+    const recent = buckets.slice(-4).reduce((s, n) => s + n, 0) / 4;
+    const previous = buckets.slice(-8, -4).reduce((s, n) => s + n, 0) / 4;
+    const pctChange =
+      previous > 0 ? Math.round(((recent - previous) / previous) * 100) : recent > 0 ? 100 : 0;
+    const direction: "up" | "down" | "flat" =
+      pctChange > 10 ? "up" : pctChange < -10 ? "down" : "flat";
+
+    out.push({ platform, weekBuckets: normalized, direction, pctChange });
+  }
+
+  out.sort(
+    (a, b) => DERIVATION_PLATFORM_ORDER.indexOf(a.platform) - DERIVATION_PLATFORM_ORDER.indexOf(b.platform)
+  );
+  return out;
+}
+
 export type DeriveStrategyOverviewOptions = {
   spendV2?: {
     footprintRows: FootprintAdInput[];
@@ -39,6 +118,12 @@ export type DeriveStrategyOverviewOptions = {
 
 export { normalizePlatform, deriveBrandScale } from "@/lib/strategy-overview/brand-scale-score";
 
+export type VoiceToneVector = {
+  formal: number;
+  emotional: number;
+  confidence: number;
+};
+
 export type ScrapedAdInput = {
   id: string;
   platform: string;
@@ -49,6 +134,9 @@ export type ScrapedAdInput = {
   ai_extracted_angle: string | null;
   funnel_stage: string | null;
   ai_enrichment_status?: string | null;
+  /** Platform-reported launch when persisted from scrape; timeline falls back to {@link first_seen_at} when null. */
+  ai_extracted_launch_date?: string | null;
+  ai_extracted_voice_tone?: unknown;
   /** When set (recompute path), Strategy Map uses distinct live creatives; see live-creatives.ts */
   is_active?: boolean;
   raw_payload?: unknown;
@@ -57,13 +145,10 @@ export type ScrapedAdInput = {
 const PLATFORM_LABEL: Record<string, string> = {
   meta: "Meta",
   google: "Google",
-  youtube: "YouTube",
   linkedin: "LinkedIn",
   tiktok: "TikTok",
-  microsoft: "Microsoft",
   pinterest: "Pinterest",
   snapchat: "Snapchat",
-  reddit: "Reddit",
 };
 
 /** Fallback funnel stage by platform when >80% of ads on that platform are unclassified. */
@@ -73,10 +158,7 @@ const DEFAULT_STAGE: Record<string, FunnelStage> = {
   snapchat: "TOF",
   meta: "MOF",
   linkedin: "MOF",
-  microsoft: "MOF",
-  youtube: "MOF",
   google: "BOF",
-  reddit: "TOF",
 };
 
 export function parseStage(raw: string | null | undefined): FunnelStage | null {
@@ -129,6 +211,7 @@ function angleTokens(ads: ScrapedAdInput[]): Map<string, Set<string>> {
   const byPlat = new Map<string, Set<string>>();
   for (const a of adsForEdgeAngles(ads)) {
     const pl = normalizePlatform(a.platform);
+    if (!pl) continue;
     const ang = (a.ai_extracted_angle ?? "general").trim().toLowerCase() || "general";
     if (!byPlat.has(pl)) byPlat.set(pl, new Set());
     byPlat.get(pl)!.add(ang);
@@ -141,6 +224,7 @@ export function enrichedAdsByPlatform(ads: ScrapedAdInput[]): Map<StrategyPlatfo
   for (const a of ads) {
     if (parseStage(a.funnel_stage) == null || !(a.ai_extracted_angle ?? "").trim()) continue;
     const pl = normalizePlatform(a.platform);
+    if (!pl) continue;
     m.set(pl, (m.get(pl) ?? 0) + 1);
   }
   return m;
@@ -300,13 +384,244 @@ function derivationQualityFromRate(rate: number): DerivationQuality {
   return "low";
 }
 
+function parseVoiceToneVector(raw: unknown): VoiceToneVector | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const formal = Number(o.formal);
+  const emotional = Number(o.emotional);
+  const confidence = Number(o.confidence);
+  if (![formal, emotional, confidence].every((n) => Number.isFinite(n))) return null;
+  if (formal < 0 || formal > 1 || emotional < 0 || emotional > 1 || confidence < 0 || confidence > 1) {
+    return null;
+  }
+  return { formal, emotional, confidence };
+}
+
+export function buildMonthlyLaunchTimeline(
+  ads: ScrapedAdInput[],
+  months: number
+): { month: string; launchCount: number; detectionCount: number }[] {
+  const buckets: { month: string; launchCount: number; detectionCount: number }[] = [];
+  const now = new Date();
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    buckets.push({
+      month: d.toISOString().slice(0, 7),
+      launchCount: 0,
+      detectionCount: 0,
+    });
+  }
+  for (const ad of ads) {
+    const launchRaw = ad.ai_extracted_launch_date?.trim();
+    const launchDate = launchRaw ? new Date(launchRaw) : null;
+    const detectionDate = new Date(ad.first_seen_at);
+    const dateToUse =
+      launchDate && !Number.isNaN(launchDate.getTime()) ? launchDate : detectionDate;
+    if (Number.isNaN(dateToUse.getTime())) continue;
+    const monthKey = dateToUse.toISOString().slice(0, 7);
+    const bucket = buckets.find((b) => b.month === monthKey);
+    if (!bucket) continue;
+    if (launchDate && !Number.isNaN(launchDate.getTime())) {
+      bucket.launchCount += 1;
+    } else {
+      bucket.detectionCount += 1;
+    }
+  }
+  return buckets;
+}
+
+export function computeTimelineDataQuality(ads: ScrapedAdInput[]): {
+  realLaunchPct: number;
+  qualityLabel: "high" | "medium" | "low";
+  warning: string | null;
+} {
+  if (ads.length === 0) {
+    return { realLaunchPct: 0, qualityLabel: "low", warning: "No ads to analyze." };
+  }
+  const realLaunchCount = ads.filter((a) => (a.ai_extracted_launch_date ?? "").trim().length > 0).length;
+  const realLaunchPct = Math.round((realLaunchCount / ads.length) * 100);
+  if (realLaunchPct >= 70) {
+    return { realLaunchPct, qualityLabel: "high", warning: null };
+  }
+  if (realLaunchPct >= 30) {
+    return {
+      realLaunchPct,
+      qualityLabel: "medium",
+      warning: `Only ${realLaunchPct}% of ads have a platform-reported launch date. The rest use detection date (when first seen in your library), which can cluster around scrape time.`,
+    };
+  }
+  return {
+    realLaunchPct,
+    qualityLabel: "low",
+    warning:
+      "Most ads lack a platform-reported launch date. This chart shows detection dates and may not reflect true launch timing.",
+  };
+}
+
+export function computeFormatMix(ads: ScrapedAdInput[]): {
+  format: string;
+  count: number;
+  sharePct: number;
+}[] {
+  const aggregator = new Map<string, number>();
+  for (const ad of ads) {
+    const format = (ad.format ?? "unknown").toLowerCase().trim();
+    aggregator.set(format, (aggregator.get(format) ?? 0) + 1);
+  }
+  const total = ads.length;
+  return Array.from(aggregator.entries())
+    .map(([format, count]) => ({
+      format,
+      count,
+      sharePct: total > 0 ? Math.round((count / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function computeVoiceToneAverage(ads: ScrapedAdInput[]): {
+  formal: number;
+  emotional: number;
+  confidence: number;
+  insufficientData: boolean;
+} | null {
+  const scored = ads
+    .map((a) => parseVoiceToneVector(a.ai_extracted_voice_tone))
+    .filter((v): v is VoiceToneVector => v != null);
+  if (scored.length < 3) return null;
+  const avg = (key: keyof VoiceToneVector) =>
+    scored.reduce((sum, s) => sum + (s[key] ?? 0), 0) / scored.length;
+  return {
+    formal: parseFloat(avg("formal").toFixed(2)),
+    emotional: parseFloat(avg("emotional").toFixed(2)),
+    confidence: parseFloat(avg("confidence").toFixed(2)),
+    insufficientData: scored.length < 10,
+  };
+}
+
+export function computeVoiceToneByPlatform(ads: ScrapedAdInput[]): VoiceToneByPlatformInsight[] {
+  const grouped = new Map<StrategyPlatform, ScrapedAdInput[]>();
+  for (const ad of ads) {
+    if (parseVoiceToneVector(ad.ai_extracted_voice_tone) == null) continue;
+    const platform = normalizePlatform(ad.platform);
+    if (!platform) continue;
+    if (!grouped.has(platform)) grouped.set(platform, []);
+    grouped.get(platform)!.push(ad);
+  }
+
+  return Array.from(grouped.entries())
+    .filter(([, list]) => list.length >= 3)
+    .map(([platform, list]) => {
+      const tones = list
+        .map((a) => parseVoiceToneVector(a.ai_extracted_voice_tone))
+        .filter((v): v is VoiceToneVector => v != null);
+      const avg = (key: keyof VoiceToneVector) =>
+        parseFloat((tones.reduce((s, t) => s + (t[key] ?? 0), 0) / tones.length).toFixed(2));
+      return {
+        platform,
+        formal: avg("formal"),
+        emotional: avg("emotional"),
+        confidence: avg("confidence"),
+        sampleSize: list.length,
+      };
+    })
+    .sort((a, b) => b.sampleSize - a.sampleSize);
+}
+
+export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatformInsight[] {
+  const angleMap = new Map<
+    string,
+    { count: number; platforms: Map<StrategyPlatform, number>; lifespanDays: number[] }
+  >();
+
+  for (const ad of ads) {
+    const angle = (ad.ai_extracted_angle ?? "").trim();
+    if (!angle || angle === "Unclassified") continue;
+
+    if (!angleMap.has(angle)) {
+      angleMap.set(angle, { count: 0, platforms: new Map(), lifespanDays: [] });
+    }
+    const entry = angleMap.get(angle)!;
+    entry.count += 1;
+
+    const platform = normalizePlatform(ad.platform);
+    if (!platform) continue;
+    entry.platforms.set(platform, (entry.platforms.get(platform) ?? 0) + 1);
+
+    const firstSeen = new Date(ad.first_seen_at).getTime();
+    const lastSeen = ad.last_seen_at ? new Date(ad.last_seen_at).getTime() : Date.now();
+    entry.lifespanDays.push(Math.max(1, Math.floor((lastSeen - firstSeen) / 86_400_000)));
+  }
+
+  return Array.from(angleMap.entries())
+    .map(([angle, data]) => {
+      const platformCounts: Partial<Record<StrategyPlatform, number>> = {};
+      for (const [pl, n] of data.platforms) {
+        platformCounts[pl] = n;
+      }
+      return {
+        angle,
+        totalCount: data.count,
+        platforms: Array.from(data.platforms.keys()).sort(),
+        platformCounts,
+        avgLifespanDays: Math.round(
+          data.lifespanDays.reduce((s, d) => s + d, 0) / Math.max(1, data.lifespanDays.length)
+        ),
+      };
+    })
+    .sort((a, b) => b.totalCount - a.totalCount)
+    .slice(0, 12);
+}
+
+export function computeTestingVelocityByPlatform(ads: ScrapedAdInput[]): TestingVelocityByPlatformInsight[] {
+  const grouped = new Map<StrategyPlatform, ScrapedAdInput[]>();
+  for (const ad of ads) {
+    const platform = normalizePlatform(ad.platform);
+    if (!platform) continue;
+    if (!grouped.has(platform)) grouped.set(platform, []);
+    grouped.get(platform)!.push(ad);
+  }
+
+  const now = Date.now();
+  const thirtyDaysAgo = now - 30 * 86_400_000;
+
+  return Array.from(grouped.entries())
+    .map(([platform, list]) => {
+      const newIn30 = list.filter((a) => {
+        const launchRaw = a.ai_extracted_launch_date?.trim();
+        const launchTime = launchRaw
+          ? new Date(launchRaw).getTime()
+          : new Date(a.first_seen_at).getTime();
+        return !Number.isNaN(launchTime) && launchTime >= thirtyDaysAgo;
+      }).length;
+
+      const totalActive = list.length;
+      const testRate = totalActive > 0 ? parseFloat((newIn30 / totalActive).toFixed(2)) : 0;
+
+      const lifespans = list.map((a) => {
+        const first = new Date(a.first_seen_at).getTime();
+        const last = a.last_seen_at ? new Date(a.last_seen_at).getTime() : now;
+        return Math.max(1, Math.floor((last - first) / 86_400_000));
+      });
+      const avgLifespan = Math.round(lifespans.reduce((s, d) => s + d, 0) / Math.max(1, lifespans.length));
+
+      return {
+        platform,
+        newIn30,
+        totalActive,
+        testRate,
+        avgLifespanDays: avgLifespan,
+      };
+    })
+    .sort((a, b) => b.totalActive - a.totalActive);
+}
+
 export function deriveStrategyOverviewPayload(
   ads: ScrapedAdInput[],
   competitor: CompetitorStrategyMeta,
   sourceScrapeBatchId: string | null,
   deriveOptions?: DeriveStrategyOverviewOptions
 ): CompetitorStrategyOverviewPayload {
-  const activeAds = ads.filter((a) => a.id);
+  const activeAds = ads.filter((a) => Boolean(a.id) && normalizePlatform(a.platform) != null);
   const totalAds = activeAds.length;
   const enrichedCount = activeAds.filter(
     (a) => parseStage(a.funnel_stage) != null && (a.ai_extracted_angle ?? "").trim().length > 0
@@ -322,6 +637,7 @@ export function deriveStrategyOverviewPayload(
   const byPlatform = new Map<StrategyPlatform, ScrapedAdInput[]>();
   for (const a of activeAds) {
     const pl = normalizePlatform(a.platform);
+    if (!pl) continue;
     if (!byPlatform.has(pl)) byPlatform.set(pl, []);
     byPlatform.get(pl)!.push(a);
   }
@@ -539,105 +855,145 @@ export function deriveStrategyOverviewPayload(
     null
   );
 
-  const cadenceMonths = 6;
-  const cadenceMonthLabels = Array.from({ length: cadenceMonths }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (cadenceMonths - 1 - i));
-    return d.toLocaleString("en-US", { month: "short", year: "2-digit" });
-  });
-  const cadenceRawLaunches = monthlyFirstSeenCounts(activeAds, cadenceMonths);
+  const totalClassified = activeAds.filter((a) => parseStage(a.funnel_stage) != null).length;
+  const insufficientFunnel = totalClassified < 5;
 
-  const pulseWeeks = 8;
-  const pulseWeekLabels = Array.from({ length: pulseWeeks }, (_, i) => `W${i + 1}`);
-  const pulseRawVolume = weeklyFirstSeenCounts(activeAds, pulseWeeks);
-  const spendSparkline = buildSparklineFromAds(activeAds);
-  const pulseTrend = computeTrend(spendSparkline);
+  const angleEntriesSorted = [...angleAgg.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const unclassifiedCount = angleAgg.get("Unclassified") ?? 0;
+  const unclassifiedRatio = activeAds.length > 0 ? unclassifiedCount / activeAds.length : 0;
+
+  const voiceAvg = computeVoiceToneAverage(activeAds);
+  const voiceSample = activeAds.filter((a) => parseVoiceToneVector(a.ai_extracted_voice_tone) != null).length;
+
+  const timelineMonths = buildMonthlyLaunchTimeline(activeAds, 12);
+  const timelineQuality = computeTimelineDataQuality(activeAds);
+  const formatMixList = computeFormatMix(activeAds);
 
   const insights = {
-    funnel_architecture: {
-      aiNarrative: "Funnel mix inferred from per-ad stages and platform roles.",
+    platform_footprint: {
+      title: "Platform Footprint",
+      subtitle: "Active ad presence per platform",
+      tooltip:
+        "Side-by-side platform comparison: how many active ads run on each platform and the estimated monthly spend share.",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
-      layers: STAGE_ORDER.map((stage) => {
-        const platsFor = nodes.filter((n) => n.funnelStage === stage).map((n) => n.label);
-        return {
-          stage,
-          platforms: platsFor,
-          dropOffPct: stage === "TOF" ? null : 15 + Math.min(35, nodes.length * 3),
-          exampleSnippet:
-            activeAds.find((a) => parseStage(a.funnel_stage) === stage)?.ad_text.slice(0, 120) ?? null,
-        };
-      }),
+      platforms: [...nodes]
+        .map((n) => ({
+          platform: n.platform,
+          label: n.label,
+          activeAds: n.adCount,
+          estSpendEur: Math.round(n.estSpendEur),
+          funnelStage: n.funnelStage,
+          spendShare: pct(n),
+          earliestFirstSeenAt: earliestFirstSeenIsoForPlatform(activeAds, n.platform),
+        }))
+        .sort((a, b) => b.activeAds - a.activeAds),
+      totalActiveAds: nodes.reduce((sum, n) => sum + n.adCount, 0),
+      totalEstSpendEur: Math.round(totalMid),
+      platformCount: nodes.length,
     },
     budget_allocation: {
-      aiNarrative: "Estimated share from benchmark CPM model × active ad footprint.",
+      title: "Budget Allocation",
+      subtitle: "Estimated monthly spend share by platform",
+      tooltip:
+        "Estimated using benchmark CPM × active ad count × brand size multiplier × format coefficient. NOT invoiced spend.",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
       segments: nodes.map((n) => ({
         platform: n.platform,
         label: n.label,
         pct: pct(n),
         estSpendEur: Math.round(n.estSpendEur),
+        adCount: n.adCount,
       })),
+      totalEstSpendEur: Math.round(totalMid),
       insight: highestSpendNode
-        ? `Largest estimated spend on ${highestSpendNode.label} (${pct(highestSpendNode)}% share).`
-        : "Estimated share from benchmark CPM model × active ad footprint.",
+        ? `Estimated largest spend on ${highestSpendNode.label} (${pct(highestSpendNode)}% share).`
+        : "No active ads detected on any platform.",
     },
-    creative_cadence: {
-      aiNarrative:
-        "Raw counts of ads first seen in each month (from your scraped library). Not normalized — totals reflect detections in-period.",
+    library_activity_timeline: {
+      title: "Library Activity Timeline",
+      subtitle: "Monthly count of ads by launch date",
+      tooltip:
+        "Monthly ad launches. Uses platform-reported launch date when available, otherwise shows when the ad first appeared in your scraped library.",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
-      months: cadenceMonthLabels,
-      launches: cadenceRawLaunches,
+      months: timelineMonths,
+      dataQuality: timelineQuality,
     },
-    audience_signal_map: {
-      aiNarrative: "Heuristic audience cues from angles and formats.",
+    funnel_distribution: {
+      title: "Funnel Distribution",
+      subtitle: "Share of ads by inferred funnel stage",
+      tooltip:
+        "Real share of active ads by funnel stage (TOF / MOF / BOF) using enriched `funnel_stage` when present; unclassified ads are excluded from stage totals.",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
-      signals: [
-        { label: "Tech enthusiasts", strength: 0.72 },
-        { label: map.audienceSignals.ageRange, strength: 0.65 },
-        { label: map.audienceSignals.geo, strength: 0.5 },
-        ...map.audienceSignals.interests.slice(0, 2).map((l, i) => ({ label: l, strength: 0.45 - i * 0.05 })),
-      ],
+      stages: STAGE_ORDER.map((stage) => {
+        const adsAtStage = activeAds.filter((a) => parseStage(a.funnel_stage) === stage);
+        const sharePct =
+          activeAds.length > 0 ? Math.round((adsAtStage.length / activeAds.length) * 100) : 0;
+        return {
+          stage,
+          adCount: adsAtStage.length,
+          sharePct,
+          platforms: Array.from(new Set(adsAtStage.map((a) => a.platform))).slice(0, 4),
+          exampleSnippet: adsAtStage[0]?.ad_text?.slice(0, 120) ?? null,
+        };
+      }),
+      totalClassified,
+      totalAds: activeAds.length,
+      insufficientData: insufficientFunnel,
     },
     angle_clustering: {
-      aiNarrative: "Clusters from ai_extracted_angle or placeholder grouping.",
+      title: "Angle Clustering",
+      subtitle: "Top creative angles by ad count",
+      tooltip:
+        "Creative angles from enrichment (`ai_extracted_angle`). Each classified ad receives one label. “Unclassified” means missing or broad extraction.",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
-      rows: [...angleAgg.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8)
-        .map(([angle, adCount]) => ({
-          angle,
-          adCount,
-          longevityScore: Math.min(100, 40 + adCount * 4),
-        })),
+      angles: angleEntriesSorted.map(([angleName, count]) => ({
+        angle: angleName,
+        adCount: count,
+        sharePct: activeAds.length > 0 ? Math.round((count / activeAds.length) * 100) : 0,
+        exampleSnippet:
+          activeAds.find((ad) => {
+            const label = (ad.ai_extracted_angle ?? "").trim() || "Unclassified";
+            return label === angleName;
+          })?.ad_text?.slice(0, 120) ?? null,
+      })),
+      unclassifiedPct: activeAds.length > 0 ? Math.round(unclassifiedRatio * 100) : 0,
+      insufficientData: activeAds.length > 0 && unclassifiedRatio > 0.8,
     },
-    voice_tone_fingerprint: {
-      aiNarrative: "Plotted from promotional vs rational heuristics in copy length and CTA density.",
+    voice_tone_position: {
+      title: "Voice & Tone Position",
+      subtitle: "Average tone across enriched ads",
+      tooltip:
+        "Average formality and emotional weighting from enrichment (`ai_extracted_voice_tone`): formal 0–1 (casual→formal), emotional 0–1 (rational→emotional), plus mean model confidence.",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
-      competitor: { formal: 0.42, emotional: 0.58 },
+      competitor: voiceAvg,
       userBrand: null,
+      sampleSize: voiceSample,
     },
-    performance_pulse: {
-      aiNarrative:
-        "Weekly counts of new ads (first seen) and trend from the latest four months of the normalized 12-month activity sparkline.",
+    ad_format_mix: {
+      title: "Ad Format Mix",
+      subtitle: "Distribution of creative formats",
+      tooltip: "Share of active ads by `format` from the scrape row (image, video, carousel, etc.).",
+      aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
-      aiNarrativeSource: "heuristic" as const,
-      weeks: pulseWeekLabels,
-      volume: pulseRawVolume,
-      trend: pulseTrend,
+      formats: formatMixList,
     },
+    voice_tone_by_platform: computeVoiceToneByPlatform(activeAds),
+    angles_by_platform: computeAnglesByPlatform(activeAds),
+    testing_velocity_by_platform: computeTestingVelocityByPlatform(activeAds),
+    spend_trend_by_platform: computeSpendTrendByPlatform(activeAds, 12),
   };
 
   return {

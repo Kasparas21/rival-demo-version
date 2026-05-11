@@ -49,6 +49,77 @@ function looseDateToIso(label: string | null | undefined, fallbackIso: string): 
   return d.toISOString();
 }
 
+const SOON_MS = 86400000; // reject dates clearly in the future (clock skew)
+
+function coerceUnknownToDate(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const ms = value > 1e12 ? value : value * 1000;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const d = new Date(value.trim());
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function isUnrealisticFuture(d: Date): boolean {
+  return d.getTime() > Date.now() + SOON_MS;
+}
+
+/**
+ * Best-effort platform launch / start time from Apify / normalized ad row.
+ * Returns null when nothing trustworthy is found or the date is in the future.
+ */
+export function extractLaunchDate(rawAd: unknown, platform: string): Date | null {
+  const raw =
+    rawAd && typeof rawAd === "object"
+      ? (rawAd as Record<string, unknown>)
+      : ({} as Record<string, unknown>);
+  const p = platform.trim().toLowerCase();
+
+  const tryKeys = (keys: string[]): Date | null => {
+    for (const k of keys) {
+      const d = coerceUnknownToDate(raw[k]);
+      if (d && !isUnrealisticFuture(d)) return d;
+    }
+    return null;
+  };
+
+  let d: Date | null = null;
+  switch (p) {
+    case "meta":
+      d = tryKeys(["ad_creation_time", "start_date", "started_running_on", "startedAt"]);
+      break;
+    case "google":
+      d = tryKeys(["first_shown", "start_date", "lastShownLabel"]);
+      break;
+    case "youtube":
+      d = tryKeys(["first_shown", "start_date", "create_time"]);
+      break;
+    case "tiktok":
+      d = tryKeys(["first_shown_date", "create_time", "firstShown", "lastShown"]);
+      break;
+    case "linkedin":
+      d = tryKeys(["firstImpression", "start_date", "firstShown", "create_time"]);
+      break;
+    case "snapchat":
+      d = tryKeys(["creation_time", "start_date", "startDateLabel"]);
+      break;
+    case "reddit":
+      d = tryKeys(["created_utc", "start_date", "created_at"]);
+      break;
+    default:
+      d = tryKeys(["first_shown", "start_date", "creation_time", "create_time", "startedAt"]);
+  }
+  return d;
+}
+
 export function platformScrapeSucceeded(out: AdsLibraryResponse, p: AdsLibraryPlatform): boolean {
   switch (p) {
     case "meta":
@@ -156,6 +227,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         format: ad.isVideo ? "video" : "image",
         first_seen_at: unixishToIso(ad.startedAt, nowIso),
         last_seen_at: unixishToIso(ad.endedAt, nowIso),
+        ai_extracted_launch_date: (() => {
+          const launch = extractLaunchDate(ad, "meta");
+          return launch ? launch.toISOString() : null;
+        })(),
         raw_payload: ad as unknown as Json,
       }));
     case "google": {
@@ -176,6 +251,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
             format: normalizeCreativeFormat(row.format, row.img ? "image" : "text"),
             first_seen_at: looseDateToIso(row.lastShownLabel, nowIso),
             last_seen_at: looseDateToIso(row.lastShownLabel, nowIso),
+            ai_extracted_launch_date: (() => {
+              const launch = extractLaunchDate(row, "google");
+              return launch ? launch.toISOString() : null;
+            })(),
             raw_payload: row as unknown as Json,
           });
         } else {
@@ -187,6 +266,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
             format: "video",
             first_seen_at: nowIso,
             last_seen_at: nowIso,
+            ai_extracted_launch_date: (() => {
+              const launch = extractLaunchDate(row, "youtube");
+              return launch ? launch.toISOString() : null;
+            })(),
             raw_payload: row as unknown as Json,
           });
         }
@@ -202,6 +285,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         format: ad.videoUrl ? "video" : "image",
         first_seen_at: nowIso,
         last_seen_at: nowIso,
+        ai_extracted_launch_date: (() => {
+          const launch = extractLaunchDate(ad, "linkedin");
+          return launch ? launch.toISOString() : null;
+        })(),
         raw_payload: ad as unknown as Json,
       }));
     case "tiktok":
@@ -213,6 +300,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         format: "video",
         first_seen_at: looseDateToIso(ad.firstShown ?? ad.lastShown, nowIso),
         last_seen_at: looseDateToIso(ad.lastShown ?? ad.firstShown, nowIso),
+        ai_extracted_launch_date: (() => {
+          const launch = extractLaunchDate(ad, "tiktok");
+          return launch ? launch.toISOString() : null;
+        })(),
         raw_payload: ad as unknown as Json,
       }));
     case "microsoft":
@@ -224,6 +315,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         format: ad.img?.trim() ? "image" : "text",
         first_seen_at: nowIso,
         last_seen_at: nowIso,
+        ai_extracted_launch_date: (() => {
+          const launch = extractLaunchDate(ad, "microsoft");
+          return launch ? launch.toISOString() : null;
+        })(),
         raw_payload: ad as unknown as Json,
       }));
     case "pinterest":
@@ -235,6 +330,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         format: ad.videoUrl ? "video" : "image",
         first_seen_at: nowIso,
         last_seen_at: nowIso,
+        ai_extracted_launch_date: (() => {
+          const launch = extractLaunchDate(ad, "pinterest");
+          return launch ? launch.toISOString() : null;
+        })(),
         raw_payload: ad as unknown as Json,
       }));
     case "snapchat":
@@ -246,6 +345,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         format: ad.videoUrl ? "video" : "image",
         first_seen_at: nowIso,
         last_seen_at: nowIso,
+        ai_extracted_launch_date: (() => {
+          const launch = extractLaunchDate(ad, "snapchat");
+          return launch ? launch.toISOString() : null;
+        })(),
         raw_payload: ad as unknown as Json,
       }));
     default:
@@ -318,6 +421,8 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
       batchId,
       nowIso,
     });
+    const launchExtracted = inserts.filter((r) => r.ai_extracted_launch_date != null).length;
+    console.log("[persist] launch dates extracted=", launchExtracted, "/", inserts.length);
     const chunkSize = 75;
     for (let offset = 0; offset < inserts.length; offset += chunkSize) {
       const slice = inserts.slice(offset, offset + chunkSize);

@@ -1,6 +1,6 @@
 /**
- * Single Anthropic (Sonnet) pass: strategic narratives for Strategy Insight cards + map tone/audience,
- * grounded in derived metrics and sampled ad copy from scraped rows.
+ * Single Anthropic (Sonnet) pass: short insight lines for Strategy Insight cards,
+ * grounded in derived metrics and sampled ad copy. No invented audience segments.
  */
 
 import { z } from "zod";
@@ -8,6 +8,8 @@ import { z } from "zod";
 import { anthropicSonnet } from "@/lib/llm/anthropic";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { parseStage, type ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
+
+const MAX_INSIGHT_LEN = 140;
 
 function stripJsonFences(text: string): string {
   let t = text.trim();
@@ -18,21 +20,22 @@ function stripJsonFences(text: string): string {
 }
 
 const insightLlmSchema = z.object({
-  funnel_architecture: z.string().optional(),
-  budget_allocation: z.string().optional(),
-  creative_cadence: z.string().optional(),
-  audience_signal_map: z.string().optional(),
-  angle_clustering: z.string().optional(),
-  voice_tone_fingerprint: z.string().optional(),
-  performance_pulse: z.string().optional(),
+  funnel_distribution_insight: z.string().optional(),
+  budget_allocation_insight: z.string().optional(),
+  library_activity_insight: z.string().optional(),
+  ad_format_mix_insight: z.string().optional(),
+  angle_clustering_insight: z.string().optional(),
+  voice_tone_insight: z.string().optional(),
+  platform_footprint_insight: z.string().optional(),
   tone_primary: z.string().optional(),
   tone_attributes: z.array(z.string()).optional(),
-  budget_insight: z.string().optional(),
-  audience_interests: z.array(z.string()).optional(),
-  audience_age_range: z.string().optional(),
-  audience_geo: z.string().optional(),
-  targeting_types: z.array(z.string()).optional(),
 });
+
+function clipInsight(s: string | undefined): string | null {
+  const t = s?.trim();
+  if (!t) return null;
+  return t.length > MAX_INSIGHT_LEN ? t.slice(0, MAX_INSIGHT_LEN - 1).trimEnd() + "…" : t;
+}
 
 function enrichedAdsForSample(ads: ScrapedAdInput[]): ScrapedAdInput[] {
   return ads.filter(
@@ -83,6 +86,20 @@ export async function enrichStrategyOverviewWithInsightLLM(
 
   const { map, insights } = payload;
 
+  const allow = {
+    funnel: !insights.funnel_distribution.insufficientData,
+    budget: insights.budget_allocation.segments.length > 0,
+    library: insights.library_activity_timeline.months.some(
+      (m) => m.launchCount > 0 || m.detectionCount > 0
+    ),
+    formats: insights.ad_format_mix.formats.length > 0,
+    angles: !insights.angle_clustering.insufficientData && insights.angle_clustering.angles.length > 0,
+    voice:
+      insights.voice_tone_position.competitor != null &&
+      !insights.voice_tone_position.competitor.insufficientData,
+    footprint: insights.platform_footprint.platforms.length > 0,
+  };
+
   const digest = {
     brand: map.competitor,
     activeAdCount: map.activeAdCount,
@@ -92,61 +109,101 @@ export async function enrichStrategyOverviewWithInsightLLM(
       high: map.totalAdSpend.high ?? map.totalAdSpend.value,
     },
     brandScaleScore: map.totalAdSpend.brandScaleScore ?? 1,
-    platforms: map.platformNodes.map((n) => ({
-      platform: n.platform,
-      label: n.label,
-      ads: n.adCount,
-      funnelStage: n.funnelStage,
-      estSpendEur: n.estSpendEur,
-      estSpendEurLow: n.estSpendEurLow ?? n.estSpendEur,
-      estSpendEurHigh: n.estSpendEurHigh ?? n.estSpendEur,
-    })),
-    funnelEdges: map.funnelEdges,
-    topAngles: map.topAngles,
-    dominantFormat: map.dominantFormat,
-    spendBand: map.spendVsSimilar,
+    cards: {
+      funnel_distribution: allow.funnel
+        ? {
+            stages: insights.funnel_distribution.stages.map((s) => ({
+              stage: s.stage,
+              sharePct: s.sharePct,
+              adCount: s.adCount,
+            })),
+            totalClassified: insights.funnel_distribution.totalClassified,
+            totalAds: insights.funnel_distribution.totalAds,
+          }
+        : { skipped: "insufficient classified funnel stages" },
+      budget_allocation: allow.budget
+        ? {
+            segments: insights.budget_allocation.segments.map((s) => ({
+              label: s.label,
+              pct: s.pct,
+              estSpendEur: s.estSpendEur,
+              adCount: s.adCount,
+            })),
+            totalEstSpendEur: insights.budget_allocation.totalEstSpendEur,
+          }
+        : { skipped: "no segments" },
+      library_activity_timeline: allow.library
+        ? {
+            dataQuality: insights.library_activity_timeline.dataQuality,
+            tailMonths: insights.library_activity_timeline.months.slice(-6),
+          }
+        : { skipped: "no timeline points" },
+      ad_format_mix: allow.formats
+        ? { formats: insights.ad_format_mix.formats.slice(0, 8) }
+        : { skipped: "no formats" },
+      angle_clustering: allow.angles
+        ? {
+            top: insights.angle_clustering.angles.slice(0, 6),
+            unclassifiedPct: insights.angle_clustering.unclassifiedPct,
+          }
+        : { skipped: "insufficient angle labels" },
+      voice_tone_position: allow.voice
+        ? {
+            competitor: insights.voice_tone_position.competitor,
+            sampleSize: insights.voice_tone_position.sampleSize,
+          }
+        : { skipped: "insufficient voice_tone scores" },
+      platform_footprint: allow.footprint
+        ? { platforms: insights.platform_footprint.platforms }
+        : { skipped: "no platforms" },
+    },
   };
 
-  const res = await anthropicSonnet({
-    systemPrompt: `You are a performance marketing strategist analyzing a competitor's paid advertising strategy. You will receive a structured JSON digest of their ad activity and a sample of real ad creatives.
+  const allowedList = [
+    allow.funnel && "funnel_distribution_insight",
+    allow.budget && "budget_allocation_insight",
+    allow.library && "library_activity_insight",
+    allow.formats && "ad_format_mix_insight",
+    allow.angles && "angle_clustering_insight",
+    allow.voice && "voice_tone_insight",
+    allow.footprint && "platform_footprint_insight",
+  ].filter(Boolean);
 
-CRITICAL RULES:
-- Every claim you make must be directly traceable to a specific ad in the sample or a metric in the digest. Do not generalize.
-- If the sample shows only 1-2 platforms, only analyze those platforms. Do not speculate about platforms not in the data.
-- Funnel stage assignments come from the pre-labeled 'funnel' field — trust those labels, do not re-classify.
-- Angle assignments come from the pre-labeled 'angle' field — use them to identify dominant patterns.
-- Output ONLY valid JSON matching the exact schema provided. No prose outside the JSON object.`,
+  const res = await anthropicSonnet({
+    systemPrompt: `You write ultra-short insight lines for a competitor ad-strategy dashboard.
+
+STRICT RULES:
+- Each insight must cite ONLY numbers or patterns present in the JSON digest or the sample creatives. Never invent platforms, percentages, dates, demographics, or branded claims.
+- If you are unsure, omit that field (do not guess).
+- Each non-empty insight must be ≤${MAX_INSIGHT_LEN} characters, one sentence.
+- Tone: descriptive and neutral. No prescriptive recommendations ("you should…").
+- Do not mention audience segments unless they appear verbatim in the sample text.`,
     messages: [
       {
         role: "user",
-        content: `Analyze this competitor's paid social / search strategy.
+        content: `You may fill ONLY these narrative slots (omit the rest or use empty string): ${allowedList.join(", ")}
 
-Derived summary (JSON):
+Derived summary:
 ${JSON.stringify(digest)}
 
 Representative ads (${sample.length} enriched of ${ads.length} total, truncated):
 ${JSON.stringify(sample)}
 
-Return ONLY valid JSON, no markdown. Each narrative value: 2–4 sentences, max ~520 characters.
+Return ONLY valid JSON, no markdown:
 {
-  "funnel_architecture": "",
-  "budget_allocation": "",
-  "creative_cadence": "",
-  "audience_signal_map": "",
-  "angle_clustering": "",
-  "voice_tone_fingerprint": "",
-  "performance_pulse": "",
-  "tone_primary": "short phrase",
-  "tone_attributes": ["3-5 labels"],
-  "budget_insight": "one punchy sentence about estimated spend / platform mix",
-  "audience_interests": ["3 inferred interest labels"],
-  "audience_age_range": "e.g. 25–44",
-  "audience_geo": "short geographic read",
-  "targeting_types": ["2-4 e.g. Interest-based, Retargeting"]
+  "funnel_distribution_insight": "",
+  "budget_allocation_insight": "",
+  "library_activity_insight": "",
+  "ad_format_mix_insight": "",
+  "angle_clustering_insight": "",
+  "voice_tone_insight": "",
+  "platform_footprint_insight": "",
+  "tone_primary": "",
+  "tone_attributes": []
 }`,
       },
     ],
-    maxTokens: 2800,
+    maxTokens: 2048,
   });
 
   usageCostUsd += res.ok && res.usage?.costUsd != null ? res.usage.costUsd : 0;
@@ -181,6 +238,9 @@ Return ONLY valid JSON, no markdown. Each narrative value: 2–4 sentences, max 
 
   const llmSource = "llm" as const;
 
+  const narr = (allowed: boolean, s: string | undefined) =>
+    allowed ? clipInsight(s) : null;
+
   return {
     payload: {
       ...payload,
@@ -194,55 +254,43 @@ Return ONLY valid JSON, no markdown. Each narrative value: 2–4 sentences, max 
               ? parsed.tone_attributes.map((x) => String(x).trim()).filter(Boolean)
               : map.toneOfVoice.attributes,
         },
-        audienceSignals: {
-          interests:
-            Array.isArray(parsed.audience_interests) && parsed.audience_interests.length > 0
-              ? parsed.audience_interests.map((x) => String(x).trim()).filter(Boolean)
-              : map.audienceSignals.interests,
-          ageRange: parsed.audience_age_range?.trim() || map.audienceSignals.ageRange,
-          geo: parsed.audience_geo?.trim() || map.audienceSignals.geo,
-          targetingType:
-            Array.isArray(parsed.targeting_types) && parsed.targeting_types.length > 0
-              ? parsed.targeting_types.map((x) => String(x).trim()).filter(Boolean)
-              : map.audienceSignals.targetingType,
-        },
       },
       insights: {
-        funnel_architecture: {
-          ...insights.funnel_architecture,
-          aiNarrative: parsed.funnel_architecture?.trim() || insights.funnel_architecture.aiNarrative,
-          aiNarrativeSource: llmSource,
+        ...insights,
+        platform_footprint: {
+          ...insights.platform_footprint,
+          aiNarrative: narr(allow.footprint, parsed.platform_footprint_insight),
+          aiNarrativeSource: allow.footprint && parsed.platform_footprint_insight?.trim() ? llmSource : undefined,
         },
         budget_allocation: {
           ...insights.budget_allocation,
-          aiNarrative: parsed.budget_allocation?.trim() || insights.budget_allocation.aiNarrative,
-          insight: parsed.budget_insight?.trim() || insights.budget_allocation.insight,
-          aiNarrativeSource: llmSource,
+          aiNarrative: narr(allow.budget, parsed.budget_allocation_insight),
+          aiNarrativeSource: allow.budget && parsed.budget_allocation_insight?.trim() ? llmSource : undefined,
         },
-        creative_cadence: {
-          ...insights.creative_cadence,
-          aiNarrative: parsed.creative_cadence?.trim() || insights.creative_cadence.aiNarrative,
-          aiNarrativeSource: llmSource,
+        library_activity_timeline: {
+          ...insights.library_activity_timeline,
+          aiNarrative: narr(allow.library, parsed.library_activity_insight),
+          aiNarrativeSource: allow.library && parsed.library_activity_insight?.trim() ? llmSource : undefined,
         },
-        audience_signal_map: {
-          ...insights.audience_signal_map,
-          aiNarrative: parsed.audience_signal_map?.trim() || insights.audience_signal_map.aiNarrative,
-          aiNarrativeSource: llmSource,
+        funnel_distribution: {
+          ...insights.funnel_distribution,
+          aiNarrative: narr(allow.funnel, parsed.funnel_distribution_insight),
+          aiNarrativeSource: allow.funnel && parsed.funnel_distribution_insight?.trim() ? llmSource : undefined,
         },
         angle_clustering: {
           ...insights.angle_clustering,
-          aiNarrative: parsed.angle_clustering?.trim() || insights.angle_clustering.aiNarrative,
-          aiNarrativeSource: llmSource,
+          aiNarrative: narr(allow.angles, parsed.angle_clustering_insight),
+          aiNarrativeSource: allow.angles && parsed.angle_clustering_insight?.trim() ? llmSource : undefined,
         },
-        voice_tone_fingerprint: {
-          ...insights.voice_tone_fingerprint,
-          aiNarrative: parsed.voice_tone_fingerprint?.trim() || insights.voice_tone_fingerprint.aiNarrative,
-          aiNarrativeSource: llmSource,
+        voice_tone_position: {
+          ...insights.voice_tone_position,
+          aiNarrative: narr(allow.voice, parsed.voice_tone_insight),
+          aiNarrativeSource: allow.voice && parsed.voice_tone_insight?.trim() ? llmSource : undefined,
         },
-        performance_pulse: {
-          ...insights.performance_pulse,
-          aiNarrative: parsed.performance_pulse?.trim() || insights.performance_pulse.aiNarrative,
-          aiNarrativeSource: llmSource,
+        ad_format_mix: {
+          ...insights.ad_format_mix,
+          aiNarrative: narr(allow.formats, parsed.ad_format_mix_insight),
+          aiNarrativeSource: allow.formats && parsed.ad_format_mix_insight?.trim() ? llmSource : undefined,
         },
       },
     },

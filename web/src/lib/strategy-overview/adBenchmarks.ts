@@ -7,13 +7,10 @@ export const PLATFORM_CPM_EUR_RANGE: Record<
 > = {
   meta: { low: 4, high: 14, impressionsPerAdPerMonth: 8000 },
   google: { low: 3, high: 12, impressionsPerAdPerMonth: 6000 },
-  youtube: { low: 4, high: 15, impressionsPerAdPerMonth: 7000 },
   tiktok: { low: 5, high: 18, impressionsPerAdPerMonth: 12000 },
   linkedin: { low: 8, high: 35, impressionsPerAdPerMonth: 3000 },
   pinterest: { low: 4, high: 14, impressionsPerAdPerMonth: 5000 },
   snapchat: { low: 3, high: 12, impressionsPerAdPerMonth: 6000 },
-  microsoft: { low: 4, high: 14, impressionsPerAdPerMonth: 4000 },
-  reddit: { low: 2, high: 10, impressionsPerAdPerMonth: 4000 },
 };
 
 const DEFAULT =

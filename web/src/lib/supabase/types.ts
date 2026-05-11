@@ -103,6 +103,7 @@ export type Database = {
           created_at: string;
           updated_at: string;
           last_scraped_at: string | null;
+          last_move_detection_at: string | null;
         };
         Insert: {
           id?: string;
@@ -118,6 +119,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           last_scraped_at?: string | null;
+          last_move_detection_at?: string | null;
         };
         Update: {
           id?: string;
@@ -133,6 +135,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
           last_scraped_at?: string | null;
+          last_move_detection_at?: string | null;
         };
         Relationships: [];
       };
@@ -234,6 +237,8 @@ export type Database = {
           ai_extracted_angle: string | null;
           funnel_stage: string | null;
           ai_enrichment_status: string;
+          ai_extracted_voice_tone: Json | null;
+          ai_extracted_launch_date: string | null;
           created_at: string;
         };
         Insert: {
@@ -252,6 +257,8 @@ export type Database = {
           ai_extracted_angle?: string | null;
           funnel_stage?: string | null;
           ai_enrichment_status?: string | null;
+          ai_extracted_voice_tone?: Json | null;
+          ai_extracted_launch_date?: string | null;
           created_at?: string;
         };
         Update: {
@@ -270,6 +277,8 @@ export type Database = {
           ai_extracted_angle?: string | null;
           funnel_stage?: string | null;
           ai_enrichment_status?: string | null;
+          ai_extracted_voice_tone?: Json | null;
+          ai_extracted_launch_date?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -334,6 +343,108 @@ export type Database = {
           source_scrape_batch_id?: string | null;
           ai_model_version?: string;
           computed_at?: string;
+        };
+        Relationships: [];
+      };
+      ad_copy_structure_cache: {
+        Row: {
+          ad_id: string;
+          user_id: string;
+          structure: Json;
+          computed_at: string;
+          ai_model_version: string;
+        };
+        Insert: {
+          ad_id: string;
+          user_id: string;
+          structure: Json;
+          computed_at?: string;
+          ai_model_version: string;
+        };
+        Update: {
+          ad_id?: string;
+          user_id?: string;
+          structure?: Json;
+          computed_at?: string;
+          ai_model_version?: string;
+        };
+        Relationships: [];
+      };
+      competitor_strategy_overview_snapshots: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          payload: Json;
+          source_scrape_batch_id: string | null;
+          ai_model_version: string;
+          computed_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          payload: Json;
+          source_scrape_batch_id?: string | null;
+          ai_model_version: string;
+          computed_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          payload?: Json;
+          source_scrape_batch_id?: string | null;
+          ai_model_version?: string;
+          computed_at?: string;
+        };
+        Relationships: [];
+      };
+      competitor_moves: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          event_type: string;
+          significance: string;
+          detected_at: string;
+          platform: string | null;
+          before_state: Json | null;
+          after_state: Json | null;
+          narrative: string | null;
+          ai_model_version: string | null;
+          source_snapshot_id_before: string | null;
+          source_snapshot_id_after: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          event_type: string;
+          significance: string;
+          detected_at?: string;
+          platform?: string | null;
+          before_state?: Json | null;
+          after_state?: Json | null;
+          narrative?: string | null;
+          ai_model_version?: string | null;
+          source_snapshot_id_before?: string | null;
+          source_snapshot_id_after?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          event_type?: string;
+          significance?: string;
+          detected_at?: string;
+          platform?: string | null;
+          before_state?: Json | null;
+          after_state?: Json | null;
+          narrative?: string | null;
+          ai_model_version?: string | null;
+          source_snapshot_id_before?: string | null;
+          source_snapshot_id_after?: string | null;
         };
         Relationships: [];
       };

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { forwardRef } from "react";
+import React, { forwardRef, useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type BrandLogoThumbProps = {
@@ -17,6 +17,24 @@ export const BrandLogoThumb = forwardRef<HTMLImageElement, BrandLogoThumbProps>(
   { src, alt, className, onError, onLoad, referrerPolicy },
   ref
 ) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  const handleError = useCallback(
+    (e: React.SyntheticEvent<HTMLImageElement>) => {
+      setFailed(true);
+      onError?.(e);
+    },
+    [onError]
+  );
+
+  if (failed || !src?.trim()) {
+    return null;
+  }
+
   return (
     <div
       className={cn(
@@ -29,7 +47,7 @@ export const BrandLogoThumb = forwardRef<HTMLImageElement, BrandLogoThumbProps>(
         src={src}
         alt={alt}
         referrerPolicy={referrerPolicy ?? "no-referrer"}
-        onError={onError}
+        onError={handleError}
         onLoad={onLoad}
         draggable={false}
         decoding="async"

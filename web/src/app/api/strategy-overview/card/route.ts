@@ -5,13 +5,13 @@ import { loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-st
 import type { StrategyInsightCardType } from "@/lib/strategy-overview/payload-types";
 
 const CARD_TYPES = new Set<string>([
-  "funnel_architecture",
+  "platform_footprint",
   "budget_allocation",
-  "creative_cadence",
-  "audience_signal_map",
+  "library_activity_timeline",
+  "funnel_distribution",
   "angle_clustering",
-  "voice_tone_fingerprint",
-  "performance_pulse",
+  "voice_tone_position",
+  "ad_format_mix",
 ]);
 
 export async function GET(req: Request): Promise<NextResponse> {

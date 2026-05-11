@@ -11,6 +11,8 @@ type Body = {
   competitor?: { name?: string; domain?: string };
   userBrand?: { name?: string; domain?: string; brandContext?: string };
   adEvidence?: string;
+  /** JSON string of structured strategy aggregates (workspace + competitor) */
+  structuredDigest?: string;
 };
 
 export async function POST(req: Request): Promise<NextResponse> {
@@ -47,6 +49,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const adEvidence = typeof body.adEvidence === "string" ? body.adEvidence : "";
+  const structuredDigest = typeof body.structuredDigest === "string" ? body.structuredDigest : "";
 
   const out = await runBrandComparisonLlm({
     competitorName,
@@ -55,6 +58,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     userBrandDomain: body.userBrand?.domain?.trim() || undefined,
     userBrandContext: body.userBrand?.brandContext?.trim() || undefined,
     adEvidence,
+    structuredDigest: structuredDigest.trim() || undefined,
   });
 
   if (!out.ok) {

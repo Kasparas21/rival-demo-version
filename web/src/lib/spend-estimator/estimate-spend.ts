@@ -4,12 +4,10 @@ import type { BrandFootprint, PerPlatformSpendEstimate, PlatformStats, SpendEsti
 const PLATFORMS: SupportedPlatform[] = [
   "meta",
   "google",
-  "youtube",
   "tiktok",
   "linkedin",
   "pinterest",
   "snapchat",
-  "microsoft",
 ];
 
 export type EstimatorConfig = {

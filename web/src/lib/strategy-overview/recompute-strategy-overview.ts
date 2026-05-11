@@ -14,13 +14,15 @@ import {
   expandAdsCacheDomainCandidates,
   tryHydrateScrapedAdsFromAdsCache,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
+import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
 import { enrichStrategyOverviewWithInsightLLM } from "@/lib/strategy-overview/insightNarratives";
+import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
 
 /**
- * Bump this string whenever spend math, derivation logic, insight schema, or any stored payload
- * shape changes — it is the server-side cache invalidation key for `competitor_strategy_overview`.
+ * Bump this string any time the spend formula, derivation logic, output schema,
+ * or insight card structure changes. It is the cache invalidation key.
  */
-export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-9-brand-scale-spend";
+export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-14-comparison-v2-visuals";
 
 const LOCK_TTL_MS = 300_000;
 /** If status is still "running" after this long, treat lock as orphaned (crashed serverless, etc.). */
@@ -151,6 +153,8 @@ function rowToInput(r: Database["public"]["Tables"]["scraped_ads"]["Row"]): Scra
     ai_extracted_angle: r.ai_extracted_angle,
     funnel_stage: r.funnel_stage,
     ai_enrichment_status: r.ai_enrichment_status ?? null,
+    ai_extracted_launch_date: r.ai_extracted_launch_date ?? null,
+    ai_extracted_voice_tone: r.ai_extracted_voice_tone ?? null,
     is_active: r.is_active,
     raw_payload: r.raw_payload,
   };
@@ -174,7 +178,8 @@ async function countActiveScrapedAds(
   return count ?? 0;
 }
 
-function buildNoAdsFoundPayload(
+/** Exported for `/api/strategy-overview/compiled` fast path when there are zero scraped rows. */
+export function buildNoAdsFoundPayload(
   meta: { name: string; domain: string; logoUrl: string | null }
 ): CompetitorStrategyOverviewPayload {
   const nowIso = new Date().toISOString();
@@ -217,61 +222,94 @@ function buildNoAdsFoundPayload(
       derivationQuality: "low",
     },
     insights: {
-      funnel_architecture: {
-        aiNarrative: "No ads available yet.",
+      platform_footprint: {
+        title: "Platform Footprint",
+        subtitle: "Active ad presence per platform",
+        tooltip:
+          "Side-by-side platform comparison: how many active ads run on each platform and the estimated monthly spend share.",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
-        layers: [],
+        platforms: [],
+        totalActiveAds: 0,
+        totalEstSpendEur: 0,
+        platformCount: 0,
       },
       budget_allocation: {
-        aiNarrative: "No ads available yet.",
+        title: "Budget Allocation",
+        subtitle: "Estimated monthly spend share by platform",
+        tooltip:
+          "Estimated using benchmark CPM × active ad count × brand size multiplier × format coefficient. NOT invoiced spend.",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
         segments: [],
+        totalEstSpendEur: 0,
         insight: "—",
       },
-      creative_cadence: {
-        aiNarrative: "No ads available yet.",
+      library_activity_timeline: {
+        title: "Library Activity Timeline",
+        subtitle: "Monthly count of ads by launch date",
+        tooltip:
+          "Monthly ad launches. Uses platform-reported launch date when available, otherwise shows when the ad first appeared in your scraped library.",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
         months: [],
-        launches: [],
+        dataQuality: { realLaunchPct: 0, qualityLabel: "low", warning: "No ads to analyze." },
       },
-      audience_signal_map: {
-        aiNarrative: "No ads available yet.",
+      funnel_distribution: {
+        title: "Funnel Distribution",
+        subtitle: "Share of ads by inferred funnel stage",
+        tooltip:
+          "Real share of active ads by funnel stage (TOF / MOF / BOF) using enriched `funnel_stage` when present; unclassified ads are excluded from stage totals.",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
-        signals: [],
+        stages: [],
+        totalClassified: 0,
+        totalAds: 0,
+        insufficientData: true,
       },
       angle_clustering: {
-        aiNarrative: "No ads available yet.",
+        title: "Angle Clustering",
+        subtitle: "Top creative angles by ad count",
+        tooltip:
+          "Creative angles from enrichment (`ai_extracted_angle`). Each classified ad receives one label. “Unclassified” means missing or broad extraction.",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
-        rows: [],
+        angles: [],
+        unclassifiedPct: 0,
+        insufficientData: true,
       },
-      voice_tone_fingerprint: {
-        aiNarrative: "No ads available yet.",
+      voice_tone_position: {
+        title: "Voice & Tone Position",
+        subtitle: "Average tone across enriched ads",
+        tooltip:
+          "Average formality and emotional weighting from enrichment (`ai_extracted_voice_tone`): formal 0–1 (casual→formal), emotional 0–1 (rational→emotional), plus mean model confidence.",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
-        competitor: { formal: 0.5, emotional: 0.5 },
+        competitor: null,
         userBrand: null,
+        sampleSize: 0,
       },
-      performance_pulse: {
-        aiNarrative: "No ads available yet.",
+      ad_format_mix: {
+        title: "Ad Format Mix",
+        subtitle: "Distribution of creative formats",
+        tooltip: "Share of active ads by `format` from the scrape row (image, video, carousel, etc.).",
+        aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
-        aiNarrativeSource: "heuristic",
-        weeks: [],
-        volume: [],
-        trend: "flat",
+        formats: [],
       },
+      voice_tone_by_platform: [],
+      angles_by_platform: [],
+      testing_velocity_by_platform: [],
+      spend_trend_by_platform: [],
     },
+    audience_inference: null,
   };
 }
 
@@ -553,6 +591,15 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         return { ok: false, error: upOverviewErr.message };
       }
 
+      await recordStrategyOverviewSnapshot({
+        supabase,
+        userId,
+        competitorId,
+        payload: emptyPayload,
+        sourceScrapeBatchId: null,
+        aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
+      });
+
       return { ok: true, payload: emptyPayload };
     }
 
@@ -577,6 +624,15 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       if (upOverviewErr) {
         return { ok: false, error: upOverviewErr.message };
       }
+      const batchIdForEmpty = await getLatestScrapeBatchId(supabase, competitorId);
+      await recordStrategyOverviewSnapshot({
+        supabase,
+        userId,
+        competitorId,
+        payload: emptyPayload,
+        sourceScrapeBatchId: batchIdForEmpty,
+        aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
+      });
       return { ok: true, payload: emptyPayload };
     }
 
@@ -606,6 +662,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         .update({
           ai_extracted_angle: null,
           funnel_stage: null,
+          ai_extracted_voice_tone: null,
           ai_enrichment_status: "pending",
         })
         .in("id", ids)
@@ -615,6 +672,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
           ...r,
           ai_extracted_angle: null,
           funnel_stage: null,
+          ai_extracted_voice_tone: null,
           ai_enrichment_status: "pending",
         })
       );
@@ -690,6 +748,18 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     payload = insightOut.payload;
     aiCostUsdTotal += insightOut.usageCostUsd;
 
+    if (payload.pipelineStatus !== "no_ads_found" && (payload.totalAdCount ?? 0) > 0) {
+      const domain = meta.brandDomain ?? meta.cacheDomain;
+      const audIn = buildAudienceInferenceInputFromPayload(
+        { brandName: meta.name, brandDomain: domain },
+        payload
+      );
+      const aud = await inferAudience(audIn);
+      payload = { ...payload, audience_inference: aud };
+    } else {
+      payload = { ...payload, audience_inference: null };
+    }
+
     const derivQ = (payload.derivationQuality ?? payload.map.derivationQuality ?? "medium") as DerivationQuality;
     const aiCostCents = Math.round(aiCostUsdTotal * 100);
     const durationMs = Date.now() - t0;
@@ -716,6 +786,15 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       return { ok: false, error: upOverviewErr.message };
     }
 
+    await recordStrategyOverviewSnapshot({
+      supabase,
+      userId,
+      competitorId,
+      payload,
+      sourceScrapeBatchId: batchId,
+      aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
+    });
+
     await supabase.from("funnel_flow_edges").delete().eq("competitor_id", competitorId).eq("user_id", userId);
 
     const edgeRows = payload.map.funnelEdges.map((e) => ({
@@ -736,13 +815,13 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     await supabase.from("strategy_insights_cards").delete().eq("competitor_id", competitorId).eq("user_id", userId);
 
     const cardTypes = [
-      "funnel_architecture",
+      "platform_footprint",
       "budget_allocation",
-      "creative_cadence",
-      "audience_signal_map",
+      "library_activity_timeline",
+      "funnel_distribution",
       "angle_clustering",
-      "voice_tone_fingerprint",
-      "performance_pulse",
+      "voice_tone_position",
+      "ad_format_mix",
     ] as const;
 
     const insightPayload = payload.insights;
