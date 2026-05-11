@@ -429,9 +429,11 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
     platformsToPersist: Iterable<AdsLibraryPlatform>;
     out: AdsLibraryResponse;
     nowIso: string;
+    /** Use an existing scrape batch row (weekly cron); when omitted inserts `ads-library:…`. */
+    scrapeBatchId?: string | null;
   }
 ): Promise<void> {
-  const { userId, competitorId, domainNorm, platformsToPersist, out, nowIso } = params;
+  const { userId, competitorId, domainNorm, platformsToPersist, out, nowIso, scrapeBatchId } = params;
 
   if (!competitorId) {
     return;
@@ -440,21 +442,30 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
   const toPersist = [...platformsToPersist].filter((p) => platformScrapeSucceeded(out, p));
   if (toPersist.length === 0) return;
 
-  const { data: batchRow, error: batchErr } = await supabase
-    .from("scrape_batches")
-    .insert({
-      user_id: userId,
-      competitor_id: competitorId,
-      label: `ads-library:${domainNorm}:${nowIso}`,
-    })
-    .select("id")
-    .single();
+  let batchId: string | undefined = scrapeBatchId?.trim() || undefined;
 
-  if (batchErr || !batchRow?.id) {
-    console.error("[persistScrapedAds] scrape_batches insert", batchErr);
+  if (!batchId) {
+    const { data: batchRow, error: batchErr } = await supabase
+      .from("scrape_batches")
+      .insert({
+        user_id: userId,
+        competitor_id: competitorId,
+        label: `ads-library:${domainNorm}:${nowIso}`,
+      })
+      .select("id")
+      .single();
+
+    if (batchErr || !batchRow?.id) {
+      console.error("[persistScrapedAds] scrape_batches insert", batchErr);
+      return;
+    }
+    batchId = batchRow.id;
+  }
+
+  if (!batchId) {
+    console.error("[persistScrapedAds] missing scrape batch id");
     return;
   }
-  const batchId = batchRow.id;
 
   for (const platform of toPersist) {
     const inserts = buildScrapedAdInsertsForPlatform({

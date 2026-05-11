@@ -114,12 +114,39 @@ export async function GET() {
 
   const workspaceDomain = primaryBrand?.domain?.trim() || null;
 
-  const competitors = (data ?? [])
+  const rows = data ?? [];
+  const competitorIdsForWeekly = rows.map((r) => r.id).filter(Boolean);
+  const weeklyLatestStartByCompetitor = new Map<string, string>();
+
+  if (competitorIdsForWeekly.length > 0) {
+    const { data: weeklyRows, error: weeklyErr } = await supabase
+      .from("weekly_scrape_jobs")
+      .select("competitor_id, week_start")
+      .eq("user_id", user.id)
+      .eq("status", "done")
+      .in("competitor_id", competitorIdsForWeekly)
+      .order("week_start", { ascending: false });
+
+    if (weeklyErr) {
+      console.error("[saved-competitors GET] weekly_scrape_jobs", weeklyErr.message);
+    } else {
+      for (const w of weeklyRows ?? []) {
+        if (!weeklyLatestStartByCompetitor.has(w.competitor_id)) {
+          weeklyLatestStartByCompetitor.set(w.competitor_id, w.week_start);
+        }
+      }
+    }
+  }
+
+  const competitors = rows
     .map((row) => {
       const lc = rowToLibraryContext(row.ads_library_context);
-      return {
+      const weeklyLabel = weeklyLatestStartByCompetitor.get(row.id);
+      const base = {
+        savedCompetitorDbId: row.id,
         slug: row.slug,
         name: row.name,
+        spyOnBrandFollowed: Boolean(row.is_followed ?? false),
         ...(row.logo_url ? { logoUrl: row.logo_url } : {}),
         ...(row.brand_name && row.brand_domain
           ? {
@@ -134,7 +161,9 @@ export async function GET() {
         ...(row.last_scraped_at ? { lastScrapedAt: row.last_scraped_at } : {}),
         ...(row.is_workspace_brand === true ? { isWorkspaceBrand: true } : {}),
         ...(lc ? { libraryContext: lc } : {}),
+        ...(weeklyLabel ? { lastWeeklyWeekStart: weeklyLabel } : {}),
       };
+      return base;
     })
     .filter((row) => !isSidebarRowLikelyWorkspaceBrand(row as SidebarCompetitor, workspaceDomain));
 

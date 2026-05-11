@@ -105,6 +105,8 @@ export type Database = {
           last_scraped_at: string | null;
           last_move_detection_at: string | null;
           ads_library_context?: Json | null;
+          is_followed: boolean;
+          followed_at: string | null;
         };
         Insert: {
           id?: string;
@@ -122,6 +124,8 @@ export type Database = {
           last_scraped_at?: string | null;
           last_move_detection_at?: string | null;
           ads_library_context?: Json | null;
+          is_followed?: boolean;
+          followed_at?: string | null;
         };
         Update: {
           id?: string;
@@ -139,6 +143,44 @@ export type Database = {
           last_scraped_at?: string | null;
           last_move_detection_at?: string | null;
           ads_library_context?: Json | null;
+          is_followed?: boolean;
+          followed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      weekly_scrape_jobs: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          week_start: string;
+          status: string;
+          scrape_batch_id: string | null;
+          error_text: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          week_start: string;
+          status?: string;
+          scrape_batch_id?: string | null;
+          error_text?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          week_start?: string;
+          status?: string;
+          scrape_batch_id?: string | null;
+          error_text?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };

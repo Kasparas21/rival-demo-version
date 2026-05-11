@@ -42,6 +42,7 @@ import {
 import { RIVAL_BRANDS_UPDATED_EVENT, RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { PostOnboardingPricingOverlay } from "@/components/billing/post-onboarding-pricing-overlay";
 import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dashboard-mock";
+import { Toaster } from "sonner";
 
 const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
@@ -1046,6 +1047,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           }}
         />
       ) : null}
+      <Toaster richColors closeButton />
       </div>
     </div>
   );

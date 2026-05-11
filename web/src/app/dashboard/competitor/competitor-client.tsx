@@ -11,6 +11,7 @@ import {
   X,
   RefreshCw,
   Clock,
+  SatelliteDish,
   ThumbsUp,
   Send,
   ExternalLink,
@@ -89,6 +90,7 @@ import {
   loadSidebarCompetitors,
   mergeAccountSidebarRowsWithLocalLibraryContext,
   normalizeCompetitorSlug,
+  findMatchingCompetitorIndex,
   saveSidebarCompetitors,
   sidebarCompetitorsWithoutWorkspaceRow,
   SIDEBAR_COMPETITORS_EVENT,
@@ -145,6 +147,7 @@ import {
   readStoredTiktokRegion,
 } from "@/components/dashboard/competitor/competitor-session-readers";
 import { GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT } from "@/lib/ad-library/constants";
+import { toast } from "sonner";
 
 function normalizeDomainHostForAdsEvent(input: string): string {
   return (
@@ -155,6 +158,19 @@ function normalizeDomainHostForAdsEvent(input: string): string {
       .replace(/^www\./i, "")
       .split("/")[0] ?? ""
   );
+}
+
+function formatWeeklySpySubtitle(weekStartIsoYmd: string): string {
+  const [yStr, moStr, dStr] = weekStartIsoYmd.split("-");
+  const y = Number(yStr);
+  const mo = Number(moStr);
+  const da = Number(dStr);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(da)) return "";
+  const dt = new Date(Date.UTC(y, mo - 1, da));
+  const wd = dt.toLocaleDateString(undefined, { weekday: "short" });
+  const mon = dt.toLocaleDateString(undefined, { month: "short" });
+  const dom = dt.getUTCDate();
+  return `Weekly: Week of ${wd} ${mon} ${dom}`;
 }
 
 const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 xl:grid-cols-3";
@@ -1256,7 +1272,10 @@ function CompetitorDashboardBody({
 }: CompetitorDashboardBodyProps) {
   const [sidebarSnapshot, setSidebarSnapshot] = useState<SidebarCompetitor[] | undefined>(undefined);
   useEffect(() => {
-    setSidebarSnapshot(loadSidebarCompetitors());
+    const load = () => setSidebarSnapshot(loadSidebarCompetitors());
+    load();
+    window.addEventListener(SIDEBAR_COMPETITORS_EVENT, load);
+    return () => window.removeEventListener(SIDEBAR_COMPETITORS_EVENT, load);
   }, [canonicalHost, sidebarEpoch]);
 
   const myBrand = useActiveBrand();
@@ -1420,6 +1439,15 @@ function CompetitorDashboardBody({
     () => effectiveCompetitorBrandLabel(brand.name, brand.domain) || brand.name,
     [brand.name, brand.domain],
   );
+
+  const competitorSidebarMatch = useMemo(() => {
+    if (!sidebarSnapshot?.length) return undefined;
+    const idx = findMatchingCompetitorIndex(sidebarSnapshot, canonicalHost, competitorDisplayLabel);
+    return idx >= 0 ? sidebarSnapshot[idx] : undefined;
+  }, [sidebarSnapshot, canonicalHost, competitorDisplayLabel]);
+
+  const [spyFollowPending, setSpyFollowPending] = useState(false);
+  const [spyFollowOptimistic, setSpyFollowOptimistic] = useState<boolean | null>(null);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -1671,6 +1699,39 @@ function CompetitorDashboardBody({
     }
   }, [myBrand.domain]);
 
+  const spyFollowing =
+    spyFollowOptimistic !== null ? spyFollowOptimistic : Boolean(competitorSidebarMatch?.spyOnBrandFollowed);
+
+  const handleSpyToggle = useCallback(async () => {
+    const id = competitorSidebarMatch?.savedCompetitorDbId;
+    if (!id || spyFollowPending) return;
+    const next = !spyFollowing;
+    setSpyFollowOptimistic(next);
+    setSpyFollowPending(true);
+    try {
+      const res = await fetch(`/api/account/saved-competitors/${encodeURIComponent(id)}/follow`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : "Could not update weekly spy.");
+      }
+      setSpyFollowOptimistic(null);
+      await syncSavedCompetitorsFromAccount();
+    } catch (e) {
+      setSpyFollowOptimistic(null);
+      toast.error(e instanceof Error ? e.message : "Could not update weekly spy.");
+    } finally {
+      setSpyFollowPending(false);
+    }
+  }, [
+    competitorSidebarMatch?.savedCompetitorDbId,
+    spyFollowPending,
+    spyFollowing,
+    syncSavedCompetitorsFromAccount,
+  ]);
+
   const fetchMeta = adsPlatforms.includes("meta");
   const fetchGoogle = adsPlatforms.includes("google");
   const fetchLinkedIn = adsPlatforms.includes("linkedin");
@@ -1911,8 +1972,8 @@ function CompetitorDashboardBody({
         ) : null}
         {/* Brand identity + status */}
         <div className={`px-6 sm:px-8 lg:px-10 pt-6 sm:pt-7 pb-0 ${isOwnWorkspace ? "pl-7 sm:pl-9" : ""}`}>
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div className="flex items-center gap-4 min-w-0">
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <div className="flex min-w-0 flex-1 items-center gap-4">
               <div
                 className={`w-12 h-12 shrink-0 overflow-hidden rounded-2xl shadow-sm ${
                   isOwnWorkspace
@@ -1933,33 +1994,80 @@ function CompetitorDashboardBody({
                     </span>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Clock
-                    className={`w-3.5 h-3.5 shrink-0 ${isOwnWorkspace ? "text-sky-700/70" : "text-[#a1a1aa]"}`}
-                  />
-                  <span
-                    className={`text-[13px] ${isOwnWorkspace ? "text-sky-900/80" : "text-[#71717a]"}`}
-                    title={
-                      accountLastScrapedAt
-                        ? new Date(accountLastScrapedAt).toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })
-                        : undefined
-                    }
-                  >
-                    {void lastScrapeRelativeTick}
-                    {isOwnWorkspace
-                      ? accountLastScrapedAt
-                        ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
-                        : "Scrape your ads from the Ads Library tab"
-                      : accountLastScrapedAt
-                        ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
-                        : "Not yet scraped"}
-                  </span>
+                <div className="mt-1 flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <Clock
+                      className={`w-3.5 h-3.5 shrink-0 ${isOwnWorkspace ? "text-sky-700/70" : "text-[#a1a1aa]"}`}
+                    />
+                    <span
+                      className={`text-[13px] ${isOwnWorkspace ? "text-sky-900/80" : "text-[#71717a]"}`}
+                      title={
+                        accountLastScrapedAt
+                          ? new Date(accountLastScrapedAt).toLocaleString(undefined, {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            })
+                          : undefined
+                      }
+                    >
+                      {void lastScrapeRelativeTick}
+                      {isOwnWorkspace
+                        ? accountLastScrapedAt
+                          ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
+                          : "Scrape your ads from the Ads Library tab"
+                        : accountLastScrapedAt
+                          ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
+                          : "Not yet scraped"}
+                    </span>
+                  </div>
+                  {!isOwnWorkspace && competitorSidebarMatch?.lastWeeklyWeekStart ? (
+                    <p
+                      className="pl-[22px] text-[12px] leading-snug text-[#94a3b8]"
+                      title={`Last automated weekly scrape for ${competitorSidebarMatch.lastWeeklyWeekStart}`}
+                    >
+                      {formatWeeklySpySubtitle(competitorSidebarMatch.lastWeeklyWeekStart)}
+                    </p>
+                  ) : null}
                 </div>
               </div>
             </div>
+            {!isOwnWorkspace && competitorSidebarMatch?.savedCompetitorDbId ? (
+              <button
+                type="button"
+                disabled={spyFollowPending}
+                onClick={() => void handleSpyToggle()}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+                  spyFollowing
+                    ? "bg-sky-600 text-white shadow-sm hover:bg-sky-700"
+                    : "border border-[#d4d4d8] bg-white/90 text-[#52525b] shadow-sm hover:border-[#a1a1aa] hover:bg-zinc-50"
+                }`}
+              >
+                {spyFollowPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-current" aria-hidden />
+                    <span>Updating…</span>
+                  </>
+                ) : (
+                  <>
+                    <SatelliteDish
+                      className={`h-4 w-4 shrink-0 ${spyFollowing ? "fill-current text-white" : "text-[#71717a]"}`}
+                      aria-hidden
+                    />
+                    {spyFollowing ? (
+                      <>
+                        <span className="relative flex h-2 w-2">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                        </span>
+                        <span>Spying · Active</span>
+                      </>
+                    ) : (
+                      <span>Spy on this brand</span>
+                    )}
+                  </>
+                )}
+              </button>
+            ) : null}
           </div>
 
           {/* Tab navigation */}

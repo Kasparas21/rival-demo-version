@@ -56,6 +56,12 @@ export type SidebarCompetitor = {
   lastScrapedAt?: string;
   /** True while Firecrawl / discover API is in flight */
   pending?: boolean;
+  /** Supabase `saved_competitors.id` — from account GET */
+  savedCompetitorDbId?: string;
+  /** Weekly cron “spy on this brand” flag */
+  spyOnBrandFollowed?: boolean;
+  /** Latest successful `weekly_scrape_jobs.week_start` (YYYY-MM-DD) */
+  lastWeeklyWeekStart?: string;
 };
 
 function firstNonEmptyLogoUrl(...urls: (string | undefined)[]): string | undefined {
@@ -178,6 +184,10 @@ export function mergeAccountSidebarRowsWithLocalLibraryContext(
       logoUrl,
       brand,
       libraryContext: mergeSidebarLibraryContext(loc.libraryContext, remote.libraryContext),
+      ...(remote.savedCompetitorDbId != null ? { savedCompetitorDbId: remote.savedCompetitorDbId } : {}),
+      spyOnBrandFollowed:
+        remote.spyOnBrandFollowed !== undefined ? remote.spyOnBrandFollowed : loc.spyOnBrandFollowed,
+      lastWeeklyWeekStart: remote.lastWeeklyWeekStart ?? loc.lastWeeklyWeekStart,
     });
   });
 }
@@ -209,6 +219,11 @@ function mergePatchIntoRow(
     pending: patch.pending !== undefined ? patch.pending : stored.pending,
     lastScrapedAt:
       patch.lastScrapedAt !== undefined ? patch.lastScrapedAt : stored.lastScrapedAt,
+    savedCompetitorDbId: patch.savedCompetitorDbId ?? stored.savedCompetitorDbId,
+    spyOnBrandFollowed:
+      patch.spyOnBrandFollowed !== undefined ? patch.spyOnBrandFollowed : stored.spyOnBrandFollowed,
+    lastWeeklyWeekStart:
+      patch.lastWeeklyWeekStart !== undefined ? patch.lastWeeklyWeekStart : stored.lastWeeklyWeekStart,
   };
 }
 
@@ -229,6 +244,9 @@ function mergeDuplicateGroup(newer: SidebarCompetitor, older: SidebarCompetitor)
     libraryContext: mergeSidebarLibraryContext(older.libraryContext, newer.libraryContext),
     pending: newer.pending && older.pending,
     lastScrapedAt: newer.lastScrapedAt ?? older.lastScrapedAt,
+    savedCompetitorDbId: newer.savedCompetitorDbId ?? older.savedCompetitorDbId,
+    spyOnBrandFollowed: newer.spyOnBrandFollowed ?? older.spyOnBrandFollowed,
+    lastWeeklyWeekStart: newer.lastWeeklyWeekStart ?? older.lastWeeklyWeekStart,
   };
 }
 

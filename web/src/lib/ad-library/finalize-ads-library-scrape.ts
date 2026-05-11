@@ -1,0 +1,179 @@
+/**
+ * Persist / ads_cache merge / quota / last_scraped — shared by POST /api/ads/library and weekly cron.
+ */
+
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import { ADS_CACHE_TTL_MS, CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
+import { mergeAdsCachePayloadForPlatform } from "@/lib/ad-library/ads-cache-merge";
+import { savedCompetitorDomainOrFilter } from "@/lib/ad-library/competitor-cache-domain";
+import {
+  computePlatformsToPersist,
+  countLibraryAdsForPlatform,
+  persistScrapedAdsFromAdsLibraryResponse,
+} from "@/lib/ad-library/persist-scraped-ads";
+import type { Database, Json } from "@/lib/supabase/types";
+
+function isCacheablePlatform(p: AdsLibraryPlatform): p is CacheablePlatform {
+  return (CACHEABLE_PLATFORMS as readonly string[]).includes(p);
+}
+
+export async function finalizeAdsLibraryAfterFreshScrape(
+  supabase: SupabaseClient<Database>,
+  params: {
+    userId: string;
+    resolvedCompetitorId: string | null;
+    domainNorm: string;
+    adsCacheDomain: string;
+    platformsRequested: Set<AdsLibraryPlatform>;
+    platformsNeedingScrape: Set<AdsLibraryPlatform>;
+    out: AdsLibraryResponse;
+    /** When set (e.g. weekly cron), `persistScrapedAdsFromAdsLibraryResponse` uses this batch instead of inserting. */
+    scrapeBatchId?: string | null;
+  }
+): Promise<void> {
+  const {
+    userId,
+    resolvedCompetitorId,
+    domainNorm,
+    adsCacheDomain,
+    platformsRequested,
+    platformsNeedingScrape,
+    out,
+    scrapeBatchId,
+  } = params;
+
+  if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
+    const cacheableToMerge = [...platformsNeedingScrape].filter(isCacheablePlatform);
+    if (cacheableToMerge.length > 0) {
+      const { data: existingCacheRows } = await supabase
+        .from("ads_cache")
+        .select("platform, ads_data")
+        .eq("user_id", userId)
+        .eq("competitor_domain", adsCacheDomain)
+        .in("platform", cacheableToMerge);
+
+      const prevByPl = new Map<string, unknown>();
+      for (const r of existingCacheRows ?? []) {
+        const pl = r.platform;
+        if (pl && isCacheablePlatform(pl as AdsLibraryPlatform)) {
+          prevByPl.set(pl, r.ads_data);
+        }
+      }
+
+      for (const p of cacheableToMerge) {
+        const prev = prevByPl.get(p);
+        const merged = mergeAdsCachePayloadForPlatform(p, prev, out);
+        if (p === "meta") out.meta = merged as AdsLibraryResponse["meta"];
+        if (p === "google") out.google = merged as AdsLibraryResponse["google"];
+        if (p === "linkedin") out.linkedin = merged as AdsLibraryResponse["linkedin"];
+        if (p === "tiktok") out.tiktok = merged as AdsLibraryResponse["tiktok"];
+        if (p === "microsoft") out.microsoft = merged as AdsLibraryResponse["microsoft"];
+        if (p === "pinterest") out.pinterest = merged as AdsLibraryResponse["pinterest"];
+        if (p === "snapchat") out.snapchat = merged as AdsLibraryResponse["snapchat"];
+      }
+    }
+  }
+
+  const platformsToPersist =
+    userId && resolvedCompetitorId
+      ? await computePlatformsToPersist(supabase, {
+          userId,
+          competitorId: resolvedCompetitorId,
+          platformsRequested,
+          platformsNeedingScrape,
+          out,
+        })
+      : new Set<AdsLibraryPlatform>();
+
+  if (userId && adsCacheDomain && platformsToPersist.size > 0) {
+    const nowPersist = new Date().toISOString();
+    await persistScrapedAdsFromAdsLibraryResponse(supabase, {
+      userId,
+      competitorId: resolvedCompetitorId,
+      domainNorm: adsCacheDomain,
+      platformsToPersist,
+      out,
+      nowIso: nowPersist,
+      scrapeBatchId: scrapeBatchId ?? undefined,
+    });
+  }
+
+  if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + ADS_CACHE_TTL_MS).toISOString();
+    const rows: {
+      user_id: string;
+      competitor_domain: string;
+      platform: string;
+      ads_data: Json;
+      scraped_at: string;
+      expires_at: string;
+    }[] = [];
+
+    for (const p of platformsNeedingScrape) {
+      if (!isCacheablePlatform(p)) continue;
+      const adsData: Json = (
+        p === "meta"
+          ? out.meta
+          : p === "google"
+            ? out.google
+            : p === "linkedin"
+              ? out.linkedin
+              : p === "tiktok"
+                ? out.tiktok
+                : p === "microsoft"
+                  ? out.microsoft
+                  : p === "pinterest"
+                    ? out.pinterest
+                    : out.snapchat
+      ) as unknown as Json;
+      rows.push({
+        user_id: userId,
+        competitor_domain: adsCacheDomain,
+        platform: p,
+        ads_data: adsData,
+        scraped_at: now,
+        expires_at: expiresAt,
+      });
+    }
+
+    if (rows.length > 0) {
+      const { error: upsertError } = await supabase.from("ads_cache").upsert(rows, {
+        onConflict: "user_id,competitor_domain,platform",
+      });
+      if (upsertError) {
+        console.error("[finalizeAdsLibrary] ads_cache upsert", upsertError);
+      } else {
+        let adsScrapedDelta = 0;
+        let scrapeOpsDelta = 0;
+        for (const p of platformsNeedingScrape) {
+          if (!isCacheablePlatform(p)) continue;
+          scrapeOpsDelta += 1;
+          adsScrapedDelta += countLibraryAdsForPlatform(p, out);
+        }
+        if (adsScrapedDelta > 0 || scrapeOpsDelta > 0) {
+          const { error: usageErr } = await supabase.rpc("increment_monthly_scrape_usage", {
+            p_ads_count: adsScrapedDelta,
+            p_ops_count: scrapeOpsDelta,
+          });
+          if (usageErr) {
+            console.error("[finalizeAdsLibrary] increment_monthly_scrape_usage", usageErr);
+          }
+        }
+        const scrapeOr = savedCompetitorDomainOrFilter(domainNorm);
+        const lastScrapedQuery = supabase
+          .from("saved_competitors")
+          .update({ last_scraped_at: now })
+          .eq("user_id", userId);
+        const { error: lastScrapedError } =
+          scrapeOr.length > 0
+            ? await lastScrapedQuery.or(scrapeOr)
+            : await lastScrapedQuery.eq("brand_domain", domainNorm);
+        if (lastScrapedError) {
+          console.error("[finalizeAdsLibrary] last_scraped_at update", lastScrapedError);
+        }
+      }
+    }
+  }
+}

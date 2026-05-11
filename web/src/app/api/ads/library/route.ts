@@ -1,25 +1,5 @@
 import { NextResponse } from "next/server";
-import { ApifyRunnerError } from "@/lib/apify/client";
-import { scrapeFacebookAds } from "@/lib/apify/facebook-ads";
-import { scrapeGoogleAdsTransparency } from "@/lib/apify/google-ads";
-import { scrapeLinkedInAdLibrary } from "@/lib/apify/linkedin-ads";
-import { scrapeMicrosoftAdsLibrary } from "@/lib/apify/microsoft-ads";
-import { scrapePinterestAdsLibrary } from "@/lib/apify/pinterest-ads";
-import { scrapeSnapchatEuAdsGallery } from "@/lib/apify/snapchat-ads";
-import { scrapeTikTokAdsLibrary } from "@/lib/apify/tiktok-ads";
-import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
-import {
-  googleItemToRow,
-  linkedInItemToCard,
-  microsoftDatasetItemToCard,
-  pinterestDatasetItemToCard,
-  sortSnapchatAdsForResponse,
-  sortTikTokAdsForResponse,
-  snapchatDatasetRowMediaPriority,
-  snapchatDatasetItemToCard,
-} from "@/lib/ad-library/normalize";
-import { ADS_CACHE_TTL_MS, CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
-import { mergeAdsCachePayloadForPlatform } from "@/lib/ad-library/ads-cache-merge";
+import { CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import {
@@ -32,7 +12,6 @@ import {
   quotaExceededResponseBody,
 } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Json } from "@/lib/supabase/types";
 import {
   normalizeGoogleAdsRegion,
   normalizeGoogleAdsResultsLimit,
@@ -41,19 +20,14 @@ import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinteres
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-options";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
-import {
-  computePlatformsToPersist,
-  countLibraryAdsForPlatform,
-  persistScrapedAdsFromAdsLibraryResponse,
-  platformScrapeSucceeded,
-} from "@/lib/ad-library/persist-scraped-ads";
+import { countLibraryAdsForPlatform, platformScrapeSucceeded } from "@/lib/ad-library/persist-scraped-ads";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
-import {
-  resolveAdsCacheDomainForUser,
-  savedCompetitorDomainOrFilter,
-} from "@/lib/ad-library/competitor-cache-domain";
+import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
+import type { AdsLibraryIds } from "@/lib/ad-library/run-ads-library-parallel-scrape";
+import { runAdsLibraryParallelScrape } from "@/lib/ad-library/run-ads-library-parallel-scrape";
+import { finalizeAdsLibraryAfterFreshScrape } from "@/lib/ad-library/finalize-ads-library-scrape";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -61,22 +35,6 @@ export const maxDuration = 300;
 
 const MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
 const DEFAULT_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
-
-type Ids = {
-  meta?: string;
-  metaPageUrl?: string;
-  google?: string;
-  linkedin?: string;
-  microsoft?: string;
-  /** pinterest.com profile URL — handle is derived for Apify (preferred when set). */
-  pinterest?: string;
-  /** Optional override: handle or URL (normalized); otherwise brand name is used. */
-  pinterestAdvertiserName?: string;
-  /** Saved Snapchat Ads Gallery keyword (manual identifiers / discovery). */
-  snapchat?: string;
-  /** Saved TikTok Ads Library advertiser token or library URL (`query_type=2` exact match with quotes, same as brand). */
-  tiktok?: string;
-};
 
 function cleanDomain(d: string): string {
   return d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || d;
@@ -157,27 +115,6 @@ function pickBestAdsCacheHitsByPlatform(
   return out;
 }
 
-function countScrapedAdsForPlatform(platform: AdsLibraryPlatform, out: AdsLibraryResponse): number {
-  switch (platform) {
-    case "meta":
-      return out.meta.ads?.length ?? 0;
-    case "google":
-      return out.google.rows?.length ?? 0;
-    case "linkedin":
-      return out.linkedin.ads?.length ?? 0;
-    case "tiktok":
-      return out.tiktok.ads?.length ?? 0;
-    case "microsoft":
-      return out.microsoft.ads?.length ?? 0;
-    case "pinterest":
-      return out.pinterest.ads?.length ?? 0;
-    case "snapchat":
-      return out.snapchat.ads?.length ?? 0;
-    default:
-      return 0;
-  }
-}
-
 /**
  * POST /api/ads/library
  * Body: { brand, ids? (pinterest URL + optional pinterestAdvertiserName), metaStatus?, …, pinterestCountry? … }
@@ -186,7 +123,7 @@ function countScrapedAdsForPlatform(platform: AdsLibraryPlatform, out: AdsLibrar
 export async function POST(req: Request): Promise<NextResponse> {
   let body: {
     brand?: { name?: string; domain?: string };
-    ids?: Ids;
+    ids?: AdsLibraryIds;
     metaStatus?: "ACTIVE" | "ALL";
     metaMaxAds?: number;
     metaCountry?: string;
@@ -251,7 +188,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const brandName = body.brand?.name?.trim() || "Competitor";
   const domain = cleanDomain(body.brand?.domain || "");
   const linkedinKeywordFallback = domain ? hostToBrandLabel(domain) : undefined;
-  const ids: Ids = body.ids ?? {};
+  const ids: AdsLibraryIds = body.ids ?? {};
   const metaStatus = body.metaStatus === "ALL" ? "ALL" : "ACTIVE";
   const metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_ADS, MAX_ADS));
   const metaCountry = (body.metaCountry ?? "US").trim().toUpperCase() || "US";
@@ -464,300 +401,56 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const isPartial = platformsRequested.size < ALL_ADS_API_PLATFORMS.length;
 
-  await Promise.all([
-    (async () => {
-      if (!platformsRequested.has("meta") || !platformsNeedingScrape.has("meta")) return;
-      try {
-        out.meta.ads = await scrapeFacebookAds({
-          ids,
-          brandName,
-          activeStatus: metaStatus,
-          maxAds: metaMaxAds,
-          countryCode: metaCountry,
-          metaStartDate,
-          metaEndDate,
-          scrapePageAdsSortBy: metaSortBy,
-        });
-      } catch (e) {
-        out.meta.error =
-          e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Meta ads failed";
-      }
-    })(),
-    (async () => {
-      if (!platformsRequested.has("google") || !platformsNeedingScrape.has("google")) return;
-      try {
-        const rawGoogle = ids.google?.trim() ?? "";
-        const queryDom = domain;
+  await runAdsLibraryParallelScrape({
+    ids,
+    brandName,
+    domain,
+    linkedinKeywordFallback,
+    pinterestAdvertiserNameForApify,
+    platformsRequested,
+    platformsNeedingScrape,
+    out,
+    metaStatus,
+    metaMaxAds,
+    metaCountry,
+    metaStartDate,
+    metaEndDate,
+    metaSortBy,
+    linkedinMaxAds,
+    linkedinDateRange,
+    linkedinCountryCode,
+    tiktokMaxAds,
+    tiktokStartDate,
+    tiktokEndDate,
+    microsoftMaxSearchResults,
+    microsoftCountryCodes,
+    microsoftStartDate,
+    microsoftEndDate,
+    pinterestMaxResults,
+    pinterestStartDate,
+    pinterestEndDate,
+    pinterestGender,
+    pinterestAge,
+    snapchatMaxItems,
+    snapchatCountryIso,
+    snapchatStartDate,
+    snapchatEndDate,
+    tiktokRegion,
+    googleRegion,
+    googleResultsLimit,
+    pinterestCountry,
+  });
 
-        const transparencyCanon = canonicalGoogleAdsTransparencyStartUrl(rawGoogle);
-        if (!transparencyCanon) {
-          out.google.error =
-            rawGoogle.trim().length > 0
-              ? "Google Ads requires a Transparency advertiser URL with /advertiser/AR… in it (copy it from the advertiser page address bar). Domain search URLs (?domain=) are not supported."
-              : "No Google advertiser URL — paste https://adstransparency.google.com/advertiser/AR… from Transparency Center.";
-          return;
-        }
-        const rows = await scrapeGoogleAdsTransparency({
-          startUrls: [transparencyCanon],
-          resultsLimit: googleResultsLimit,
-          region: googleRegion,
-        });
-
-        out.google.rows = rows
-          .slice(0, googleResultsLimit)
-          .map((item, i) => googleItemToRow(item, i, { queryDomain: queryDom }));
-      } catch (e) {
-        out.google.error = e instanceof Error ? e.message : "Google ads failed";
-      }
-    })(),
-    (async () => {
-      if (!platformsRequested.has("linkedin") || !platformsNeedingScrape.has("linkedin")) return;
-      try {
-        const raw = await scrapeLinkedInAdLibrary({
-          brandName,
-          linkedinUrl: ids.linkedin,
-          keywordFallback: linkedinKeywordFallback,
-          maxItems: linkedinMaxAds,
-          dateRange: linkedinDateRange,
-          countryCode: linkedinCountryCode || undefined,
-        });
-        out.linkedin.ads = raw
-          .slice(0, linkedinMaxAds)
-          .map((item, i) => linkedInItemToCard(item, i));
-      } catch (e) {
-        out.linkedin.error = e instanceof Error ? e.message : "LinkedIn ads failed";
-      }
-    })(),
-    (async () => {
-      if (!platformsRequested.has("tiktok") || !platformsNeedingScrape.has("tiktok")) return;
-      try {
-        out.tiktok.ads = await scrapeTikTokAdsLibrary({
-          brandName,
-          brandDomain: domain || undefined,
-          savedTiktok: typeof ids.tiktok === "string" ? ids.tiktok : undefined,
-          region: tiktokRegion,
-          maxAds: tiktokMaxAds,
-          fetchDetails: true,
-          startDate: tiktokStartDate,
-          endDate: tiktokEndDate,
-        });
-      } catch (e) {
-        out.tiktok.error = e instanceof Error ? e.message : "TikTok ads failed";
-      }
-    })(),
-    (async () => {
-      if (!platformsRequested.has("microsoft") || !platformsNeedingScrape.has("microsoft")) return;
-      try {
-        const rows = await scrapeMicrosoftAdsLibrary({
-          brandName,
-          maxSearchResults: microsoftMaxSearchResults,
-          advertiserIdOverride: ids.microsoft,
-          countryCodes: microsoftCountryCodes,
-          startDate: microsoftStartDate,
-          endDate: microsoftEndDate,
-        });
-        out.microsoft.ads = rows
-          .slice(0, microsoftMaxSearchResults)
-          .map((raw, i) => microsoftDatasetItemToCard(raw, i));
-      } catch (e) {
-        out.microsoft.error =
-          e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Microsoft ads failed";
-      }
-    })(),
-    (async () => {
-      if (!platformsRequested.has("pinterest") || !platformsNeedingScrape.has("pinterest")) return;
-      try {
-        const rows = await scrapePinterestAdsLibrary({
-          advertiserName: pinterestAdvertiserNameForApify,
-          maxResults: pinterestMaxResults,
-          country: pinterestCountry,
-          startDate: pinterestStartDate,
-          endDate: pinterestEndDate,
-          gender: pinterestGender,
-          age: pinterestAge,
-        });
-        out.pinterest.ads = rows
-          .slice(0, pinterestMaxResults)
-          .map((raw, i) => pinterestDatasetItemToCard(raw, i, { brandName, brandDomain: domain }));
-      } catch (e) {
-        out.pinterest.error =
-          e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Pinterest ads failed";
-      }
-    })(),
-    (async () => {
-      if (!platformsRequested.has("snapchat") || !platformsNeedingScrape.has("snapchat")) return;
-      if (!domain) {
-        out.snapchat.error = "No domain for Snapchat EU gallery search.";
-        return;
-      }
-      try {
-        const raw = await scrapeSnapchatEuAdsGallery({
-          domain,
-          brandName,
-          maxItemsGlobal: snapchatMaxItems,
-          ...(typeof ids.snapchat === "string" && ids.snapchat.trim()
-            ? { searchKeyword: ids.snapchat.trim() }
-            : {}),
-          countryCode:
-            snapchatCountryIso &&
-            snapchatCountryIso !== "ANYWHERE" &&
-            snapchatCountryIso !== "WORLD" &&
-            snapchatCountryIso !== "WORLDWIDE"
-              ? snapchatCountryIso
-              : undefined,
-          startDate: snapchatStartDate || undefined,
-          endDate: snapchatEndDate || undefined,
-          ...(metaStatus === "ACTIVE" ? { status: "ACTIVE" as const } : {}),
-        });
-        out.snapchat.ads = [...raw]
-          .sort((a, b) => snapchatDatasetRowMediaPriority(b) - snapchatDatasetRowMediaPriority(a))
-          .slice(0, snapchatMaxItems)
-          .map((row, i) => snapchatDatasetItemToCard(row, i, { brandName, brandDomain: domain }));
-      } catch (e) {
-        out.snapchat.error =
-          e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Snapchat ads failed";
-      }
-    })(),
-  ]);
-
-  if (platformsRequested.has("snapchat") && out.snapchat.ads.length > 0) {
-    out.snapchat = { ...out.snapchat, ads: sortSnapchatAdsForResponse(out.snapchat.ads) };
-  }
-  if (platformsRequested.has("tiktok") && out.tiktok.ads.length > 0) {
-    out.tiktok = { ...out.tiktok, ads: sortTikTokAdsForResponse(out.tiktok.ads) };
-  }
-
-  if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
-    const cacheableToMerge = [...platformsNeedingScrape].filter(isCacheablePlatform);
-    if (cacheableToMerge.length > 0) {
-      const { data: existingCacheRows } = await supabase
-        .from("ads_cache")
-        .select("platform, ads_data")
-        .eq("user_id", userId)
-        .eq("competitor_domain", adsCacheDomain)
-        .in("platform", cacheableToMerge);
-
-      const prevByPl = new Map<string, unknown>();
-      for (const r of existingCacheRows ?? []) {
-        const pl = r.platform;
-        if (pl && isCacheablePlatform(pl as AdsLibraryPlatform)) {
-          prevByPl.set(pl, r.ads_data);
-        }
-      }
-
-      for (const p of cacheableToMerge) {
-        const prev = prevByPl.get(p);
-        const merged = mergeAdsCachePayloadForPlatform(p, prev, out);
-        if (p === "meta") out.meta = merged as AdsLibraryResponse["meta"];
-        if (p === "google") out.google = merged as AdsLibraryResponse["google"];
-        if (p === "linkedin") out.linkedin = merged as AdsLibraryResponse["linkedin"];
-        if (p === "tiktok") out.tiktok = merged as AdsLibraryResponse["tiktok"];
-        if (p === "microsoft") out.microsoft = merged as AdsLibraryResponse["microsoft"];
-        if (p === "pinterest") out.pinterest = merged as AdsLibraryResponse["pinterest"];
-        if (p === "snapchat") out.snapchat = merged as AdsLibraryResponse["snapchat"];
-      }
-    }
-  }
-
-  const platformsToPersist =
-    userId && resolvedCompetitorId
-      ? await computePlatformsToPersist(supabase, {
-          userId,
-          competitorId: resolvedCompetitorId,
-          platformsRequested,
-          platformsNeedingScrape,
-          out,
-        })
-      : new Set<AdsLibraryPlatform>();
-
-  if (userId && adsCacheDomain && platformsToPersist.size > 0) {
-    const nowPersist = new Date().toISOString();
-    await persistScrapedAdsFromAdsLibraryResponse(supabase, {
+  if (userId) {
+    await finalizeAdsLibraryAfterFreshScrape(supabase, {
       userId,
-      competitorId: resolvedCompetitorId,
-      domainNorm: adsCacheDomain,
-      platformsToPersist,
+      resolvedCompetitorId,
+      domainNorm,
+      adsCacheDomain,
+      platformsRequested,
+      platformsNeedingScrape,
       out,
-      nowIso: nowPersist,
     });
-  }
-
-  if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + ADS_CACHE_TTL_MS).toISOString();
-    const rows: {
-      user_id: string;
-      competitor_domain: string;
-      platform: string;
-      ads_data: Json;
-      scraped_at: string;
-      expires_at: string;
-    }[] = [];
-
-    for (const p of platformsNeedingScrape) {
-      if (!isCacheablePlatform(p)) continue;
-      const adsData: Json = (
-        p === "meta"
-          ? out.meta
-          : p === "google"
-            ? out.google
-            : p === "linkedin"
-              ? out.linkedin
-              : p === "tiktok"
-                ? out.tiktok
-                : p === "microsoft"
-                  ? out.microsoft
-                  : p === "pinterest"
-                    ? out.pinterest
-                    : out.snapchat
-      ) as unknown as Json;
-      rows.push({
-        user_id: userId,
-        competitor_domain: adsCacheDomain,
-        platform: p,
-        ads_data: adsData,
-        scraped_at: now,
-        expires_at: expiresAt,
-      });
-    }
-
-    if (rows.length > 0) {
-      const { error: upsertError } = await supabase.from("ads_cache").upsert(rows, {
-        onConflict: "user_id,competitor_domain,platform",
-      });
-      if (upsertError) {
-        console.error("[api/ads/library] ads_cache upsert", upsertError);
-      } else {
-        let adsScrapedDelta = 0;
-        let scrapeOpsDelta = 0;
-        for (const p of platformsNeedingScrape) {
-          if (!isCacheablePlatform(p)) continue;
-          scrapeOpsDelta += 1;
-          adsScrapedDelta += countScrapedAdsForPlatform(p, out);
-        }
-        if (adsScrapedDelta > 0 || scrapeOpsDelta > 0) {
-          const { error: usageErr } = await supabase.rpc("increment_monthly_scrape_usage", {
-            p_ads_count: adsScrapedDelta,
-            p_ops_count: scrapeOpsDelta,
-          });
-          if (usageErr) {
-            console.error("[api/ads/library] increment_monthly_scrape_usage", usageErr);
-          }
-        }
-        const scrapeOr = savedCompetitorDomainOrFilter(domainNorm);
-        const lastScrapedQuery = supabase
-          .from("saved_competitors")
-          .update({ last_scraped_at: now })
-          .eq("user_id", userId);
-        const { error: lastScrapedError } =
-          scrapeOr.length > 0
-            ? await lastScrapedQuery.or(scrapeOr)
-            : await lastScrapedQuery.eq("brand_domain", domainNorm);
-        if (lastScrapedError) {
-          console.error("[api/ads/library] last_scraped_at update", lastScrapedError);
-        }
-      }
-    }
   }
 
   /** Refresh Strategy Map whenever ads are loaded (cache hit or fresh scrape) so derivation/spend stay current. */
