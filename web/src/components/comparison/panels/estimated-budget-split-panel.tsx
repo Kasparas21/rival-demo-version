@@ -4,49 +4,75 @@ import { useMemo } from "react";
 import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
 import { Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer } from "recharts";
 
-import type {
-  BudgetAllocationCard,
-  CompetitorStrategyOverviewPayload,
-  SpendTrendByPlatformInsight,
-  StrategyPlatform,
-} from "@/lib/strategy-overview/payload-types";
+import type { CompetitorStrategyOverviewPayload, SpendTrendByPlatformInsight, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { COMPARISON_PLATFORM_ORDER, ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { ComparisonInsufficient, ComparisonPanelShell } from "@/components/comparison/panel-shell";
 
-const COLORS = ["#1877F2", "#4285F4", "#FF0050", "#0A66C2", "#E60023", "#FFFC00"];
-
-type BudgetSegment = BudgetAllocationCard["segments"][number];
+const PLATFORM_COLORS: Record<StrategyPlatform, string> = {
+  meta: "#1877F2",
+  google: "#4285F4",
+  tiktok: "#FF0050",
+  linkedin: "#0A66C2",
+  pinterest: "#E60023",
+  snapchat: "#FFD60A",
+};
 
 type Props = {
   left: { name: string; payload: CompetitorStrategyOverviewPayload | null };
   right: { name: string; payload: CompetitorStrategyOverviewPayload | null };
 };
 
-function findLargestSpendDelta(
-  left: BudgetSegment[],
-  right: BudgetSegment[]
-): { platform: StrategyPlatform; ratio: number; label: string } | null {
-  let best: { platform: StrategyPlatform; ratio: number } | null = null;
-  for (const segment of right) {
-    const leftMatch = left.find((s) => s.platform === segment.platform);
-    const leftSpend = leftMatch?.estSpendEur ?? 0;
-    if (leftSpend > 0) {
-      const ratio = segment.estSpendEur / leftSpend;
-      if (ratio >= 1.3 && (!best || ratio > best.ratio)) {
-        best = { platform: segment.platform, ratio };
-      }
-    } else if (segment.estSpendEur > 0) {
-      if (!best || best.ratio < 999) {
-        best = { platform: segment.platform, ratio: Infinity };
-      }
+type DonutSeg = { name: string; pct: number; platform: StrategyPlatform };
+
+function segmentsFromPayload(payload: CompetitorStrategyOverviewPayload | null): DonutSeg[] {
+  if (!payload) return [];
+  return payload.insights.budget_allocation.segments.map((s) => ({
+    name: s.label,
+    pct: s.pct,
+    platform: s.platform,
+  }));
+}
+
+function computeShareComparison(
+  leftSegments: DonutSeg[],
+  rightSegments: DonutSeg[],
+  leftBrandName: string,
+  rightBrandName: string,
+): { label: string; detail: string | null } {
+  let biggestDiff: { platform: StrategyPlatform; ratio: number; leftPct: number; rightPct: number } | null = null;
+
+  for (const pl of COMPARISON_PLATFORM_ORDER) {
+    const leftPct = leftSegments.find((s) => s.platform === pl)?.pct ?? 0;
+    const rightPct = rightSegments.find((s) => s.platform === pl)?.pct ?? 0;
+
+    if (leftPct < 5 && rightPct < 5) continue;
+
+    const maxPct = Math.max(leftPct, rightPct);
+    const minPct = Math.max(Math.min(leftPct, rightPct), 1);
+    const ratio = maxPct / minPct;
+
+    if (!biggestDiff || ratio > biggestDiff.ratio) {
+      biggestDiff = { platform: pl, ratio, leftPct, rightPct };
     }
   }
-  if (!best || best.ratio < 1.3) return null;
-  const label =
-    best.ratio === Infinity
-      ? `${best.platform} active vs none`
-      : `${best.ratio.toFixed(1)}× more on ${best.platform}`;
-  return { platform: best.platform, ratio: best.ratio, label };
+
+  if (!biggestDiff || biggestDiff.ratio < 1.5) {
+    return { label: "Similar mix", detail: null };
+  }
+
+  const higherSide =
+    biggestDiff.leftPct > biggestDiff.rightPct
+      ? leftBrandName
+      : biggestDiff.rightPct > biggestDiff.leftPct
+        ? rightBrandName
+        : null;
+
+  const platformName = biggestDiff.platform.charAt(0).toUpperCase() + biggestDiff.platform.slice(1);
+
+  return {
+    label: `${biggestDiff.ratio.toFixed(1)}× more on ${platformName}`,
+    detail: higherSide,
+  };
 }
 
 function trendMap(rows: SpendTrendByPlatformInsight[] | undefined): Map<StrategyPlatform, SpendTrendByPlatformInsight> {
@@ -57,59 +83,47 @@ function trendMap(rows: SpendTrendByPlatformInsight[] | undefined): Map<Strategy
   return m;
 }
 
-function DonutBlock({
-  brandName,
-  payload,
-}: {
-  brandName: string;
-  payload: CompetitorStrategyOverviewPayload | null;
-}) {
-  const data = useMemo(() => {
-    if (!payload) return [];
-    return payload.insights.budget_allocation.segments.map((s) => ({
-      name: s.label,
-      value: s.pct,
-      platform: s.platform,
-    }));
-  }, [payload]);
-
-  if (!payload || data.length === 0) {
-    return (
-      <div className="flex h-[220px] items-center justify-center text-[11px] text-slate-400 border border-dashed border-slate-200/90 rounded-xl bg-white/40">
-        No spend split
-      </div>
-    );
-  }
-
-  const total = payload.insights.budget_allocation.totalEstSpendEur;
+function BudgetDonutSlot({ brandName, segments, totalEur }: { brandName: string; segments: DonutSeg[]; totalEur: number }) {
+  const hasChart = segments.length > 0;
 
   return (
-    <div className="flex flex-col items-center">
-      <p className="text-[12px] font-semibold text-slate-800 mb-2 w-full text-center">{brandName}</p>
-      <div className="h-[220px] w-full max-w-[240px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={62}
-              outerRadius={88}
-              paddingAngle={2}
-              dataKey="value"
-              nameKey="name"
-            >
-              {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
-      <p className="-mt-4 text-[18px] font-bold text-slate-900 tabular-nums text-center">
-        €{total.toLocaleString()}
-        <span className="block font-sans text-[10px] font-normal text-slate-500">/ mo est.</span>
+    <div className="flex min-w-0 flex-col items-center">
+      <p className="mb-1.5 max-w-full truncate text-center text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+        {brandName}
       </p>
+      <div className="relative mx-auto" style={{ width: 110, height: 110 }}>
+        {hasChart ? (
+          <>
+            <PieChart width={110} height={110}>
+              <Pie
+                data={segments}
+                cx={55}
+                cy={55}
+                innerRadius={35}
+                outerRadius={52}
+                paddingAngle={2}
+                dataKey="pct"
+                nameKey="name"
+                stroke="none"
+              >
+                {segments.map((segment) => (
+                  <Cell key={segment.platform} fill={PLATFORM_COLORS[segment.platform] ?? "#94A3B8"} />
+                ))}
+              </Pie>
+            </PieChart>
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-[11px] font-bold leading-tight text-slate-900 tabular-nums">
+                €{totalEur.toLocaleString()}
+              </span>
+              <span className="text-[8px] leading-tight text-slate-500">/mo</span>
+            </div>
+          </>
+        ) : (
+          <div className="flex size-full items-center justify-center rounded-xl border border-dashed border-slate-200/90 bg-white/40 text-[9px] text-slate-400">
+            No spend split
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -132,22 +146,28 @@ function SpendTrendSpark({ row }: { row: SpendTrendByPlatformInsight | undefined
 }
 
 export function EstimatedBudgetSplitPanel({ left, right }: Props) {
-  const deltaLine = useMemo(() => {
-    const l = left.payload?.insights.budget_allocation.segments ?? [];
-    const r = right.payload?.insights.budget_allocation.segments ?? [];
-    if (l.length === 0 || r.length === 0) return null;
-    return findLargestSpendDelta(l, r);
-  }, [left.payload, right.payload]);
+  const leftSegments = useMemo(() => segmentsFromPayload(left.payload), [left.payload]);
+  const rightSegments = useMemo(() => segmentsFromPayload(right.payload), [right.payload]);
+
+  const { label: comparisonLabel, detail: comparisonDetail } = useMemo(
+    () =>
+      computeShareComparison(leftSegments, rightSegments, left.name, right.name),
+    [leftSegments, rightSegments, left.name, right.name],
+  );
+
+  const leftTotalEur = left.payload?.insights.budget_allocation.totalEstSpendEur ?? 0;
+  const rightTotalEur = right.payload?.insights.budget_allocation.totalEstSpendEur ?? 0;
 
   const leftTrend = trendMap(left.payload?.insights.spend_trend_by_platform);
   const rightTrend = trendMap(right.payload?.insights.spend_trend_by_platform);
 
-  const legendSegments = useMemo(() => {
-    const set = new Set<StrategyPlatform>();
-    for (const s of left.payload?.insights.budget_allocation.segments ?? []) set.add(s.platform);
-    for (const s of right.payload?.insights.budget_allocation.segments ?? []) set.add(s.platform);
-    return COMPARISON_PLATFORM_ORDER.filter((p) => set.has(p));
-  }, [left.payload, right.payload]);
+  const visiblePlatforms = useMemo(() => {
+    return COMPARISON_PLATFORM_ORDER.filter((pl) => {
+      const leftHas = (leftSegments.find((s) => s.platform === pl)?.pct ?? 0) > 0;
+      const rightHas = (rightSegments.find((s) => s.platform === pl)?.pct ?? 0) > 0;
+      return leftHas || rightHas;
+    });
+  }, [leftSegments, rightSegments]);
 
   const DirectionGlyph = ({ d }: { d: "up" | "down" | "flat" }) => {
     if (d === "up") return <ArrowUp className="h-3 w-3 text-emerald-600" aria-hidden />;
@@ -164,47 +184,42 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
       {!left.payload && !right.payload ? (
         <ComparisonInsufficient message="Budget comparison needs strategy payloads for both brands." />
       ) : (
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-3 items-center">
-            <DonutBlock brandName={left.name} payload={left.payload} />
-            <div className="flex flex-col items-center justify-center py-2 px-1 min-h-[100px]">
-              {deltaLine ? (
-                <>
-                  <ArrowUp className="h-6 w-6 text-red-500 rotate-180 mb-1" aria-hidden />
-                  <p className="text-center font-sans text-[10px] font-semibold text-slate-800 leading-tight max-w-[100px]">
-                    {deltaLine.label}
-                  </p>
-                </>
-              ) : (
-                <p className="text-[10px] text-slate-400 text-center">Similar mix</p>
-              )}
+        <div className="flex flex-col gap-3">
+          <div className="grid min-w-0 grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <BudgetDonutSlot brandName={left.name} segments={leftSegments} totalEur={leftTotalEur} />
             </div>
-            <DonutBlock brandName={right.name} payload={right.payload} />
+            <div className="min-w-0">
+              <BudgetDonutSlot brandName={right.name} segments={rightSegments} totalEur={rightTotalEur} />
+            </div>
           </div>
 
-          {legendSegments.length > 0 ? (
-            <div className="flex flex-wrap justify-center gap-3 border-t border-slate-100 pt-3">
-              {legendSegments.map((pl, i) => (
-                <div key={pl} className="inline-flex items-center gap-1.5 text-[9px] text-slate-600 capitalize">
-                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                  {pl}
-                </div>
-              ))}
-            </div>
-          ) : null}
+          <div className="flex flex-col items-center justify-center pt-1">
+            <span className="text-center text-[11px] font-medium text-slate-600">{comparisonLabel}</span>
+            {comparisonDetail ? (
+              <span className="mt-0.5 text-center text-[9px] leading-snug text-slate-500">{comparisonDetail}</span>
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 border-t border-slate-100 pt-3">
+            {visiblePlatforms.map((platform) => (
+              <div key={platform} className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: PLATFORM_COLORS[platform] }} />
+                <span className="text-[10px] capitalize text-slate-600">{platform}</span>
+              </div>
+            ))}
+          </div>
 
           <div>
-            <p className="text-[12px] font-semibold text-slate-800 mb-2">
-              Spend trend (last ~90 days)
-            </p>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <p className="mb-2 text-[12px] font-semibold text-slate-800">Spend trend (last ~90 days)</p>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <div>
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{left.name}</p>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <p className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-slate-500">{left.name}</p>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                   {COMPARISON_PLATFORM_ORDER.map((pl) => {
                     const row = leftTrend.get(pl);
                     const active = (left.payload?.insights.budget_allocation.segments ?? []).some(
-                      (s) => s.platform === pl && s.adCount > 0
+                      (s) => s.platform === pl && s.adCount > 0,
                     );
                     return (
                       <div
@@ -213,7 +228,7 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
                           active ? "bg-white/80" : "bg-slate-50/60 opacity-50"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-0.5 mb-1">
+                        <div className="mb-1 flex items-center justify-between gap-0.5">
                           <ComparisonPlatformIcon platform={pl} className="h-4 w-4" />
                           <DirectionGlyph d={row?.direction ?? "flat"} />
                         </div>
@@ -224,12 +239,12 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
                 </div>
               </div>
               <div>
-                <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{right.name}</p>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <p className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-slate-500">{right.name}</p>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                   {COMPARISON_PLATFORM_ORDER.map((pl) => {
                     const row = rightTrend.get(pl);
                     const active = (right.payload?.insights.budget_allocation.segments ?? []).some(
-                      (s) => s.platform === pl && s.adCount > 0
+                      (s) => s.platform === pl && s.adCount > 0,
                     );
                     return (
                       <div
@@ -238,7 +253,7 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
                           active ? "bg-white/80" : "bg-slate-50/60 opacity-50"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-0.5 mb-1">
+                        <div className="mb-1 flex items-center justify-between gap-0.5">
                           <ComparisonPlatformIcon platform={pl} className="h-4 w-4" />
                           <DirectionGlyph d={row?.direction ?? "flat"} />
                         </div>
