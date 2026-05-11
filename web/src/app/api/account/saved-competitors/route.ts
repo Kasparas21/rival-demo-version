@@ -7,7 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
-function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): Json | null {
+function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
   const ids =
     raw.ids && typeof raw.ids === "object" && raw.ids !== null && !Array.isArray(raw.ids)
       ? Object.fromEntries(
@@ -18,12 +18,12 @@ function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): Json | null {
     ? raw.channels.filter((c): c is string => typeof c === "string" && c.trim() !== "")
     : undefined;
   const confirmed = typeof raw.confirmed === "boolean" ? raw.confirmed : undefined;
-  const out: Record<string, unknown> = {};
+  const out: AdsLibraryContextPayload = {};
   if (ids && Object.keys(ids).length > 0) out.ids = ids;
   if (channels && channels.length > 0) out.channels = channels;
   if (confirmed !== undefined) out.confirmed = confirmed;
-  if (Object.keys(out).length === 0) return null;
-  return out as Json;
+  if (!out.ids && !out.channels?.length && out.confirmed === undefined) return null;
+  return out;
 }
 
 function rowToLibraryContext(raw: unknown): SidebarCompetitor["libraryContext"] | undefined {
@@ -258,7 +258,9 @@ function buildUpsertRows(params: {
     let ads_library_context_val: Json | null;
     if (item.adsLibraryContext !== undefined) {
       ads_library_context_val =
-        item.adsLibraryContext === null ? null : sanitizeAdsLibraryContext(item.adsLibraryContext) ?? null;
+        item.adsLibraryContext === null
+          ? null
+          : (sanitizeAdsLibraryContext(item.adsLibraryContext) as Json | null);
     } else {
       ads_library_context_val = (prior?.ads_library_context as Json | null) ?? null;
     }
