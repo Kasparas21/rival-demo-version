@@ -25,6 +25,8 @@ import {
   applyDiscoveredMetaPresentation,
   finalizeLinkedInDiscovery,
   buildRecommendedKeywords,
+  stripPublicDiscoverSuggestions,
+  stripDiscoverFieldUiMetadata,
 } from "@/lib/competitor-discover-firecrawl";
 
 /** Vercel / long-running discovery (optional; ignored locally) */
@@ -299,7 +301,7 @@ export async function POST(req: Request) {
         domain: scrapedDomain,
         logoUrl,
       },
-      discoveredIds,
+      discoveredIds: stripPublicDiscoverSuggestions(discoveredIds),
       recommendedKeywords,
       interpretation: {
         summary: interpretation.interpretationSummary,
@@ -311,8 +313,8 @@ export async function POST(req: Request) {
           keywords: interpretation.keywordTokens.length,
         },
       },
-      fieldConfidence,
-      fieldPreviewUrls,
+      fieldConfidence: stripDiscoverFieldUiMetadata(fieldConfidence),
+      fieldPreviewUrls: stripDiscoverFieldUiMetadata(fieldPreviewUrls),
       ...(warning ? { warning } : {}),
     } satisfies DiscoverResponse);
   } catch (err) {

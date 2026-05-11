@@ -140,6 +140,13 @@ export function resolveCompetitorViewFromSidebar(
   if (overrides.confirmedParam === "1") isConfirmed = true;
   else if (overrides.confirmedParam === "0") isConfirmed = false;
   else if (row?.libraryContext?.confirmed === true) isConfirmed = true;
+  else if (row && typeof row.lastScrapedAt === "string" && row.lastScrapedAt.trim().length > 0) {
+    /** Synced from `saved_competitors.last_scraped_at` after account restore — Ads Library should load from `ads_cache`. */
+    isConfirmed = true;
+  } else if (row && row.pending !== true && row.brand?.domain?.trim()) {
+    /** Saved competitor with domain, not in-flight discovery — enable server-backed ads without local-only `libraryContext`. */
+    isConfirmed = true;
+  }
 
   return { brand, platformIds, channelsParam, isConfirmed };
 }

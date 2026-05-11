@@ -104,6 +104,7 @@ export type Database = {
           updated_at: string;
           last_scraped_at: string | null;
           last_move_detection_at: string | null;
+          ads_library_context?: Json | null;
         };
         Insert: {
           id?: string;
@@ -120,6 +121,7 @@ export type Database = {
           updated_at?: string;
           last_scraped_at?: string | null;
           last_move_detection_at?: string | null;
+          ads_library_context?: Json | null;
         };
         Update: {
           id?: string;
@@ -136,6 +138,7 @@ export type Database = {
           updated_at?: string;
           last_scraped_at?: string | null;
           last_move_detection_at?: string | null;
+          ads_library_context?: Json | null;
         };
         Relationships: [];
       };
@@ -226,6 +229,7 @@ export type Database = {
           user_id: string;
           competitor_id: string;
           platform: string;
+          stable_ad_key: string;
           ad_text: string;
           ad_creative_url: string | null;
           format: string;
@@ -246,6 +250,7 @@ export type Database = {
           user_id: string;
           competitor_id: string;
           platform: string;
+          stable_ad_key: string;
           ad_text: string;
           ad_creative_url?: string | null;
           format: string;
@@ -266,6 +271,7 @@ export type Database = {
           user_id?: string;
           competitor_id?: string;
           platform?: string;
+          stable_ad_key?: string;
           ad_text?: string;
           ad_creative_url?: string | null;
           format?: string;

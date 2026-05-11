@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
 import type { Database, Json } from "@/lib/supabase/types";
 
 type ScrapedAdInsert = Database["public"]["Tables"]["scraped_ads"]["Insert"];
@@ -163,8 +164,9 @@ export function countLibraryAdsForPlatform(platform: AdsLibraryPlatform, out: Ad
 }
 
 /**
- * Platforms to sync into `scraped_ads`: always those freshly scraped (so zero-ad runs clear rows),
- * plus cache-served platforms that have creatives in `out` but no rows in `scraped_ads` yet.
+ * Platforms to sync into `scraped_ads`: freshly scraped successes (including merges that retain
+ * prior creatives when a run returns zero rows), plus cache-served platforms that have creatives in
+ * `out` but no rows in `scraped_ads` yet. Upserts use stable_ad_key (no wholesale delete).
  */
 export async function computePlatformsToPersist(
   supabase: SupabaseClient<Database>,
@@ -222,6 +224,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return (out.meta.ads ?? []).map((ad) => ({
         ...base,
         platform: "meta",
+        stable_ad_key: stableAdKeyForLibraryItem("meta", ad),
         ad_text: joinedText([ad.desc, ad.headline, ad.linkDescription, ad.cta]),
         ad_creative_url: ad.img?.trim() || ad.videoUrl?.trim() || null,
         format: ad.isVideo ? "video" : "image",
@@ -240,6 +243,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           rows.push({
             ...base,
             platform: "google",
+            stable_ad_key: stableAdKeyForGoogleRow(row),
             ad_text: joinedText([
               row.title,
               row.creativeCopy,
@@ -261,6 +265,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           rows.push({
             ...base,
             platform: "youtube",
+            stable_ad_key: stableAdKeyForGoogleRow(row),
             ad_text: joinedText([row.title, row.channel, row.views]),
             ad_creative_url: row.thumbnail?.trim() || null,
             format: "video",
@@ -280,6 +285,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return (out.linkedin.ads ?? []).map((ad) => ({
         ...base,
         platform: "linkedin",
+        stable_ad_key: stableAdKeyForLibraryItem("linkedin", ad),
         ad_text: joinedText([ad.headline, ad.desc]),
         ad_creative_url: ad.img?.trim() || null,
         format: ad.videoUrl ? "video" : "image",
@@ -295,6 +301,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return (out.tiktok.ads ?? []).map((ad) => ({
         ...base,
         platform: "tiktok",
+        stable_ad_key: stableAdKeyForLibraryItem("tiktok", ad),
         ad_text: joinedText([ad.headline, ad.desc]),
         ad_creative_url: ad.img?.trim() || null,
         format: "video",
@@ -310,6 +317,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return (out.microsoft.ads ?? []).map((ad) => ({
         ...base,
         platform: "microsoft",
+        stable_ad_key: stableAdKeyForLibraryItem("microsoft", ad),
         ad_text: joinedText([ad.headline, ad.desc]),
         ad_creative_url: ad.img?.trim() || null,
         format: ad.img?.trim() ? "image" : "text",
@@ -325,6 +333,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return (out.pinterest.ads ?? []).map((ad) => ({
         ...base,
         platform: "pinterest",
+        stable_ad_key: stableAdKeyForLibraryItem("pinterest", ad),
         ad_text: joinedText([ad.headline, ad.desc]),
         ad_creative_url: ad.img?.trim() || null,
         format: ad.videoUrl ? "video" : "image",
@@ -340,6 +349,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return (out.snapchat.ads ?? []).map((ad) => ({
         ...base,
         platform: "snapchat",
+        stable_ad_key: stableAdKeyForLibraryItem("snapchat", ad),
         ad_text: joinedText([ad.headline, ad.desc]),
         ad_creative_url: ad.img?.trim() || null,
         format: ad.videoUrl ? "video" : "image",
@@ -356,9 +366,57 @@ export function buildScrapedAdInsertsForPlatform(params: {
   }
 }
 
+async function mergeFirstLastSeenFromExisting(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  competitorId: string,
+  inserts: ScrapedAdInsert[]
+): Promise<void> {
+  const byPl = new Map<string, ScrapedAdInsert[]>();
+  for (const ins of inserts) {
+    const pl = ins.platform;
+    if (!byPl.has(pl)) byPl.set(pl, []);
+    byPl.get(pl)!.push(ins);
+  }
+
+  const chunkSize = 100;
+  for (const [pl, rows] of byPl) {
+    const keys = [...new Set(rows.map((r) => r.stable_ad_key).filter(Boolean) as string[])];
+    const prior = new Map<string, { first: string; last: string }>();
+    for (let i = 0; i < keys.length; i += chunkSize) {
+      const chunk = keys.slice(i, i + chunkSize);
+      const { data } = await supabase
+        .from("scraped_ads")
+        .select("stable_ad_key, first_seen_at, last_seen_at")
+        .eq("user_id", userId)
+        .eq("competitor_id", competitorId)
+        .eq("platform", pl)
+        .in("stable_ad_key", chunk);
+      for (const r of data ?? []) {
+        if (r.stable_ad_key)
+          prior.set(r.stable_ad_key, { first: r.first_seen_at, last: r.last_seen_at });
+      }
+    }
+    for (const ins of rows) {
+      const p = prior.get(ins.stable_ad_key ?? "");
+      if (!p) continue;
+      const iFirst = Date.parse(ins.first_seen_at);
+      const pFirst = Date.parse(p.first);
+      const iLast = Date.parse(ins.last_seen_at);
+      const pLast = Date.parse(p.last);
+      if (!Number.isNaN(pFirst) && !Number.isNaN(iFirst)) {
+        ins.first_seen_at = new Date(Math.min(iFirst, pFirst)).toISOString();
+      }
+      if (!Number.isNaN(pLast) && !Number.isNaN(iLast)) {
+        ins.last_seen_at = new Date(Math.max(iLast, pLast)).toISOString();
+      }
+    }
+  }
+}
+
 /**
  * Writes row-level creatives to `scraped_ads` for the given platforms (fresh scrapes and/or
- * cache backfill). Replaces prior rows for the same competitor + platform keys.
+ * cache backfill). Upserts on `(user_id, competitor_id, platform, stable_ad_key)`.
  */
 export async function persistScrapedAdsFromAdsLibraryResponse(
   supabase: SupabaseClient<Database>,
@@ -399,20 +457,6 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
   const batchId = batchRow.id;
 
   for (const platform of toPersist) {
-    const dbKeys = DB_PLATFORMS_FOR_LIBRARY_PLATFORM[platform];
-    for (const dbPlatform of dbKeys) {
-      const { error: delErr } = await supabase
-        .from("scraped_ads")
-        .delete()
-        .eq("user_id", userId)
-        .eq("competitor_id", competitorId)
-        .eq("platform", dbPlatform);
-      if (delErr) {
-        console.error("[persistScrapedAds] scraped_ads delete", delErr);
-        return;
-      }
-    }
-
     const inserts = buildScrapedAdInsertsForPlatform({
       platform,
       out,
@@ -421,14 +465,20 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
       batchId,
       nowIso,
     });
+    if (inserts.length === 0) continue;
+
     const launchExtracted = inserts.filter((r) => r.ai_extracted_launch_date != null).length;
     console.log("[persist] launch dates extracted=", launchExtracted, "/", inserts.length);
+
+    await mergeFirstLastSeenFromExisting(supabase, userId, competitorId, inserts);
     const chunkSize = 75;
     for (let offset = 0; offset < inserts.length; offset += chunkSize) {
       const slice = inserts.slice(offset, offset + chunkSize);
-      const { error: insErr } = await supabase.from("scraped_ads").insert(slice);
-      if (insErr) {
-        console.error("[persistScrapedAds] scraped_ads insert", insErr);
+      const { error: upsertErr } = await supabase.from("scraped_ads").upsert(slice, {
+        onConflict: "user_id,competitor_id,platform,stable_ad_key",
+      });
+      if (upsertErr) {
+        console.error("[persistScrapedAds] scraped_ads upsert", upsertErr);
         return;
       }
     }

@@ -281,6 +281,7 @@ function buildAdRow(params: {
     user_id: userId,
     competitor_id: competitorId,
     platform,
+    stable_ad_key: `seed:${platform}:${globalIndex}`,
     ad_text: adText,
     ad_creative_url: adCreativeUrl,
     format,

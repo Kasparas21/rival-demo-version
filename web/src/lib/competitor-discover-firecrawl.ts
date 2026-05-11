@@ -28,6 +28,42 @@ import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-li
 
 export const DISCOVER_FIRECRAWL_TIMEOUT_MS = 55_000;
 
+/**
+ * Omit auto-filled ad-library URLs/IDs from API responses — Meta/Google/LinkedIn library links with
+ * IDs are wrong too often; TikTok/Snapchat/Pinterest are filled from {@link buildRecommendedKeywords} only.
+ */
+const PUBLIC_DISCOVER_STRIP_KEYS: (keyof PlatformIdentifier)[] = [
+  "meta",
+  "metaPageUrl",
+  "google",
+  "linkedin",
+  "tiktok",
+  "pinterest",
+  "snapchat",
+  "pinterestAdvertiserName",
+];
+
+export function stripPublicDiscoverSuggestions(
+  ids: Partial<PlatformIdentifier>
+): Partial<PlatformIdentifier> {
+  const out = { ...ids };
+  for (const k of PUBLIC_DISCOVER_STRIP_KEYS) {
+    delete out[k];
+  }
+  return out;
+}
+
+export function stripDiscoverFieldUiMetadata<T extends Partial<Record<ChannelId, unknown>>>(
+  row: T | undefined
+): T | undefined {
+  if (!row) return row;
+  const out = { ...row } as T;
+  for (const k of ["meta", "google", "linkedin", "tiktok", "pinterest", "snapchat"] as ChannelId[]) {
+    delete (out as Record<string, unknown>)[k];
+  }
+  return out;
+}
+
 /** Pull footer/header socials that only appear as raw `<a href>`. Matches onboarding homepage scrape. */
 function extractHrefUrlsFromHtml(html: string | undefined): string[] {
   if (!html?.trim()) return [];

@@ -50,6 +50,15 @@ import {
 import { BrandLogoThumb } from "@/components/brand-logo-thumb";
 import { META_ADS_INLINE_PREVIEW } from "@/lib/ad-library/constants";
 import {
+  DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE,
+  googleAdRowHasDashboardInlinePreview,
+  linkedInAdHasDashboardInlinePreview,
+  metaAdHasDashboardInlinePreview,
+  pinterestAdHasDashboardInlinePreview,
+  snapchatAdHasDashboardInlinePreview,
+  tikTokAdHasDashboardInlinePreview,
+} from "@/lib/ad-library/dashboard-inline-preview";
+import {
   canonicalLinkedInAdLibraryUrl,
   canonicalMetaAdsLibraryUrl,
 } from "@/lib/ad-library/canonical-library-url";
@@ -58,13 +67,10 @@ import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-lib
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
   extractYouTubeVideoId,
-  googleAdRowPreviewLikelihood,
   googleAdsExternalLinkLabel,
   isUsableGoogleStillImagePreviewUrl,
   youtubePosterCandidateUrls,
   youtubeThumbnailFromUrl,
-  sortSnapchatAdsForResponse,
-  sortTikTokAdsForResponse,
   type GoogleAdRow,
   type LinkedInAdCard,
 } from "@/lib/ad-library/normalize";
@@ -97,8 +103,12 @@ import {
   readScrapeRequestFieldsFromStorage,
 } from "@/lib/ad-library/scrape-request-fields";
 import { ComparisonPage } from "@/components/comparison/comparison-page";
-import { fetchSavedCompetitorsFromAccount, saveCompetitorToAccount } from "@/lib/account/client";
-import type { SavedCompetitorPayload } from "@/lib/account/types";
+import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
+import {
+  fetchSavedCompetitorsFromAccount,
+  saveCompetitorToAccount,
+  sidebarCompetitorToAccountPayload,
+} from "@/lib/account/client";
 import type { CompetitorPageBrand } from "@/lib/competitor-view-resolve";
 import type { MarketingImprovementLlmResult } from "@/lib/workspace/run-marketing-improvement-llm";
 import {
@@ -1468,13 +1478,7 @@ function CompetitorDashboardBody({
     const hoisted = hoistLogoOntoRow(row);
     const upsert = upsertSidebarCompetitor(hoisted);
     if (!upsert.ok) return;
-    const acct: SavedCompetitorPayload = {
-      slug: hoisted.slug,
-      name: hoisted.name,
-      logoUrl: hoisted.logoUrl,
-      brand: hoisted.brand,
-      pending: false,
-    };
+    const acct = sidebarCompetitorToAccountPayload(hoisted);
     const accountKey = JSON.stringify({
       slug: acct.slug,
       name: acct.name,
@@ -1482,6 +1486,7 @@ function CompetitorDashboardBody({
       brandDomain: acct.brand?.domain ?? null,
       brandName: acct.brand?.name ?? null,
       brandLogoUrl: acct.brand?.logoUrl ?? null,
+      adsLibraryContext: acct.adsLibraryContext ?? null,
     });
     if (lastSavedCompetitorToAccountKeyRef.current === accountKey) return;
     lastSavedCompetitorToAccountKeyRef.current = accountKey;
@@ -1508,7 +1513,6 @@ function CompetitorDashboardBody({
     snapchatRefreshing,
     fetchError: adLibFetchError,
     configured: adsApiConfigured,
-    refresh: refreshAdLibrary,
     refreshGoogleAds,
     refreshMetaAds,
     refreshTikTokAds,
@@ -1718,52 +1722,63 @@ function CompetitorDashboardBody({
   const pinterestAds = useMemo(() => adLib?.pinterest?.ads ?? [], [adLib?.pinterest?.ads]);
   const snapchatAds = useMemo(() => adLib?.snapchat?.ads ?? [], [adLib?.snapchat?.ads]);
   const filteredMetaAds = useMemo(() => {
-    const sorted = [...metaAds].sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
     const seen = new Set<string>();
-    return sorted.filter((ad) => {
+    return metaAds.filter((ad) => {
       if (seen.has(ad.id)) return false;
       seen.add(ad.id);
       return true;
     });
   }, [metaAds]);
-  const filteredGoogleRows = useMemo(() => {
-    return [...googleRows].sort((a, b) => {
-      const d = googleAdRowPreviewLikelihood(b) - googleAdRowPreviewLikelihood(a);
-      if (d !== 0) return d;
-      return String(b.id).localeCompare(String(a.id));
-    });
-  }, [googleRows]);
-  const filteredLinkedInAds = useMemo(() => {
-    return [...linkedinAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
-  }, [linkedinAds]);
-  const filteredTikTokAds = useMemo(() => sortTikTokAdsForResponse(tiktokAds), [tiktokAds]);
-  const filteredPinterestAds = useMemo(() => {
-    return [...pinterestAds].sort((a, b) => String(b.id).localeCompare(String(a.id)));
-  }, [pinterestAds]);
-  const filteredSnapchatAds = useMemo(
-    () => sortSnapchatAdsForResponse(snapchatAds),
-    [snapchatAds]
+  const filteredGoogleRows = googleRows;
+  const filteredLinkedInAds = linkedinAds;
+  const filteredTikTokAds = tiktokAds;
+  const filteredPinterestAds = pinterestAds;
+  const filteredSnapchatAds = snapchatAds;
+
+  const inlinePreviewMetaAds = useMemo(
+    () => filteredMetaAds.filter(metaAdHasDashboardInlinePreview),
+    [filteredMetaAds]
+  );
+  const inlinePreviewGoogleRows = useMemo(
+    () => filteredGoogleRows.filter(googleAdRowHasDashboardInlinePreview),
+    [filteredGoogleRows]
+  );
+  const inlinePreviewLinkedInAds = useMemo(
+    () => filteredLinkedInAds.filter(linkedInAdHasDashboardInlinePreview),
+    [filteredLinkedInAds]
+  );
+  const inlinePreviewTikTokAds = useMemo(
+    () => filteredTikTokAds.filter(tikTokAdHasDashboardInlinePreview),
+    [filteredTikTokAds]
+  );
+  const inlinePreviewPinterestAds = useMemo(
+    () => filteredPinterestAds.filter(pinterestAdHasDashboardInlinePreview),
+    [filteredPinterestAds]
+  );
+  const inlinePreviewSnapchatAds = useMemo(
+    () => filteredSnapchatAds.filter(snapchatAdHasDashboardInlinePreview),
+    [filteredSnapchatAds]
   );
 
-  /** Avoid platform skeletons while `adLibLoading` stays true — e.g. Google already hydrated from cache but Meta still scraping. */
+  /** Skeleton grid only when there are no creatives yet; platform-only refresh keeps existing cards — spinner is on the refresh button. */
   const metaSectionBusy = useMemo(
     () =>
       fetchMeta &&
-      (metaRefreshing ||
+      ((metaRefreshing && filteredMetaAds.length === 0) ||
         (adLibLoading && filteredMetaAds.length === 0 && adLib?.meta?.error == null)),
     [fetchMeta, metaRefreshing, adLibLoading, filteredMetaAds.length, adLib?.meta?.error]
   );
   const googleSectionBusy = useMemo(
     () =>
       fetchGoogle &&
-      (googleRefreshing ||
+      ((googleRefreshing && filteredGoogleRows.length === 0) ||
         (adLibLoading && filteredGoogleRows.length === 0 && adLib?.google?.error == null)),
     [fetchGoogle, googleRefreshing, adLibLoading, filteredGoogleRows.length, adLib?.google?.error]
   );
   const linkedinSectionBusy = useMemo(
     () =>
       fetchLinkedIn &&
-      (linkedinRefreshing ||
+      ((linkedinRefreshing && filteredLinkedInAds.length === 0) ||
         (adLibLoading && filteredLinkedInAds.length === 0 && adLib?.linkedin?.error == null)),
     [
       fetchLinkedIn,
@@ -1776,14 +1791,14 @@ function CompetitorDashboardBody({
   const tiktokSectionBusy = useMemo(
     () =>
       fetchTikTok &&
-      (tiktokRefreshing ||
+      ((tiktokRefreshing && filteredTikTokAds.length === 0) ||
         (adLibLoading && filteredTikTokAds.length === 0 && adLib?.tiktok?.error == null)),
     [fetchTikTok, tiktokRefreshing, adLibLoading, filteredTikTokAds.length, adLib?.tiktok?.error]
   );
   const pinterestSectionBusy = useMemo(
     () =>
       fetchPinterest &&
-      (pinterestRefreshing ||
+      ((pinterestRefreshing && filteredPinterestAds.length === 0) ||
         (adLibLoading && filteredPinterestAds.length === 0 && adLib?.pinterest?.error == null)),
     [
       fetchPinterest,
@@ -1796,7 +1811,7 @@ function CompetitorDashboardBody({
   const snapchatSectionBusy = useMemo(
     () =>
       fetchSnapchat &&
-      (snapchatRefreshing ||
+      ((snapchatRefreshing && filteredSnapchatAds.length === 0) ||
         (adLibLoading && filteredSnapchatAds.length === 0 && adLib?.snapchat?.error == null)),
     [
       fetchSnapchat,
@@ -2238,7 +2253,8 @@ function CompetitorDashboardBody({
             {isConfirmed && adsPlatforms.length > 0 && adsApiConfigured && !adLibFetchError && !adLibLoading && adLib === null ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-[14px] text-slate-800">
                 <span className="font-semibold">No saved ads for this competitor yet. </span>
-                Click a platform&apos;s <strong className="font-semibold">Refresh … only</strong> button below to run Apify and load ads (uses credits).
+                Click a platform&apos;s <strong className="font-semibold">Refresh … only</strong> button below to run
+                Apify and load ads (uses credits).
               </div>
             ) : null}
 
@@ -2298,7 +2314,7 @@ function CompetitorDashboardBody({
                       className={platformRefreshOnlyButtonClass}
                       title="Re-fetch Meta only (bypasses cache). Other platforms unchanged."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${metaRefreshing ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`h-4 w-4 shrink-0 ${metaRefreshing ? "motion-safe:animate-spin" : ""}`} />
                       Refresh Meta only
                     </button>
                   </div>
@@ -2330,9 +2346,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredMetaAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No active Meta ads loaded yet. Try Refresh Meta only below." />
+                  ) : inlinePreviewMetaAds.length === 0 ? (
+                    <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {filteredMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <MetaAdCard key={ad.id} ad={ad} viewMode="grid" brand={brand} />
                       ))}
                     </div>
@@ -2403,7 +2421,7 @@ function CompetitorDashboardBody({
                       className={platformRefreshOnlyButtonClass}
                       title="Re-fetch Google / YouTube only (bypasses cache). Other platforms unchanged."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${googleRefreshing ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`h-4 w-4 shrink-0 ${googleRefreshing ? "motion-safe:animate-spin" : ""}`} />
                       Refresh Google only
                     </button>
                   </div>
@@ -2424,9 +2442,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredGoogleRows.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No Google ads returned for this domain. Confirm the website domain from discovery." />
+                  ) : inlinePreviewGoogleRows.length === 0 ? (
+                    <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {filteredGoogleRows.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewGoogleRows.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <GoogleAdRowCard key={ad.id} ad={ad} brand={brand} />
                       ))}
                     </div>
@@ -2498,7 +2518,7 @@ function CompetitorDashboardBody({
                       className={platformRefreshOnlyButtonClass}
                       title="Re-fetch LinkedIn only (bypasses cache). Other platforms unchanged."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${linkedinRefreshing ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`h-4 w-4 shrink-0 ${linkedinRefreshing ? "motion-safe:animate-spin" : ""}`} />
                       Refresh LinkedIn only
                     </button>
                   </div>
@@ -2525,9 +2545,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredLinkedInAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No LinkedIn ads returned. Add a LinkedIn company URL in discovery or try refreshing." />
+                  ) : inlinePreviewLinkedInAds.length === 0 ? (
+                    <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {filteredLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <LinkedInFeedAdCard key={ad.id} ad={ad} brand={brand} />
                       ))}
                     </div>
@@ -2594,7 +2616,7 @@ function CompetitorDashboardBody({
                       className={platformRefreshOnlyButtonClass}
                       title="Re-fetch TikTok only (bypasses cache). Other platforms unchanged."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${tiktokRefreshing ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`h-4 w-4 shrink-0 ${tiktokRefreshing ? "motion-safe:animate-spin" : ""}`} />
                       Refresh TikTok only
                     </button>
                   </div>
@@ -2621,9 +2643,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredTikTokAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No TikTok ads returned. The search uses your brand name as the advertiser query on TikTok Ads Library." />
+                  ) : inlinePreviewTikTokAds.length === 0 ? (
+                    <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {filteredTikTokAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewTikTokAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <TikTokAdCard key={ad.id} ad={ad} />
                       ))}
                     </div>
@@ -2690,7 +2714,7 @@ function CompetitorDashboardBody({
                       className={platformRefreshOnlyButtonClass}
                       title="Re-fetch Pinterest only (bypasses cache). Other platforms unchanged."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${pinterestRefreshing ? "animate-spin" : ""}`} />
+                      <RefreshCw className={`h-4 w-4 shrink-0 ${pinterestRefreshing ? "motion-safe:animate-spin" : ""}`} />
                       Refresh Pinterest only
                     </button>
                   </div>
@@ -2727,9 +2751,11 @@ function CompetitorDashboardBody({
                         </>
                       }
                     />
+                  ) : inlinePreviewPinterestAds.length === 0 ? (
+                    <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {filteredPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <PinterestAdCard key={ad.id} ad={ad} />
                       ))}
                     </div>
@@ -2804,7 +2830,7 @@ function CompetitorDashboardBody({
                         title="Re-fetch Snapchat only (bypasses cache)."
                       >
                         <RefreshCw
-                          className={`h-4 w-4 shrink-0 ${snapchatRefreshing ? "animate-spin" : ""}`}
+                          className={`h-4 w-4 shrink-0 ${snapchatRefreshing ? "motion-safe:animate-spin" : ""}`}
                           aria-hidden
                         />
                         Refresh Snapchat only
@@ -2826,9 +2852,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredSnapchatAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="Nothing turned up for this combination. Pick another EU market, adjust the date range in your scrape settings, and try Refresh." />
+                  ) : inlinePreviewSnapchatAds.length === 0 ? (
+                    <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {filteredSnapchatAds
+                      {inlinePreviewSnapchatAds
                         .slice(0, META_ADS_INLINE_PREVIEW)
                         .map((ad) => (
                           <SnapchatAdCard key={ad.id} ad={ad} />

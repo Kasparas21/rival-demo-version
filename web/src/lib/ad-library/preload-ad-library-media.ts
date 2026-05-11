@@ -1,6 +1,14 @@
 import type { AdsLibraryResponse } from "./api-types";
 import { META_ADS_INLINE_PREVIEW } from "./constants";
-import { sortSnapchatAdsForResponse, sortTikTokAdsForResponse } from "./normalize";
+import {
+  googleAdRowHasDashboardInlinePreview,
+  linkedInAdHasDashboardInlinePreview,
+  metaAdHasDashboardInlinePreview,
+  microsoftAdHasDashboardInlinePreview,
+  pinterestAdHasDashboardInlinePreview,
+  snapchatAdHasDashboardInlinePreview,
+  tikTokAdHasDashboardInlinePreview,
+} from "./dashboard-inline-preview";
 
 const DEFAULT_MAX_URLS = 48;
 
@@ -23,12 +31,12 @@ export function collectAdsLibraryWarmupUrls(
   const max = opts?.maxUrls ?? DEFAULT_MAX_URLS;
   const urls = new Set<string>();
 
-  for (const ad of full.meta.ads.slice(0, per)) {
+  for (const ad of full.meta.ads.filter(metaAdHasDashboardInlinePreview).slice(0, per)) {
     pushHttpUrl(urls, ad.img);
     pushHttpUrl(urls, ad.pageProfilePic);
   }
 
-  for (const row of full.google.rows.slice(0, per)) {
+  for (const row of full.google.rows.filter(googleAdRowHasDashboardInlinePreview).slice(0, per)) {
     if (row.type === "google") {
       pushHttpUrl(urls, row.previewUrl ?? row.img);
     } else {
@@ -36,26 +44,24 @@ export function collectAdsLibraryWarmupUrls(
     }
   }
 
-  for (const ad of full.linkedin.ads.slice(0, per)) {
+  for (const ad of full.linkedin.ads.filter(linkedInAdHasDashboardInlinePreview).slice(0, per)) {
     pushHttpUrl(urls, ad.img);
     pushHttpUrl(urls, ad.advertiserLogoUrl);
   }
 
-  const ttWarm = sortTikTokAdsForResponse(full.tiktok.ads);
-  for (const ad of ttWarm.slice(0, per)) {
+  for (const ad of full.tiktok.ads.filter(tikTokAdHasDashboardInlinePreview).slice(0, per)) {
     pushHttpUrl(urls, ad.img);
   }
 
-  for (const ad of full.microsoft.ads.slice(0, per)) {
+  for (const ad of full.microsoft.ads.filter(microsoftAdHasDashboardInlinePreview).slice(0, per)) {
     pushHttpUrl(urls, ad.img);
   }
 
-  for (const ad of full.pinterest.ads.slice(0, per)) {
+  for (const ad of full.pinterest.ads.filter(pinterestAdHasDashboardInlinePreview).slice(0, per)) {
     pushHttpUrl(urls, ad.img);
   }
 
-  const snapWarm = sortSnapchatAdsForResponse(full.snapchat.ads);
-  for (const ad of snapWarm.slice(0, per)) {
+  for (const ad of full.snapchat.ads.filter(snapchatAdHasDashboardInlinePreview).slice(0, per)) {
     pushHttpUrl(urls, ad.img);
     pushHttpUrl(urls, ad.videoUrl);
   }

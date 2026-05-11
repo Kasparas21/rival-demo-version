@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   coerceAdsLibraryResponse,
   mergeAdsLibraryState,
@@ -78,6 +78,12 @@ export function useAdLibrary(
 
   const sessionRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
+  /** Mirrors latest `data` so merges after `await fetch` use the correct prior state (functional `setData` + session write were racing React 18 batching). */
+  const dataRef = useRef<AdsLibraryResponse | null>(null);
+
+  useLayoutEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   /**
    * Must match `/dashboard/searching` + `channelsQueryToAdsPlatforms`: canonical API order inside
@@ -211,20 +217,12 @@ export function useAdLibrary(
         });
         if (loadAbortRef.current !== ac) return;
 
-        let mergedState: AdsLibraryResponse | null = null;
-        setData((prev) => {
-          const merged = mergeAdsLibraryState(prev, json, {
-            trustIncomingEmpty: opts?.skipCache === true,
-          });
-          mergedState = merged;
-          return merged;
+        const merged = mergeAdsLibraryState(dataRef.current, json);
+        setData(merged);
+        writeAdsLibrarySessionCache(payloadKey, {
+          response: coerceAdsLibraryResponse(merged),
+          httpOk,
         });
-        if (mergedState) {
-          writeAdsLibrarySessionCache(payloadKey, {
-            response: coerceAdsLibraryResponse(mergedState),
-            httpOk,
-          });
-        }
         if (!httpOk && "error" in json && json.error) {
           setFetchError(json.error);
         } else if (!httpOk) {

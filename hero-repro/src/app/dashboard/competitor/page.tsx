@@ -85,6 +85,15 @@ import {
   type MicrosoftAdCard,
   type PinterestAdCard,
 } from "@/lib/ad-library/normalize";
+import {
+  DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE,
+  googleAdRowHasDashboardInlinePreview,
+  linkedInAdHasDashboardInlinePreview,
+  metaAdHasDashboardInlinePreview,
+  microsoftAdHasDashboardInlinePreview,
+  pinterestAdHasDashboardInlinePreview,
+  tikTokAdHasDashboardInlinePreview,
+} from "@/lib/ad-library/dashboard-inline-preview";
 import { fetchSavedCompetitorsFromAccount } from "@/lib/account/client";
 import {
   loadSidebarCompetitors,
@@ -894,7 +903,7 @@ function CompetitorContent() {
       if (sortBy === "platform") {
         return a.pageName.localeCompare(b.pageName);
       }
-      return (b.startedAt ?? 0) - (a.startedAt ?? 0);
+      return 0;
     });
   }, [metaAds, normalizedSearch, sortBy]);
   const filteredGoogleRows = useMemo(() => {
@@ -906,7 +915,7 @@ function CompetitorContent() {
       : googleRows;
     return [...out].sort((a, b) => {
       if (sortBy === "platform") return a.type.localeCompare(b.type);
-      return String(b.id).localeCompare(String(a.id));
+      return 0;
     });
   }, [googleRows, normalizedSearch, sortBy]);
   const filteredLinkedInAds = useMemo(() => {
@@ -918,7 +927,7 @@ function CompetitorContent() {
       : linkedinAds;
     return [...out].sort((a, b) => {
       if (sortBy === "platform") return a.advertiser.localeCompare(b.advertiser);
-      return String(b.id).localeCompare(String(a.id));
+      return 0;
     });
   }, [linkedinAds, normalizedSearch, sortBy]);
   const filteredTikTokAds = useMemo(() => {
@@ -930,7 +939,7 @@ function CompetitorContent() {
       : tiktokAds;
     return [...out].sort((a, b) => {
       if (sortBy === "platform") return a.advertiser.localeCompare(b.advertiser);
-      return String(b.id).localeCompare(String(a.id));
+      return 0;
     });
   }, [tiktokAds, normalizedSearch, sortBy]);
   const filteredMicrosoftAds = useMemo(() => {
@@ -942,7 +951,7 @@ function CompetitorContent() {
       : microsoftAds;
     return [...out].sort((a, b) => {
       if (sortBy === "platform") return a.advertiser.localeCompare(b.advertiser);
-      return String(b.id).localeCompare(String(a.id));
+      return 0;
     });
   }, [microsoftAds, normalizedSearch, sortBy]);
   const filteredPinterestAds = useMemo(() => {
@@ -954,9 +963,34 @@ function CompetitorContent() {
       : pinterestAds;
     return [...out].sort((a, b) => {
       if (sortBy === "platform") return a.advertiser.localeCompare(b.advertiser);
-      return String(b.id).localeCompare(String(a.id));
+      return 0;
     });
   }, [pinterestAds, normalizedSearch, sortBy]);
+
+  const inlinePreviewMetaAds = useMemo(
+    () => filteredMetaAds.filter(metaAdHasDashboardInlinePreview),
+    [filteredMetaAds]
+  );
+  const inlinePreviewGoogleRows = useMemo(
+    () => filteredGoogleRows.filter(googleAdRowHasDashboardInlinePreview),
+    [filteredGoogleRows]
+  );
+  const inlinePreviewLinkedInAds = useMemo(
+    () => filteredLinkedInAds.filter(linkedInAdHasDashboardInlinePreview),
+    [filteredLinkedInAds]
+  );
+  const inlinePreviewTikTokAds = useMemo(
+    () => filteredTikTokAds.filter(tikTokAdHasDashboardInlinePreview),
+    [filteredTikTokAds]
+  );
+  const inlinePreviewMicrosoftAds = useMemo(
+    () => filteredMicrosoftAds.filter(microsoftAdHasDashboardInlinePreview),
+    [filteredMicrosoftAds]
+  );
+  const inlinePreviewPinterestAds = useMemo(
+    () => filteredPinterestAds.filter(pinterestAdHasDashboardInlinePreview),
+    [filteredPinterestAds]
+  );
 
   /** Platforms with more scraped ads render first; unconnected placeholders stay below this block. */
   const platformOrder = useMemo(() => {
@@ -1375,8 +1409,10 @@ function CompetitorContent() {
                   <p className="text-[14px] text-[#6b7280] col-span-full py-6">
                     No Meta ads matched your filters. Try changing search or sort, or run a fresh scrape.
                   </p>
+                ) : inlinePreviewMetaAds.length === 0 ? (
+                  <p className="text-[14px] text-[#6b7280] col-span-full py-6">{DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE}</p>
                 ) : (
-                  filteredMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  inlinePreviewMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                     <MetaAdCard key={ad.id} ad={ad} viewMode={viewMode} brand={brand} />
                   ))
                 )}
@@ -1533,8 +1569,10 @@ function CompetitorContent() {
                   <p className="text-[14px] text-[#6b7280] col-span-full py-6">
                     No Google ads returned for this domain. Confirm the website domain from discovery.
                   </p>
+                ) : inlinePreviewGoogleRows.length === 0 ? (
+                  <p className="text-[14px] text-[#6b7280] col-span-full py-6">{DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE}</p>
                 ) : (
-                  filteredGoogleRows.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  inlinePreviewGoogleRows.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                     <GoogleAdRowCard key={ad.id} ad={ad} brand={brand} />
                   ))
                 )}
@@ -1707,8 +1745,10 @@ function CompetitorContent() {
                   <p className="text-[14px] text-[#6b7280] col-span-full py-6">
                     No LinkedIn ads returned. Add a LinkedIn company URL in discovery or try refreshing.
                   </p>
+                ) : inlinePreviewLinkedInAds.length === 0 ? (
+                  <p className="text-[14px] text-[#6b7280] col-span-full py-6">{DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE}</p>
                 ) : (
-                  filteredLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  inlinePreviewLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                     <LinkedInFeedAdCard key={ad.id} ad={ad} brand={brand} />
                   ))
                 )}
@@ -1883,8 +1923,10 @@ function CompetitorContent() {
                   <p className="text-[14px] text-[#6b7280] col-span-full py-6">
                     No TikTok ads returned. The search uses your brand name as the advertiser query on TikTok Ads Library.
                   </p>
+                ) : inlinePreviewTikTokAds.length === 0 ? (
+                  <p className="text-[14px] text-[#6b7280] col-span-full py-6">{DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE}</p>
                 ) : (
-                  filteredTikTokAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  inlinePreviewTikTokAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                     <TikTokAdCard key={ad.id} ad={ad} />
                   ))
                 )}
@@ -2053,8 +2095,10 @@ function CompetitorContent() {
                   <p className="text-[14px] text-[#6b7280] col-span-full py-6">
                     No Microsoft Ads returned for this brand in the EEA library. Try a different spelling or confirm the advertiser runs ads in covered regions (EU/EEA).
                   </p>
+                ) : inlinePreviewMicrosoftAds.length === 0 ? (
+                  <p className="text-[14px] text-[#6b7280] col-span-full py-6">{DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE}</p>
                 ) : (
-                  filteredMicrosoftAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  inlinePreviewMicrosoftAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                     <MicrosoftFeedAdCard key={ad.id} ad={ad} brand={brand} />
                   ))
                 )}
@@ -2256,8 +2300,10 @@ function CompetitorContent() {
                     <code className="text-[12px] bg-[#f4f4f5] px-1 rounded">ids.pinterestAdvertiserName</code>
                     ). Try a larger EU market, confirm the profile URL, or paste the advertiser label from Pinterest’s transparency UI. Small regions (e.g. LT) may have fewer disclosed rows than DE/FR.
                   </p>
+                ) : inlinePreviewPinterestAds.length === 0 ? (
+                  <p className="text-[14px] text-[#6b7280] col-span-full py-6">{DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE}</p>
                 ) : (
-                  filteredPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  inlinePreviewPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                     <PinterestFeedAdCard key={ad.id} ad={ad} brand={brand} />
                   ))
                 )}

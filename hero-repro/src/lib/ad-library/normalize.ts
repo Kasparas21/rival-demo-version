@@ -4,6 +4,7 @@ import type {
   GoogleCompanyAdItem,
   LinkedInAdItem,
 } from "@/lib/ad-library/apify-raw-types";
+import { stableIdForGoogleItemRow } from "@/lib/ad-library/google-stable-id";
 
 /** Safe http(s) href for ad destination links; null if `text` is not a valid URL. */
 export function safeHttpsUrl(text: string): string | null {
@@ -73,6 +74,8 @@ export type GoogleAdRow =
       channel: string;
       views: string;
       thumbnail: string;
+      youtubeVideoId?: string | null;
+      videoUrl?: string | null;
       adUrl: string;
       format?: string;
     };
@@ -694,7 +697,7 @@ export function googleCreativeFormatLabel(format: string | undefined): string | 
 
 export function googleItemToRow(
   item: GoogleCompanyAdItem,
-  index: number,
+  _index: number,
   ctx?: GoogleRowContext
 ): GoogleAdRow {
   const queryDomain = ctx?.queryDomain?.trim() || "";
@@ -711,8 +714,6 @@ export function googleItemToRow(
     adUrl = `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(queryDomain)}`;
   }
 
-  /** Include `index` so keys stay unique when the API returns duplicate advertiser/creative pairs. */
-  const id = `${advertiserId ?? "ad"}-${creativeId ?? "cr"}-${index}`;
   const format = (item.format || "").toLowerCase();
   const fromHeadline =
     item.headline?.trim() || item.title?.trim() || item.description?.trim()?.slice(0, 120);
@@ -743,6 +744,19 @@ export function googleItemToRow(
     else if (nested && !isGoogleFaviconUrl(nested)) thumb = nested;
     else if (ytFromFields) thumb = ytFromFields;
     else thumb = youtubeThumbnailFromUrl(adUrl) || "";
+
+    const yid =
+      extractYouTubeVideoId(adUrl) ||
+      extractYouTubeVideoId(pu) ||
+      extractYouTubeVideoId(iu) ||
+      "";
+    const id = stableIdForGoogleItemRow({
+      type: "youtube",
+      advertiserId,
+      creativeId,
+      adUrl,
+      youtubeVideoId: yid || null,
+    });
 
     return {
       type: "youtube",
@@ -796,6 +810,13 @@ export function googleItemToRow(
           : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       })()
     : null;
+
+  const id = stableIdForGoogleItemRow({
+    type: "google",
+    advertiserId,
+    creativeId,
+    adUrl,
+  });
 
   return {
     type: "google",

@@ -1,10 +1,50 @@
 import { NextResponse } from "next/server";
 import { ensureUserProfile } from "@/lib/auth/profile";
-import type { SavedCompetitorPayload } from "@/lib/account/types";
+import type { AdsLibraryContextPayload, SavedCompetitorPayload } from "@/lib/account/types";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/supabase/types";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
+
+function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): Json | null {
+  const ids =
+    raw.ids && typeof raw.ids === "object" && raw.ids !== null && !Array.isArray(raw.ids)
+      ? Object.fromEntries(
+          Object.entries(raw.ids).filter(([, v]) => typeof v === "string" && v.trim() !== ""),
+        )
+      : undefined;
+  const channels = Array.isArray(raw.channels)
+    ? raw.channels.filter((c): c is string => typeof c === "string" && c.trim() !== "")
+    : undefined;
+  const confirmed = typeof raw.confirmed === "boolean" ? raw.confirmed : undefined;
+  const out: Record<string, unknown> = {};
+  if (ids && Object.keys(ids).length > 0) out.ids = ids;
+  if (channels && channels.length > 0) out.channels = channels;
+  if (confirmed !== undefined) out.confirmed = confirmed;
+  if (Object.keys(out).length === 0) return null;
+  return out as Json;
+}
+
+function rowToLibraryContext(raw: unknown): SidebarCompetitor["libraryContext"] | undefined {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const idsRaw = o.ids;
+  const channelsRaw = o.channels;
+  const confirmedRaw = o.confirmed;
+  const out: NonNullable<SidebarCompetitor["libraryContext"]> = {};
+  if (idsRaw && typeof idsRaw === "object" && !Array.isArray(idsRaw)) {
+    const entries = Object.entries(idsRaw).filter(([, v]) => typeof v === "string");
+    if (entries.length > 0) out.ids = Object.fromEntries(entries);
+  }
+  if (Array.isArray(channelsRaw)) {
+    const ch = channelsRaw.filter((c): c is string => typeof c === "string");
+    if (ch.length > 0) out.channels = ch;
+  }
+  if (typeof confirmedRaw === "boolean") out.confirmed = confirmedRaw;
+  if (out.ids || out.channels?.length || out.confirmed !== undefined) return out;
+  return undefined;
+}
 
 function normalizeCompetitor(input: SavedCompetitorPayload): SavedCompetitorPayload {
   const base: SavedCompetitorPayload = {
@@ -21,6 +61,10 @@ function normalizeCompetitor(input: SavedCompetitorPayload): SavedCompetitorPayl
           }
         : undefined,
   };
+  if (input.adsLibraryContext !== undefined) {
+    base.adsLibraryContext =
+      input.adsLibraryContext === null ? null : sanitizeAdsLibraryContext(input.adsLibraryContext) ?? null;
+  }
   if (input.isWorkspaceBrand === true) {
     return { ...base, isWorkspaceBrand: true };
   }
@@ -71,23 +115,27 @@ export async function GET() {
   const workspaceDomain = primaryBrand?.domain?.trim() || null;
 
   const competitors = (data ?? [])
-    .map((row) => ({
-    slug: row.slug,
-    name: row.name,
-    ...(row.logo_url ? { logoUrl: row.logo_url } : {}),
-    ...(row.brand_name && row.brand_domain
-      ? {
-          brand: {
-            name: row.brand_name,
-            domain: row.brand_domain,
-            ...(row.brand_logo_url ? { logoUrl: row.brand_logo_url } : {}),
-          },
-        }
-      : {}),
-    pending: row.pending,
-    ...(row.last_scraped_at ? { lastScrapedAt: row.last_scraped_at } : {}),
-    ...(row.is_workspace_brand === true ? { isWorkspaceBrand: true } : {}),
-  }))
+    .map((row) => {
+      const lc = rowToLibraryContext(row.ads_library_context);
+      return {
+        slug: row.slug,
+        name: row.name,
+        ...(row.logo_url ? { logoUrl: row.logo_url } : {}),
+        ...(row.brand_name && row.brand_domain
+          ? {
+              brand: {
+                name: row.brand_name,
+                domain: row.brand_domain,
+                ...(row.brand_logo_url ? { logoUrl: row.brand_logo_url } : {}),
+              },
+            }
+          : {}),
+        pending: row.pending,
+        ...(row.last_scraped_at ? { lastScrapedAt: row.last_scraped_at } : {}),
+        ...(row.is_workspace_brand === true ? { isWorkspaceBrand: true } : {}),
+        ...(lc ? { libraryContext: lc } : {}),
+      };
+    })
     .filter((row) => !isSidebarRowLikelyWorkspaceBrand(row as SidebarCompetitor, workspaceDomain));
 
   return NextResponse.json({ competitors });
@@ -98,6 +146,7 @@ type ExistingRowMeta = {
   logo_url: string | null;
   brand_logo_url: string | null;
   is_workspace_brand?: boolean | null;
+  ads_library_context?: Json | null;
 };
 
 type ServerSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -105,37 +154,70 @@ type ServerSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 async function fetchExistingSavedRows(
   supabase: ServerSupabase,
   userId: string
-): Promise<{ ok: true; rows: ExistingRowMeta[]; workspaceBrandColumnSupported: boolean } | { ok: false; error: string }> {
-  const withWs = await supabase
+): Promise<
+  | { ok: true; rows: ExistingRowMeta[]; workspaceBrandColumnSupported: boolean; adsLibraryContextColumnSupported: boolean }
+  | { ok: false; error: string }
+> {
+  const full = await supabase
     .from("saved_competitors")
-    .select("slug, logo_url, brand_logo_url, is_workspace_brand")
+    .select("slug, logo_url, brand_logo_url, is_workspace_brand, ads_library_context")
     .eq("user_id", userId);
 
-  if (!withWs.error) {
+  if (!full.error) {
     return {
       ok: true,
-      rows: (withWs.data ?? []) as ExistingRowMeta[],
+      rows: (full.data ?? []) as ExistingRowMeta[],
       workspaceBrandColumnSupported: true,
+      adsLibraryContextColumnSupported: true,
     };
   }
-  if (!isMissingDbColumnError(withWs.error.message, "is_workspace_brand")) {
-    return { ok: false, error: withWs.error.message };
+
+  if (isMissingDbColumnError(full.error.message, "ads_library_context")) {
+    const mid = await supabase
+      .from("saved_competitors")
+      .select("slug, logo_url, brand_logo_url, is_workspace_brand")
+      .eq("user_id", userId);
+    if (!mid.error) {
+      return {
+        ok: true,
+        rows: (mid.data ?? []).map((r) => ({ ...r, ads_library_context: null })) as ExistingRowMeta[],
+        workspaceBrandColumnSupported: true,
+        adsLibraryContextColumnSupported: false,
+      };
+    }
+    if (!isMissingDbColumnError(mid.error.message, "is_workspace_brand")) {
+      return { ok: false, error: mid.error.message };
+    }
+    const leg = await supabase.from("saved_competitors").select("slug, logo_url, brand_logo_url").eq("user_id", userId);
+    if (leg.error) return { ok: false, error: leg.error.message };
+    return {
+      ok: true,
+      rows: (leg.data ?? []).map((r) => ({
+        ...(r as ExistingRowMeta),
+        is_workspace_brand: false,
+        ads_library_context: null,
+      })),
+      workspaceBrandColumnSupported: false,
+      adsLibraryContextColumnSupported: false,
+    };
   }
 
-  const noWs = await supabase.from("saved_competitors").select("slug, logo_url, brand_logo_url").eq("user_id", userId);
-
-  if (noWs.error) {
-    return { ok: false, error: noWs.error.message };
+  if (isMissingDbColumnError(full.error.message, "is_workspace_brand")) {
+    const leg = await supabase.from("saved_competitors").select("slug, logo_url, brand_logo_url").eq("user_id", userId);
+    if (leg.error) return { ok: false, error: leg.error.message };
+    return {
+      ok: true,
+      rows: (leg.data ?? []).map((r) => ({
+        ...(r as ExistingRowMeta),
+        is_workspace_brand: false,
+        ads_library_context: null,
+      })),
+      workspaceBrandColumnSupported: false,
+      adsLibraryContextColumnSupported: false,
+    };
   }
 
-  return {
-    ok: true,
-    rows: (noWs.data ?? []).map((r) => ({
-      ...(r as ExistingRowMeta),
-      is_workspace_brand: false,
-    })),
-    workspaceBrandColumnSupported: false,
-  };
+  return { ok: false, error: full.error.message };
 }
 
 function buildUpsertRows(params: {
@@ -143,8 +225,9 @@ function buildUpsertRows(params: {
   existingRows: ExistingRowMeta[];
   userId: string;
   workspaceBrandColumnSupported: boolean;
+  adsLibraryContextColumnSupported: boolean;
 }) {
-  const { items, existingRows, userId, workspaceBrandColumnSupported } = params;
+  const { items, existingRows, userId, workspaceBrandColumnSupported, adsLibraryContextColumnSupported } = params;
 
   const existingBySlug = new Map(
     existingRows.map((r) => {
@@ -155,6 +238,7 @@ function buildUpsertRows(params: {
           logo_url: r.logo_url,
           brand_logo_url: r.brand_logo_url,
           is_workspace_brand: Boolean(r.is_workspace_brand),
+          ads_library_context: r.ads_library_context ?? null,
         },
       ] as const;
     })
@@ -171,6 +255,14 @@ function buildUpsertRows(params: {
     const is_workspace_brand =
       item.isWorkspaceBrand === true ? true : (prior?.is_workspace_brand ?? false);
 
+    let ads_library_context_val: Json | null;
+    if (item.adsLibraryContext !== undefined) {
+      ads_library_context_val =
+        item.adsLibraryContext === null ? null : sanitizeAdsLibraryContext(item.adsLibraryContext) ?? null;
+    } else {
+      ads_library_context_val = (prior?.ads_library_context as Json | null) ?? null;
+    }
+
     const base = {
       user_id: userId,
       slug,
@@ -181,6 +273,7 @@ function buildUpsertRows(params: {
       brand_logo_url,
       pending: item.pending ?? false,
       updated_at: new Date().toISOString(),
+      ...(adsLibraryContextColumnSupported ? { ads_library_context: ads_library_context_val } : {}),
     };
     return workspaceBrandColumnSupported ? { ...base, is_workspace_brand } : base;
   });
@@ -239,7 +332,8 @@ export async function POST(request: Request) {
   if (!existingResult.ok) {
     return NextResponse.json({ error: existingResult.error }, { status: 500 });
   }
-  const { rows: existingList, workspaceBrandColumnSupported } = existingResult;
+  const { rows: existingList, workspaceBrandColumnSupported, adsLibraryContextColumnSupported } =
+    existingResult;
 
   /** Watched rivals only (workspace slug does not consume a competitor slot once `is_workspace_brand` exists). */
   const slugCountIfApplied = (): number => {
@@ -287,6 +381,7 @@ export async function POST(request: Request) {
       existingRows: [],
       userId: user.id,
       workspaceBrandColumnSupported,
+      adsLibraryContextColumnSupported,
     });
     const insertRes = await supabase.from("saved_competitors").insert(rows);
     if (insertRes.error) {
@@ -306,6 +401,7 @@ export async function POST(request: Request) {
       existingRows: mergeRowsAgainst,
       userId: user.id,
       workspaceBrandColumnSupported,
+      adsLibraryContextColumnSupported,
     });
     const { error } = await supabase.from("saved_competitors").upsert(rows, {
       onConflict: "user_id,slug",

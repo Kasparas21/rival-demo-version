@@ -19,6 +19,7 @@ import {
   snapchatDatasetItemToCard,
 } from "@/lib/ad-library/normalize";
 import { ADS_CACHE_TTL_MS, CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
+import { mergeAdsCachePayloadForPlatform } from "@/lib/ad-library/ads-cache-merge";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import {
@@ -90,13 +91,28 @@ type AdsCachePickRow = {
   ads_data: unknown;
   competitor_domain: string;
   scraped_at: string;
+  expires_at?: string | null;
 };
+
+function rowExpiresStillValid(expiresAt: string | null | undefined, nowIso: string): boolean {
+  if (expiresAt == null || String(expiresAt).trim() === "") return false;
+  const ex = Date.parse(String(expiresAt));
+  const now = Date.parse(nowIso);
+  if (Number.isNaN(ex) || Number.isNaN(now)) return false;
+  return ex > now;
+}
 
 /**
  * `readDomains` can return multiple DB keys (slug vs registrable domain). Without ordering, PostgREST may
  * return two rows per platform; the last iterated row used to win arbitrarily (sometimes an empty stale row).
+ * Prefers cache rows whose `expires_at` is still in the future; otherwise falls back to latest `scraped_at`
+ * so expired-but-present snapshots still hydrate the UI without forcing Apify.
  */
-function pickBestAdsCacheHitsByPlatform(rows: AdsCachePickRow[], preferredDomain: string): Map<CacheablePlatform, unknown> {
+function pickBestAdsCacheHitsByPlatform(
+  rows: AdsCachePickRow[],
+  preferredDomain: string,
+  nowIso: string
+): Map<CacheablePlatform, unknown> {
   const pref = preferredDomain.trim().toLowerCase();
   const bestRow = new Map<CacheablePlatform, AdsCachePickRow>();
   for (const row of rows) {
@@ -121,6 +137,13 @@ function pickBestAdsCacheHitsByPlatform(rows: AdsCachePickRow[], preferredDomain
       continue;
     }
     if (!rPref && pPref) continue;
+    const rFresh = rowExpiresStillValid(row.expires_at ?? null, nowIso);
+    const pFresh = rowExpiresStillValid(prev.expires_at ?? null, nowIso);
+    if (rFresh && !pFresh) {
+      bestRow.set(cp, row);
+      continue;
+    }
+    if (!rFresh && pFresh) continue;
     const rTime = Date.parse(row.scraped_at);
     const pTime = Date.parse(prev.scraped_at);
     if (!Number.isNaN(rTime) && !Number.isNaN(pTime) && rTime > pTime) {
@@ -356,14 +379,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (userId && domainNorm && !skipCache) {
       const platformsToCheck = [...platformsRequested].filter(isCacheablePlatform);
       if (platformsToCheck.length > 0 && adsCacheReadDomains.length > 0) {
+        const nowIso = new Date().toISOString();
         const { data: cachedRows } = await supabase
           .from("ads_cache")
-          .select("platform, ads_data, competitor_domain, scraped_at")
+          .select("platform, ads_data, competitor_domain, scraped_at, expires_at")
           .eq("user_id", userId)
           .in("competitor_domain", adsCacheReadDomains)
-          .in("platform", platformsToCheck)
-          .gt("expires_at", new Date().toISOString());
-        const picked = pickBestAdsCacheHitsByPlatform((cachedRows ?? []) as AdsCachePickRow[], adsCacheDomain);
+          .in("platform", platformsToCheck);
+        const picked = pickBestAdsCacheHitsByPlatform((cachedRows ?? []) as AdsCachePickRow[], adsCacheDomain, nowIso);
         for (const [p, data] of picked) {
           platformCacheHits.set(p, data);
         }
@@ -433,6 +456,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       out.tiktok = data as AdsLibraryResponse["tiktok"];
     if (platform === "pinterest")
       out.pinterest = data as AdsLibraryResponse["pinterest"];
+    if (platform === "microsoft")
+      out.microsoft = data as AdsLibraryResponse["microsoft"];
     if (platform === "snapchat")
       out.snapchat = data as AdsLibraryResponse["snapchat"];
   }
@@ -602,6 +627,38 @@ export async function POST(req: Request): Promise<NextResponse> {
     out.tiktok = { ...out.tiktok, ads: sortTikTokAdsForResponse(out.tiktok.ads) };
   }
 
+  if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
+    const cacheableToMerge = [...platformsNeedingScrape].filter(isCacheablePlatform);
+    if (cacheableToMerge.length > 0) {
+      const { data: existingCacheRows } = await supabase
+        .from("ads_cache")
+        .select("platform, ads_data")
+        .eq("user_id", userId)
+        .eq("competitor_domain", adsCacheDomain)
+        .in("platform", cacheableToMerge);
+
+      const prevByPl = new Map<string, unknown>();
+      for (const r of existingCacheRows ?? []) {
+        const pl = r.platform;
+        if (pl && isCacheablePlatform(pl as AdsLibraryPlatform)) {
+          prevByPl.set(pl, r.ads_data);
+        }
+      }
+
+      for (const p of cacheableToMerge) {
+        const prev = prevByPl.get(p);
+        const merged = mergeAdsCachePayloadForPlatform(p, prev, out);
+        if (p === "meta") out.meta = merged as AdsLibraryResponse["meta"];
+        if (p === "google") out.google = merged as AdsLibraryResponse["google"];
+        if (p === "linkedin") out.linkedin = merged as AdsLibraryResponse["linkedin"];
+        if (p === "tiktok") out.tiktok = merged as AdsLibraryResponse["tiktok"];
+        if (p === "microsoft") out.microsoft = merged as AdsLibraryResponse["microsoft"];
+        if (p === "pinterest") out.pinterest = merged as AdsLibraryResponse["pinterest"];
+        if (p === "snapchat") out.snapchat = merged as AdsLibraryResponse["snapchat"];
+      }
+    }
+  }
+
   const platformsToPersist =
     userId && resolvedCompetitorId
       ? await computePlatformsToPersist(supabase, {
@@ -648,9 +705,11 @@ export async function POST(req: Request): Promise<NextResponse> {
               ? out.linkedin
               : p === "tiktok"
                 ? out.tiktok
-                : p === "pinterest"
-                  ? out.pinterest
-                  : out.snapchat
+                : p === "microsoft"
+                  ? out.microsoft
+                  : p === "pinterest"
+                    ? out.pinterest
+                    : out.snapchat
       ) as unknown as Json;
       rows.push({
         user_id: userId,
@@ -729,6 +788,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (platformsRequested.has("google")) partialBody.google = out.google;
     if (platformsRequested.has("linkedin")) partialBody.linkedin = out.linkedin;
     if (platformsRequested.has("tiktok")) partialBody.tiktok = out.tiktok;
+    if (platformsRequested.has("microsoft")) partialBody.microsoft = out.microsoft;
     if (platformsRequested.has("pinterest")) partialBody.pinterest = out.pinterest;
     if (platformsRequested.has("snapchat")) partialBody.snapchat = out.snapchat;
     return NextResponse.json(partialBody as unknown as AdsLibraryResponse);

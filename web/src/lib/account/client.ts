@@ -11,8 +11,9 @@ async function safeJson(response: Response) {
   }
 }
 
-function normalizeForAccountApi(h: SidebarCompetitor): SavedCompetitorPayload {
-  return {
+/** JSON body for POST `/api/account/saved-competitors` — includes `adsLibraryContext` when present. */
+export function sidebarCompetitorToAccountPayload(h: SidebarCompetitor): SavedCompetitorPayload {
+  const payload: SavedCompetitorPayload = {
     slug: h.slug,
     name: h.name,
     logoUrl: h.logoUrl,
@@ -20,6 +21,19 @@ function normalizeForAccountApi(h: SidebarCompetitor): SavedCompetitorPayload {
     pending: h.pending,
     lastScrapedAt: h.lastScrapedAt,
   };
+  const lc = h.libraryContext;
+  if (lc && (lc.ids || lc.channels?.length || lc.confirmed !== undefined)) {
+    payload.adsLibraryContext = {
+      ...(lc.ids && Object.keys(lc.ids).length > 0 ? { ids: { ...lc.ids } } : {}),
+      ...(lc.channels?.length ? { channels: [...lc.channels] } : {}),
+      ...(lc.confirmed !== undefined ? { confirmed: lc.confirmed } : {}),
+    };
+  }
+  return payload;
+}
+
+function normalizeForAccountApi(h: SidebarCompetitor): SavedCompetitorPayload {
+  return sidebarCompetitorToAccountPayload(hoistLogoOntoRow(h));
 }
 
 export async function saveCompetitorToAccount(

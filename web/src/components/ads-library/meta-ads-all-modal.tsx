@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -18,6 +18,7 @@ export interface MetaAdsAllModalProps {
 }
 
 export function MetaAdsAllModal({ open, onClose, ads, viewMode, brand }: MetaAdsAllModalProps) {
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(0);
 
@@ -50,6 +51,11 @@ export function MetaAdsAllModal({ open, onClose, ads, viewMode, brand }: MetaAds
       document.body.style.overflow = "";
     };
   }, [open, onClose]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    scrollBodyRef.current?.scrollTo(0, 0);
+  }, [open, page]);
 
   const total = ads.length;
   const pageCount = Math.max(1, Math.ceil(total / META_ADS_MODAL_PAGE_SIZE));
@@ -112,7 +118,10 @@ export function MetaAdsAllModal({ open, onClose, ads, viewMode, brand }: MetaAds
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+            <div
+              ref={scrollBodyRef}
+              className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
+            >
               {pageAds.length === 0 ? (
                 <p className="py-8 text-center text-[14px] text-[#6b7280]">No ads match the current filters.</p>
               ) : (

@@ -1,3 +1,13 @@
+import type { MergePlatformAdsOptions } from "./merge-library-platform-ads";
+import {
+  mergeGoogleAdRows,
+  mergeLinkedInAdCards,
+  mergeMetaAdCards,
+  mergeMicrosoftAdCards,
+  mergePinterestAdCards,
+  mergeSnapchatAdCards,
+  mergeTikTokAdCards,
+} from "./merge-library-platform-ads";
 import type {
   GoogleAdRow,
   LinkedInAdCard,
@@ -8,14 +18,7 @@ import type {
   TikTokAdCard,
 } from "./normalize";
 
-export type AdsLibraryPlatform =
-  | "meta"
-  | "google"
-  | "linkedin"
-  | "tiktok"
-  | "microsoft"
-  | "pinterest"
-  | "snapchat";
+export type { AdsLibraryPlatform } from "./ads-library-platform";
 
 export type AdsLibraryResponse = {
   ok: boolean;
@@ -87,24 +90,117 @@ export function coerceAdsLibraryResponse(
   };
 }
 
+function mergeMetaSlot(
+  previous: AdsLibraryResponse["meta"],
+  incoming: AdsLibraryResponse["meta"],
+  options?: MergePlatformAdsOptions
+): AdsLibraryResponse["meta"] {
+  if (incoming.error != null) return incoming;
+  const prevAds = previous.error != null ? [] : [...(previous.ads ?? [])];
+  const incAds = incoming.ads ?? [];
+  if (incAds.length === 0) return { error: null, ads: prevAds };
+  return { error: null, ads: mergeMetaAdCards(prevAds, incAds, options) };
+}
+
+function mergeGoogleSlot(
+  previous: AdsLibraryResponse["google"],
+  incoming: AdsLibraryResponse["google"],
+  options?: MergePlatformAdsOptions
+): AdsLibraryResponse["google"] {
+  if (incoming.error != null) return incoming;
+  const prevRows = previous.error != null ? [] : [...(previous.rows ?? [])];
+  const incRows = incoming.rows ?? [];
+  if (incRows.length === 0) return { error: null, rows: prevRows };
+  return { error: null, rows: mergeGoogleAdRows(prevRows, incRows, options) };
+}
+
+function mergeCardSlot<T extends { ads: unknown[]; error: string | null }>(
+  previous: T,
+  incoming: T,
+  options: MergePlatformAdsOptions | undefined,
+  mergeFn: (e: unknown[], i: unknown[], o?: MergePlatformAdsOptions) => unknown[]
+): T {
+  if (incoming.error != null) return incoming;
+  const prevAds = previous.error != null ? [] : [...(previous.ads ?? [])];
+  const incAds = incoming.ads ?? [];
+  if (incAds.length === 0) return { ...incoming, ads: prevAds } as T;
+  const merged = mergeFn(prevAds, incAds, options);
+  return { ...incoming, ads: merged } as T;
+}
+
+/**
+ * Combines incremental `/api/ads/library` responses with UI state.
+ * Successful empty platform payloads no longer wipe prior creatives; arrays union by stable id.
+ * @param _options.trustIncomingEmpty Ignored (kept for call-site compatibility).
+ */
 export function mergeAdsLibraryState(
   prev: AdsLibraryResponse | null,
-  incoming: AdsLibraryResponse | AdsLibraryPartialJson
+  incoming: AdsLibraryResponse | AdsLibraryPartialJson,
+  _options?: { trustIncomingEmpty?: boolean }
 ): AdsLibraryResponse {
-  if (!("partial" in incoming) || !incoming.partial) {
-    return coerceAdsLibraryResponse(incoming as AdsLibraryResponse);
-  }
+  void _options?.trustIncomingEmpty;
   const base = prev ? coerceAdsLibraryResponse(prev) : emptyAdsLibraryShell();
+  const isPartial = "partial" in incoming && incoming.partial === true;
+
+  if (!isPartial) {
+    const inc = coerceAdsLibraryResponse(incoming as AdsLibraryResponse);
+    return coerceAdsLibraryResponse({
+      ...inc,
+      meta: mergeMetaSlot(base.meta, inc.meta),
+      google: mergeGoogleSlot(base.google, inc.google),
+      linkedin: mergeCardSlot(base.linkedin, inc.linkedin, undefined, (e, i, o) =>
+        mergeLinkedInAdCards(e as LinkedInAdCard[], i as LinkedInAdCard[], o)
+      ),
+      tiktok: mergeCardSlot(base.tiktok, inc.tiktok, undefined, (e, i, o) =>
+        mergeTikTokAdCards(e as TikTokAdCard[], i as TikTokAdCard[], o)
+      ),
+      microsoft: mergeCardSlot(base.microsoft, inc.microsoft, undefined, (e, i, o) =>
+        mergeMicrosoftAdCards(e as MicrosoftAdCard[], i as MicrosoftAdCard[], o)
+      ),
+      pinterest: mergeCardSlot(base.pinterest, inc.pinterest, undefined, (e, i, o) =>
+        mergePinterestAdCards(e as PinterestAdCard[], i as PinterestAdCard[], o)
+      ),
+      snapchat: mergeCardSlot(base.snapchat, inc.snapchat, undefined, (e, i, o) =>
+        mergeSnapchatAdCards(e as SnapchatAdCard[], i as SnapchatAdCard[], o)
+      ),
+    });
+  }
+
   return coerceAdsLibraryResponse({
     ok: incoming.ok ?? base.ok,
     configured: incoming.configured ?? base.configured,
     error: incoming.error ?? base.error,
-    meta: incoming.meta ?? base.meta,
-    google: incoming.google ?? base.google,
-    linkedin: incoming.linkedin ?? base.linkedin,
-    tiktok: incoming.tiktok ?? base.tiktok,
-    microsoft: incoming.microsoft ?? base.microsoft,
-    pinterest: incoming.pinterest ?? base.pinterest,
-    snapchat: incoming.snapchat ?? base.snapchat,
+    meta: incoming.meta !== undefined ? mergeMetaSlot(base.meta, incoming.meta) : base.meta,
+    google: incoming.google !== undefined ? mergeGoogleSlot(base.google, incoming.google) : base.google,
+    linkedin:
+      incoming.linkedin !== undefined
+        ? mergeCardSlot(base.linkedin, incoming.linkedin, undefined, (e, i, o) =>
+            mergeLinkedInAdCards(e as LinkedInAdCard[], i as LinkedInAdCard[], o)
+          )
+        : base.linkedin,
+    tiktok:
+      incoming.tiktok !== undefined
+        ? mergeCardSlot(base.tiktok, incoming.tiktok, undefined, (e, i, o) =>
+            mergeTikTokAdCards(e as TikTokAdCard[], i as TikTokAdCard[], o)
+          )
+        : base.tiktok,
+    microsoft:
+      incoming.microsoft !== undefined
+        ? mergeCardSlot(base.microsoft, incoming.microsoft, undefined, (e, i, o) =>
+            mergeMicrosoftAdCards(e as MicrosoftAdCard[], i as MicrosoftAdCard[], o)
+          )
+        : base.microsoft,
+    pinterest:
+      incoming.pinterest !== undefined
+        ? mergeCardSlot(base.pinterest, incoming.pinterest, undefined, (e, i, o) =>
+            mergePinterestAdCards(e as PinterestAdCard[], i as PinterestAdCard[], o)
+          )
+        : base.pinterest,
+    snapchat:
+      incoming.snapchat !== undefined
+        ? mergeCardSlot(base.snapchat, incoming.snapchat, undefined, (e, i, o) =>
+            mergeSnapchatAdCards(e as SnapchatAdCard[], i as SnapchatAdCard[], o)
+          )
+        : base.snapchat,
   });
 }

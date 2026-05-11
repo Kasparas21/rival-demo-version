@@ -522,9 +522,7 @@ function SearchingContent() {
                 body: JSON.stringify({ ...payload, platforms: [p], skipCache: true }),
               });
               const json = (await res.json()) as AdsLibraryResponse | AdsLibraryPartialJson;
-              mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json, {
-                trustIncomingEmpty: true,
-              });
+              mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
               if (!res.ok) allHttpOk = false;
               setPlatformStatuses((prev) => ({
                 ...prev,

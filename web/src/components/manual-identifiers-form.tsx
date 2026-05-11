@@ -132,10 +132,9 @@ function buildManualIdentifierSeed(
   const next: PlatformIdentifier = { ...discoveredIds };
   delete next.meta;
   delete next.metaPageUrl;
-  const g = typeof next.google === "string" ? next.google.trim() : "";
-  if (g && !canonicalGoogleAdsTransparencyStartUrl(g)) {
-    delete next.google;
-  }
+  delete next.google;
+  delete next.linkedin;
+  delete next.pinterestAdvertiserName;
 
   const kwFirst = recommendedKeywords?.[0]?.trim() ?? "";
   for (const ch of KEYWORD_CHANNEL_IDS) {
@@ -143,12 +142,7 @@ function buildManualIdentifierSeed(
       delete next[ch];
       continue;
     }
-    if (kwFirst) {
-      next[ch] = kwFirst;
-    } else {
-      const stripped = keywordDisplayFromDiscovered(discoveredIds, ch);
-      next[ch] = stripped ? stripped : undefined;
-    }
+    next[ch] = kwFirst ? kwFirst : undefined;
   }
   return next;
 }
@@ -593,9 +587,7 @@ export function ManualIdentifiersForm({
   const [identifiers, setIdentifiers] = useState<PlatformIdentifier>(() =>
     buildManualIdentifierSeed(discoveredIds, recommendedKeywords, selectedChannels)
   );
-  const [metaDisplay, setMetaDisplay] = useState(
-    () => discoveredIds.metaPageUrl ?? discoveredIds.meta ?? ""
-  );
+  const [metaDisplay, setMetaDisplay] = useState(() => "");
   const [focusedField, setFocusedField] = useState<ChannelId | null>(null);
   const [errors, setErrors] = useState<Partial<Record<ChannelId, string>>>({});
   const [warnings, setWarnings] = useState<Partial<Record<ChannelId, string>>>({});

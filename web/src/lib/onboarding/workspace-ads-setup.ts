@@ -78,28 +78,6 @@ export function mergeWorkspaceScrapeFromSocials(
   const ig = firstHrefForBucket(socials, "instagram");
   if (!out.facebookUrl.trim()) out.facebookUrl = fb;
   if (!out.instagramUrl.trim()) out.instagramUrl = ig;
-  if (!out.metaAdsLibraryUrl.trim()) {
-    for (const s of socials) {
-      const h = s.href.trim();
-      const low = h.toLowerCase();
-      if (
-        low.includes("ads/library") &&
-        (low.includes("facebook.com") || low.includes("fb.com") || low.includes("m.facebook.com"))
-      ) {
-        const canon = canonicalMetaAdsLibraryUrl(h) ?? h;
-        out.metaAdsLibraryUrl = canon;
-        break;
-      }
-    }
-  }
-
-  if (!out.linkedInUrl.trim()) {
-    const li = firstHrefForBucket(socials, "linkedin");
-    if (li) {
-      out.linkedInUrl = canonicalLinkedInAdLibraryUrl(li) ?? li;
-    }
-  }
-
   const tt = firstHrefForBucket(socials, "tiktok");
   if (!out.tikTokUrl.trim()) out.tikTokUrl = tt;
   if (!out.tiktokKeyword.trim() && tt) {

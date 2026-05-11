@@ -10,6 +10,9 @@ export const GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT = 50;
 /** Google Ads Transparency Apify `resultsLimit` — actor allows up to 1000; app caps at 500. */
 export const GOOGLE_ADS_LIBRARY_MAX_ITEMS = 500;
 
+/** Max creatives kept per platform after incremental merges (LRU prune by last-seen). */
+export const ADS_LIBRARY_MERGED_CAP_PER_PLATFORM = Math.max(ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM * 5, 500);
+
 /** Inline preview count per platform on competitor Ads Library (before “View all”). Matches `xl:grid-cols-3` so one row on wide viewports. */
 export const META_ADS_INLINE_PREVIEW = 3;
 

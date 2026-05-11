@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   coerceAdsLibraryResponse,
   mergeAdsLibraryState,
@@ -73,6 +73,11 @@ export function useAdLibrary(
   const [linkedinRefreshing, setLinkedinRefreshing] = useState(false);
   const [microsoftRefreshing, setMicrosoftRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const dataRef = useRef<AdsLibraryResponse | null>(null);
+  useLayoutEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   const platformsSorted = useMemo(
     () => [...adsPlatforms].sort() as AdsLibraryPlatform[],
@@ -177,18 +182,12 @@ export function useAdLibrary(
         const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(body, {
           skipCache: opts?.skipCache ?? false,
         });
-        let mergedState: AdsLibraryResponse | null = null;
-        setData((prev) => {
-          const merged = mergeAdsLibraryState(prev, json);
-          mergedState = merged;
-          return merged;
+        const merged = mergeAdsLibraryState(dataRef.current, json);
+        setData(merged);
+        writeAdsLibrarySessionCache(payloadKey, {
+          response: coerceAdsLibraryResponse(merged),
+          httpOk,
         });
-        if (mergedState) {
-          writeAdsLibrarySessionCache(payloadKey, {
-            response: coerceAdsLibraryResponse(mergedState),
-            httpOk,
-          });
-        }
         if (!httpOk && "error" in json && json.error) {
           setFetchError(json.error);
         } else if (!httpOk) {

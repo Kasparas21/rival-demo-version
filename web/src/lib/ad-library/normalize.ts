@@ -9,6 +9,7 @@ import {
   effectiveCompetitorBrandLabel,
   junkUserBrandDisplayName,
 } from "@/lib/ad-library/competitor-brand-display";
+import { stableIdForGoogleItemRow } from "@/lib/ad-library/google-stable-id";
 
 /** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
 export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
@@ -1210,7 +1211,7 @@ export function googleCreativeFormatLabel(format: string | undefined): string | 
 
 export function googleItemToRow(
   item: GoogleCompanyAdItem,
-  index: number,
+  _index: number,
   ctx?: GoogleRowContext
 ): GoogleAdRow {
   const queryDomain = ctx?.queryDomain?.trim() || "";
@@ -1227,8 +1228,6 @@ export function googleItemToRow(
     adUrl = `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(queryDomain)}`;
   }
 
-  /** Include `index` so keys stay unique when the API returns duplicate advertiser/creative pairs. */
-  const id = `${advertiserId ?? "ad"}-${creativeId ?? "cr"}-${index}`;
   const fromHeadline =
     item.headline?.trim() || item.title?.trim() || item.description?.trim()?.slice(0, 120);
 
@@ -1295,6 +1294,14 @@ export function googleItemToRow(
       (iu && findFirstGoogleVideoFileUrl(iu) ? iu : null) ||
       "";
 
+    const id = stableIdForGoogleItemRow({
+      type: "youtube",
+      advertiserId,
+      creativeId,
+      adUrl,
+      youtubeVideoId: yid || null,
+    });
+
     return {
       type: "youtube",
       id,
@@ -1349,6 +1356,13 @@ export function googleItemToRow(
           : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       })()
     : null;
+
+  const id = stableIdForGoogleItemRow({
+    type: "google",
+    advertiserId,
+    creativeId,
+    adUrl,
+  });
 
   return {
     type: "google",

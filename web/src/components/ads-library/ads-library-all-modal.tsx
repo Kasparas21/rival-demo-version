@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
@@ -29,6 +29,7 @@ export function AdsLibraryAllModal<T>({
   pageSize?: number;
 }) {
   const titleId = useId();
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(0);
 
@@ -60,6 +61,11 @@ export function AdsLibraryAllModal<T>({
       document.body.style.overflow = "";
     };
   }, [open, onClose]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    scrollBodyRef.current?.scrollTo(0, 0);
+  }, [open, page]);
 
   const start = total === 0 ? 0 : page * pageSize + 1;
   const end = Math.min(total, (page + 1) * pageSize);
@@ -119,7 +125,10 @@ export function AdsLibraryAllModal<T>({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+            <div
+              ref={scrollBodyRef}
+              className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5"
+            >
               {pageAds.length === 0 ? (
                 <p className="py-8 text-center text-[14px] text-[#6b7280]">No ads match the current filters.</p>
               ) : (

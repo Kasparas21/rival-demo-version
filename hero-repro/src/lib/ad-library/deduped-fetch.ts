@@ -210,27 +210,34 @@ export function fetchAdsLibraryDeduplicated(
   payload: Record<string, unknown>,
   options: { skipCache?: boolean; cacheTtlMs?: number } = {}
 ): Promise<FetchAdsLibraryResult> {
-  const key = stableAdsLibraryPayloadKey(payload);
+  /** Session + in-memory reuse: stable per request payload, never includes `skipCache`. */
+  const storageKey = stableAdsLibraryPayloadKey(payload);
+  /** In-flight dedupe must differ when `skipCache` differs (see web `deduped-fetch` note). */
+  const fetchKey = stableAdsLibraryPayloadKey({
+    ...payload,
+    ...(options.skipCache ? { skipCache: true } : {}),
+  });
 
   if (!options.skipCache) {
-    const persisted = readAdsLibrarySessionCache(key);
+    const persisted = readAdsLibrarySessionCache(storageKey);
     if (persisted && persisted.expires > Date.now()) {
-      cache.set(key, { expires: persisted.expires, result: persisted.result });
+      cache.set(storageKey, { expires: persisted.expires, result: persisted.result });
       return Promise.resolve(persisted.result);
     }
-    const hit = cache.get(key);
+    const hit = cache.get(storageKey);
     if (hit && hit.expires > Date.now()) {
       return Promise.resolve(hit.result);
     }
   }
 
-  const running = inflight.get(key);
+  const running = inflight.get(fetchKey);
   if (running) return running;
 
   const promise = (async (): Promise<FetchAdsLibraryResult> => {
     try {
       const res = await fetch("/api/ads/library", {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...payload,
@@ -242,16 +249,16 @@ export function fetchAdsLibraryDeduplicated(
 
       if (!options.skipCache) {
         const ttl = options.cacheTtlMs ?? cacheTtlFor(result);
-        cache.set(key, { expires: Date.now() + ttl, result });
+        cache.set(storageKey, { expires: Date.now() + ttl, result });
       }
 
       return result;
     } finally {
-      inflight.delete(key);
+      inflight.delete(fetchKey);
     }
   })();
 
-  inflight.set(key, promise);
+  inflight.set(fetchKey, promise);
   return promise;
 }
 
