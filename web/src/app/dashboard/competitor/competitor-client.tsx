@@ -3463,10 +3463,18 @@ function CompetitorDashboardBody({
             }
           >
             {activeSubTab === "strategy-map" ? (
-              <StrategyMapTab brand={brand} onOpenAdsLibrary={() => handleTabChange("ads library")} />
+              <StrategyMapTab
+                brand={brand}
+                onOpenAdsLibrary={() => handleTabChange("ads library")}
+                competitorId={competitorDbIdForSaved || undefined}
+              />
             ) : null}
             {activeSubTab === "strategy-insight" ? (
-              <StrategyInsightTab brand={brand} onOpenAdsLibrary={() => handleTabChange("ads library")} />
+              <StrategyInsightTab
+                brand={brand}
+                onOpenAdsLibrary={() => handleTabChange("ads library")}
+                competitorId={competitorDbIdForSaved || undefined}
+              />
             ) : null}
             {activeSubTab === "moves" ? (
               <StrategicMovesTab

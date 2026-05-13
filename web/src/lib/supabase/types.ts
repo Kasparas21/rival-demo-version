@@ -559,6 +559,78 @@ export type Database = {
         };
         Relationships: [];
       };
+      competitor_activity_scores: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          score: number;
+          tier: number;
+          tier_label: string;
+          spend_range_min: number;
+          spend_range_max: number | null;
+          signal_production_value: number;
+          signal_creative_diversity: number;
+          signal_refresh_velocity: number;
+          signal_format_sophistication: number;
+          signal_landing_infra: number;
+          signal_copy_sophistication: number;
+          signal_product_depth: number;
+          signal_activity_duration: number;
+          reasons_top: Json;
+          raw_metrics: Json;
+          ads_count_at_calc: number;
+          confidence: string;
+          calculated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          score: number;
+          tier: number;
+          tier_label: string;
+          spend_range_min: number;
+          spend_range_max?: number | null;
+          signal_production_value: number;
+          signal_creative_diversity: number;
+          signal_refresh_velocity: number;
+          signal_format_sophistication: number;
+          signal_landing_infra: number;
+          signal_copy_sophistication: number;
+          signal_product_depth: number;
+          signal_activity_duration: number;
+          reasons_top?: Json;
+          raw_metrics?: Json;
+          ads_count_at_calc: number;
+          confidence: string;
+          calculated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          score?: number;
+          tier?: number;
+          tier_label?: string;
+          spend_range_min?: number;
+          spend_range_max?: number | null;
+          signal_production_value?: number;
+          signal_creative_diversity?: number;
+          signal_refresh_velocity?: number;
+          signal_format_sophistication?: number;
+          signal_landing_infra?: number;
+          signal_copy_sophistication?: number;
+          signal_product_depth?: number;
+          signal_activity_duration?: number;
+          reasons_top?: Json;
+          raw_metrics?: Json;
+          ads_count_at_calc?: number;
+          confidence?: string;
+          calculated_at?: string;
+        };
+        Relationships: [];
+      };
       creative_tests: {
         Row: {
           id: string;

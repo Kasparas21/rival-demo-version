@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
+import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-recompute";
 import type { Database, Json } from "@/lib/supabase/types";
 
 type ScrapedAdInsert = Database["public"]["Tables"]["scraped_ads"]["Insert"];
@@ -509,6 +510,10 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
       }
       rowsInserted += slice.length;
     }
+  }
+
+  if (errors.length === 0 && rowsInserted > 0) {
+    scheduleActivityScoreRecompute(userId, competitorId);
   }
 
   return { ok: errors.length === 0, errors, rowsInserted };

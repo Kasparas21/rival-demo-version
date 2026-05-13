@@ -58,6 +58,25 @@ export type PlatformNodePayload = {
   position: { x: number; y: number };
 };
 
+export type FunnelCellId = `${StrategyPlatform}:${FunnelStage}`;
+
+export type FunnelCellNodePayload = {
+  /** Composite id: "meta:TOF" */
+  id: FunnelCellId;
+  platform: StrategyPlatform;
+  label: string;
+  funnelStage: FunnelStage;
+  adCount: number;
+  estSpendEur: number;
+  estSpendEurLow: number;
+  estSpendEurHigh: number;
+  /** First 8 ad ids in this cell, newest first, for thumbnail preview */
+  sampleAdIds: string[];
+  /** Cell-level confidence based on adCount + enrichment quality */
+  cellConfidence: "high" | "medium" | "low";
+  position: { x: number; y: number };
+};
+
 export type FunnelEdgePayload = {
   from: StrategyPlatform;
   to: StrategyPlatform;
@@ -84,6 +103,8 @@ export type StrategyMapPayload = {
   toneOfVoice: { primary: string; attributes: string[] };
   topAngles: { angle: string; rank: number }[];
   platformNodes: PlatformNodePayload[];
+  /** Per (platform × funnel stage); optional for older cached payloads */
+  funnelCells?: FunnelCellNodePayload[];
   funnelEdges: FunnelEdgePayload[];
   /** When true, UI should hide edges and show banner */
   suppressEdgesReason?: "low_sample" | "single_platform";
@@ -178,6 +199,8 @@ export type PlatformFootprintCard = InsightCardBase & {
     label: string;
     activeAds: number;
     estSpendEur: number;
+    estSpendEurLow?: number;
+    estSpendEurHigh?: number;
     funnelStage: FunnelStage;
     spendShare: number;
     /** Earliest `first_seen_at` among active ads on this platform (ISO), for “Active since” UI. */
@@ -185,6 +208,8 @@ export type PlatformFootprintCard = InsightCardBase & {
   }[];
   totalActiveAds: number;
   totalEstSpendEur: number;
+  totalEstSpendEurLow?: number;
+  totalEstSpendEurHigh?: number;
   platformCount: number;
 };
 

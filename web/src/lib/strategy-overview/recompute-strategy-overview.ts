@@ -22,7 +22,7 @@ import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy
  * Bump this string any time the spend formula, derivation logic, output schema,
  * or insight card structure changes. It is the cache invalidation key.
  */
-export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-14-comparison-v2-visuals";
+export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-15-funnel-cells-map";
 
 const LOCK_TTL_MS = 300_000;
 /** If status is still "running" after this long, treat lock as orphaned (crashed serverless, etc.). */
@@ -245,13 +245,15 @@ export function buildNoAdsFoundPayload(
         title: "Platform Footprint",
         subtitle: "Active ad presence per platform",
         tooltip:
-          "Side-by-side platform comparison: how many active ads run on each platform and the estimated monthly spend share.",
+          "Side-by-side platform comparison: active ads per platform and modeled monthly spend range (benchmark-based — not invoiced spend).",
         aiNarrative: null,
         lastUpdated: nowIso,
         dataConfidence: "low",
         platforms: [],
         totalActiveAds: 0,
         totalEstSpendEur: 0,
+        totalEstSpendEurLow: 0,
+        totalEstSpendEurHigh: 0,
         platformCount: 0,
       },
       budget_allocation: {

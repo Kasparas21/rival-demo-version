@@ -1,71 +1,28 @@
 "use client";
 
-import {
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-} from "recharts";
-
 import type { StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
+import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import { BarChart3, Sparkles, Video, Users } from "lucide-react";
 
 type Props = {
   map: StrategyMapPayload;
   dimmed?: boolean;
+  /** Saved competitor row id for activity score API; omit on legacy callers without DB id. */
+  competitorId?: string;
 };
 
-function fmtK(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return String(Math.round(n));
-}
-
-const ESTIMATE_CONFIDENCE_HINT =
-  "Modeled estimate based on ad count, platform mix, creative rotation speed, and active-day proxy. Not sourced from platform-reported spend data.";
-
-export function StrategyOverviewSidebar({ map, dimmed }: Props) {
-  const chartData = map.spendTrendline.map((v, i) => ({ i, v }));
-  const mid = map.totalAdSpend.value;
-  const low = map.totalAdSpend.low ?? mid;
-  const high = map.totalAdSpend.high ?? mid;
-
+export function StrategyOverviewSidebar({ map, dimmed, competitorId }: Props) {
   return (
     <div
       className={`flex flex-col gap-3 min-w-0 transition-opacity ${dimmed ? "opacity-45 pointer-events-none" : ""}`}
     >
-      <div className="rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/90 p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Estimated total ad spend</p>
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-200/80">
-            {map.spendVsSimilar}
-          </span>
+      {competitorId ? (
+        <ActivityScorePanel competitorId={competitorId} enabled={!dimmed} />
+      ) : (
+        <div className="rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/90 p-4 text-[12px] text-slate-600 shadow-sm">
+          Activity score needs a saved competitor record. Open this brand from your sidebar after tracking it in Rival.
         </div>
-        <p className="text-[26px] font-bold text-[#0f172a] tracking-tight">€{fmtK(mid)} / month</p>
-        {low !== high ? (
-          <p className="text-[13px] font-medium text-slate-600 mt-1">
-            Range: €{fmtK(low)} – €{fmtK(high)}
-          </p>
-        ) : null}
-        <p className="text-[10px] text-slate-500 mt-1">
-          Midpoint from platform CPM ranges × brand scale (
-          {map.totalAdSpend.brandScaleScore != null ? map.totalAdSpend.brandScaleScore.toFixed(1) : "—"})
-        </p>
-        <p className="text-[10px] text-slate-500 mt-1 capitalize">
-          <span title={ESTIMATE_CONFIDENCE_HINT} className="cursor-help border-b border-dotted border-slate-400">
-            Confidence: {map.totalAdSpend.confidence}
-          </span>
-        </p>
-        <div className="h-14 w-full mt-3 -mx-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <XAxis dataKey="i" hide />
-              <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
-              <Line type="monotone" dataKey="v" stroke="#0ea5e9" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      )}
 
       <div className="rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/90 p-4 shadow-sm">
         <div className="flex items-center gap-2 mb-3">

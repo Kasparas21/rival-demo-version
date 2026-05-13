@@ -13,7 +13,12 @@ export function isAdSaved(savedMap: SavedMap, scrapedAdId: string): boolean {
   return Boolean(scrapedAdId && savedMap[scrapedAdId]);
 }
 
-export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryItemRef[]) {
+export function useSavedAdsStatus(
+  competitorId: string,
+  libraryItems: LibraryItemRef[],
+  /** Also check saved state for these scraped_ads ids (e.g. when library card id is missing). */
+  scrapedAdIds: string[] = []
+) {
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -34,16 +39,25 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
     return [...m.values()];
   }, [libraryItems]);
 
+  const dedupedScrapedIds = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const id of scrapedAdIds) {
+      const u = id.trim();
+      if (u) m.set(u, u);
+    }
+    return [...m.values()];
+  }, [scrapedAdIds]);
+
   useEffect(() => {
     const cid = competitorId.trim();
-    if (!cid || dedupedItems.length === 0) {
+    if (!cid || (dedupedItems.length === 0 && dedupedScrapedIds.length === 0)) {
       setSavedMap({});
       setResolvedToScraped({});
       lastKeyRef.current = "";
       return;
     }
 
-    const queryKey = `${cid}|${dedupedItems.map((i) => `${i.platform}:${i.libraryItemId}`).sort().join(",")}`;
+    const queryKey = `${cid}|lib:${dedupedItems.map((i) => `${i.platform}:${i.libraryItemId}`).sort().join(",")}|s:${dedupedScrapedIds.sort().join(",")}`;
     if (queryKey === lastKeyRef.current) return;
     lastKeyRef.current = queryKey;
 
@@ -56,6 +70,7 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
       body: JSON.stringify({
         competitorId: cid,
         libraryItems: dedupedItems,
+        scrapedAdIds: dedupedScrapedIds,
       }),
     })
       .then((r) => r.json())
@@ -76,7 +91,7 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
     return () => {
       cancelled = true;
     };
-  }, [competitorId, dedupedItems]);
+  }, [competitorId, dedupedItems, dedupedScrapedIds]);
 
   const scrapedIdForCard = useCallback(
     (platform: string, libraryItemId: string) => {

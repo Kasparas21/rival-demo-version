@@ -1,20 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, ChevronDown, ChevronUp, Link as LinkIcon, Zap } from "lucide-react";
+import { Activity, BarChart3, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
 
-import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import { describeArcClockwise } from "@/lib/charts/arc-geometry";
 import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
-import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
-
-export type PlatformVelocity = {
-  platform: string;
-  latest_ad_first_seen_at: string | null;
-  days_since_latest: number | null;
-  active_count: number;
-  total_count: number;
-};
 
 type LandingPageGroup = {
   groupId: string;
@@ -28,12 +19,6 @@ type LandingPageGroup = {
 type LandingPagesResponse = {
   ok: boolean;
   landingPages?: LandingPageGroup[];
-  error?: string;
-};
-
-type VelocityResponse = {
-  ok: boolean;
-  velocities?: PlatformVelocity[];
   error?: string;
 };
 
@@ -87,20 +72,8 @@ const PLATFORM_TEXT_COLORS: Record<string, string> = {
   snapchat: "#B8B600",
 };
 
-function isStrategyPlatform(p: string): p is StrategyPlatform {
-  return (
-    p === "meta" ||
-    p === "google" ||
-    p === "tiktok" ||
-    p === "linkedin" ||
-    p === "pinterest" ||
-    p === "snapchat"
-  );
-}
-
 export function AdLibraryAnalyticsPanel({ competitorId, platformCounts }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [velocities, setVelocities] = useState<PlatformVelocity[]>([]);
   const [landingPages, setLandingPages] = useState<LandingPageGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -109,13 +82,10 @@ export function AdLibraryAnalyticsPanel({ competitorId, platformCounts }: Props)
     let cancelled = false;
     setLoading(true);
 
-    Promise.all([
-      fetch(`/api/competitor/velocity?competitorId=${encodeURIComponent(competitorId)}`).then((r) => r.json()),
-      fetch(`/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}`).then((r) => r.json()),
-    ])
-      .then(([velRes, lpRes]: [VelocityResponse, LandingPagesResponse]) => {
+    fetch(`/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}`)
+      .then((r) => r.json())
+      .then((lpRes: LandingPagesResponse) => {
         if (cancelled) return;
-        if (velRes.ok) setVelocities(velRes.velocities ?? []);
         if (lpRes.ok && lpRes.landingPages) {
           setLandingPages(lpRes.landingPages.slice(0, 5));
         }
@@ -188,13 +158,16 @@ export function AdLibraryAnalyticsPanel({ competitorId, platformCounts }: Props)
           </div>
 
           <div className="p-5">
-            <div className="mb-3 flex items-center gap-1.5">
-              <Zap className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
-                Cross-platform velocity
-              </span>
+            <div className="mb-3 flex flex-col gap-0.5">
+              <div className="flex items-center gap-1.5">
+                <Activity className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+                  Activity score
+                </span>
+              </div>
+              <p className="text-[10px] text-[#64748b]">Operational footprint in this market</p>
             </div>
-            <VelocityList velocities={velocities} loading={loading} />
+            <ActivityScorePanel competitorId={competitorId} variant="analytics" />
           </div>
         </div>
       ) : null}
@@ -489,70 +462,6 @@ function LandingPagesList({ groups, loading }: { groups: LandingPageGroup[]; loa
                   : {count}
                 </span>
               ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function VelocityList({ velocities, loading }: { velocities: PlatformVelocity[]; loading: boolean }) {
-  if (loading) {
-    return <div className="py-4 text-[11px] italic text-[#94a3b8]">Loading…</div>;
-  }
-
-  if (velocities.length === 0) {
-    return <div className="py-4 text-[11px] italic text-[#94a3b8]">No data yet.</div>;
-  }
-
-  const sorted = [...velocities].sort((a, b) => {
-    if (a.days_since_latest === null && b.days_since_latest === null) return 0;
-    if (a.days_since_latest === null) return 1;
-    if (b.days_since_latest === null) return -1;
-    return a.days_since_latest - b.days_since_latest;
-  });
-
-  return (
-    <div className="space-y-2">
-      <p className="mb-1 text-[10px] text-[#64748b]">Where they&apos;re investing attention now</p>
-      {sorted.map((v) => {
-        const isStale = v.days_since_latest === null || v.days_since_latest > 30;
-        const isVeryFresh = v.days_since_latest !== null && v.days_since_latest <= 7;
-
-        return (
-          <div key={v.platform} className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              {isStrategyPlatform(v.platform) ? (
-                <ComparisonPlatformIcon platform={v.platform} className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <span className="h-3.5 w-3.5 shrink-0 rounded bg-slate-200" aria-hidden />
-              )}
-              <span className="text-[12px] font-medium text-[#0f172a]">
-                {PLATFORM_LABELS[v.platform] ?? v.platform}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5">
-              {v.total_count === 0 ? (
-                <span className="text-[11px] text-[#cbd5e1]">No ads</span>
-              ) : v.days_since_latest === null ? (
-                <span className="text-[11px] text-[#94a3b8]">All inactive</span>
-              ) : (
-                <>
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      isVeryFresh ? "bg-green-500" : isStale ? "bg-[#cbd5e1]" : "bg-amber-400"
-                    }`}
-                  />
-                  <span
-                    className={`text-[11px] font-medium ${
-                      isVeryFresh ? "text-green-700" : isStale ? "text-[#94a3b8]" : "text-[#0f172a]"
-                    }`}
-                  >
-                    {v.days_since_latest === 0 ? "Today" : `${v.days_since_latest}d ago`}
-                  </span>
-                </>
-              )}
             </div>
           </div>
         );

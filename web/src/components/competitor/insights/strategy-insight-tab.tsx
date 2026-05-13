@@ -6,10 +6,16 @@ import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-ove
 type Props = {
   brand: CompetitorPageBrand;
   onOpenAdsLibrary: () => void;
+  competitorId?: string;
 };
 
-export function StrategyInsightTab({ brand, onOpenAdsLibrary }: Props) {
+export function StrategyInsightTab({ brand, onOpenAdsLibrary, competitorId }: Props) {
   return (
-    <StrategyOverviewApp brand={brand} onOpenAdsLibrary={onOpenAdsLibrary} forceView="insight" />
+    <StrategyOverviewApp
+      brand={brand}
+      onOpenAdsLibrary={onOpenAdsLibrary}
+      forceView="insight"
+      competitorId={competitorId}
+    />
   );
 }

@@ -1,8 +1,10 @@
+import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { describe, expect, it } from "vitest";
 
 import {
   computeTrend,
   deriveBrandScale,
+  deriveFunnelCells,
   deriveFunnelEdges,
   deriveStrategyOverviewPayload,
   monthlyFirstSeenCounts,
@@ -162,6 +164,42 @@ describe("computeTrend", () => {
 
   it("returns flat for stable recent window", () => {
     expect(computeTrend([40, 40, 40, 40, 40, 45])).toBe("flat");
+  });
+});
+
+describe("deriveFunnelCells", () => {
+  it("emits one cell per platform × classified stage mix (Denticija-style)", () => {
+    const t0 = "2024-01-01T00:00:00.000Z";
+    const t1 = "2024-02-01T00:00:00.000Z";
+    const byPlatformLive = new Map<StrategyPlatform, ScrapedAdInput[]>([
+      [
+        "meta",
+        [
+          ad({ id: "a1", platform: "meta", first_seen_at: t1, funnel_stage: "TOF" }),
+          ad({ id: "a2", platform: "meta", first_seen_at: t0, funnel_stage: "TOF" }),
+          ad({ id: "a3", platform: "meta", first_seen_at: t0, funnel_stage: "MOF" }),
+        ],
+      ],
+      [
+        "google",
+        [ad({ id: "b1", platform: "google", first_seen_at: t0, funnel_stage: "BOF" })],
+      ],
+    ]);
+
+    const cells = deriveFunnelCells(byPlatformLive, 1.5);
+    const byId = new Map(cells.map((c) => [c.id, c]));
+    expect(byId.get("meta:TOF")?.adCount).toBe(2);
+    expect(byId.get("meta:TOF")?.sampleAdIds[0]).toBe("a1");
+    expect(byId.get("meta:MOF")?.adCount).toBe(1);
+    expect(byId.get("google:BOF")?.adCount).toBe(1);
+  });
+
+  it("produces no cells when all ads are unclassified", () => {
+    const now = new Date().toISOString();
+    const byPlatformLive = new Map<StrategyPlatform, ScrapedAdInput[]>([
+      ["meta", [ad({ id: "x", platform: "meta", first_seen_at: now, funnel_stage: null })]],
+    ]);
+    expect(deriveFunnelCells(byPlatformLive, 1.2)).toEqual([]);
   });
 });
 

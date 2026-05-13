@@ -5,7 +5,6 @@ import {
   BackgroundVariant,
   Controls,
   MarkerType,
-  Panel,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
@@ -17,15 +16,16 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo } from "react";
 
-import type { FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
+import { FunnelCellNode, type FunnelCellNodeData } from "@/components/strategy-overview/funnel-cell-node";
 import { FunnelEdge } from "@/components/strategy-overview/funnel-edge";
 import type { PlatformNodeData } from "@/components/strategy-overview/platform-node";
 import { PlatformNode } from "@/components/strategy-overview/platform-node";
+import type { FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
 
 type Props = {
   map: StrategyMapPayload;
   mapKey: string;
-  onNodeClick?: (platform: string) => void;
+  onNodeClick?: (nodeId: string) => void;
   onEdgeHover?: (edge: { reasoning: string; confidence: number } | null) => void;
 };
 
@@ -43,9 +43,12 @@ function stageForPlatform(payload: StrategyMapPayload, platform: string): Funnel
 function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
   const { fitView } = useReactFlow();
 
+  const useCellsLayout = map.funnelCells != null && map.funnelCells.length > 0;
+
   const nodeTypes = useMemo(
     () => ({
       platform: PlatformNode as React.ComponentType<unknown>,
+      "funnel-cell": FunnelCellNode as React.ComponentType<unknown>,
     }),
     []
   );
@@ -57,30 +60,50 @@ function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
     []
   );
 
-  const initialNodes: Node<PlatformNodeData>[] = useMemo(
-    () =>
-      map.platformNodes.map((n) => ({
-        id: n.platform,
-        type: "platform",
-        position: n.position,
+  const initialNodes: Node<PlatformNodeData | FunnelCellNodeData>[] = useMemo(() => {
+    if (useCellsLayout) {
+      return map.funnelCells!.map((c) => ({
+        id: c.id,
+        type: "funnel-cell",
+        position: c.position,
         style: { width: 200 },
         draggable: false,
         selectable: true,
         data: {
-          label: n.label,
-          platform: n.platform,
-          adCount: n.adCount,
-          activityLevel: n.activityLevel,
-          estSpendEur: n.estSpendEur,
-          estSpendEurLow: n.estSpendEurLow,
-          estSpendEurHigh: n.estSpendEurHigh,
-          funnelStage: n.funnelStage,
+          label: c.label,
+          platform: c.platform,
+          funnelStage: c.funnelStage,
+          adCount: c.adCount,
+          estSpendEurLow: c.estSpendEurLow,
+          estSpendEurHigh: c.estSpendEurHigh,
+          cellConfidence: c.cellConfidence,
         },
-      })),
-    [map]
-  );
+      }));
+    }
+    return map.platformNodes.map((n) => ({
+      id: n.platform,
+      type: "platform",
+      position: n.position,
+      style: { width: 200 },
+      draggable: false,
+      selectable: true,
+      data: {
+        label: n.label,
+        platform: n.platform,
+        adCount: n.adCount,
+        activityLevel: n.activityLevel,
+        estSpendEur: n.estSpendEur,
+        estSpendEurLow: n.estSpendEurLow,
+        estSpendEurHigh: n.estSpendEurHigh,
+        funnelStage: n.funnelStage,
+      },
+    }));
+  }, [map, useCellsLayout]);
 
   const initialEdges: Edge[] = useMemo(() => {
+    // TODO: design cell-level relationship edges (e.g., TOF → MOF cross-platform) in a future pass.
+    if (useCellsLayout) return [];
+
     return map.funnelEdges.map((e) => {
       const st = stageForPlatform(map, e.from);
       const stroke = STAGE_STROKE[st];
@@ -99,7 +122,7 @@ function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
         },
       };
     });
-  }, [map]);
+  }, [map, useCellsLayout]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -164,33 +187,21 @@ function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
           orientation="horizontal"
           className="!bg-white/90 !border !border-slate-200/80 !rounded-xl !shadow-md"
         />
-        <Panel position="top-right" className="m-2">
-          <div className="rounded-xl border border-slate-200/80 bg-white/95 px-3 py-2 text-[10px] shadow-sm">
-            <p className="font-semibold text-slate-600 mb-1.5">Legend</p>
-            <div className="flex flex-col gap-1">
-              <span className="flex items-center gap-2 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-blue-500" /> TOF (Awareness)
-              </span>
-              <span className="flex items-center gap-2 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-amber-500" /> MOF (Consideration)
-              </span>
-              <span className="flex items-center gap-2 text-slate-700">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" /> BOF (Conversion)
-              </span>
-            </div>
-          </div>
-        </Panel>
       </ReactFlow>
     </>
   );
 }
 
 export function StrategyMapFlow(props: Props) {
-  const { mapKey, ...rest } = props;
+  const { mapKey, map, ...rest } = props;
+  const useCellsLayout = map.funnelCells != null && map.funnelCells.length > 0;
+  const heightClass = useCellsLayout ? "h-[min(640px,76vh)]" : "h-[min(520px,70vh)]";
   return (
-    <div className="h-[min(520px,70vh)] w-full rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/60 overflow-hidden">
+    <div
+      className={`${heightClass} w-full rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/60 overflow-hidden`}
+    >
       <ReactFlowProvider>
-        <FlowInner key={mapKey} {...rest} />
+        <FlowInner key={mapKey} map={map} {...rest} />
       </ReactFlowProvider>
     </div>
   );

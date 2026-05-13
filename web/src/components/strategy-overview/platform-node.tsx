@@ -28,11 +28,6 @@ const STAGE_BADGE: Record<FunnelStage, string> = {
   BOF: "bg-emerald-100 text-emerald-900 border-emerald-200",
 };
 
-function fmtSpendEur(n: number): string {
-  if (n >= 1000) return `€${(n / 1000).toFixed(1)}K/mo`;
-  return `€${Math.round(n)}/mo`;
-}
-
 function fmtSpendEurShort(n: number): string {
   if (n >= 1000) return `€${(n / 1000).toFixed(1)}K`;
   return `€${Math.round(n)}`;
@@ -41,10 +36,7 @@ function fmtSpendEurShort(n: number): string {
 function describeEstSpend(d: PlatformNodeData): string {
   const low = d.estSpendEurLow ?? d.estSpendEur;
   const high = d.estSpendEurHigh ?? d.estSpendEur;
-  if (Math.abs(high - low) < Math.max(low, high, 1) * 0.02) {
-    return `Est. spend ${fmtSpendEur(d.estSpendEur)}`;
-  }
-  return `Est. spend ${fmtSpendEurShort(low)}–${fmtSpendEurShort(high)}/mo`;
+  return `Modeled ${fmtSpendEurShort(low)}–${fmtSpendEurShort(high)}/mo`;
 }
 
 function PlatformNodeInner({ data, selected }: NodeProps) {

@@ -43,6 +43,12 @@ function formatMonthYm(ym: string): string {
   return d.toLocaleString("en-US", { month: "short", year: "2-digit" });
 }
 
+function fmtEurRange(low: number, high: number): string {
+  const a = Math.round(low);
+  const b = Math.round(high);
+  return `${a.toLocaleString()}–${b.toLocaleString()}`;
+}
+
 function CardShell({
   title,
   subtitle,
@@ -175,7 +181,7 @@ export function StrategyInsightView({ insights, selectedPlatform }: Props) {
                     <th className="pb-1.5 font-medium pr-2">Platform</th>
                     <th className="pb-1.5 font-medium pr-2 tabular-nums">Ads</th>
                     <th className="pb-1.5 font-medium pr-2">Stage</th>
-                    <th className="pb-1.5 font-medium tabular-nums">Est. €/mo</th>
+                    <th className="pb-1.5 font-medium tabular-nums">Modeled €/mo (range)</th>
                     <th className="pb-1.5 font-medium tabular-nums text-right">Share</th>
                   </tr>
                 </thead>
@@ -189,7 +195,10 @@ export function StrategyInsightView({ insights, selectedPlatform }: Props) {
                       <td className="py-1.5 pr-2 text-slate-600 tabular-nums">{row.activeAds}</td>
                       <td className="py-1.5 pr-2 text-slate-500">{row.funnelStage}</td>
                       <td className="py-1.5 pr-2 text-slate-600 tabular-nums">
-                        {row.estSpendEur.toLocaleString()}
+                        {fmtEurRange(
+                          row.estSpendEurLow ?? row.estSpendEur,
+                          row.estSpendEurHigh ?? row.estSpendEur
+                        )}
                       </td>
                       <td className="py-1.5 text-slate-600 tabular-nums text-right">{row.spendShare}%</td>
                     </tr>
@@ -197,8 +206,12 @@ export function StrategyInsightView({ insights, selectedPlatform }: Props) {
                 </tbody>
               </table>
               <p className="text-[9px] text-slate-500 mt-2">
-                Total {insights.platform_footprint.totalActiveAds} active ads · ~€
-                {insights.platform_footprint.totalEstSpendEur.toLocaleString()}/mo modeled (all platforms)
+                Total {insights.platform_footprint.totalActiveAds} active ads · modeled monthly range ca. €
+                {fmtEurRange(
+                  insights.platform_footprint.totalEstSpendEurLow ?? insights.platform_footprint.totalEstSpendEur,
+                  insights.platform_footprint.totalEstSpendEurHigh ?? insights.platform_footprint.totalEstSpendEur
+                )}
+                /mo combined (benchmarks; not platform-disclosed spend)
               </p>
             </div>
           )}

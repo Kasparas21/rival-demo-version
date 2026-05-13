@@ -8,12 +8,16 @@ import {
   ADS_LIBRARY_UPDATED_EVENT,
   pendingStrategyRefreshStorageKey,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
-import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import type {
+  CompetitorStrategyOverviewPayload,
+  FunnelCellId,
+} from "@/lib/strategy-overview/payload-types";
 import { useStrategyOverviewUi, type StrategyViewMode } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyViewToggle } from "@/components/strategy-overview/strategy-view-toggle";
 import { StrategyMapFlow } from "@/components/strategy-overview/strategy-map-flow";
 import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy-sidebar";
 import { StrategyInsightView } from "@/components/strategy-overview/strategy-insight-view";
+import { FunnelCellSheet } from "@/components/strategy-overview/funnel-cell-sheet";
 import { NodeDetailSheet } from "@/components/strategy-overview/node-detail-sheet";
 
 type Brand = { name: string; domain: string };
@@ -23,6 +27,7 @@ type Props = {
   onOpenAdsLibrary?: () => void;
   /** When set, parent controls map vs insight; internal toggle is hidden. */
   forceView?: StrategyViewMode;
+  competitorId?: string;
 };
 
 function readViewParam(raw: string | null): StrategyViewMode {
@@ -30,7 +35,7 @@ function readViewParam(raw: string | null): StrategyViewMode {
   return "map";
 }
 
-export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView }: Props) {
+export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, competitorId }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -55,6 +60,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView }: Prop
   const [cached, setCached] = useState(false);
   const [recomputeBusy, setRecomputeBusy] = useState(false);
   const [sheetPlatform, setSheetPlatform] = useState<string | null>(null);
+  const [openCellId, setOpenCellId] = useState<FunnelCellId | null>(null);
   const [edgeTip, setEdgeTip] = useState<{ reasoning: string; confidence: number } | null>(null);
 
   const domain = brand.domain.trim();
@@ -242,8 +248,30 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView }: Prop
 
   const mapKey = useMemo(() => {
     if (!payload) return "empty";
-    return `${payload.map.activeAdCount}-${payload.map.platformNodes.map((n) => n.adCount).join(",")}`;
+    const fc = payload.map.funnelCells;
+    const fcKey = fc?.length ? fc.map((c) => c.id).join("|") : "legacy-cells";
+    return `${payload.map.activeAdCount}-${fcKey}-${payload.map.platformNodes.map((n) => n.adCount).join(",")}`;
   }, [payload]);
+
+  const cellSummary = useMemo(() => {
+    if (!openCellId || !payload?.map.funnelCells?.length) return null;
+    return payload.map.funnelCells.find((c) => c.id === openCellId) ?? null;
+  }, [openCellId, payload]);
+
+  const funnelClassificationBanner =
+    !loading &&
+    !error &&
+    payload &&
+    payload.map.activeAdCount > 0 &&
+    Array.isArray(payload.map.funnelCells) &&
+    payload.map.funnelCells.length === 0 ? (
+      <div className="mb-4 rounded-xl border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-[13px] text-sky-950">
+        <p className="font-semibold text-sky-950">Funnel classification is still processing for this competitor.</p>
+        <p className="mt-1 text-sky-950/95">
+          Showing platform-level view in the meantime.
+        </p>
+      </div>
+    ) : null;
 
   const suppressBanner = payload?.map.suppressEdgesReason
     ? payload.map.suppressEdgesReason === "low_sample"
@@ -399,18 +427,24 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView }: Prop
                     </span>
                   ) : null}
                 </div>
+                {funnelClassificationBanner}
                 <StrategyMapFlow
                   mapKey={mapKey}
                   map={payload.map}
-                  onNodeClick={(plat) => {
-                    setSelectedPlatform(plat as never);
-                    setSheetPlatform(plat);
+                  onNodeClick={(nodeId) => {
+                    if (nodeId.includes(":")) {
+                      setOpenCellId(nodeId as FunnelCellId);
+                      setSheetPlatform(null);
+                      return;
+                    }
+                    setSelectedPlatform(nodeId as never);
+                    setSheetPlatform(nodeId);
                   }}
                   onEdgeHover={setEdgeTip}
                 />
               </div>
               <aside className="w-full xl:w-[300px] shrink-0">
-                <StrategyOverviewSidebar map={payload.map} />
+                <StrategyOverviewSidebar map={payload.map} competitorId={competitorId} />
               </aside>
             </div>
           ) : (
@@ -459,6 +493,14 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView }: Prop
               Refresh insights
             </button>
           </div>
+
+          <FunnelCellSheet
+            open={openCellId != null}
+            cellId={openCellId}
+            competitorId={competitorId ?? ""}
+            cellSummary={cellSummary}
+            onClose={() => setOpenCellId(null)}
+          />
 
           <NodeDetailSheet
             open={sheetPlatform != null}
