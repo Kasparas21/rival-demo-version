@@ -386,7 +386,7 @@ function GaugeArc({
 
       <div
         className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
-        style={{ paddingBottom: size * 0.08 }}
+        style={{ transform: `translateY(${size * 0.095}px)` }}
       >
         <div className="text-center">
           {hoveredPlatform ? (
