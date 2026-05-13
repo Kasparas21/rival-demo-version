@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
-
 import { ComparisonPanelShell, ComparisonInsufficient } from "@/components/comparison/panel-shell";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { RivalLoadingRow } from "@/components/ui/rival-loading";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 export type VaultAdRow = {
@@ -91,9 +90,8 @@ export function CopyVaultPanel({
       tooltip='Shows up to 10 enriched ads active 30+ days with a known angle. Click a card to open the ad drawer; use the AI Analysis tab and “Extract” for copy structure.'
     >
       {loading ? (
-        <div className="flex items-center gap-2 py-10 justify-center text-[13px] text-slate-500">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading competitor ads…
+        <div className="flex justify-center py-10">
+          <RivalLoadingRow label="Loading competitor ads…" description="Ranking long-lived creatives by angle and lifespan." />
         </div>
       ) : error ? (
         <p className="text-[13px] text-red-700">{error}</p>

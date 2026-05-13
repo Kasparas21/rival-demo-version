@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
@@ -290,8 +291,8 @@ export function AdDetailDrawer({
           </div>
 
           {loading ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="text-[13px] text-slate-500">Loading ad…</div>
+            <div className="flex flex-1 flex-col overflow-y-auto py-16">
+              <RivalLoadingBlock title="Loading ad…" description="Fetching creative, copy, and save state." padded className="min-h-[200px]" />
             </div>
           ) : null}
 

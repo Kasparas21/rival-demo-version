@@ -6,6 +6,7 @@ import { Bookmark, StickyNote, Trash2 } from "lucide-react";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import type { Json } from "@/lib/supabase/types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 
 function platformForIcon(p: string): StrategyPlatform {
   const x = p.toLowerCase();
@@ -104,8 +105,8 @@ export function SavedAdsPanel({ competitorId, competitorLabel, onOpenAd }: Saved
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-[13px] text-[#808080]">Loading saved ads…</div>
+      <div className="flex justify-center py-12 px-4">
+        <RivalLoadingBlock title="Loading saved ads…" description="Syncing bookmarks and sticky notes." size="md" padded={false} />
       </div>
     );
   }

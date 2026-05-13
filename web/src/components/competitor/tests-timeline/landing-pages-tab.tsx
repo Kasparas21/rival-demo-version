@@ -4,6 +4,7 @@ import { ArrowUpDown, Calendar, ExternalLink, Info, Monitor, TrendingUp } from "
 import { useEffect, useMemo, useState } from "react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 type AdReference = {
@@ -126,9 +127,12 @@ export function LandingPagesTab({ competitorId, competitorLabel, onOpenAd }: Pro
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-[13px] text-slate-500">Loading landing pages…</div>
-      </div>
+      <RivalLoadingBlock
+        title="Loading landing pages…"
+        description="Aggregating destination URLs from saved ads and rollups."
+        padded
+        className="mx-auto max-w-5xl py-16 sm:py-24"
+      />
     );
   }
 

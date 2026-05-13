@@ -7,6 +7,7 @@ import { BrandProvider, type Brand } from "./brand-context";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { RivalLogoImg } from "@/components/rival-logo";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
 import {
@@ -1079,7 +1080,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={<div className="h-screen w-full flex items-center justify-center text-[#808080]">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-full items-center justify-center bg-[color:var(--rival-bg-soft,#fafafa)] px-6">
+          <RivalLoadingBlock title="Loading dashboard" description="Preparing sidebar and workspaces." padded={false} />
+        </div>
+      }
+    >
       <DashboardLayoutInner>{children}</DashboardLayoutInner>
     </Suspense>
   );

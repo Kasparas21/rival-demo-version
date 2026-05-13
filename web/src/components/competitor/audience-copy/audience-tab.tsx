@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { AudienceInferencePanel } from "@/components/comparison/panels/audience-inference-panel";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
 
@@ -51,7 +52,14 @@ export function AudienceTab({
   }, [competitorDomain]);
 
   if (loading) {
-    return <div className="py-12 text-center text-[13px] text-slate-500">Loading audience…</div>;
+    return (
+      <RivalLoadingBlock
+        title="Loading audience inference…"
+        description="Contrasting scraped copy and angles between your workspace and this competitor."
+        padded
+        className="mx-auto max-w-5xl py-16"
+      />
+    );
   }
 
   if (!data?.ok || !data.workspace?.payload || !data.competitor?.payload) {

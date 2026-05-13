@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowUp, Copy, Check, History, ChevronRight, MessageSquare } from "lucide-react";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
+import { RivalLogoVideo } from "@/components/ui/rival-loading";
 
 export type InsightCard = {
   title: string;
@@ -394,13 +395,28 @@ export function AIInsightChat({
                 )}
                 {isLoading && (
                   <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-[#343434] flex items-center justify-center shrink-0 flex-shrink-0">
-                      <span className="font-serif text-[14px] font-normal text-white tracking-tight">R</span>
+                    <div
+                      className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/[0.08] bg-gradient-to-br from-[#2a2a2a] to-[#474747]"
+                      aria-hidden
+                    >
+                      <RivalLogoVideo size="xs" />
                     </div>
-                    <div className="flex gap-1.5 py-4 items-center">
-                      <span className="w-2 h-2 rounded-full bg-[#DDF1FD] animate-bounce" style={{ animationDelay: "0ms" }} />
-                      <span className="w-2 h-2 rounded-full bg-[#DDF1FD] animate-bounce" style={{ animationDelay: "150ms" }} />
-                      <span className="w-2 h-2 rounded-full bg-[#DDF1FD] animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <div className="min-w-0 flex-1 space-y-1.5 pb-4 pt-1">
+                      <p className="text-[13px] font-medium tracking-tight text-[#52525b]">Thinking…</p>
+                      <div className="flex items-center gap-1.5" aria-hidden>
+                        <span
+                          className="size-2 rounded-full bg-[#DDF1FD] motion-safe:animate-bounce"
+                          style={{ animationDelay: "0ms" }}
+                        />
+                        <span
+                          className="size-2 rounded-full bg-[#DDF1FD] motion-safe:animate-bounce"
+                          style={{ animationDelay: "150ms" }}
+                        />
+                        <span
+                          className="size-2 rounded-full bg-[#DDF1FD] motion-safe:animate-bounce"
+                          style={{ animationDelay: "300ms" }}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

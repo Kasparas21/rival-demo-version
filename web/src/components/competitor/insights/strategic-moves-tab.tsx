@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { StrategicMoveDetectorPanel } from "@/components/comparison/panels/strategic-move-detector-panel";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 
 type Props = {
@@ -45,9 +46,12 @@ export function StrategicMovesTab({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-[13px] text-slate-500">Loading moves…</div>
-      </div>
+      <RivalLoadingBlock
+        title="Loading moves…"
+        description="Reading the latest two strategy snapshots to infer what changed."
+        padded
+        className="mx-auto max-w-5xl py-16"
+      />
     );
   }
 

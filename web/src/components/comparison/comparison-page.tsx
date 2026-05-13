@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { ArrowLeftRight, RefreshCw, Sparkles } from "lucide-react";
+
+import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { buildComparisonDigest } from "@/lib/brand-comparison/build-comparison-digest";
@@ -250,7 +252,13 @@ export function ComparisonPage({
               }}
               className="inline-flex items-center gap-2 rounded-full border border-[#e4e4e7] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3f3f46] shadow-sm hover:bg-[#fafafa] disabled:opacity-50"
             >
-              {payloadLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {payloadLoading ? (
+                <span className="inline-flex rounded-md border border-neutral-200/80 bg-white p-[3px]">
+                  <RivalLogoVideo size="inline" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
               Refresh
             </button>
           </div>
@@ -266,10 +274,12 @@ export function ComparisonPage({
         {recomputingNote}
 
         {payloadLoading && !wsPayload && !compPayload ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-[14px] text-slate-500">
-            <Loader2 className="h-5 w-5 animate-spin shrink-0" />
-            Loading strategy snapshots…
-          </div>
+          <RivalLoadingBlock
+            title="Loading strategy snapshots…"
+            description="Pulling the latest scraped ads summary for workspace and competitor."
+            padded
+            className="py-14 sm:py-16"
+          />
         ) : payloadError ? (
           <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
             {payloadError}
@@ -301,7 +311,11 @@ export function ComparisonPage({
                   <Sparkles className="w-3.5 h-3.5 text-white" />
                 </div>
                 <h3 className="text-[14px] font-semibold text-slate-900">AI gap analysis</h3>
-                {llmLoading ? <Loader2 className="h-4 w-4 animate-spin text-slate-400" /> : null}
+                {llmLoading ? (
+                  <span className="inline-flex shrink-0 rounded-md border border-slate-200/80 bg-white p-[3px] ring-1 ring-black/[0.03]">
+                    <RivalLogoVideo size="inline" />
+                  </span>
+                ) : null}
               </div>
               {llmError ? (
                 <p className="text-[13px] text-red-700">{llmError}</p>

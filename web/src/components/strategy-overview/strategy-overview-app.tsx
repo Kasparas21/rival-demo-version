@@ -2,7 +2,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BarChart3, Loader2, RefreshCw } from "lucide-react";
+import { BarChart3, RefreshCw } from "lucide-react";
+
+import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 
 import {
   ADS_LIBRARY_UPDATED_EVENT,
@@ -316,18 +318,17 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
       {!forceView ? <StrategyViewToggle view={view} onChange={setView} /> : null}
 
       {backgroundRecompute && !emptyStrategy ? (
-        <div className="mb-4 rounded-xl border border-indigo-200/90 bg-indigo-50/90 px-4 py-2.5 text-[13px] text-indigo-950 flex items-center gap-2">
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-          Building strategy overview in the background… this page will update when recomputation finishes.
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-indigo-200/90 bg-indigo-50/90 px-4 py-2.5 text-[13px] text-indigo-950">
+          <span className="mt-0.5 inline-flex shrink-0 rounded-lg border border-indigo-200/80 bg-white/90 p-[3px] shadow-sm ring-1 ring-indigo-900/[0.05]">
+            <RivalLogoVideo size="inline" />
+          </span>
+          <span className="leading-snug pt-px">
+            Building strategy overview in the background… this page will update when recomputation finishes.
+          </span>
         </div>
       ) : null}
 
-      {loading ? (
-        <div className="flex items-center justify-center gap-2 py-24 text-slate-500">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Loading strategy data…
-        </div>
-      ) : null}
+      {loading ? <RivalLoadingBlock title="Loading strategy data…" padded className="py-20" /> : null}
 
       {!loading && error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900 mb-4">
@@ -343,13 +344,13 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
       ) : null}
 
       {!loading && !error && backgroundRecompute && emptyStrategy ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-indigo-600 mb-4" aria-hidden />
-          <p className="text-[15px] font-semibold text-[#3f3f46]">Building strategy overview…</p>
-          <p className="mt-1.5 max-w-md text-[13px] text-[#71717a]">
-            Analyzing scraped ads and generating your funnel map. This usually takes under two minutes.
-          </p>
-        </div>
+        <RivalLoadingBlock
+          title="Building strategy overview…"
+          description="Analyzing scraped ads and generating your funnel map. This usually takes under two minutes."
+          size="xl"
+          padded
+          className="py-14"
+        />
       ) : null}
 
       {!loading && !error && !backgroundRecompute && emptyStrategy ? (
@@ -489,7 +490,13 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
               }}
               className="border border-[#e4e4e7] rounded-full px-4 py-2 text-[13px] text-[#71717a] hover:text-[#3f3f46] flex items-center gap-2"
             >
-              {recomputeBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {recomputeBusy ? (
+                <span className="inline-flex rounded-md border border-neutral-200/80 bg-white/90 p-[3px]">
+                  <RivalLogoVideo size="inline" />
+                </span>
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
               Refresh insights
             </button>
           </div>

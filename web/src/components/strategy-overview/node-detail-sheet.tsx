@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+
 type AdRow = {
   id: string;
   copyPreview: string;
@@ -70,7 +72,9 @@ export function NodeDetailSheet({ open, onClose, competitorDomain, platform, onO
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {loading ? <p className="text-[13px] text-slate-500">Loading samples…</p> : null}
+          {loading ? (
+            <RivalLoadingBlock title="Loading samples…" description="Fetching ads referenced on this funnel node." padded className="py-12" />
+          ) : null}
           {err ? <p className="text-[13px] text-red-600">{err}</p> : null}
           {!loading && !err
             ? ads.map((a) => (

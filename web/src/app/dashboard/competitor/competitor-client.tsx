@@ -15,7 +15,6 @@ import {
   Play,
   Video,
   Check,
-  Loader2,
   Lock,
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
@@ -23,6 +22,7 @@ import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
 import { findSidebarRowForHost, resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
 import { useActiveBrand } from "../brand-context";
+import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 import {
   MetaLogo,
   GoogleLogo,
@@ -173,8 +173,8 @@ function normalizeDomainHostForAdsEvent(input: string): string {
   );
 }
 
-function formatWeeklySpySubtitle(weekStartIsoYmd: string): string {
-  const [yStr, moStr, dStr] = weekStartIsoYmd.split("-");
+function formatSpySubtitle(fireUtcYmd: string): string {
+  const [yStr, moStr, dStr] = fireUtcYmd.split("-");
   const y = Number(yStr);
   const mo = Number(moStr);
   const da = Number(dStr);
@@ -183,7 +183,7 @@ function formatWeeklySpySubtitle(weekStartIsoYmd: string): string {
   const wd = dt.toLocaleDateString(undefined, { weekday: "short" });
   const mon = dt.toLocaleDateString(undefined, { month: "short" });
   const dom = dt.getUTCDate();
-  return `Weekly: Week of ${wd} ${mon} ${dom}`;
+  return `Last spy run: ${wd} ${mon} ${dom} (UTC)`;
 }
 
 const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
@@ -1672,8 +1672,6 @@ function CompetitorDashboardBody({
     [competitorSidebarMatch?.savedCompetitorDbId, resolveLibraryAdAndOpen],
   );
 
-  const [spyFollowPending, setSpyFollowPending] = useState(false);
-  const [spyFollowOptimistic, setSpyFollowOptimistic] = useState<boolean | null>(null);
   const [serverScrapedAdTotal, setServerScrapedAdTotal] = useState<number | null>(null);
   const [forceRescrapeBusy, setForceRescrapeBusy] = useState(false);
 
@@ -1923,39 +1921,6 @@ function CompetitorDashboardBody({
       saveSidebarCompetitors(mergeAccountSidebarRowsWithLocalLibraryContext(visible, localPrev));
     }
   }, [myBrand.domain]);
-
-  const spyFollowing =
-    spyFollowOptimistic !== null ? spyFollowOptimistic : Boolean(competitorSidebarMatch?.spyOnBrandFollowed);
-
-  const handleSpyToggle = useCallback(async () => {
-    const id = competitorSidebarMatch?.savedCompetitorDbId;
-    if (!id || spyFollowPending) return;
-    const next = !spyFollowing;
-    setSpyFollowOptimistic(next);
-    setSpyFollowPending(true);
-    try {
-      const res = await fetch(`/api/account/saved-competitors/${encodeURIComponent(id)}/follow`, {
-        method: "PATCH",
-        credentials: "include",
-      });
-      const payload = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(typeof payload?.error === "string" ? payload.error : "Could not update weekly spy.");
-      }
-      setSpyFollowOptimistic(null);
-      await syncSavedCompetitorsFromAccount();
-    } catch (e) {
-      setSpyFollowOptimistic(null);
-      toast.error(e instanceof Error ? e.message : "Could not update weekly spy.");
-    } finally {
-      setSpyFollowPending(false);
-    }
-  }, [
-    competitorSidebarMatch?.savedCompetitorDbId,
-    spyFollowPending,
-    spyFollowing,
-    syncSavedCompetitorsFromAccount,
-  ]);
 
   const fetchMeta = adsPlatforms.includes("meta");
   const fetchGoogle = adsPlatforms.includes("google");
@@ -2343,9 +2308,9 @@ function CompetitorDashboardBody({
                   {!isOwnWorkspace && competitorSidebarMatch?.lastWeeklyWeekStart ? (
                     <p
                       className="pl-[22px] text-[12px] leading-snug text-[#94a3b8]"
-                      title={`Last automated weekly scrape for ${competitorSidebarMatch.lastWeeklyWeekStart}`}
+                      title={`Last automated spy run (UTC): ${competitorSidebarMatch.lastWeeklyWeekStart}`}
                     >
-                      {formatWeeklySpySubtitle(competitorSidebarMatch.lastWeeklyWeekStart)}
+                      {formatSpySubtitle(competitorSidebarMatch.lastWeeklyWeekStart)}
                     </p>
                   ) : null}
                 </div>
@@ -2354,41 +2319,17 @@ function CompetitorDashboardBody({
             {!isOwnWorkspace ? (
               <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
                 {competitorSidebarMatch?.savedCompetitorDbId ? (
-                  <button
-                    type="button"
-                    disabled={spyFollowPending}
-                    onClick={() => void handleSpyToggle()}
-                    className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
-                      spyFollowing
-                        ? "bg-sky-600 text-white shadow-sm hover:bg-sky-700"
-                        : "border border-[#d4d4d8] bg-white/90 text-[#52525b] shadow-sm hover:border-[#a1a1aa] hover:bg-zinc-50"
-                    }`}
+                  <div
+                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-[13px] font-semibold text-sky-900"
+                    title="Competitors are automatically included in staggered library spy runs (Meta/Google/TikTok every 3 days; LinkedIn/Pinterest/Snapchat every 7 days)."
                   >
-                    {spyFollowPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-current" aria-hidden />
-                        <span>Updating…</span>
-                      </>
-                    ) : (
-                      <>
-                        <SatelliteDish
-                          className={`h-4 w-4 shrink-0 ${spyFollowing ? "fill-current text-white" : "text-[#71717a]"}`}
-                          aria-hidden
-                        />
-                        {spyFollowing ? (
-                          <>
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                            </span>
-                            <span>Spying · Active</span>
-                          </>
-                        ) : (
-                          <span>Spy on this brand</span>
-                        )}
-                      </>
-                    )}
-                  </button>
+                    <SatelliteDish className="h-4 w-4 shrink-0 text-sky-700" aria-hidden />
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    <span>Spy monitoring on</span>
+                  </div>
                 ) : null}
                 {competitorDbIdForSaved && serverScrapedAdTotal === 0 ? (
                   <button
@@ -2400,7 +2341,9 @@ function CompetitorDashboardBody({
                   >
                     {forceRescrapeBusy ? (
                       <>
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-current" aria-hidden />
+                        <span className="inline-flex shrink-0 items-center justify-center rounded-md bg-white/[0.12] p-0.5 ring-1 ring-white/10">
+                          <RivalLogoVideo size="inline" />
+                        </span>
                         <span>Re-scraping…</span>
                       </>
                     ) : (
@@ -2535,7 +2478,9 @@ function CompetitorDashboardBody({
                 className="inline-flex items-center gap-2 rounded-full border border-sky-200/90 bg-white px-3 py-1.5 text-[12px] font-medium text-sky-950 shadow-sm hover:bg-sky-50 disabled:opacity-50"
               >
                 {marketingCoachLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="inline-flex items-center justify-center rounded-md border border-sky-200/70 bg-white/85 p-[3px] shadow-sm">
+                    <RivalLogoVideo size="inline" />
+                  </span>
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
@@ -2544,10 +2489,7 @@ function CompetitorDashboardBody({
             </div>
 
             {marketingCoachLoading ? (
-              <div className="flex items-center justify-center gap-2 py-20 text-[14px] text-sky-900/70">
-                <Loader2 className="h-5 w-5 animate-spin shrink-0" />
-                Synthesizing across your watched brands…
-              </div>
+              <RivalLoadingBlock tone="sky" size="xl" title="Synthesizing across your watched brands…" className="py-12 sm:py-16" />
             ) : marketingCoachError ? (
               <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
                 {marketingCoachError}
@@ -3457,9 +3399,7 @@ function CompetitorDashboardBody({
         <div className="flex-1 overflow-y-auto bg-transparent">
           <Suspense
             fallback={
-              <div className="flex flex-1 items-center justify-center py-16 text-[15px] font-medium text-[#71717a]">
-                Loading…
-              </div>
+              <RivalLoadingBlock title="Loading insights" description="Fetching strategy overview and enrichment…" padded className="py-14" />
             }
           >
             {activeSubTab === "strategy-map" ? (

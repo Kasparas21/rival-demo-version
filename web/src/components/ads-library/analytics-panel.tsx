@@ -6,6 +6,7 @@ import { Activity, BarChart3, ChevronDown, ChevronUp, Link as LinkIcon } from "l
 import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import { describeArcClockwise } from "@/lib/charts/arc-geometry";
 import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
+import { RivalLoadingMicro } from "@/components/ui/rival-loading";
 
 type LandingPageGroup = {
   groupId: string;
@@ -412,7 +413,7 @@ function HoveredPlatformLabel({
 
 function LandingPagesList({ groups, loading }: { groups: LandingPageGroup[]; loading: boolean }) {
   if (loading) {
-    return <div className="py-4 text-[11px] italic text-[#94a3b8]">Loading…</div>;
+    return <RivalLoadingMicro caption="Loading landing pages…" />;
   }
 
   if (groups.length === 0) {
@@ -468,4 +469,3 @@ function LandingPagesList({ groups, loading }: { groups: LandingPageGroup[]; loa
       })}
     </div>
   );
-}

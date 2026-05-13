@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertCircle, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, Sparkles } from "lucide-react";
 
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { ComparisonPanelShell, ComparisonInsufficient } from "@/components/comparison/panel-shell";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import { RivalLogoVideo } from "@/components/ui/rival-loading";
 
 type Filter = "all" | "platform" | "angles" | "budget" | "voice";
 
@@ -242,7 +243,11 @@ export function StrategicMoveDetectorPanel({
               onClick={() => void triggerRecompute(weakerSide.domain)}
               className="inline-flex items-center gap-2 rounded-full bg-slate-900 text-white px-4 py-2 text-[11px] font-semibold hover:bg-slate-800 disabled:opacity-50"
             >
-              {triggering ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {triggering ? (
+                <span className="inline-flex rounded-md border border-white/15 bg-white/10 p-[3px] ring-1 ring-white/15">
+                  <RivalLogoVideo size="inline" />
+                </span>
+              ) : null}
               Trigger recompute on {weakerSide.name}
             </button>
           ) : null}

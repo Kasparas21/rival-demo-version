@@ -6,6 +6,7 @@ import { CalendarRange, Info, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { COMPARISON_PLATFORM_ORDER, ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 type TimelineAd = {
@@ -184,9 +185,12 @@ export function TimelineTab({ competitorId, competitorLabel, onOpenAd }: Props) 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-[13px] text-slate-500">Loading timeline…</div>
-      </div>
+      <RivalLoadingBlock
+        title="Loading timeline…"
+        description="Fetching first-seen and last-seen dates so we can timeline every creative."
+        padded
+        className="mx-auto max-w-6xl py-16 sm:py-24"
+      />
     );
   }
 

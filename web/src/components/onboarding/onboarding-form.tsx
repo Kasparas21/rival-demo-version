@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Check, ExternalLink, Loader2, X } from "lucide-react";
+import { Building2, Check, ExternalLink, X } from "lucide-react";
 import {
   GoogleLogo,
   LinkedInLogo,
@@ -12,6 +12,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { glassInputClass } from "@/components/ui/glass-styles";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import {
@@ -800,12 +801,14 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
             </div>
 
             {brandLoading ? (
-              <div
-                className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-white/50 bg-white/30 py-14 text-center"
-                aria-busy="true"
-              >
-                <Loader2 className="size-9 animate-spin text-gray-900/70 motion-reduce:animate-none" />
-                <p className="text-[15px] font-medium text-gray-800">Scanning your homepage…</p>
+              <div className="rounded-2xl border border-white/50 bg-white/30" aria-busy="true">
+                <RivalLoadingBlock
+                  title="Scanning your homepage…"
+                  description="We are pulling your logo, category, and a quick positioning read."
+                  size="xl"
+                  padded
+                  className="py-12"
+                />
               </div>
             ) : brandInsights ? (
               <div className="space-y-5">

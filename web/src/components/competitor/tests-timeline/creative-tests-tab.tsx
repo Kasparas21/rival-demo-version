@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Beaker, ChevronDown, ChevronRight, HelpCircle, Info, Play, Skull, Trophy } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 type CreativeTestAd = {
@@ -115,9 +116,12 @@ export function CreativeTestsTab({ competitorId, competitorLabel, onOpenAd }: Pr
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-[13px] text-slate-500">Loading creative tests…</div>
-      </div>
+      <RivalLoadingBlock
+        title="Loading creative tests…"
+        description="Clustering launches by day and platform to infer test groups and winners."
+        padded
+        className="mx-auto max-w-5xl py-16 sm:py-24"
+      />
     );
   }
 

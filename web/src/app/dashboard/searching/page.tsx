@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
-import { Loader2, RefreshCw, AlertCircle, ArrowRight } from "lucide-react";
+import { RefreshCw, AlertCircle, ArrowRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import { ManualIdentifiersForm, type PlatformIdentifier } from "@/components/manual-identifiers-form";
@@ -9,6 +9,7 @@ import type { TermHint } from "@/lib/competitor-query";
 import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { RivalLogoImg } from "@/components/rival-logo";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import {
   findMatchingCompetitorIndex,
   loadSidebarCompetitors,
@@ -697,10 +698,13 @@ function SearchingContent() {
                 </button>
               </>
             ) : (
-              <>
-                <Loader2 className="w-10 h-10 animate-spin text-[#343434]" />
-                <p className="text-[15px] text-[#808080] font-medium">{discoveryStep}</p>
-              </>
+              <RivalLoadingBlock
+                title={discoveryStep}
+                description="Profiling the brand domain and locating public accounts — usually under a minute."
+                size="xl"
+                padded
+                className="py-10"
+              />
             )}
           </div>
         )}
@@ -854,8 +858,8 @@ export default function SearchingViewWrapper() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-24">
-          <Loader2 className="h-8 w-8 animate-spin text-[#343434]" aria-hidden />
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-16">
+          <RivalLoadingBlock title="Loading search" description="Preparing competitor discovery." padded={false} />
           <span className="sr-only">Loading search</span>
         </div>
       }
