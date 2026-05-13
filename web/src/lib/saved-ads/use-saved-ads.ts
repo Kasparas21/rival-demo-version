@@ -9,6 +9,9 @@ export const PENDING_SAVED_AD_ID = "__pending__";
 
 export type LibraryItemRef = { platform: string; libraryItemId: string };
 
+/** Stable default for optional scraped id lists (`[]` default would be a fresh array each render). */
+const EMPTY_SCRAPED_IDS: readonly string[] = [];
+
 export function isAdSaved(savedMap: SavedMap, scrapedAdId: string): boolean {
   return Boolean(scrapedAdId && savedMap[scrapedAdId]);
 }
@@ -17,7 +20,7 @@ export function useSavedAdsStatus(
   competitorId: string,
   libraryItems: LibraryItemRef[],
   /** Also check saved state for these scraped_ads ids (e.g. when library card id is missing). */
-  scrapedAdIds: string[] = []
+  scrapedAdIds: readonly string[] = EMPTY_SCRAPED_IDS,
 ) {
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
@@ -51,13 +54,13 @@ export function useSavedAdsStatus(
   useEffect(() => {
     const cid = competitorId.trim();
     if (!cid || (dedupedItems.length === 0 && dedupedScrapedIds.length === 0)) {
-      setSavedMap({});
-      setResolvedToScraped({});
+      setSavedMap((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      setResolvedToScraped((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       lastKeyRef.current = "";
       return;
     }
 
-    const queryKey = `${cid}|lib:${dedupedItems.map((i) => `${i.platform}:${i.libraryItemId}`).sort().join(",")}|s:${dedupedScrapedIds.sort().join(",")}`;
+    const queryKey = `${cid}|lib:${dedupedItems.map((i) => `${i.platform}:${i.libraryItemId}`).sort().join(",")}|s:${[...dedupedScrapedIds].sort().join(",")}`;
     if (queryKey === lastKeyRef.current) return;
     lastKeyRef.current = queryKey;
 
