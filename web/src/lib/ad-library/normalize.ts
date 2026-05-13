@@ -134,6 +134,9 @@ export type TikTokAdCard = {
   /** Formatted for display (e.g. MM/DD/YYYY) */
   firstShown?: string | null;
   lastShown?: string | null;
+  /** Parsed from raw Ad Dates for header “Active nD” / lifespan (ms since epoch). */
+  flightStartMs?: number;
+  flightEndMs?: number;
   /** e.g. "1K-10K" from Ad Audience / reach */
   uniqueUsersSeen?: string | null;
   advertiserMismatch?: boolean;
@@ -2725,6 +2728,10 @@ export function tiktokApifyItemToCard(
   const { first: firstRaw, last: lastRaw } = parseTikTokAdDates(adDates);
   const firstShown = firstRaw ? formatTikTokUiDate(firstRaw) : null;
   const lastShown = lastRaw ? formatTikTokUiDate(lastRaw) : null;
+  const flightStartMs = firstRaw ? new Date(firstRaw).getTime() : undefined;
+  const flightEndMs = lastRaw ? new Date(lastRaw).getTime() : undefined;
+  const flightStartOk = flightStartMs !== undefined && !Number.isNaN(flightStartMs);
+  const flightEndOk = flightEndMs !== undefined && !Number.isNaN(flightEndMs);
   const uniqueUsersSeen = pickTikTokAudience(raw) ?? null;
 
   const bn = ctx?.brandName?.trim() ?? "";
@@ -2743,6 +2750,8 @@ export function tiktokApifyItemToCard(
     videoUrl: videoUrl || undefined,
     firstShown,
     lastShown,
+    ...(flightStartOk ? { flightStartMs } : {}),
+    ...(flightEndOk ? { flightEndMs } : {}),
     uniqueUsersSeen,
     ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowUp, Copy, Check, History, ChevronRight, MessageSquare } from "lucide-react";
-import { BrandLogoThumb } from "@/components/brand-logo-thumb";
+import { CompetitorLogo } from "@/components/shared/competitor-logo";
 
 export type InsightCard = {
   title: string;
@@ -90,6 +90,7 @@ export function AIInsightChat({
   myBrandLogoUrl,
   myBrandColor,
   myBrandContext,
+  myBrandDomain,
 }: {
   competitorName: string;
   competitorDomain: string;
@@ -99,6 +100,8 @@ export function AIInsightChat({
   myBrandColor?: string;
   /** Workspace brand positioning from onboarding / settings — improves mock grounding until a live model ships. */
   myBrandContext?: string;
+  /** Workspace domain for logo fallbacks (Clearbit / favicon). */
+  myBrandDomain?: string;
 }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -325,8 +328,14 @@ export function AIInsightChat({
                         className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-white"
                         title={myBrandName}
                       >
-                        {myBrandLogoUrl ? (
-                          <BrandLogoThumb src={myBrandLogoUrl} alt={myBrandName} className="bg-white" />
+                        {myBrandLogoUrl || myBrandDomain ? (
+                          <CompetitorLogo
+                            sources={{ primary: myBrandLogoUrl, domain: myBrandDomain }}
+                            name={myBrandName}
+                            size="sm"
+                            shape="rounded"
+                            className="border-white/20 shadow-none"
+                          />
                         ) : (
                           <span className="text-[11px] font-semibold" style={{ color: myBrandColor ?? "#343434" }}>{myBrandBadge}</span>
                         )}

@@ -19,6 +19,8 @@ type Props = {
   competitorMoves: ComparisonMoveRow[];
   workspaceSnapshotCount: number;
   competitorSnapshotCount: number;
+  /** When set, show only competitor timeline (Insights > Strategic Moves). */
+  standaloneMode?: boolean;
 };
 
 function relativeTime(iso: string): string {
@@ -142,6 +144,7 @@ export function StrategicMoveDetectorPanel({
   competitorMoves,
   workspaceSnapshotCount,
   competitorSnapshotCount,
+  standaloneMode = false,
 }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
   const [triggering, setTriggering] = useState<"ws" | "rival" | null>(null);
@@ -166,14 +169,20 @@ export function StrategicMoveDetectorPanel({
     return counts;
   }, [competitorMoves]);
 
-  const lowSnapshots = workspaceSnapshotCount < 2 || competitorSnapshotCount < 2;
+  const lowSnapshots = standaloneMode
+    ? competitorSnapshotCount < 2
+    : workspaceSnapshotCount < 2 || competitorSnapshotCount < 2;
 
   const weakerSide = useMemo(() => {
+    if (standaloneMode) {
+      return { name: competitorLabel, domain: competitorDomain, count: competitorSnapshotCount };
+    }
     if (workspaceSnapshotCount <= competitorSnapshotCount) {
       return { name: workspaceLabel, domain: workspaceDomain, count: workspaceSnapshotCount };
     }
     return { name: competitorLabel, domain: competitorDomain, count: competitorSnapshotCount };
   }, [
+    standaloneMode,
     workspaceSnapshotCount,
     competitorSnapshotCount,
     workspaceLabel,
@@ -185,7 +194,7 @@ export function StrategicMoveDetectorPanel({
   const triggerRecompute = async (domain: string) => {
     const d = domain.trim();
     if (!d) return;
-    setTriggering(domain === workspaceDomain ? "ws" : "rival");
+    setTriggering(!standaloneMode && domain === workspaceDomain ? "ws" : "rival");
     try {
       await fetch(
         `/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(d)}&force=1`,
@@ -212,9 +221,18 @@ export function StrategicMoveDetectorPanel({
           <div>
             <p className="text-[14px] font-semibold text-slate-900 tracking-tight">Move tracking activates after two scrapes</p>
             <p className="text-[11px] text-slate-600 mt-2 leading-relaxed max-w-md mx-auto">
-              Currently {workspaceSnapshotCount} snapshot(s) of {workspaceLabel} and {competitorSnapshotCount} of{" "}
-              {competitorLabel}. Trigger another full recompute on the brand with fewer snapshots, wait for it to finish,
-              then repeat so each side has at least 2 snapshots.
+              {standaloneMode ? (
+                <>
+                  Currently {competitorSnapshotCount} snapshot(s) of {competitorLabel}. Trigger another full recompute,
+                  wait for it to finish, then repeat so at least 2 snapshots exist for move detection.
+                </>
+              ) : (
+                <>
+                  Currently {workspaceSnapshotCount} snapshot(s) of {workspaceLabel} and {competitorSnapshotCount} of{" "}
+                  {competitorLabel}. Trigger another full recompute on the brand with fewer snapshots, wait for it to
+                  finish, then repeat so each side has at least 2 snapshots.
+                </>
+              )}
             </p>
           </div>
           {weakerSide.domain ? (
@@ -233,7 +251,7 @@ export function StrategicMoveDetectorPanel({
     );
   }
 
-  if (competitorMoves.length === 0 && workspaceMoves.length === 0) {
+  if (!standaloneMode && competitorMoves.length === 0 && workspaceMoves.length === 0) {
     return (
       <ComparisonPanelShell
         title="Strategic move detector"
@@ -251,7 +269,11 @@ export function StrategicMoveDetectorPanel({
   return (
     <ComparisonPanelShell
       title="Strategic move detector"
-      subtitle="Changes inferred from the last two strategy snapshots per brand"
+      subtitle={
+        standaloneMode
+          ? `Changes inferred from strategy snapshots for ${competitorLabel}`
+          : "Changes inferred from the last two strategy snapshots per brand"
+      }
       tooltip="High-significance moves get a short Sonnet narrative."
     >
       <div className="space-y-4">
@@ -275,6 +297,7 @@ export function StrategicMoveDetectorPanel({
           ))}
         </div>
 
+        {!standaloneMode ? (
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{workspaceLabel} — recent</p>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -293,6 +316,7 @@ export function StrategicMoveDetectorPanel({
             )}
           </div>
         </div>
+        ) : null}
 
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{competitorLabel} — timeline</p>

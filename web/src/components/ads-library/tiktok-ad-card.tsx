@@ -2,8 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { ExternalLink, Play } from "lucide-react";
+import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import type { TikTokAdCard as TikTokAdCardModel } from "@/lib/ad-library/normalize";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
+
+function tikTokFlightLifespanDays(ad: TikTokAdCardModel): number {
+  const start = ad.flightStartMs;
+  if (start == null || Number.isNaN(start)) return 0;
+  const end = ad.flightEndMs != null && !Number.isNaN(ad.flightEndMs) ? ad.flightEndMs : Date.now();
+  return Math.max(0, Math.floor((end - start) / (24 * 60 * 60 * 1000)));
+}
+
+function isTikTokAdKilled(ad: TikTokAdCardModel): boolean {
+  if (ad.flightEndMs == null || Number.isNaN(ad.flightEndMs)) return false;
+  return ad.flightEndMs < Date.now() - 48 * 60 * 60 * 1000;
+}
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
@@ -23,6 +36,7 @@ function TikTokCreativePlaceholder({ ad }: { ad: TikTokAdCardModel }) {
       href={ad.adUrl}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
       className="relative flex h-full min-h-[220px] w-full flex-col items-center justify-center bg-gradient-to-br from-[#010101] via-[#0c4a6e]/35 to-[#0f172a] px-4 text-center transition-opacity hover:opacity-95"
     >
       <span className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/10 text-white shadow-lg backdrop-blur-sm ring-1 ring-white/20">
@@ -36,7 +50,21 @@ function TikTokCreativePlaceholder({ ad }: { ad: TikTokAdCardModel }) {
   );
 }
 
-export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
+export function TikTokAdCard({
+  ad,
+  onClick,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
+}: {
+  ad: TikTokAdCardModel;
+  onClick?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
+}) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -62,19 +90,65 @@ export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
   const tryImg = Boolean(poster) && !imgFailed && (!tryVideo || videoFailed);
 
   return (
-    <article className="min-w-0 h-full flex flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+    <article
+      onClick={onClick}
+      className={`min-w-0 h-full flex flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06)] ${
+        onClick ? "cursor-pointer hover:ring-2 hover:ring-slate-200 transition-shadow" : ""
+      }`}
+    >
       <div className="space-y-3 shrink-0 px-4 pb-3 pt-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="shrink-0 rounded bg-[#38bdf8] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
-            Ad
-          </span>
-          <span
-            className="min-w-0 break-words text-[15px] font-bold leading-tight text-[#0f172a] [overflow-wrap:anywhere]"
-            title={ad.advertiser}
-          >
-            {ad.advertiser}
-          </span>
-          {ad.advertiserMismatch ? <UnverifiedSourceBadge /> : null}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="shrink-0 rounded bg-[#38bdf8] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+              Ad
+            </span>
+            <span
+              className="min-w-0 break-words text-[15px] font-bold leading-tight text-[#0f172a] [overflow-wrap:anywhere]"
+              title={ad.advertiser}
+            >
+              {ad.advertiser}
+            </span>
+            {ad.advertiserMismatch ? <UnverifiedSourceBadge /> : null}
+          </div>
+          {ad.flightStartMs != null && !Number.isNaN(ad.flightStartMs) ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#64748b]">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    isTikTokAdKilled(ad) ? "bg-[#94a3b8]" : "bg-green-500"
+                  }`}
+                />
+                <span className="font-medium whitespace-nowrap">
+                  {isTikTokAdKilled(ad) ? "Ended" : "Active"} {tikTokFlightLifespanDays(ad)}D
+                </span>
+              </div>
+              {ad.adUrl?.trim() ? (
+                <a
+                  href={ad.adUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="p-1 rounded-md hover:bg-[#f1f5f9] text-[#94a3b8] hover:text-[#343434] transition-colors"
+                  title="Open original ad on TikTok"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              ) : null}
+            </div>
+          ) : (
+            ad.adUrl?.trim() ? (
+              <a
+                href={ad.adUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="p-1 rounded-md hover:bg-[#f1f5f9] text-[#94a3b8] hover:text-[#343434] transition-colors shrink-0"
+                title="Open original ad on TikTok"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            ) : null
+          )}
         </div>
         <div className="space-y-1.5">
           <MetaRow label="First shown:" value={first} />
@@ -83,8 +157,8 @@ export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
         </div>
       </div>
 
-      <div className="relative flex min-h-0 flex-1 flex-col w-full overflow-hidden bg-[#0f172a]">
-        <div className="mx-auto aspect-[9/16] w-full max-w-[min(100%,280px)] max-h-[min(480px,55vh)] min-h-[200px]">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col bg-[#0f172a] p-3">
+        <div className="mx-auto aspect-[9/16] w-full max-w-[min(100%,280px)] max-h-[min(480px,55vh)] min-h-[200px] overflow-hidden rounded-xl bg-black/20">
           {tryVideo ? (
             <div className="relative h-full w-full">
               <video
@@ -92,8 +166,9 @@ export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
                 playsInline
                 preload="metadata"
                 poster={poster || undefined}
-                className="h-full w-full object-contain object-center"
+                className="h-full w-full rounded-xl object-contain object-center"
                 src={ad.videoUrl}
+                onClick={(e) => e.stopPropagation()}
                 onError={() => setVideoFailed(true)}
               />
               {overlayCopy ? (
@@ -109,12 +184,13 @@ export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
               href={ad.adUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="relative block h-full w-full"
             >
               <img
                 src={poster}
                 alt=""
-                className="h-full w-full object-contain object-center"
+                className="h-full w-full object-contain object-center rounded-xl"
                 onError={() => setImgFailed(true)}
               />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -141,11 +217,18 @@ export function TikTokAdCard({ ad }: { ad: TikTokAdCardModel }) {
           href={ad.adUrl}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#2563eb] hover:underline"
         >
           View in TikTok Ads Library
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
+        <AdSaveRow
+          scrapedAdId={scrapedAdId}
+          isSaved={Boolean(isSaved)}
+          onToggleSave={onToggleSave}
+          saveDisabled={saveDisabled}
+        />
       </div>
     </article>
   );

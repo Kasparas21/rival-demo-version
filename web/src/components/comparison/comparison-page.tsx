@@ -1,24 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
 
-import { BrandLogoThumb } from "@/components/brand-logo-thumb";
-import { googleFaviconUrlForDomain } from "@/lib/discovery";
+import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { buildComparisonDigest } from "@/lib/brand-comparison/build-comparison-digest";
 import type { BrandComparisonLlmResult } from "@/lib/brand-comparison/run-brand-comparison-llm";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { CompetitiveScoreSidebar } from "@/components/comparison/competitive-score-sidebar";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { AngleMigrationPanel } from "@/components/comparison/panels/angle-migration-panel";
-import { AudienceInferencePanel } from "@/components/comparison/panels/audience-inference-panel";
-import { CopyVaultPanel } from "@/components/comparison/panels/copy-vault-panel";
 import { CrossPlatformFunnelFlowPanel } from "@/components/comparison/panels/cross-platform-funnel-flow-panel";
 import { EstimatedBudgetSplitPanel } from "@/components/comparison/panels/estimated-budget-split-panel";
 import { PlatformPresencePanel } from "@/components/comparison/panels/platform-presence-panel";
 import { PlatformVoiceMapPanel } from "@/components/comparison/panels/platform-voice-map-panel";
-import { StrategicMoveDetectorPanel } from "@/components/comparison/panels/strategic-move-detector-panel";
 import { TestingVelocityMatrixPanel } from "@/components/comparison/panels/testing-velocity-matrix-panel";
+
+export type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 
 export type ComparisonPageProps = {
   isConfirmed: boolean;
@@ -81,34 +79,8 @@ export function ComparisonPage({
   const [llm, setLlm] = useState<BrandComparisonLlmResult | null>(null);
   const [llmLoading, setLlmLoading] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
-  const [competitorLogoLoadOk, setCompetitorLogoLoadOk] = useState(true);
-  const [workspaceLogoLoadOk, setWorkspaceLogoLoadOk] = useState(true);
 
   const analyticsFired = useRef(false);
-
-  const competitorLogoUrl = useMemo(() => {
-    const trimmed = competitor.logoUrl?.trim();
-    if (trimmed) return trimmed;
-    const d = competitor.domain?.trim();
-    if (d) return googleFaviconUrlForDomain(d);
-    return null;
-  }, [competitor.logoUrl, competitor.domain]);
-
-  const workspaceLogoUrl = useMemo(() => {
-    const trimmed = workspace.logoUrl?.trim();
-    if (trimmed) return trimmed;
-    const d = workspace.domain?.trim();
-    if (d) return googleFaviconUrlForDomain(d);
-    return null;
-  }, [workspace.logoUrl, workspace.domain]);
-
-  useEffect(() => {
-    setCompetitorLogoLoadOk(true);
-  }, [competitorLogoUrl]);
-
-  useEffect(() => {
-    setWorkspaceLogoLoadOk(true);
-  }, [workspaceLogoUrl]);
 
   const loadPayloads = useCallback(async () => {
     setPayloadLoading(true);
@@ -322,37 +294,6 @@ export function ComparisonPage({
 
             <AngleMigrationPanel left={left} right={right} leftIsWorkspace={leftIsWorkspace} />
 
-            <AudienceInferencePanel
-              workspace={{
-                name: workspace.name,
-                color: workspace.color,
-                badge: workspace.badge,
-                logoUrl: workspaceLogoUrl,
-                audience: wsPayload?.audience_inference,
-              }}
-              competitor={{
-                name: competitorDisplayLabel,
-                logoUrl: competitorLogoUrl,
-                audience: compPayload?.audience_inference,
-              }}
-              audienceComparisonNarrative={llm?.audienceComparisonNarrative ?? null}
-            />
-
-            {competitorSide?.meta.competitorId ? (
-              <CopyVaultPanel competitorId={competitorSide.meta.competitorId} competitorLabel={competitorDisplayLabel} />
-            ) : null}
-
-            <StrategicMoveDetectorPanel
-              workspaceLabel={workspace.name}
-              competitorLabel={competitorDisplayLabel}
-              workspaceDomain={workspace.domain ?? ""}
-              competitorDomain={competitor.domain}
-              workspaceMoves={workspaceSide?.recent_moves ?? []}
-              competitorMoves={competitorSide?.recent_moves ?? []}
-              workspaceSnapshotCount={workspaceSide?.snapshot_count ?? 0}
-              competitorSnapshotCount={competitorSide?.snapshot_count ?? 0}
-            />
-
             {/* AI gap analysis */}
             <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
               <div className="flex items-center gap-2 mb-3">
@@ -371,18 +312,16 @@ export function ComparisonPage({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
                     <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                       <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-slate-200">
-                        {competitorLogoUrl && competitorLogoLoadOk ? (
-                          <BrandLogoThumb
-                            src={competitorLogoUrl}
-                            alt={competitorDisplayLabel}
-                            className="bg-white"
-                            onError={() => setCompetitorLogoLoadOk(false)}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-600 text-white text-[11px] font-bold">
-                            {(competitorDisplayLabel.trim().charAt(0) || "?").toUpperCase()}
-                          </div>
-                        )}
+                        <CompetitorLogo
+                          sources={{
+                            primary: competitor.logoUrl,
+                            domain: competitor.domain,
+                          }}
+                          name={competitorDisplayLabel}
+                          size="md"
+                          shape="rounded"
+                          className="rounded-xl border-slate-200"
+                        />
                       </div>
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase text-slate-500">{competitorDisplayLabel}</p>
@@ -392,21 +331,16 @@ export function ComparisonPage({
                     </div>
                     <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/50 p-4">
                       <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-slate-200">
-                        {workspaceLogoUrl && workspaceLogoLoadOk ? (
-                          <BrandLogoThumb
-                            src={workspaceLogoUrl}
-                            alt={workspace.name}
-                            className="bg-white"
-                            onError={() => setWorkspaceLogoLoadOk(false)}
-                          />
-                        ) : (
-                          <div
-                            className="w-full h-full flex items-center justify-center text-white text-[11px] font-bold"
-                            style={{ backgroundColor: workspace.color ?? "#343434" }}
-                          >
-                            {workspace.badge ?? "Y"}
-                          </div>
-                        )}
+                        <CompetitorLogo
+                          sources={{
+                            primary: workspace.logoUrl,
+                            domain: workspace.domain,
+                          }}
+                          name={workspace.name}
+                          size="md"
+                          shape="rounded"
+                          className="rounded-xl border-slate-200"
+                        />
                       </div>
                       <div className="min-w-0">
                         <p className="text-[10px] font-semibold uppercase text-slate-500">{workspace.name}</p>

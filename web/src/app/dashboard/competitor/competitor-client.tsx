@@ -1,14 +1,11 @@
 "use client";
 import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
-import dynamic from "next/dynamic";
 import {
   Sparkles,
   MessageCircle,
   Repeat2,
   BarChart2,
   Globe,
-  MoreHorizontal,
-  X,
   RefreshCw,
   Clock,
   SatelliteDish,
@@ -21,11 +18,11 @@ import {
   Loader2,
   Lock,
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
+import { useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
 import { resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
 import { useActiveBrand } from "../brand-context";
-import { AIInsightChat } from "@/components/ai-insight-chat";
 import {
   MetaLogo,
   GoogleLogo,
@@ -36,19 +33,24 @@ import {
   YouTubeLogo,
 } from "@/components/platform-logos";
 import { useAdLibrary } from "@/hooks/use-ad-library";
+import { AdLibraryAnalyticsPanel } from "@/components/ads-library/analytics-panel";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import { GoogleAdFormatIcon } from "@/components/ads-library/google-ad-format-icon";
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-modal";
 import { MetaAdsAllModal } from "@/components/ads-library/meta-ads-all-modal";
+import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
+import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
+import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import { TikTokAdCard } from "@/components/ads-library/tiktok-ad-card";
-import { SnapchatAdCard } from "@/components/ads-library/snapchat-ad-card";
+import { SavedAdsPanel } from "@/components/ads-library/saved-ads-panel";
 import { PinterestAdCard } from "@/components/ads-library/pinterest-ad-card";
+import { SnapchatAdCard } from "@/components/ads-library/snapchat-ad-card";
 import {
   UnverifiedSourceBadge,
 } from "@/components/ads-library/unverified-source-overlay";
-import { BrandLogoThumb } from "@/components/brand-logo-thumb";
+import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { META_ADS_INLINE_PREVIEW } from "@/lib/ad-library/constants";
 import {
   DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE,
@@ -131,7 +133,19 @@ import {
   COMPETITOR_PAGE_TABS,
   WORKSPACE_ADS_TAB,
   WORKSPACE_MARKETING_IMPROVEMENTS_TAB,
+  findCompetitorTab,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
+import { StrategyMapTab } from "@/components/competitor/insights/strategy-map-tab";
+import { StrategyInsightTab } from "@/components/competitor/insights/strategy-insight-tab";
+import { StrategicMovesTab } from "@/components/competitor/insights/strategic-moves-tab";
+import { CreativeTestsTab } from "@/components/competitor/tests-timeline/creative-tests-tab";
+import { TimelineTab } from "@/components/competitor/tests-timeline/timeline-tab";
+import { LandingPagesTab } from "@/components/competitor/tests-timeline/landing-pages-tab";
+import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
+import { HooksTab } from "@/components/competitor/audience-copy/hooks-tab";
+import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
+import { BriefsTab } from "@/components/competitor/audience-copy/briefs-tab";
+import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   type AdsLibraryUpdatedDetail,
@@ -173,14 +187,14 @@ function formatWeeklySpySubtitle(weekStartIsoYmd: string): string {
   return `Weekly: Week of ${wd} ${mon} ${dom}`;
 }
 
-const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-6 sm:grid-cols-2 xl:grid-cols-3";
+const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
 
 /** Matches Google Transparency + YouTube cards so mixed-format rows align in {@link ADS_GRID_CLASS}. */
 const GOOGLE_MEDIA_FRAME_CLASS =
-  "flex h-[200px] min-h-[200px] max-h-[200px] w-full shrink-0 items-center justify-center overflow-hidden";
+  "flex h-[200px] min-h-[200px] max-h-[200px] w-full shrink-0 items-center justify-center overflow-hidden rounded-xl";
 
 const YOUTUBE_MEDIA_FRAME_CLASS =
-  "relative flex h-[200px] min-h-[200px] max-h-[200px] w-full shrink-0 items-center justify-center overflow-hidden bg-[#0f0f0f]";
+  "relative flex h-[200px] min-h-[200px] max-h-[200px] w-full shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#0f0f0f]";
 
 const GOOGLE_ARTICLE_MIN_HEIGHT_CLASS = "min-h-[440px] sm:min-h-[460px]";
 
@@ -229,17 +243,6 @@ const ADS_LIBRARY_PLATFORM_FILTER_CONFIG: {
   { id: "snapchat", label: "Snapchat", title: "Snapchat ads", Icon: SnapchatLogo },
 ];
 
-const StrategyOverview = dynamic(
-  () => import("@/components/strategy-overview").then((m) => ({ default: m.StrategyOverview })),
-  {
-    loading: () => (
-      <div className="flex flex-1 items-center justify-center py-16 text-[15px] font-medium text-[#71717a]">
-        Loading strategy…
-      </div>
-    ),
-  }
-);
-
 /** When the API uses the domain as “headline”, lift real copy from the description. */
 function googleTextSnippet(ad: Extract<GoogleAdRow, { type: "google" }>): {
   displayUrl: string;
@@ -271,9 +274,19 @@ function googleTextSnippet(ad: Extract<GoogleAdRow, { type: "google" }>): {
 function GoogleTransparencyCard({
   ad,
   brandDomain,
+  onOpenDetail,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
 }: {
   ad: Extract<GoogleAdRow, { type: "google" }>;
   brandDomain: string;
+  onOpenDetail?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
 }) {
   const [creativeImgFailed, setCreativeImgFailed] = useState(false);
   useEffect(() => {
@@ -304,7 +317,10 @@ function GoogleTransparencyCard({
 
   return (
     <article
-      className={`flex h-full min-w-0 flex-col rounded-2xl border border-[#dadce0] bg-white text-left shadow-[0_1px_2px_rgba(60,64,67,0.08)] transition-colors hover:border-[#c7c7c7] ${GOOGLE_ARTICLE_MIN_HEIGHT_CLASS}`}
+      onClick={() => onOpenDetail?.()}
+      className={`flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-[#dadce0] bg-white text-left shadow-[0_1px_2px_rgba(60,64,67,0.08)] transition-colors hover:border-[#c7c7c7] ${GOOGLE_ARTICLE_MIN_HEIGHT_CLASS}${
+        onOpenDetail ? " cursor-pointer hover:ring-2 hover:ring-slate-200" : ""
+      }`}
     >
       <div className="shrink-0 border-b border-[#e8eaed] px-4 py-3">
         <h3 className="text-[17px] font-medium leading-snug text-[#202124] text-pretty [overflow-wrap:anywhere] break-words">
@@ -331,6 +347,7 @@ function GoogleTransparencyCard({
               href={imageOpenHref}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               title={previewHref ? "Open creative preview" : ad.adUrl ?? undefined}
               className={`block shrink-0 border-b border-[#e8eaed] bg-[#f8f9fa] ${GOOGLE_MEDIA_FRAME_CLASS}`}
             >
@@ -338,7 +355,7 @@ function GoogleTransparencyCard({
                 <img
                   src={imageSrc}
                   alt=""
-                  className="max-h-full max-w-full object-contain object-center"
+                  className="max-h-full max-w-full rounded-xl object-contain object-center"
                   onError={() => setCreativeImgFailed(true)}
                 />
               ) : (
@@ -354,6 +371,7 @@ function GoogleTransparencyCard({
                 href={previewHref}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
                 className="inline-flex flex-col items-center gap-2 px-4 text-center"
               >
                 <ExternalLink className="h-6 w-6 shrink-0 text-[#1a73e8] opacity-90" aria-hidden />
@@ -374,7 +392,7 @@ function GoogleTransparencyCard({
                 <img src={imageSrc} alt="" className="h-8 w-8 object-contain" />
               </div>
             ) : null}
-            <a href={href} target="_blank" rel="noopener noreferrer" title={ad.adUrl ?? undefined} className="block">
+            <a href={href} target="_blank" rel="noopener noreferrer" title={ad.adUrl ?? undefined} onClick={(e) => e.stopPropagation()} className="block">
               <p className="flex items-center gap-1.5 text-[12px] leading-tight text-[#188038]">
                 <Globe className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                 <span className="truncate font-medium">{sn.displayUrl}</span>
@@ -406,12 +424,19 @@ function GoogleTransparencyCard({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
           title={ad.adUrl ?? undefined}
           className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full border border-[#bfdbfe] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#2563eb] shadow-sm transition-colors hover:bg-[#eff6ff]"
         >
           {linkCta.primary}
           <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
         </a>
+        <AdSaveRow
+          scrapedAdId={scrapedAdId}
+          isSaved={Boolean(isSaved)}
+          onToggleSave={onToggleSave}
+          saveDisabled={saveDisabled}
+        />
       </div>
     </article>
   );
@@ -421,9 +446,19 @@ function GoogleTransparencyCard({
 function GoogleYoutubeAdCard({
   ad,
   brand,
+  onOpenDetail,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
 }: {
   ad: Extract<GoogleAdRow, { type: "youtube" }>;
   brand: { name: string; domain: string; logoUrl?: string };
+  onOpenDetail?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
 }) {
   const [posterIdx, setPosterIdx] = useState(0);
   const [videoDead, setVideoDead] = useState(false);
@@ -471,9 +506,12 @@ function GoogleYoutubeAdCard({
 
   return (
     <article
-      className={`flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] ${GOOGLE_ARTICLE_MIN_HEIGHT_CLASS}`}
+      onClick={() => onOpenDetail?.()}
+      className={`flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] ${GOOGLE_ARTICLE_MIN_HEIGHT_CLASS}${
+        onOpenDetail ? " cursor-pointer hover:ring-2 hover:ring-slate-200" : ""
+      }`}
     >
-      <a href={href} target="_blank" rel="noopener noreferrer" className={YOUTUBE_MEDIA_FRAME_CLASS}>
+      <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className={YOUTUBE_MEDIA_FRAME_CLASS}>
         {showVideoEl ? (
           <video
             key={`${ad.id}-v-${posterIdx}`}
@@ -482,7 +520,8 @@ function GoogleYoutubeAdCard({
             muted
             playsInline
             preload="auto"
-            className="max-h-full max-w-full object-contain object-center bg-black"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-full max-w-full rounded-xl object-contain object-center bg-black"
             onError={() => {
               setVideoDead(true);
               setPosterIdx(0);
@@ -502,7 +541,7 @@ function GoogleYoutubeAdCard({
           <img
             src={activePoster}
             alt=""
-            className="max-h-full max-w-full object-contain object-center bg-black"
+            className="max-h-full max-w-full rounded-xl object-contain object-center bg-black"
             onError={() => {
               if (canBumpPoster) setPosterIdx((i) => i + 1);
               else setPosterExhausted(true);
@@ -533,10 +572,13 @@ function GoogleYoutubeAdCard({
         </span>
       </a>
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex gap-3 p-3">
-          <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-[#e5e7eb] bg-white">
-            <BrandLogoThumb src={brand.logoUrl ?? ""} alt={brand.name} className="bg-white" />
-          </div>
+          <div className="flex gap-3 p-3">
+          <CompetitorLogo
+            sources={{ primary: brand.logoUrl, domain: brand.domain }}
+            name={brand.name}
+            size="sm-plus"
+            shape="circle"
+          />
           <div className="min-w-0 flex-1">
             <p className="text-pretty break-words text-[14px] font-medium leading-snug text-[#0f0f0f] [overflow-wrap:anywhere]">
               {ad.title}
@@ -550,11 +592,18 @@ function GoogleYoutubeAdCard({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#bfdbfe] bg-white px-4 py-2.5 text-[13px] font-semibold text-[#2563eb] shadow-sm transition-colors hover:bg-[#eff6ff] sm:w-auto"
           >
             {linkLabel}
             <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
           </a>
+          <AdSaveRow
+            scrapedAdId={scrapedAdId}
+            isSaved={Boolean(isSaved)}
+            onToggleSave={onToggleSave}
+            saveDisabled={saveDisabled}
+          />
         </div>
       </div>
     </article>
@@ -564,34 +613,83 @@ function GoogleYoutubeAdCard({
 function GoogleAdRowCard({
   ad,
   brand,
+  onOpenDetail,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
 }: {
   ad: GoogleAdRow;
   brand: { name: string; domain: string; logoUrl?: string };
+  onOpenDetail?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
 }) {
   if (ad.type === "google") {
-    return <GoogleTransparencyCard ad={ad} brandDomain={brand.domain} />;
+    return (
+      <GoogleTransparencyCard
+        ad={ad}
+        brandDomain={brand.domain}
+        onOpenDetail={onOpenDetail}
+        scrapedAdId={scrapedAdId}
+        isSaved={isSaved}
+        onToggleSave={onToggleSave}
+        saveDisabled={saveDisabled}
+      />
+    );
   }
-  return <GoogleYoutubeAdCard ad={ad} brand={brand} />;
+  return (
+    <GoogleYoutubeAdCard
+      ad={ad}
+      brand={brand}
+      onOpenDetail={onOpenDetail}
+      scrapedAdId={scrapedAdId}
+      isSaved={isSaved}
+      onToggleSave={onToggleSave}
+      saveDisabled={saveDisabled}
+    />
+  );
 }
 
 function LinkedInFeedAdCard({
   ad,
   brand,
+  onOpenDetail,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
 }: {
   ad: LinkedInAdCard;
-  brand: { name: string; logoUrl?: string };
+  brand: { name: string; domain: string; logoUrl?: string };
+  onOpenDetail?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
 }) {
   return (
-    <article className="relative min-w-0 h-full flex flex-col bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 overflow-hidden hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] hover:border-[#DDF1FD]/60 transition-all duration-200 text-left">
+    <article
+      onClick={() => onOpenDetail?.()}
+      className={`relative min-w-0 h-full flex flex-col bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 overflow-hidden hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] hover:border-[#DDF1FD]/60 transition-all duration-200 text-left${
+        onOpenDetail ? " cursor-pointer hover:ring-2 hover:ring-slate-200" : ""
+      }`}
+    >
       <div className="p-4 shrink-0">
         <div className="flex items-start gap-3">
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded border border-[#e5e7eb] bg-[#f3f4f6]">
-            <BrandLogoThumb
-              src={ad.advertiserLogoUrl ?? brand.logoUrl ?? ""}
-              alt={ad.advertiser}
-              className="bg-[#f3f4f6]"
-            />
-          </div>
+          <CompetitorLogo
+            sources={{
+              primary: ad.advertiserLogoUrl,
+              secondary: brand.logoUrl,
+              domain: brand.domain,
+            }}
+            name={ad.advertiser}
+            size="md"
+            shape="rounded"
+            className="rounded-lg border-[#e5e7eb] bg-[#f3f4f6]"
+          />
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-[15px] text-[#0a66c2]">{ad.advertiser}</p>
             <p className="text-[12px] text-[#6b7280] mt-0.5">
@@ -610,12 +708,16 @@ function LinkedInFeedAdCard({
             ) : null}
           </div>
           <div className="flex items-center gap-0.5 shrink-0 text-[#6b7280]">
-            <span className="p-1.5">
-              <MoreHorizontal className="w-4 h-4" />
-            </span>
-            <span className="p-1.5">
-              <X className="w-4 h-4" />
-            </span>
+            <a
+              href={ad.adUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-md p-1.5 transition-colors hover:bg-[#f3f4f6] hover:text-[#0a66c2]"
+              title="Open original ad on LinkedIn"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
           </div>
         </div>
         {ad.desc?.trim() ? (
@@ -627,38 +729,49 @@ function LinkedInFeedAdCard({
           </div>
         ) : null}
       </div>
-      <div className="flex flex-1 flex-col min-h-0 bg-[#f9fafb] border-y border-[#e5e7eb] overflow-hidden">
-        <AdCreativeVideoOrImage
-          img={ad.img ?? ""}
-          videoUrl={ad.videoUrl}
-          openHref={ad.adUrl}
-          className="min-h-0 w-full flex-1"
-          minHeightClass="min-h-[200px]"
-          fillAvailableHeight
-        />
+      <div className="flex flex-1 flex-col min-h-0 border-y border-[#e5e7eb] bg-[#f9fafb] p-3">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white">
+          <AdCreativeVideoOrImage
+            img={ad.img ?? ""}
+            videoUrl={ad.videoUrl}
+            openHref={ad.adUrl}
+            className="min-h-0 w-full flex-1"
+            minHeightClass="min-h-[200px]"
+            fillAvailableHeight
+          />
+        </div>
         <a
           href={ad.adUrl}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="block shrink-0 p-4 bg-white border-t border-[#e5e7eb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#0a66c2]"
         >
           <p className="font-semibold text-[15px] text-[#374151] break-words [overflow-wrap:anywhere] text-pretty leading-snug">{ad.headline}</p>
           <p className="text-[13px] text-[#6b7280] mt-0.5 break-all [overflow-wrap:anywhere]">{ad.url}</p>
         </a>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-1 px-4 py-3 border-t border-[#e5e7eb] min-h-[48px] text-[#6b7280]">
-        <span className="flex items-center gap-2 text-[13px] font-medium py-1.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-t border-[#e5e7eb] px-4 py-3 min-h-[48px] text-[#6b7280]">
+        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
           <ThumbsUp className="w-4 h-4" /> Like
         </span>
-        <span className="flex items-center gap-2 text-[13px] font-medium py-1.5">
+        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
           <MessageCircle className="w-4 h-4" /> Comment
         </span>
-        <span className="flex items-center gap-2 text-[13px] font-medium py-1.5">
+        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
           <Repeat2 className="w-4 h-4" /> Repost
         </span>
-        <span className="flex items-center gap-2 text-[13px] font-medium py-1.5">
+        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
           <Send className="w-4 h-4" /> Share
         </span>
+      </div>
+      <div className="shrink-0 border-t border-[#e5e7eb] bg-white px-4 pb-4 pt-1" onClick={(e) => e.stopPropagation()}>
+        <AdSaveRow
+          scrapedAdId={scrapedAdId}
+          isSaved={Boolean(isSaved)}
+          onToggleSave={onToggleSave}
+          saveDisabled={saveDisabled}
+        />
       </div>
     </article>
   );
@@ -1384,19 +1497,123 @@ function CompetitorDashboardBody({
     return next;
   }, [isOwnWorkspace]);
 
-  const [activeTab, setActiveTab] = useState("ads library");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const raw = (searchParams.get("tab") ?? "").trim();
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    const params = new URLSearchParams(searchParams.toString());
+    let fix = false;
+    if (lower === "ai insight") {
+      params.set("tab", "insights");
+      params.set("sub", "strategy-insight");
+      params.set("view", "insight");
+      fix = true;
+    } else if (lower === "strategy overview") {
+      params.set("tab", "insights");
+      const view = searchParams.get("view");
+      params.set("sub", view === "insight" ? "strategy-insight" : "strategy-map");
+      params.delete("view");
+      fix = true;
+    } else if (lower === "workspace ads") {
+      params.set("tab", "workspace-ads");
+      fix = true;
+    } else if (lower === "marketing improvements") {
+      params.set("tab", "workspace-marketing-improvements");
+      fix = true;
+    }
+    if (fix) {
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [searchParams, pathname, router]);
+
+  const tabParamRaw = (searchParams.get("tab") ?? "").trim();
+  const isValidTab = (id: string) => {
+    if (COMPETITOR_PAGE_TABS.some((t) => t.id === id)) return true;
+    if (isOwnWorkspace && (id === "workspace-ads" || id === "workspace-marketing-improvements")) return true;
+    return false;
+  };
+  const activeTab = isValidTab(tabParamRaw) ? tabParamRaw : "ads library";
+
+  const activeSubTab = useMemo(() => {
+    const def = findCompetitorTab(activeTab);
+    if (!def?.subTabs?.length) return null;
+    const sub = (searchParams.get("sub") ?? "").trim();
+    if (sub && def.subTabs.some((s) => s.id === sub)) return sub;
+    return def.defaultSubTab ?? null;
+  }, [activeTab, searchParams]);
+
+  useEffect(() => {
+    const def = findCompetitorTab(activeTab);
+    if (!def?.subTabs?.length || !def.defaultSubTab) return;
+    const sub = (searchParams.get("sub") ?? "").trim();
+    const ok = Boolean(sub && def.subTabs.some((s) => s.id === sub));
+    if (ok) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sub", def.defaultSubTab);
+    if (activeTab === "insights") {
+      params.set("view", def.defaultSubTab === "strategy-insight" ? "insight" : "map");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [activeTab, pathname, router, searchParams]);
 
   useEffect(() => {
     if (isOwnWorkspace && activeTab === "comparison") {
-      setActiveTab("ads library");
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "ads library");
+      params.delete("sub");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-  }, [isOwnWorkspace, activeTab]);
+  }, [isOwnWorkspace, activeTab, pathname, router, searchParams]);
 
   useEffect(() => {
-    if (!isOwnWorkspace && activeTab === "marketing improvements") {
-      setActiveTab("ads library");
+    if (
+      !isOwnWorkspace &&
+      (activeTab === "workspace-ads" || activeTab === "workspace-marketing-improvements")
+    ) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", "ads library");
+      params.delete("sub");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-  }, [isOwnWorkspace, activeTab]);
+  }, [isOwnWorkspace, activeTab, pathname, router, searchParams]);
+
+  const handleTabChange = useCallback(
+    (tabId: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", tabId);
+      const tab = findCompetitorTab(tabId);
+      if (tab?.defaultSubTab) {
+        params.set("sub", tab.defaultSubTab);
+        if (tabId === "insights") {
+          params.set("view", tab.defaultSubTab === "strategy-insight" ? "insight" : "map");
+        }
+      } else {
+        params.delete("sub");
+        if (tabId !== "insights") {
+          params.delete("view");
+        }
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const handleSubTabChange = useCallback(
+    (subTabId: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("sub", subTabId);
+      if (activeTab === "insights") {
+        if (subTabId === "strategy-map") params.set("view", "map");
+        else if (subTabId === "strategy-insight") params.set("view", "insight");
+      }
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [activeTab, pathname, router, searchParams],
+  );
   const [visibleAdPlatforms, setVisibleAdPlatforms] = useState<AdsLibraryPlatform[] | null>(null);
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [googleAdsModalOpen, setGoogleAdsModalOpen] = useState(false);
@@ -1446,12 +1663,20 @@ function CompetitorDashboardBody({
     return idx >= 0 ? sidebarSnapshot[idx] : undefined;
   }, [sidebarSnapshot, canonicalHost, competitorDisplayLabel]);
 
+  const { activeAdId, openAd, closeAd, resolveLibraryAdAndOpen } = useAdDetailState();
+
+  const openAdLibraryCard = useCallback(
+    (platform: string, libraryItemId: string) => {
+      const cid = competitorSidebarMatch?.savedCompetitorDbId?.trim();
+      if (!cid || !libraryItemId.trim()) return;
+      void resolveLibraryAdAndOpen(cid, platform, libraryItemId);
+    },
+    [competitorSidebarMatch?.savedCompetitorDbId, resolveLibraryAdAndOpen],
+  );
+
   const [spyFollowPending, setSpyFollowPending] = useState(false);
   const [spyFollowOptimistic, setSpyFollowOptimistic] = useState<boolean | null>(null);
 
-  const handleTabChange = (tab: string) => {
-    setActiveTab(tab);
-  };
 
   const getTimeAgo = (date: Date) => {
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -1571,7 +1796,7 @@ function CompetitorDashboardBody({
   const [marketingCoachRefresh, setMarketingCoachRefresh] = useState(0);
 
   useEffect(() => {
-    if (activeTab !== "marketing improvements") return;
+    if (activeTab !== "workspace-marketing-improvements") return;
     if (!isOwnWorkspace) return;
 
     let cancelled = false;
@@ -1821,6 +2046,45 @@ function CompetitorDashboardBody({
     [filteredSnapchatAds]
   );
 
+  const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
+  const savedAdsLibraryItems = useMemo(() => {
+    const items: { platform: string; libraryItemId: string }[] = [];
+    for (const ad of filteredMetaAds) items.push({ platform: "meta", libraryItemId: ad.id });
+    for (const ad of filteredTikTokAds) items.push({ platform: "tiktok", libraryItemId: ad.id });
+    for (const ad of filteredLinkedInAds) items.push({ platform: "linkedin", libraryItemId: ad.id });
+    for (const ad of filteredPinterestAds) items.push({ platform: "pinterest", libraryItemId: ad.id });
+    for (const ad of filteredSnapchatAds) items.push({ platform: "snapchat", libraryItemId: ad.id });
+    for (const row of filteredGoogleRows) {
+      items.push({
+        platform: row.type === "youtube" ? "youtube" : "google",
+        libraryItemId: row.id,
+      });
+    }
+    return items;
+  }, [
+    filteredMetaAds,
+    filteredTikTokAds,
+    filteredLinkedInAds,
+    filteredPinterestAds,
+    filteredSnapchatAds,
+    filteredGoogleRows,
+  ]);
+
+  const { savedMap, scrapedIdForCard, toggleSave } = useSavedAdsStatus(competitorDbIdForSaved, savedAdsLibraryItems);
+
+  const adSaveProps = useCallback(
+    (platform: string, libraryItemId: string) => {
+      const sid = scrapedIdForCard(platform, libraryItemId);
+      return {
+        scrapedAdId: sid,
+        isSaved: Boolean(sid && savedMap[sid]),
+        onToggleSave: competitorDbIdForSaved ? () => void toggleSave(platform, libraryItemId) : undefined,
+        saveDisabled: !competitorDbIdForSaved,
+      };
+    },
+    [competitorDbIdForSaved, scrapedIdForCard, savedMap, toggleSave],
+  );
+
   /** Skeleton grid only when there are no creatives yet; platform-only refresh keeps existing cards — spinner is on the refresh button. */
   const metaSectionBusy = useMemo(
     () =>
@@ -1974,15 +2238,21 @@ function CompetitorDashboardBody({
         <div className={`px-6 sm:px-8 lg:px-10 pt-6 sm:pt-7 pb-0 ${isOwnWorkspace ? "pl-7 sm:pl-9" : ""}`}>
           <div className="flex items-center justify-between gap-4 mb-5">
             <div className="flex min-w-0 flex-1 items-center gap-4">
-              <div
-                className={`w-12 h-12 shrink-0 overflow-hidden rounded-2xl shadow-sm ${
+              <CompetitorLogo
+                sources={{
+                  primary: brand.logoUrl,
+                  secondary: null,
+                  domain: brand.domain,
+                }}
+                name={competitorDisplayLabel}
+                size="lg"
+                shape="rounded"
+                className={
                   isOwnWorkspace
-                    ? "border-2 border-sky-200/90 ring-2 ring-sky-100/80"
-                    : "border border-[#e0e3e8]"
-                }`}
-              >
-                <BrandLogoThumb src={brand.logoUrl} alt={competitorDisplayLabel} className="bg-white" />
-              </div>
+                    ? "border-2 border-sky-200/90 ring-2 ring-sky-100/80 shadow-sm"
+                    : "border-[#e0e3e8] shadow-sm"
+                }
+              />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2 gap-y-1">
                   <h1 className="text-[22px] sm:text-[26px] font-bold text-[#343434] tracking-[-0.02em] truncate">
@@ -2095,14 +2365,14 @@ function CompetitorDashboardBody({
                           ? "border-sky-600 text-slate-900"
                           : "border-[#343434] text-[#343434]"
                         : "border-transparent text-[#6b7280] hover:text-[#343434] hover:border-[#DDF1FD]"
-                  } ${tab.id === "AI insight" ? "" : ""}`}
+                  }`}
                 >
                   <Icon
                     className={`w-4 h-4 shrink-0 ${
                       isDisabled
                         ? "text-[#b8beca]"
                         : isActive
-                          ? tab.id === "AI insight"
+                          ? tab.id === "alerts"
                             ? "text-amber-500"
                             : isOwnWorkspace
                               ? "text-sky-700"
@@ -2116,11 +2386,47 @@ function CompetitorDashboardBody({
               );
             })}
           </nav>
+          {(() => {
+            const currentTab = findCompetitorTab(activeTab);
+            if (!currentTab?.subTabs?.length) return null;
+            return (
+              <div className="border-b border-slate-200 bg-slate-50/50">
+                <div className="flex items-center gap-1 overflow-x-auto px-6 py-2">
+                  {currentTab.subTabs.map((st) => {
+                    const isSubActive = activeSubTab === st.id;
+                    return (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => handleSubTabChange(st.id)}
+                        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                          isSubActive
+                            ? "bg-slate-900 text-white"
+                            : "text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {st.label}
+                        {st.isNew ? (
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                              isSubActive ? "bg-white/20 text-white" : "bg-indigo-100 text-indigo-700"
+                            }`}
+                          >
+                            NEW
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
       {/* Tab Content Areas */}
-      {activeTab === "workspace ads" && isOwnWorkspace ? (
+      {activeTab === "workspace-ads" && isOwnWorkspace ? (
         <div className="flex-1 overflow-y-auto bg-transparent">
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
             <WorkspaceAdSourcesPanel
@@ -2133,7 +2439,7 @@ function CompetitorDashboardBody({
         </div>
       ) : null}
 
-      {activeTab === "marketing improvements" && isOwnWorkspace ? (
+      {activeTab === "workspace-marketing-improvements" && isOwnWorkspace ? (
         <div className="flex-1 overflow-y-auto bg-transparent">
           <div className="mx-auto max-w-[900px] px-6 py-8 sm:px-8 lg:px-10 animate-in fade-in duration-200">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
@@ -2279,6 +2585,27 @@ function CompetitorDashboardBody({
       {activeTab === 'ads library' && (
         <div className="flex-1 overflow-y-auto bg-transparent">
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
+            {activeSubTab === "saved" ? (
+              <SavedAdsPanel
+                competitorId={competitorDbIdForSaved}
+                competitorLabel={competitorDisplayLabel}
+                onOpenAd={openAd}
+              />
+            ) : (
+              <>
+            {competitorDbIdForSaved ? (
+              <AdLibraryAnalyticsPanel
+                competitorId={competitorDbIdForSaved}
+                platformCounts={{
+                  meta: filteredMetaAds.length,
+                  google: filteredGoogleRows.length,
+                  tiktok: tiktokAds.length,
+                  linkedin: linkedinAds.length,
+                  pinterest: pinterestAds.length,
+                  snapchat: snapchatAds.length,
+                }}
+              />
+            ) : null}
             {adsPlatforms.length > 0 ? (
               <div className="mb-5 rounded-2xl border border-[#e5e7eb]/70 bg-[#DDF1FD]/25 px-3 py-2 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:px-4 sm:py-2">
                 <div className="mx-auto flex max-w-[1400px] flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-1 lg:gap-x-7">
@@ -2459,7 +2786,14 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={ADS_GRID_CLASS}>
                       {inlinePreviewMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <MetaAdCard key={ad.id} ad={ad} viewMode="grid" brand={brand} />
+                        <MetaAdCard
+                          key={ad.id}
+                          ad={ad}
+                          viewMode="grid"
+                          brand={brand}
+                          onClick={() => openAdLibraryCard("meta", ad.id)}
+                          {...adSaveProps("meta", ad.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -2471,6 +2805,8 @@ function CompetitorDashboardBody({
                 ads={filteredMetaAds}
                 viewMode="grid"
                 brand={brand}
+                onAdActivate={(ad) => openAdLibraryCard("meta", ad.id)}
+                getMetaAdExtras={(ad) => adSaveProps("meta", ad.id)}
               />
             </section>
             ) : null}
@@ -2555,7 +2891,15 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={ADS_GRID_CLASS}>
                       {inlinePreviewGoogleRows.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <GoogleAdRowCard key={ad.id} ad={ad} brand={brand} />
+                        <GoogleAdRowCard
+                          key={ad.id}
+                          ad={ad}
+                          brand={brand}
+                          onOpenDetail={() =>
+                            void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id)
+                          }
+                          {...adSaveProps(ad.type === "youtube" ? "youtube" : "google", ad.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -2574,7 +2918,16 @@ function CompetitorDashboardBody({
                 ads={filteredGoogleRows}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
-                renderItem={(ad) => <GoogleAdRowCard ad={ad} brand={brand} />}
+                renderItem={(ad) => (
+                  <GoogleAdRowCard
+                    ad={ad}
+                    brand={brand}
+                    onOpenDetail={() =>
+                      void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id)
+                    }
+                    {...adSaveProps(ad.type === "youtube" ? "youtube" : "google", ad.id)}
+                  />
+                )}
               />
             </section>
             ) : null}
@@ -2658,7 +3011,13 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={ADS_GRID_CLASS}>
                       {inlinePreviewLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <LinkedInFeedAdCard key={ad.id} ad={ad} brand={brand} />
+                        <LinkedInFeedAdCard
+                          key={ad.id}
+                          ad={ad}
+                          brand={brand}
+                          onOpenDetail={() => void openAdLibraryCard("linkedin", ad.id)}
+                          {...adSaveProps("linkedin", ad.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -2672,7 +3031,14 @@ function CompetitorDashboardBody({
                 ads={filteredLinkedInAds}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
-                renderItem={(ad) => <LinkedInFeedAdCard ad={ad} brand={brand} />}
+                renderItem={(ad) => (
+                  <LinkedInFeedAdCard
+                    ad={ad}
+                    brand={brand}
+                    onOpenDetail={() => void openAdLibraryCard("linkedin", ad.id)}
+                    {...adSaveProps("linkedin", ad.id)}
+                  />
+                )}
               />
             </section>
             ) : null}
@@ -2756,7 +3122,12 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={ADS_GRID_CLASS}>
                       {inlinePreviewTikTokAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <TikTokAdCard key={ad.id} ad={ad} />
+                        <TikTokAdCard
+                          key={ad.id}
+                          ad={ad}
+                          onClick={() => void openAdLibraryCard("tiktok", ad.id)}
+                          {...adSaveProps("tiktok", ad.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -2770,7 +3141,9 @@ function CompetitorDashboardBody({
                 ads={filteredTikTokAds}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
-                renderItem={(ad) => <TikTokAdCard ad={ad} />}
+                renderItem={(ad) => (
+                  <TikTokAdCard ad={ad} onClick={() => void openAdLibraryCard("tiktok", ad.id)} {...adSaveProps("tiktok", ad.id)} />
+                )}
               />
             </section>
             ) : null}
@@ -2864,7 +3237,12 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={ADS_GRID_CLASS}>
                       {inlinePreviewPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <PinterestAdCard key={ad.id} ad={ad} />
+                        <PinterestAdCard
+                          key={ad.id}
+                          ad={ad}
+                          onClick={() => void openAdLibraryCard("pinterest", ad.id)}
+                          {...adSaveProps("pinterest", ad.id)}
+                        />
                       ))}
                     </div>
                   )}
@@ -2878,7 +3256,9 @@ function CompetitorDashboardBody({
                 ads={filteredPinterestAds}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
-                renderItem={(ad) => <PinterestAdCard ad={ad} />}
+                renderItem={(ad) => (
+                  <PinterestAdCard ad={ad} onClick={() => void openAdLibraryCard("pinterest", ad.id)} {...adSaveProps("pinterest", ad.id)} />
+                )}
               />
             </section>
             ) : null}
@@ -2967,7 +3347,12 @@ function CompetitorDashboardBody({
                       {inlinePreviewSnapchatAds
                         .slice(0, META_ADS_INLINE_PREVIEW)
                         .map((ad) => (
-                          <SnapchatAdCard key={ad.id} ad={ad} />
+                          <SnapchatAdCard
+                            key={ad.id}
+                            ad={ad}
+                            onClick={() => void openAdLibraryCard("snapchat", ad.id)}
+                            {...adSaveProps("snapchat", ad.id)}
+                          />
                         ))}
                     </div>
                   )}
@@ -2981,39 +3366,103 @@ function CompetitorDashboardBody({
                 ads={filteredSnapchatAds}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
-                renderItem={(ad) => <SnapchatAdCard ad={ad} />}
+                renderItem={(ad) => (
+                  <SnapchatAdCard ad={ad} onClick={() => void openAdLibraryCard("snapchat", ad.id)} {...adSaveProps("snapchat", ad.id)} />
+                )}
               />
               </section>
             ) : null}
 
             </div>
             </div>
+              </>
+            )}
           </div>
         </div>
       )}
 
-      {activeTab === 'strategy overview' && (
+      {activeTab === "insights" && (
         <div className="flex-1 overflow-y-auto bg-transparent">
           <Suspense
             fallback={
               <div className="flex flex-1 items-center justify-center py-16 text-[15px] font-medium text-[#71717a]">
-                Loading strategy…
+                Loading…
               </div>
             }
           >
-            <StrategyOverview
-              brand={brand}
-              onOpenAdsLibrary={() => {
-                setActiveTab("ads library");
-              }}
-            />
+            {activeSubTab === "strategy-map" ? (
+              <StrategyMapTab brand={brand} onOpenAdsLibrary={() => handleTabChange("ads library")} />
+            ) : null}
+            {activeSubTab === "strategy-insight" ? (
+              <StrategyInsightTab brand={brand} onOpenAdsLibrary={() => handleTabChange("ads library")} />
+            ) : null}
+            {activeSubTab === "moves" ? (
+              <StrategicMovesTab
+                competitorDomain={brand.domain}
+                workspaceName={myBrand.name}
+                competitorLabel={competitorDisplayLabel}
+                workspaceDomain={myBrand.domain?.trim() ?? ""}
+              />
+            ) : null}
           </Suspense>
         </div>
       )}
 
-      {activeTab === 'comparison' && (
+      {activeTab === "tests" && (
         <div className="flex-1 overflow-y-auto bg-transparent">
-          <div className="px-6 sm:px-8 lg:px-10 py-8 w-full max-w-[1400px] mx-auto animate-in fade-in duration-200">
+          {activeSubTab === "creative-tests" ? (
+            <CreativeTestsTab
+              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorLabel={competitorDisplayLabel}
+              onOpenAd={openAd}
+            />
+          ) : null}
+          {activeSubTab === "timeline" ? (
+            <TimelineTab
+              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorLabel={competitorDisplayLabel}
+              onOpenAd={openAd}
+            />
+          ) : null}
+          {activeSubTab === "landing-pages" ? (
+            <LandingPagesTab
+              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorLabel={competitorDisplayLabel}
+              onOpenAd={openAd}
+            />
+          ) : null}
+        </div>
+      )}
+
+      {activeTab === "audience-copy" && (
+        <div className="flex-1 overflow-y-auto bg-transparent">
+          {activeSubTab === "audience" ? (
+            <AudienceTab
+              competitorDomain={brand.domain}
+              workspaceName={myBrand.name}
+              workspaceLogoUrl={myBrand.logoUrl ?? null}
+              workspaceDomain={myBrand.domain ?? null}
+              workspaceColor={myBrand.color ?? undefined}
+              workspaceBadge={myBrand.badge ?? undefined}
+              competitorLabel={competitorDisplayLabel}
+              competitorLogoUrl={brand.logoUrl}
+            />
+          ) : null}
+          {activeSubTab === "hooks" ? <HooksTab /> : null}
+          {activeSubTab === "copy-vault" ? (
+            <CopyVaultTab
+              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorLabel={competitorDisplayLabel}
+              onOpenAd={openAd}
+            />
+          ) : null}
+          {activeSubTab === "briefs" ? <BriefsTab /> : null}
+        </div>
+      )}
+
+      {activeTab === "comparison" && !isOwnWorkspace ? (
+        <div className="flex-1 overflow-y-auto bg-transparent">
+          <div className="mx-auto w-full max-w-[1400px] px-6 py-8 sm:px-8 lg:px-10 animate-in fade-in duration-200">
             <ComparisonPage
               isConfirmed={isConfirmed}
               competitorDisplayLabel={competitorDisplayLabel}
@@ -3029,22 +3478,15 @@ function CompetitorDashboardBody({
             />
           </div>
         </div>
-      )}
+      ) : null}
 
-      {activeTab === 'AI insight' && (
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          <AIInsightChat
-            competitorName={competitorDisplayLabel}
-            competitorDomain={brand.domain}
-            myBrandName={myBrand.name}
-            myBrandBadge={myBrand.badge}
-            myBrandLogoUrl={myBrand.logoUrl}
-            myBrandColor={myBrand.color}
-            myBrandContext={myBrand.brandContext}
-          />
+      {activeTab === "alerts" ? (
+        <div className="flex-1 overflow-y-auto bg-transparent">
+          <AlertsTab />
         </div>
-      )}
+      ) : null}
 
+      <AdDetailDrawer adId={activeAdId} onClose={closeAd} />
     </div>
   );
 }

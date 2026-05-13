@@ -11,8 +11,8 @@ import React, {
 } from "react";
 import { ExternalLink, HelpCircle, Info } from "lucide-react";
 import { CHANNELS, type ChannelId } from "./channel-picker-modal";
-import { googleFaviconUrlForDomain, brandSlugFromDomain } from "@/lib/discovery";
-import { BrandLogoThumb } from "@/components/brand-logo-thumb";
+import { brandSlugFromDomain } from "@/lib/discovery";
+import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { AdLibraryRegionPrefs } from "@/lib/ad-library/ad-library-region-prefs";
 import { buildGoogleAdsRegionOptions } from "@/lib/ad-library/google-ads-regions";
 import { TIKTOK_ADS_LIBRARY_REGION_OPTIONS } from "@/lib/ad-library/tiktok-regions";
@@ -850,16 +850,15 @@ export function ManualIdentifiersForm({
           <div className="flex gap-3 sm:gap-4">
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-gray-200">
               {brandLogoUrl || competitorDomain ? (
-                <BrandLogoThumb
-                  src={brandLogoUrl ?? googleFaviconUrlForDomain(competitorDomain!)}
-                  alt=""
-                  className="bg-gray-50"
-                  onError={(e) => {
-                    if (competitorDomain) {
-                      const fallback = googleFaviconUrlForDomain(competitorDomain);
-                      if (e.currentTarget.src !== fallback) e.currentTarget.src = fallback;
-                    }
+                <CompetitorLogo
+                  sources={{
+                    primary: brandLogoUrl,
+                    domain: competitorDomain ?? null,
                   }}
+                  name={competitorDomain ?? "Brand"}
+                  size="md"
+                  shape="rounded"
+                  className="rounded-xl border-0 bg-gray-50"
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-gray-50">

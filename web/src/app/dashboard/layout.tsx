@@ -4,7 +4,7 @@ import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Trash2 } from
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandProvider, type Brand } from "./brand-context";
-import { BrandLogoThumb } from "@/components/brand-logo-thumb";
+import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
@@ -554,8 +554,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               className="size-11 shrink-0 rounded-xl overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[#DDF1FD] active:scale-[0.97] transition-all mx-auto shadow-sm"
               title={activeBrand.name}
             >
-              {activeBrand.logoUrl ? (
-                <BrandLogoThumb src={activeBrand.logoUrl} alt={activeBrand.name} className="bg-white" />
+              {activeBrand.logoUrl || activeBrand.domain ? (
+                <CompetitorLogo
+                  sources={{ primary: activeBrand.logoUrl, domain: activeBrand.domain }}
+                  name={activeBrand.name}
+                  size="lg"
+                  shape="rounded"
+                  className="h-11 w-11 rounded-xl border-0 shadow-none"
+                />
               ) : (
                 <div
                   className="w-full h-full text-white flex items-center justify-center text-[11px] font-bold shrink-0"
@@ -572,9 +578,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl bg-white/50 border border-white/60 hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all text-left group shadow-[0_2px_8px_rgba(0,0,0,0.03)]"
             >
               <div className="flex items-center gap-3 min-w-0">
-                {activeBrand.logoUrl ? (
+                {activeBrand.logoUrl || activeBrand.domain ? (
                   <div className="h-[36px] w-[36px] shrink-0 overflow-hidden rounded-[10px] border border-white/60 shadow-sm">
-                    <BrandLogoThumb src={activeBrand.logoUrl} alt={activeBrand.name} className="bg-white" />
+                    <CompetitorLogo
+                      sources={{ primary: activeBrand.logoUrl, domain: activeBrand.domain }}
+                      name={activeBrand.name}
+                      size="md"
+                      shape="rounded"
+                      className="h-9 w-9 rounded-[10px] border-0 shadow-none"
+                    />
                   </div>
                 ) : (
                   <div
@@ -597,9 +609,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               onClick={() => goToBrandHub(activeBrand)}
               className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-white/50 border border-white/60 shadow-[0_2px_8px_rgba(0,0,0,0.03)] text-left hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/35"
             >
-              {activeBrand.logoUrl ? (
+              {activeBrand.logoUrl || activeBrand.domain ? (
                 <div className="h-[36px] w-[36px] shrink-0 overflow-hidden rounded-[10px] border border-white/60 shadow-sm">
-                  <BrandLogoThumb src={activeBrand.logoUrl} alt={activeBrand.name} className="bg-white" />
+                  <CompetitorLogo
+                    sources={{ primary: activeBrand.logoUrl, domain: activeBrand.domain }}
+                    name={activeBrand.name}
+                    size="md"
+                    shape="rounded"
+                    className="h-9 w-9 rounded-[10px] border-0 shadow-none"
+                  />
                 </div>
               ) : (
                 <div
@@ -642,9 +660,15 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                         : "hover:bg-[#DDF1FD]/20 text-[#52525b] hover:text-[#343434]"
                     }`}
                   >
-                    {b.logoUrl ? (
+                    {b.logoUrl || b.domain ? (
                       <div className="h-[32px] w-[32px] shrink-0 overflow-hidden rounded-[8px] border border-white/60">
-                        <BrandLogoThumb src={b.logoUrl} alt={b.name} className="bg-white" />
+                        <CompetitorLogo
+                          sources={{ primary: b.logoUrl, domain: b.domain }}
+                          name={b.name}
+                          size="sm"
+                          shape="rounded"
+                          className="h-8 w-8 rounded-[8px] border-0 shadow-none"
+                        />
                       </div>
                     ) : (
                       <div

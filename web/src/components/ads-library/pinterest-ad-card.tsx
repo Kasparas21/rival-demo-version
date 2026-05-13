@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
@@ -115,7 +116,21 @@ function FactsRow({
   );
 }
 
-export function PinterestAdCard({ ad }: { ad: PinterestAdCardModel }) {
+export function PinterestAdCard({
+  ad,
+  onClick,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
+}: {
+  ad: PinterestAdCardModel;
+  onClick?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
+}) {
   const targetingRows = useMemo(() => {
     const raw = ad.targetingRows?.length ? ad.targetingRows : targetingRowsFromDesc(ad.desc);
     return raw.filter((row) => !isHiddenPinterestTargetingRow(row));
@@ -136,7 +151,12 @@ export function PinterestAdCard({ ad }: { ad: PinterestAdCardModel }) {
   const hasFacts = Boolean(ad.disclosureWindow ?? ad.reachSummary ?? ad.impressionsLabel);
 
   return (
-    <article className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)]">
+    <article
+      onClick={onClick}
+      className={`relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/60 bg-white/80 text-left backdrop-blur-sm transition-all duration-200 hover:border-[#DDF1FD]/60 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] ${
+        onClick ? "cursor-pointer hover:ring-2 hover:ring-slate-200" : ""
+      }`}
+    >
       <div className="shrink-0 px-4 pb-3 pt-4">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <p className="min-w-0 break-words text-[15px] font-semibold text-[#bd081c] [overflow-wrap:anywhere]">{ad.advertiser}</p>
@@ -180,19 +200,22 @@ export function PinterestAdCard({ ad }: { ad: PinterestAdCardModel }) {
         ) : null}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-y border-[#e5e7eb] bg-[#f9fafb]">
-        <AdCreativeVideoOrImage
-          img={ad.img ?? ""}
-          videoUrl={ad.videoUrl}
-          openHref={ad.adUrl}
-          className="min-h-0 w-full flex-1"
-          minHeightClass="min-h-[200px]"
-          fillAvailableHeight
-        />
+      <div className="flex min-h-0 flex-1 flex-col border-y border-[#e5e7eb] bg-[#f9fafb] p-3">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white">
+          <AdCreativeVideoOrImage
+            img={ad.img ?? ""}
+            videoUrl={ad.videoUrl}
+            openHref={ad.adUrl}
+            className="min-h-0 w-full flex-1"
+            minHeightClass="min-h-[200px]"
+            fillAvailableHeight
+          />
+        </div>
         <a
           href={ad.adUrl}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
           className="block shrink-0 border-t border-[#e5e7eb] bg-white p-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#bd081c]"
         >
           <p className="text-pretty text-[15px] font-semibold leading-snug text-[#374151] [overflow-wrap:anywhere] break-words">{ad.headline}</p>
@@ -200,6 +223,15 @@ export function PinterestAdCard({ ad }: { ad: PinterestAdCardModel }) {
             <p className="mt-0.5 break-all text-[13px] text-[#6b7280] [overflow-wrap:anywhere]">{ad.url}</p>
           ) : null}
         </a>
+      </div>
+
+      <div className="shrink-0 bg-white px-4 pb-4 pt-1" onClick={(e) => e.stopPropagation()}>
+        <AdSaveRow
+          scrapedAdId={scrapedAdId}
+          isSaved={Boolean(isSaved)}
+          onToggleSave={onToggleSave}
+          saveDisabled={saveDisabled}
+        />
       </div>
     </article>
   );

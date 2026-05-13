@@ -4,10 +4,10 @@ import { Loader2, RefreshCw, AlertCircle, ArrowRight } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import { ManualIdentifiersForm, type PlatformIdentifier } from "@/components/manual-identifiers-form";
-import { looksLikeUrl, googleFaviconUrlForDomain } from "@/lib/discovery";
+import { looksLikeUrl } from "@/lib/discovery";
 import type { TermHint } from "@/lib/competitor-query";
 import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
-import { BrandLogoThumb } from "@/components/brand-logo-thumb";
+import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { RivalLogoImg } from "@/components/rival-logo";
 import {
   findMatchingCompetitorIndex,
@@ -647,17 +647,15 @@ function SearchingContent() {
               {isDiscovering ? (
                 <BrandLogoSkeleton className="h-full w-full" />
               ) : discoveredBrand?.domain || discoveredBrand?.logoUrl ? (
-                <BrandLogoThumb
-                  src={discoveredBrand?.logoUrl ?? googleFaviconUrlForDomain(discoveredBrand!.domain)}
-                  alt=""
-                  className="bg-gray-50"
-                  onError={(e) => {
-                    const d = discoveredBrand?.domain;
-                    if (d) {
-                      const fb = googleFaviconUrlForDomain(d);
-                      if (e.currentTarget.src !== fb) e.currentTarget.src = fb;
-                    }
+                <CompetitorLogo
+                  sources={{
+                    primary: discoveredBrand?.logoUrl,
+                    domain: discoveredBrand?.domain,
                   }}
+                  name={discoveredBrand?.name ?? "Brand"}
+                  size="lg"
+                  shape="rounded"
+                  className="rounded-xl border-gray-200 bg-gray-50"
                 />
               ) : (
                 <BrandLogoSkeleton className="h-full w-full" />

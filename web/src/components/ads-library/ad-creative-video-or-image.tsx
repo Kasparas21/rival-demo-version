@@ -54,12 +54,12 @@ export function AdCreativeVideoOrImage({
   }, [v, poster]);
 
   const frameClass = fillAvailableHeight
-    ? `flex min-h-0 flex-1 flex-col items-center justify-center ${
+    ? `flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden rounded-xl ${
         mat ? "bg-transparent px-0 py-0" : "bg-[#f3f4f6] px-2 py-3"
-      } ${minHeightClass} overflow-auto ${className}`
-    : `flex items-center justify-center ${mat ? "bg-transparent px-0 py-0" : "py-3 px-2 bg-[#f3f4f6]"} ${minHeightClass} ${
+      } ${minHeightClass} ${className}`
+    : `flex items-center justify-center overflow-hidden rounded-xl ${mat ? "bg-transparent px-0 py-0" : "py-3 px-2 bg-[#f3f4f6]"} ${minHeightClass} ${
         mat ? "max-h-[min(520px,60vh)]" : "max-h-[min(400px,45vh)]"
-      } overflow-hidden ${className}`;
+      } ${className}`;
 
   const mediaMax = fillAvailableHeight
     ? "max-h-full max-w-full"
@@ -77,7 +77,7 @@ export function AdCreativeVideoOrImage({
           playsInline
           preload="metadata"
           poster={poster && !isLikelyVideoFileUrl(poster) ? poster : undefined}
-          className={`${mediaMax} h-auto w-auto object-contain object-center ${videoBackdrop}`}
+            className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl ${videoBackdrop}`}
           src={v}
           onError={() => setVideoFailed(true)}
           {...(nrPoster || nrVideo ? { referrerPolicy: "no-referrer" as const } : {})}
@@ -97,7 +97,7 @@ export function AdCreativeVideoOrImage({
             src={poster}
             alt=""
             referrerPolicy={nrPoster ? "no-referrer" : undefined}
-            className={`${mediaMax} h-auto w-auto object-contain object-center`}
+            className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl`}
             onError={() => setImgFailed(true)}
           />
           {v && videoFailed ? (

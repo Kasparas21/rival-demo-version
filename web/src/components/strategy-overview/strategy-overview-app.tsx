@@ -21,6 +21,8 @@ type Brand = { name: string; domain: string };
 type Props = {
   brand: Brand;
   onOpenAdsLibrary?: () => void;
+  /** When set, parent controls map vs insight; internal toggle is hidden. */
+  forceView?: StrategyViewMode;
 };
 
 function readViewParam(raw: string | null): StrategyViewMode {
@@ -28,11 +30,12 @@ function readViewParam(raw: string | null): StrategyViewMode {
   return "map";
 }
 
-export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
+export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const view = readViewParam(searchParams.get("view"));
+  const urlView = readViewParam(searchParams.get("view"));
+  const view: StrategyViewMode = forceView ?? urlView;
 
   const setView = useCallback(
     (v: StrategyViewMode) => {
@@ -282,7 +285,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary }: Props) {
         </p>
       </div>
 
-      <StrategyViewToggle view={view} onChange={setView} />
+      {!forceView ? <StrategyViewToggle view={view} onChange={setView} /> : null}
 
       {backgroundRecompute && !emptyStrategy ? (
         <div className="mb-4 rounded-xl border border-indigo-200/90 bg-indigo-50/90 px-4 py-2.5 text-[13px] text-indigo-950 flex items-center gap-2">

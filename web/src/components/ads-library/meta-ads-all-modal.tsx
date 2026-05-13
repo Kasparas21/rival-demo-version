@@ -15,9 +15,25 @@ export interface MetaAdsAllModalProps {
   ads: MetaAdCardModel[];
   viewMode: "grid" | "list";
   brand: { domain: string; logoUrl: string };
+  /** Opens the scraped-ad detail drawer when a card is activated (ignores library-native id). */
+  onAdActivate?: (ad: MetaAdCardModel) => void;
+  getMetaAdExtras?: (ad: MetaAdCardModel) => {
+    scrapedAdId?: string;
+    isSaved?: boolean;
+    onToggleSave?: () => void;
+    saveDisabled?: boolean;
+  };
 }
 
-export function MetaAdsAllModal({ open, onClose, ads, viewMode, brand }: MetaAdsAllModalProps) {
+export function MetaAdsAllModal({
+  open,
+  onClose,
+  ads,
+  viewMode,
+  brand,
+  onAdActivate,
+  getMetaAdExtras,
+}: MetaAdsAllModalProps) {
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(0);
@@ -128,11 +144,23 @@ export function MetaAdsAllModal({ open, onClose, ads, viewMode, brand }: MetaAds
                 <div
                   className={`grid items-stretch gap-6 ${viewMode === "list" ? "mx-auto w-full max-w-2xl grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}
                 >
-                  {pageAds.map((ad) => (
-                    <div key={ad.id} className="h-full min-h-0 flex flex-col">
-                      <MetaAdCard ad={ad} viewMode={viewMode} brand={brand} />
-                    </div>
-                  ))}
+                  {pageAds.map((ad) => {
+                    const extras = getMetaAdExtras?.(ad);
+                    return (
+                      <div key={ad.id} className="flex h-full min-h-0 flex-col">
+                        <MetaAdCard
+                          ad={ad}
+                          viewMode={viewMode}
+                          brand={brand}
+                          onClick={() => onAdActivate?.(ad)}
+                          scrapedAdId={extras?.scrapedAdId}
+                          isSaved={extras?.isSaved}
+                          onToggleSave={extras?.onToggleSave}
+                          saveDisabled={extras?.saveDisabled}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

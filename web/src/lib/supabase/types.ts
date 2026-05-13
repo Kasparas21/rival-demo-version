@@ -148,6 +148,69 @@ export type Database = {
         };
         Relationships: [];
       };
+      saved_ads: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          source_scraped_ad_id: string | null;
+          platform: string;
+          ad_text: string;
+          ad_creative_url: string | null;
+          format: string;
+          ai_extracted_angle: string | null;
+          funnel_stage: string | null;
+          raw_payload: Json;
+          source_first_seen_at: string | null;
+          source_last_seen_at: string | null;
+          notes: string | null;
+          saved_by_user_id: string;
+          saved_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          source_scraped_ad_id?: string | null;
+          platform: string;
+          ad_text?: string;
+          ad_creative_url?: string | null;
+          format?: string;
+          ai_extracted_angle?: string | null;
+          funnel_stage?: string | null;
+          raw_payload?: Json;
+          source_first_seen_at?: string | null;
+          source_last_seen_at?: string | null;
+          notes?: string | null;
+          saved_by_user_id: string;
+          saved_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          source_scraped_ad_id?: string | null;
+          platform?: string;
+          ad_text?: string;
+          ad_creative_url?: string | null;
+          format?: string;
+          ai_extracted_angle?: string | null;
+          funnel_stage?: string | null;
+          raw_payload?: Json;
+          source_first_seen_at?: string | null;
+          source_last_seen_at?: string | null;
+          notes?: string | null;
+          saved_by_user_id?: string;
+          saved_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       weekly_scrape_jobs: {
         Row: {
           id: string;
@@ -493,6 +556,54 @@ export type Database = {
           ai_model_version?: string | null;
           source_snapshot_id_before?: string | null;
           source_snapshot_id_after?: string | null;
+        };
+        Relationships: [];
+      };
+      creative_tests: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          launch_date: string;
+          platform: string;
+          ad_ids: string[];
+          winner_ad_id: string | null;
+          test_status: string;
+          median_lifespan_days: number;
+          max_lifespan_days: number;
+          winner_lifespan_days: number | null;
+          ad_count: number;
+          computed_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          launch_date: string;
+          platform: string;
+          ad_ids: string[];
+          winner_ad_id?: string | null;
+          test_status: string;
+          median_lifespan_days?: number;
+          max_lifespan_days?: number;
+          winner_lifespan_days?: number | null;
+          ad_count: number;
+          computed_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          launch_date?: string;
+          platform?: string;
+          ad_ids?: string[];
+          winner_ad_id?: string | null;
+          test_status?: string;
+          median_lifespan_days?: number;
+          max_lifespan_days?: number;
+          winner_lifespan_days?: number | null;
+          ad_count?: number;
+          computed_at?: string;
         };
         Relationships: [];
       };

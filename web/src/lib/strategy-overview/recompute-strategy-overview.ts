@@ -28,6 +28,25 @@ const LOCK_TTL_MS = 300_000;
 /** If status is still "running" after this long, treat lock as orphaned (crashed serverless, etc.). */
 const ORPHAN_LOCK_AGE_MS = 900_000;
 
+async function tryComputeCreativeTestsForCompetitor(params: {
+  supabase: SupabaseClient<Database>;
+  userId: string;
+  competitorId: string;
+}): Promise<void> {
+  const { supabase, userId, competitorId } = params;
+  try {
+    const { computeCreativeTestsForCompetitor } = await import("@/lib/creative-tests/compute-creative-tests");
+    const ctResult = await computeCreativeTestsForCompetitor({ supabase, userId, competitorId });
+    if (!ctResult.ok) {
+      console.error("[recompute] Creative tests computation failed:", ctResult.error);
+      return;
+    }
+    console.log(`[recompute] Computed ${ctResult.tests.length} creative tests for ${competitorId}`);
+  } catch (err) {
+    console.error("[recompute] Creative tests threw:", err);
+  }
+}
+
 function randomToken(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -600,6 +619,8 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
       });
 
+      await tryComputeCreativeTestsForCompetitor({ supabase, userId, competitorId });
+
       return { ok: true, payload: emptyPayload };
     }
 
@@ -633,6 +654,9 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         sourceScrapeBatchId: batchIdForEmpty,
         aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
       });
+
+      await tryComputeCreativeTestsForCompetitor({ supabase, userId, competitorId });
+
       return { ok: true, payload: emptyPayload };
     }
 
@@ -743,6 +767,8 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     );
 
     payload = { ...payload, lowEnrichmentConfidence };
+
+    await tryComputeCreativeTestsForCompetitor({ supabase, userId, competitorId });
 
     const insightOut = await enrichStrategyOverviewWithInsightLLM(payload, freshInputs);
     payload = insightOut.payload;

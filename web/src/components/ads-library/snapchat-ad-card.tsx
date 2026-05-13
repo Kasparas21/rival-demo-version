@@ -2,6 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 import type { SnapchatAdCard as SnapchatCardModel } from "@/lib/ad-library/normalize";
+import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
@@ -26,7 +27,21 @@ function formatSnapCtaLabel(raw: string | null | undefined): string {
     .join(" ");
 }
 
-export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
+export function SnapchatAdCard({
+  ad,
+  onClick,
+  scrapedAdId,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
+}: {
+  ad: SnapchatCardModel;
+  onClick?: () => void;
+  scrapedAdId?: string;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
+  saveDisabled?: boolean;
+}) {
   const hasVideo = Boolean(ad.videoUrl?.trim());
   const tryImg = Boolean(ad.img?.trim());
   const hasCreative = hasVideo || tryImg;
@@ -35,7 +50,12 @@ export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
   const isActive = ad.status === "ACTIVE";
 
   return (
-    <article className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm transition-shadow hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)]">
+    <article
+      onClick={onClick}
+      className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white shadow-sm transition-shadow hover:shadow-[0_8px_30px_rgba(15,23,42,0.08)] ${
+        onClick ? "cursor-pointer hover:ring-2 hover:ring-slate-200" : ""
+      }`}
+    >
       {/* Ads Gallery–style facts */}
       <div className="shrink-0 border-b border-[#ececec] px-4 pb-4 pt-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -78,6 +98,7 @@ export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
             href={ad.adUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="text-[13px] font-semibold text-[#0077b5] underline decoration-[#0077b5]/35 underline-offset-2 hover:text-[#005582]"
           >
             See Details
@@ -92,7 +113,7 @@ export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
         }`}
       >
         <div
-          className={`relative w-full shrink-0 ${lightCreativeChrome ? "min-h-[260px] p-3 sm:p-4" : "min-h-[280px]"}`}
+          className={`relative w-full shrink-0 ${lightCreativeChrome ? "min-h-[260px] p-3 sm:p-4" : "min-h-[280px] p-3 sm:p-4"}`}
         >
           {hasCreative ? (
             <AdCreativeVideoOrImage
@@ -103,8 +124,8 @@ export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
               variant={lightCreativeChrome ? "neutralMat" : "default"}
               className={
                 lightCreativeChrome
-                  ? "rounded-lg border border-black/[0.06] bg-white shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] py-5 px-4 sm:py-6 sm:px-5 !max-h-[min(500px,58vh)]"
-                  : "rounded-none bg-neutral-950 !py-0 !max-h-[min(520px,62vh)]"
+                  ? "rounded-xl border border-black/[0.06] bg-white shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] py-5 px-4 sm:py-6 sm:px-5 !max-h-[min(500px,58vh)]"
+                  : "rounded-xl bg-neutral-950 !py-0 !max-h-[min(520px,62vh)]"
               }
             />
           ) : (
@@ -112,6 +133,7 @@ export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
               href={ad.adUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="flex min-h-[240px] w-full flex-col items-center justify-center gap-3 bg-gradient-to-b from-neutral-900 to-neutral-950 px-4 py-10 text-center"
             >
               <p className="text-[15px] font-semibold leading-snug text-white drop-shadow-sm line-clamp-4">{ad.headline}</p>
@@ -160,6 +182,15 @@ export function SnapchatAdCard({ ad }: { ad: SnapchatCardModel }) {
           </p>
         </div>
       ) : null}
+
+      <div className="shrink-0 border-t border-[#ececec] bg-white px-4 pb-4 pt-1" onClick={(e) => e.stopPropagation()}>
+        <AdSaveRow
+          scrapedAdId={scrapedAdId}
+          isSaved={Boolean(isSaved)}
+          onToggleSave={onToggleSave}
+          saveDisabled={saveDisabled}
+        />
+      </div>
     </article>
   );
 }
