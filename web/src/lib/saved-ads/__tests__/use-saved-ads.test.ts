@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isAdSaved } from "@/lib/saved-ads/use-saved-ads";
+import { PENDING_SAVED_AD_ID, isAdSaved } from "@/lib/saved-ads/use-saved-ads";
 import { libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
 
 describe("use-saved-ads helpers", () => {
@@ -11,6 +11,10 @@ describe("use-saved-ads helpers", () => {
   it("isAdSaved respects map", () => {
     expect(isAdSaved({ x: "saved-row" }, "x")).toBe(true);
     expect(isAdSaved({ x: "saved-row" }, "y")).toBe(false);
+  });
+
+  it("isAdSaved treats optimistic pending as saved for UI", () => {
+    expect(isAdSaved({ x: PENDING_SAVED_AD_ID }, "x")).toBe(true);
   });
 });
 

@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type SavedMap = Record<string, string>;
 
+/** Placeholder row id while POST /api/saved-ads is in flight — UI treats as saved */
+export const PENDING_SAVED_AD_ID = "__pending__";
+
 export type LibraryItemRef = { platform: string; libraryItemId: string };
 
 export function isAdSaved(savedMap: SavedMap, scrapedAdId: string): boolean {
@@ -15,6 +18,10 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
   const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const lastKeyRef = useRef("");
+  const savedMapRef = useRef<SavedMap>({});
+  const saveAbortByScrapedRef = useRef(new Map<string, AbortController>());
+
+  savedMapRef.current = savedMap;
 
   const dedupedItems = useMemo(() => {
     const m = new Map<string, LibraryItemRef>();
@@ -79,14 +86,21 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
     [resolvedToScraped],
   );
 
-  const saveAd = useCallback(
-    async (args: { scrapedAdId?: string; platform?: string; libraryItemId?: string; notes?: string | null }) => {
+  const postSaveAd = useCallback(
+    async (args: {
+      scrapedAdId?: string;
+      platform?: string;
+      libraryItemId?: string;
+      notes?: string | null;
+      signal?: AbortSignal;
+    }) => {
       const cid = competitorId.trim();
       if (!cid) return null;
       const res = await fetch("/api/saved-ads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
+        signal: args.signal,
         body: JSON.stringify({
           competitorId: cid,
           scrapedAdId: args.scrapedAdId,
@@ -97,7 +111,6 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
       });
       const json = (await res.json()) as { ok?: boolean; savedAd?: { id: string; source_scraped_ad_id: string | null } };
       if (json.ok && json.savedAd?.source_scraped_ad_id) {
-        setSavedMap((prev) => ({ ...prev, [json.savedAd!.source_scraped_ad_id!]: json.savedAd!.id }));
         return json.savedAd.id;
       }
       return null;
@@ -105,9 +118,21 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
     [competitorId],
   );
 
+  const saveAd = useCallback(
+    async (args: { scrapedAdId?: string; platform?: string; libraryItemId?: string; notes?: string | null }) => {
+      const id = await postSaveAd({ ...args });
+      const sid = args.scrapedAdId?.trim();
+      if (id && sid) {
+        setSavedMap((prev) => ({ ...prev, [sid]: id }));
+      }
+      return id;
+    },
+    [postSaveAd],
+  );
+
   const unsaveAd = useCallback(async (scrapedAdId: string) => {
-    const savedAdId = savedMap[scrapedAdId];
-    if (!savedAdId) return false;
+    const savedAdId = savedMapRef.current[scrapedAdId];
+    if (!savedAdId || savedAdId === PENDING_SAVED_AD_ID) return false;
     const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
     const json = (await res.json()) as { ok?: boolean };
     if (json.ok) {
@@ -119,7 +144,7 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
       return true;
     }
     return false;
-  }, [savedMap]);
+  }, []);
 
   const toggleSave = useCallback(
     async (platform: string, libraryItemId: string, notes?: string | null) => {
@@ -145,13 +170,70 @@ export function useSavedAdsStatus(competitorId: string, libraryItems: LibraryIte
 
       if (!sid) return;
 
-      if (savedMap[sid]) {
-        await unsaveAd(sid);
+      const current = savedMapRef.current[sid];
+
+      if (current) {
+        if (current === PENDING_SAVED_AD_ID) {
+          saveAbortByScrapedRef.current.get(sid)?.abort();
+          saveAbortByScrapedRef.current.delete(sid);
+          setSavedMap((prev) => {
+            const next = { ...prev };
+            delete next[sid];
+            return next;
+          });
+          return;
+        }
+
+        const savedAdId = current;
+        setSavedMap((prev) => {
+          const next = { ...prev };
+          delete next[sid];
+          return next;
+        });
+        void (async () => {
+          try {
+            const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
+            const json = (await res.json()) as { ok?: boolean };
+            if (!json.ok) {
+              setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+            }
+          } catch {
+            setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+          }
+        })();
         return;
       }
-      await saveAd({ scrapedAdId: sid, notes: notes ?? undefined });
+
+      setSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
+      const ac = new AbortController();
+      saveAbortByScrapedRef.current.set(sid, ac);
+
+      void (async () => {
+        try {
+          const id = await postSaveAd({ scrapedAdId: sid, notes, signal: ac.signal });
+          if (ac.signal.aborted) return;
+          if (id) {
+            setSavedMap((prev) => ({ ...prev, [sid]: id }));
+          } else {
+            setSavedMap((prev) => {
+              const next = { ...prev };
+              if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
+              return next;
+            });
+          }
+        } catch {
+          if (ac.signal.aborted) return;
+          setSavedMap((prev) => {
+            const next = { ...prev };
+            if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
+            return next;
+          });
+        } finally {
+          saveAbortByScrapedRef.current.delete(sid);
+        }
+      })();
     },
-    [competitorId, scrapedIdForCard, savedMap, saveAd, unsaveAd],
+    [competitorId, scrapedIdForCard, postSaveAd],
   );
 
   return { savedMap, resolvedToScraped, loading, scrapedIdForCard, saveAd, unsaveAd, toggleSave };
