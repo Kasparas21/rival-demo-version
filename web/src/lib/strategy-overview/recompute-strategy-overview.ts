@@ -578,12 +578,14 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     const cacheCount = await countAdsCacheRowsForUser(supabase, userId, cacheDomainCandidates);
     console.log(`[recompute] scraped_ads count=${scrapedCount} | ads_cache count=${cacheCount}`);
 
-    const hydrated = await tryHydrateScrapedAdsFromAdsCache(supabase, { userId, competitorId, domainHint });
+    const hydrateResult = await tryHydrateScrapedAdsFromAdsCache(supabase, { userId, competitorId, domainHint });
 
     scrapedCount = await countActiveScrapedAds(supabase, userId, competitorId);
-    console.log(`[recompute] hydration ran → scraped_ads after hydration=${scrapedCount}`);
+    console.log(
+      `[recompute] hydration ran → scraped_ads after hydration=${scrapedCount} hydrate_ok=${hydrateResult.ok} reason=${hydrateResult.reason} rowsInserted=${hydrateResult.rowsInserted}`
+    );
 
-    if (scrapedCount === 0 && cacheCount === 0 && !hydrated) {
+    if (scrapedCount === 0 && cacheCount === 0 && hydrateResult.rowsInserted === 0) {
       const emptyPayload = buildNoAdsFoundPayload({
         name: meta.name,
         domain: meta.brandDomain ?? meta.cacheDomain,

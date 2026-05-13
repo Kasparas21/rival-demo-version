@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/types";
-import { normalizeCompetitorSlug, preferCanonicalSlug } from "@/lib/sidebar-competitors";
+import { normalizeCompetitorSlug, preferCanonicalSlug, slugsLikelySameCompany } from "@/lib/sidebar-competitors";
 
 /** PostgREST `or=` for matching a saved competitor by `brand_domain` or `slug`. */
 export function savedCompetitorDomainOrFilter(domainHint: string): string {
@@ -14,6 +14,37 @@ export function savedCompetitorDomainOrFilter(domainHint: string): string {
     if (firstLabel && firstLabel !== host) clauses.add(`slug.eq.${firstLabel}`);
   }
   return [...clauses].join(",");
+}
+
+type SavedCompetitorPickRow = Pick<
+  Database["public"]["Tables"]["saved_competitors"]["Row"],
+  "id" | "brand_domain" | "slug"
+>;
+
+/** When `.or()` matches both `slug.eq.nike` and `brand_domain.eq.nike.com`, prefer the FQDN / exact row. */
+function pickSavedCompetitorForDomainHint(
+  rows: SavedCompetitorPickRow[] | null | undefined,
+  cleaned: string
+): SavedCompetitorPickRow | null {
+  if (!rows?.length) return null;
+  const norm = (s: string | null | undefined) => normalizeCompetitorSlug(String(s ?? "")).toLowerCase();
+  const dotDepth = (h: string) => (h.match(/\./g) ?? []).length;
+
+  const scored = rows.map((r) => {
+    const bd = norm(r.brand_domain);
+    const sg = norm(r.slug);
+    let score = 0;
+    if (bd === cleaned) score += 200;
+    if (sg === cleaned) score += 190;
+    if (bd && slugsLikelySameCompany(bd, cleaned)) score += 80;
+    if (sg && slugsLikelySameCompany(sg, cleaned)) score += 70;
+    const tieBreak = dotDepth(bd) * 10 + dotDepth(sg) + (bd.length + sg.length) * 0.001;
+    return { r, score, tieBreak };
+  });
+  scored.sort((a, b) => b.score - a.score || b.tieBreak - a.tieBreak);
+  const best = scored[0];
+  if (!best || best.score < 1) return null;
+  return best.r;
 }
 
 /**
@@ -44,7 +75,7 @@ export async function resolveAdsCacheDomainForUser(
     return { competitorId: null, cacheDomain: fallbackCache, readDomains };
   }
 
-  const row = rows?.[0];
+  const row = pickSavedCompetitorForDomainHint(rows, cleaned);
   if (!row?.id) {
     const readDomains = Array.from(new Set([fallbackCache, cleaned].filter(Boolean)));
     return { competitorId: null, cacheDomain: fallbackCache, readDomains };

@@ -418,6 +418,12 @@ async function mergeFirstLastSeenFromExisting(
  * Writes row-level creatives to `scraped_ads` for the given platforms (fresh scrapes and/or
  * cache backfill). Upserts on `(user_id, competitor_id, platform, stable_ad_key)`.
  */
+export type PersistScrapedAdsFromLibraryResult = {
+  ok: boolean;
+  errors: string[];
+  rowsInserted: number;
+};
+
 export async function persistScrapedAdsFromAdsLibraryResponse(
   supabase: SupabaseClient<Database>,
   params: {
@@ -432,15 +438,19 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
     /** Use an existing scrape batch row (weekly cron); when omitted inserts `ads-library:…`. */
     scrapeBatchId?: string | null;
   }
-): Promise<void> {
+): Promise<PersistScrapedAdsFromLibraryResult> {
   const { userId, competitorId, domainNorm, platformsToPersist, out, nowIso, scrapeBatchId } = params;
+  const errors: string[] = [];
+  let rowsInserted = 0;
 
   if (!competitorId) {
-    return;
+    return { ok: false, errors: ["missing_competitor_id"], rowsInserted: 0 };
   }
 
   const toPersist = [...platformsToPersist].filter((p) => platformScrapeSucceeded(out, p));
-  if (toPersist.length === 0) return;
+  if (toPersist.length === 0) {
+    return { ok: true, errors: [], rowsInserted: 0 };
+  }
 
   let batchId: string | undefined = scrapeBatchId?.trim() || undefined;
 
@@ -457,14 +467,15 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
 
     if (batchErr || !batchRow?.id) {
       console.error("[persistScrapedAds] scrape_batches insert", batchErr);
-      return;
+      const msg = batchErr?.message ?? "scrape_batches insert failed";
+      return { ok: false, errors: [`batch_insert: ${msg}`], rowsInserted: 0 };
     }
     batchId = batchRow.id;
   }
 
   if (!batchId) {
     console.error("[persistScrapedAds] missing scrape batch id");
-    return;
+    return { ok: false, errors: ["missing_scrape_batch_id"], rowsInserted: 0 };
   }
 
   for (const platform of toPersist) {
@@ -476,7 +487,10 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
       batchId,
       nowIso,
     });
-    if (inserts.length === 0) continue;
+    if (inserts.length === 0) {
+      console.error("[persistScrapedAds] zero inserts built for platform", { platform, domainNorm });
+      continue;
+    }
 
     const launchExtracted = inserts.filter((r) => r.ai_extracted_launch_date != null).length;
     console.log("[persist] launch dates extracted=", launchExtracted, "/", inserts.length);
@@ -490,8 +504,12 @@ export async function persistScrapedAdsFromAdsLibraryResponse(
       });
       if (upsertErr) {
         console.error("[persistScrapedAds] scraped_ads upsert", upsertErr);
-        return;
+        errors.push(`upsert_${platform}: ${upsertErr.message}`);
+        break;
       }
+      rowsInserted += slice.length;
     }
   }
+
+  return { ok: errors.length === 0, errors, rowsInserted };
 }

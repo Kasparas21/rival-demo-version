@@ -99,6 +99,14 @@ export function adsLibraryResponseFromAdsCacheRows(
   return out;
 }
 
+export type HydrateFromAdsCacheResult = {
+  ok: boolean;
+  reason: string;
+  persistedPlatforms: string[];
+  errors: string[];
+  rowsInserted: number;
+};
+
 /**
  * When `scraped_ads` is still empty (e.g. creative data only lived in `ads_cache`), copy cache into
  * `scraped_ads` using the same row shape as live Apify runs so Strategy Overview can derive + enrich.
@@ -108,8 +116,18 @@ export function adsLibraryResponseFromAdsCacheRows(
 export async function tryHydrateScrapedAdsFromAdsCache(
   supabase: SupabaseClient<Database>,
   params: { userId: string; competitorId: string; domainHint: string }
-): Promise<boolean> {
+): Promise<HydrateFromAdsCacheResult> {
   const { userId, competitorId, domainHint } = params;
+  const trace = { userId, competitorId, domainHint };
+  const none = (reason: string, errors: string[] = []): HydrateFromAdsCacheResult => ({
+    ok: false,
+    reason,
+    persistedPlatforms: [],
+    errors,
+    rowsInserted: 0,
+  });
+
+  console.error("[hydration:enter]", trace);
 
   const { count, error: cErr } = await supabase
     .from("scraped_ads")
@@ -119,17 +137,20 @@ export async function tryHydrateScrapedAdsFromAdsCache(
     .eq("is_active", true);
 
   if (cErr) {
-    console.warn("[strategy-hydrate] scraped_ads count:", cErr.message);
+    console.error("[hydration:check_active_failed]", { ...trace, error: cErr.message });
+    return none("check_active_failed", [cErr.message]);
   }
   if ((count ?? 0) > 0) {
-    console.log(`[hydration] skip persist — scraped_ads already has ${count} active rows`);
-    return false;
+    console.error("[hydration:skip_existing_active_scraped]", { ...trace, activeCount: count ?? 0 });
+    return none("skip_existing_active_scraped");
   }
 
   const { cacheDomain, readDomains } = await resolveAdsCacheDomainForUser(supabase, userId, domainHint);
+  console.error("[hydration:resolved_domains]", { ...trace, cacheDomain, readDomains });
+
   if (readDomains.length === 0) {
-    console.log(`[hydration] no readDomains for domainHint=${domainHint}`);
-    return false;
+    console.error("[hydration:no_read_domains]", trace);
+    return none("no_read_domains");
   }
 
   const fetchCache = async (domains: string[]) => {
@@ -143,26 +164,35 @@ export async function tryHydrateScrapedAdsFromAdsCache(
 
   const initialCache = await fetchCache(readDomains);
   if (initialCache.error) {
-    console.warn("[strategy-hydrate] ads_cache:", initialCache.error.message);
-    return false;
+    console.error("[hydration:cache_fetch_failed]", { ...trace, error: initialCache.error.message });
+    return none("cache_fetch_failed", [initialCache.error.message]);
   }
 
   let cacheRows = initialCache.data ?? [];
 
   if (!cacheRows.length) {
     const expanded = expandAdsCacheDomainCandidates(readDomains);
+    console.error("[hydration:retry_expanded_domains]", { ...trace, expanded });
     const retry = await fetchCache(expanded);
     if (retry.error) {
-      console.warn("[strategy-hydrate] ads_cache expanded:", retry.error.message);
-      return false;
+      console.error("[hydration:cache_fetch_expanded_failed]", { ...trace, error: retry.error.message });
+      return none("cache_fetch_failed", [retry.error.message]);
     }
     cacheRows = retry.data ?? [];
-    if (!cacheRows.length) {
-      for (const p of ALL_ADS_API_PLATFORMS) {
-        console.warn(`[hydration] cache miss for domain=${cacheDomain} platform=${p}`);
-      }
-      return false;
+  }
+
+  console.error("[hydration:cache_rows]", {
+    ...trace,
+    count: cacheRows.length,
+    domainsFound: [...new Set(cacheRows.map((r) => r.competitor_domain))],
+    platforms: [...new Set(cacheRows.map((r) => r.platform))],
+  });
+
+  if (!cacheRows.length) {
+    for (const p of ALL_ADS_API_PLATFORMS) {
+      console.error("[hydration:cache_miss_platform]", { ...trace, domain: cacheDomain, platform: p });
     }
+    return none("no_cache_rows");
   }
 
   const latestByPlatform = new Map<string, (typeof cacheRows)[0]>();
@@ -176,37 +206,97 @@ export async function tryHydrateScrapedAdsFromAdsCache(
   const presentPlatforms = new Set(latestByPlatform.keys());
   for (const p of ALL_ADS_API_PLATFORMS) {
     if (!presentPlatforms.has(p)) {
-      console.warn(`[hydration] cache miss for domain=${cacheDomain} platform=${p}`);
+      console.error("[hydration:cache_miss_platform]", { ...trace, domain: cacheDomain, platform: p });
     }
   }
 
   const merged = [...latestByPlatform.values()];
   const out = adsLibraryResponseFromAdsCacheRows(merged);
 
+  const platformReport: {
+    platform: string;
+    scrapeOk: boolean;
+    count: number;
+    error: string | null;
+    included: boolean;
+  }[] = [];
   const platformsToPersist = new Set<AdsLibraryPlatform>();
+
   for (const p of ALL_ADS_API_PLATFORMS) {
-    if (platformScrapeSucceeded(out, p) && countLibraryAdsForPlatform(p, out) > 0) {
-      platformsToPersist.add(p);
-    }
+    const scrapeOk = platformScrapeSucceeded(out, p);
+    const adCount = countLibraryAdsForPlatform(p, out);
+    const errVal =
+      p === "meta"
+        ? out.meta.error
+        : p === "google"
+          ? out.google.error
+          : p === "linkedin"
+            ? out.linkedin.error
+            : p === "tiktok"
+              ? out.tiktok.error
+              : p === "microsoft"
+                ? out.microsoft.error
+                : p === "pinterest"
+                  ? out.pinterest.error
+                  : out.snapchat.error;
+    const included = scrapeOk && adCount > 0;
+    platformReport.push({
+      platform: p,
+      scrapeOk,
+      count: adCount,
+      error: errVal ?? null,
+      included,
+    });
+    if (included) platformsToPersist.add(p);
   }
 
+  console.error("[hydration:platform_report]", { ...trace, platformReport });
+
   if (platformsToPersist.size === 0) {
-    console.log(`[hydration] no platforms with successful scrape + ads to persist (domain=${cacheDomain})`);
-    return false;
+    console.error("[hydration:no_platforms_to_persist]", trace);
+    return none("no_platforms_to_persist");
   }
 
   const nowIso = new Date().toISOString();
-  await persistScrapedAdsFromAdsLibraryResponse(supabase, {
-    userId,
-    competitorId,
-    domainNorm: cacheDomain,
-    platformsToPersist,
-    out,
-    nowIso,
-  });
+  let persistResult;
+  try {
+    persistResult = await persistScrapedAdsFromAdsLibraryResponse(supabase, {
+      userId,
+      competitorId,
+      domainNorm: cacheDomain,
+      platformsToPersist,
+      out,
+      nowIso,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[hydration:persist_threw]", { ...trace, error: message });
+    return {
+      ok: false,
+      reason: "persist_threw",
+      persistedPlatforms: [...platformsToPersist],
+      errors: [message],
+      rowsInserted: 0,
+    };
+  }
 
-  console.log(
-    `[hydration] persisted from ads_cache → platforms=${[...platformsToPersist].join(",")} domain=${cacheDomain}`
-  );
-  return true;
+  console.error("[hydration:persist_result]", { ...trace, persistResult });
+
+  if (!persistResult.ok) {
+    return {
+      ok: false,
+      reason: "persist_failed",
+      persistedPlatforms: [...platformsToPersist],
+      errors: persistResult.errors,
+      rowsInserted: persistResult.rowsInserted,
+    };
+  }
+
+  return {
+    ok: true,
+    reason: "persisted",
+    persistedPlatforms: [...platformsToPersist],
+    errors: [],
+    rowsInserted: persistResult.rowsInserted,
+  };
 }

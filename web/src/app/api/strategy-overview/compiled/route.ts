@@ -14,6 +14,7 @@ import {
 import { deriveStrategyOverviewPayload } from "@/lib/strategy-overview/strategyDerivation";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { tryHydrateScrapedAdsFromAdsCache } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import type { Database } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -130,6 +131,15 @@ export async function GET(req: Request): Promise<NextResponse> {
   const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
+  }
+
+  const hydrateResult = await tryHydrateScrapedAdsFromAdsCache(supabase, {
+    userId: user.id,
+    competitorId: meta.competitorId,
+    domainHint: domain,
+  });
+  if (!hydrateResult.ok) {
+    console.error("[compiled] hydrate_from_ads_cache", hydrateResult);
   }
 
   if (!force) {

@@ -21,7 +21,7 @@ import {
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
-import { resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
+import { findSidebarRowForHost, resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
 import { useActiveBrand } from "../brand-context";
 import {
   MetaLogo,
@@ -92,7 +92,6 @@ import {
   loadSidebarCompetitors,
   mergeAccountSidebarRowsWithLocalLibraryContext,
   normalizeCompetitorSlug,
-  findMatchingCompetitorIndex,
   saveSidebarCompetitors,
   sidebarCompetitorsWithoutWorkspaceRow,
   SIDEBAR_COMPETITORS_EVENT,
@@ -1659,9 +1658,8 @@ function CompetitorDashboardBody({
 
   const competitorSidebarMatch = useMemo(() => {
     if (!sidebarSnapshot?.length) return undefined;
-    const idx = findMatchingCompetitorIndex(sidebarSnapshot, canonicalHost, competitorDisplayLabel);
-    return idx >= 0 ? sidebarSnapshot[idx] : undefined;
-  }, [sidebarSnapshot, canonicalHost, competitorDisplayLabel]);
+    return findSidebarRowForHost(canonicalHost, sidebarSnapshot);
+  }, [sidebarSnapshot, canonicalHost]);
 
   const { activeAdId, openAd, closeAd, resolveLibraryAdAndOpen } = useAdDetailState();
 
@@ -1676,6 +1674,8 @@ function CompetitorDashboardBody({
 
   const [spyFollowPending, setSpyFollowPending] = useState(false);
   const [spyFollowOptimistic, setSpyFollowOptimistic] = useState<boolean | null>(null);
+  const [serverScrapedAdTotal, setServerScrapedAdTotal] = useState<number | null>(null);
+  const [forceRescrapeBusy, setForceRescrapeBusy] = useState(false);
 
 
   const getTimeAgo = (date: Date) => {
@@ -2047,6 +2047,56 @@ function CompetitorDashboardBody({
   );
 
   const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
+
+  useEffect(() => {
+    const id = competitorDbIdForSaved;
+    if (!id || isOwnWorkspace) {
+      setServerScrapedAdTotal(null);
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/competitor/velocity?competitorId=${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((j: { ok?: boolean; velocities?: { total_count?: number }[] }) => {
+        if (cancelled) return;
+        if (!j.ok || !Array.isArray(j.velocities)) {
+          setServerScrapedAdTotal(null);
+          return;
+        }
+        const t = j.velocities.reduce((s, v) => s + (v.total_count ?? 0), 0);
+        setServerScrapedAdTotal(t);
+      })
+      .catch(() => {
+        if (!cancelled) setServerScrapedAdTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [competitorDbIdForSaved, isOwnWorkspace]);
+
+  const handleForceRescrape = useCallback(async () => {
+    if (forceRescrapeBusy || !competitorDbIdForSaved) return;
+    setForceRescrapeBusy(true);
+    try {
+      const res = await fetch("/api/competitor/force-rescrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ competitorId: competitorDbIdForSaved }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+      if (json?.ok) {
+        window.location.reload();
+      } else {
+        toast.error(typeof json?.error === "string" ? json.error : res.statusText || "Re-scrape failed");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Re-scrape error");
+    } finally {
+      setForceRescrapeBusy(false);
+    }
+  }, [competitorDbIdForSaved, forceRescrapeBusy]);
+
   const savedAdsLibraryItems = useMemo(() => {
     const items: { platform: string; libraryItemId: string }[] = [];
     for (const ad of filteredMetaAds) items.push({ platform: "meta", libraryItemId: ad.id });
@@ -2301,42 +2351,64 @@ function CompetitorDashboardBody({
                 </div>
               </div>
             </div>
-            {!isOwnWorkspace && competitorSidebarMatch?.savedCompetitorDbId ? (
-              <button
-                type="button"
-                disabled={spyFollowPending}
-                onClick={() => void handleSpyToggle()}
-                className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
-                  spyFollowing
-                    ? "bg-sky-600 text-white shadow-sm hover:bg-sky-700"
-                    : "border border-[#d4d4d8] bg-white/90 text-[#52525b] shadow-sm hover:border-[#a1a1aa] hover:bg-zinc-50"
-                }`}
-              >
-                {spyFollowPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-current" aria-hidden />
-                    <span>Updating…</span>
-                  </>
-                ) : (
-                  <>
-                    <SatelliteDish
-                      className={`h-4 w-4 shrink-0 ${spyFollowing ? "fill-current text-white" : "text-[#71717a]"}`}
-                      aria-hidden
-                    />
-                    {spyFollowing ? (
+            {!isOwnWorkspace ? (
+              <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                {competitorSidebarMatch?.savedCompetitorDbId ? (
+                  <button
+                    type="button"
+                    disabled={spyFollowPending}
+                    onClick={() => void handleSpyToggle()}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors disabled:opacity-60 ${
+                      spyFollowing
+                        ? "bg-sky-600 text-white shadow-sm hover:bg-sky-700"
+                        : "border border-[#d4d4d8] bg-white/90 text-[#52525b] shadow-sm hover:border-[#a1a1aa] hover:bg-zinc-50"
+                    }`}
+                  >
+                    {spyFollowPending ? (
                       <>
-                        <span className="relative flex h-2 w-2">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                        </span>
-                        <span>Spying · Active</span>
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-current" aria-hidden />
+                        <span>Updating…</span>
                       </>
                     ) : (
-                      <span>Spy on this brand</span>
+                      <>
+                        <SatelliteDish
+                          className={`h-4 w-4 shrink-0 ${spyFollowing ? "fill-current text-white" : "text-[#71717a]"}`}
+                          aria-hidden
+                        />
+                        {spyFollowing ? (
+                          <>
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                            </span>
+                            <span>Spying · Active</span>
+                          </>
+                        ) : (
+                          <span>Spy on this brand</span>
+                        )}
+                      </>
                     )}
-                  </>
-                )}
-              </button>
+                  </button>
+                ) : null}
+                {competitorDbIdForSaved && serverScrapedAdTotal === 0 ? (
+                  <button
+                    type="button"
+                    disabled={forceRescrapeBusy}
+                    onClick={() => void handleForceRescrape()}
+                    title="Runs a fresh Apify scrape for all platforms and writes results to your library (uses scrape quota)."
+                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#343434] bg-[#343434] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#1f1f1f] disabled:opacity-50"
+                  >
+                    {forceRescrapeBusy ? (
+                      <>
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-current" aria-hidden />
+                        <span>Re-scraping…</span>
+                      </>
+                    ) : (
+                      <span>Force re-scrape</span>
+                    )}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
 

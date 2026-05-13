@@ -60,6 +60,17 @@ describe("resolveCompetitorViewFromSidebar", () => {
     const out = resolveCompetitorViewFromSidebar("acme.com", { ...emptyOverrides(), confirmedParam: "0" }, [row]);
     expect(out.isConfirmed).toBe(false);
   });
+
+  it("uses the dashboard path host as brand.domain when the sidebar row only has a bare slug (matches saved_competitors / APIs)", () => {
+    const row = accountSyncedRow({
+      slug: "acme",
+      name: "Acme Corp",
+      lastScrapedAt: "2026-05-11T12:00:00.000Z",
+    });
+    const out = resolveCompetitorViewFromSidebar("acme.com", emptyOverrides(), [row]);
+    expect(out.brand.domain).toBe("acme.com");
+    expect(out.brand.handle).toBe("acme");
+  });
 });
 
 function emptyOverrides(): Parameters<typeof resolveCompetitorViewFromSidebar>[1] {

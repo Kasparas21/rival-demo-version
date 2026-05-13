@@ -88,7 +88,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
 
   if (userId && adsCacheDomain && platformsToPersist.size > 0) {
     const nowPersist = new Date().toISOString();
-    await persistScrapedAdsFromAdsLibraryResponse(supabase, {
+    const persistResult = await persistScrapedAdsFromAdsLibraryResponse(supabase, {
       userId,
       competitorId: resolvedCompetitorId,
       domainNorm: adsCacheDomain,
@@ -97,6 +97,14 @@ export async function finalizeAdsLibraryAfterFreshScrape(
       nowIso: nowPersist,
       scrapeBatchId: scrapeBatchId ?? undefined,
     });
+    if (!persistResult.ok) {
+      console.error(
+        "[finalizeAdsLibrary] persist scraped_ads failed",
+        persistResult.errors,
+        "rowsInserted=",
+        persistResult.rowsInserted
+      );
+    }
   }
 
   if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {

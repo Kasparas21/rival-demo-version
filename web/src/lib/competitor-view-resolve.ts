@@ -73,7 +73,12 @@ export function parseBrandFromUrlParam(brandParam: string | null): CompetitorPag
   return null;
 }
 
-function findSidebarRowForHost(
+/**
+ * Sidebar row for the current `/dashboard/competitor/[host]` path. Must stay aligned with
+ * {@link resolveCompetitorViewFromSidebar} so `savedCompetitorDbId` and `brand.domain` refer to
+ * the same competitor (URL host is the source of truth for DB lookups).
+ */
+export function findSidebarRowForHost(
   pathCanonicalHost: string,
   /** When provided (including `[]`), skips `localStorage` — use `[]` on SSR + first client paint for hydration. */
   sidebarSnapshot?: SidebarCompetitor[]
@@ -116,8 +121,24 @@ export function resolveCompetitorViewFromSidebar(
   const row = findSidebarRowForHost(pathCanonicalHost, sidebarSnapshot);
 
   const brandFromQuery = parseBrandFromUrlParam(overrides.brandParam);
-  const brand: CompetitorPageBrand =
-    brandFromQuery ?? (row ? brandFromSidebarRow(row) : brandFromHostnameFallback(pathCanonicalHost));
+  const pathNorm = normalizeCompetitorSlug(pathCanonicalHost);
+  const brand: CompetitorPageBrand = brandFromQuery
+    ? brandFromQuery
+    : row
+      ? (() => {
+          const base = brandFromSidebarRow(row);
+          return {
+            ...base,
+            /** Route host must match `saved_competitors` / `scraped_ads` keys (avoid slug-only vs FQDN splits). */
+            domain: pathNorm,
+            handle: pathNorm.split(".")[0] ?? base.handle,
+            logoUrl:
+              base.logoUrl?.trim() ||
+              row.brand?.logoUrl?.trim() ||
+              googleFaviconUrlForDomain(pathNorm),
+          };
+        })()
+      : brandFromHostnameFallback(pathCanonicalHost);
 
   let platformIds: Record<string, string> | null = null;
   if (overrides.idsParam?.trim()) {
