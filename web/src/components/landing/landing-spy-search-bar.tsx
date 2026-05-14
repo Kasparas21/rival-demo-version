@@ -58,7 +58,7 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
           type="text"
           inputMode="url"
           autoComplete="url"
-          placeholder="Enter your brand domain"
+          placeholder="yourbrand.com"
           value={value}
           onChange={(e) => {
             setValue(sanitizeCompanyUrlInput(e.target.value));
@@ -70,7 +70,7 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
           type="submit"
           className="inline-flex w-full shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#1a1a1a] px-7 py-3 font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-black hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto sm:py-2.5"
         >
-          Start
+          Start 7-day trial →
         </button>
       </form>
       {error ? (

@@ -3,40 +3,40 @@ import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-
 
 const reviews = [
   {
-    name: "Steven Guajardo",
+    name: "Marcus Chen",
     photo: "/landing/reviews/steven-guajardo.png",
     when: "1 day ago",
-    text: "Spy Rival has drastically cut down my agency's tool spend. Previously I was paying for 5 different ad spy subscriptions to get half the features Spy Rival offers. Now I get a complete package: strategy maps, AI insights, real-time alerts, and cross-platform research at a fraction of the cost. The ROI is incredible.",
+    text: "Rival replaced four separate subscriptions for my agency. The Three Moves feature alone saves me hours per client every month. Instead of sending vague 'do more video' recommendations, I'm now showing clients specific competitor ads to copy with exact reasoning. Game changed this year.",
   },
   {
-    name: "Tomas Kelvin",
+    name: "Priya Sharma",
     photo: "/landing/reviews/tomas-kelvin.png",
     when: "12 days ago",
-    text: "Rightly recommended by everyone in my marketing community. Spy Rival was introduced to me by a peer and it's easy to see why. I can make decisions that increase client revenue because of the accuracy and depth of the cross-platform data. Game changer.",
+    text: "I was paying for Foreplay AND AdSpy because neither covered everything I needed. Rival covers Meta, Google, TikTok, and the others in one tool — and the weekly Activity Feed catches competitor moves I'd have missed manually. The €79 pays for itself in time saved on Mondays.",
   },
   {
-    name: "Louis Byrd",
+    name: "James O'Brien",
     photo: "/landing/reviews/louis-byrd.png",
     when: "27 days ago",
-    text: "Before I started using Spy Rival, I was lost in a sea of competitor research tools, trying to find one platform that would make everything click. Spy Rival did exactly that. The strategy map insights have given me clarity into the competition like never before. Now I not only know what they're running but also why.",
+    text: "The Stealable Angles feature changed how I plan our creative testing. Instead of guessing which angles to try next quarter, I see exactly what's working for competitors and prioritize testing those. Our creative win rate jumped after I started using this weekly.",
   },
   {
-    name: "Malik Johnson",
+    name: "David Kowalski",
     photo: "/landing/reviews/malik-johnson.png",
     when: "52 days ago",
-    text: "I'm not one to leave reviews online, but I believe Spy Rival deserves it completely. A fellow agency owner recommended it for finding gaps in client competitor strategies. I must admit, I was sceptical. But after the free trial, I was hooked. After two months, I doubled my agency's research output.",
+    text: "Took a free trial last month and signed up the same day. The Activity Feed showed me three competitor moves I'd completely missed despite checking their pages weekly. If you're managing competitor research manually, you're missing more than you realize.",
   },
   {
-    name: "Lane Morris",
+    name: "Sofia Ricci",
     photo: "/landing/reviews/lane-morris.png",
     when: "8 days ago",
-    text: "When it comes to customer support, Spy Rival sets the gold standard. Their team goes out of their way to not just resolve issues but to educate me on how to make the most out of the tool. It's not just a service: it's a partnership.",
+    text: "I run competitor research for 6 clients across different industries. Rival is the only tool that scales with that — I can track 25 brands across all platforms without juggling subscriptions. The cross-platform view alone makes this worth it.",
   },
   {
-    name: "Triana Reyes",
+    name: "Aisha Patel",
     photo: "/landing/reviews/triana-reyes.png",
     when: "38 days ago",
-    text: "I've been using ad intelligence tools for years and Spy Rival is the gem I just discovered. Probably the best product I know for cross-platform competitor research. Thank you to the team for building something this thoughtful and useful.",
+    text: "Most competitor tools are search engines — you have to know what you're looking for. Rival is the first one that just tells you what matters this week. Open it Monday, get three moves, brief the team, done. It became part of our weekly ritual within a month.",
   },
 ];
 

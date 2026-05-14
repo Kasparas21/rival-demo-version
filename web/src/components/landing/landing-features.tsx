@@ -36,55 +36,57 @@ export function LandingFeatures() {
     <section className="relative z-[11] overflow-hidden bg-white py-16 text-center sm:py-24">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
-          See competitors clearly <span className="text-[#4a7fa5]">in</span>
+          From competitor ads to your
           <br />
-          <span className="text-[#4a7fa5]">seconds.</span>
+          <span className="text-[#4a7fa5]">weekly action plan in 30 seconds.</span>
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">
-          Stop hopping between six different transparency tools. Rival pulls every active ad, decodes the funnel, and shows you the gaps —
-          in one search.
+          Rival pulls every active ad your competitor runs across 6 platforms, decodes their funnel, and tells you the three moves to
+          make this week. One tool replaces six tabs.
         </p>
 
         <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:gap-8">
           <article className="flex flex-col">
             <FeatureFig
-              src="https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mUvEI2iMcDz2qYZFsOfNkSV7i51vL4pdQ9IeM"
-              alt="Rival Ads Library preview showing cross‑platform Meta, Google and other ad creatives in one place."
+              src="/landing/features/feature-stealable-angles.png"
+              alt="Comparison view showing stealable angles: hooks your competitor runs that your brand does not, with save and evidence actions."
               width={1024}
-              height={722}
+              height={684}
             />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Spy on every ad your competitor runs.</h3>
+            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Find the angles they run that you don&apos;t.</h3>
             <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Pull every active ad across Meta, Google, TikTok, LinkedIn, Snapchat and Reddit into one searchable library. Save winning
-              creatives, filter by format, see how long each has been running. No more six-tab juggling.
+              Every week, Rival compares your competitor&apos;s library against yours and ranks the angles they use that you don&apos;t. See
+              the exact hooks, save the examples worth testing, and brief your team — without scrolling through hundreds of ads to find what
+              matters.
             </p>
           </article>
 
           <article className="flex flex-col">
             <FeatureFig
-              src="https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mS5Pp9RLgLYkhla84OziVnT6FcZQeJRftAEoj"
-              alt="Full funnel strategy map with platforms placed across TOF, MOF and BOF plus spend and audience signals."
+              src="/landing/features/feature-three-moves.png"
+              alt="Three Moves dashboard with weekly tactical priorities grounded in scrape data: refresh, defend, and angle shifts with evidence."
               width={1024}
-              height={722}
+              height={679}
             />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Decode their full funnel automatically.</h3>
+            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Get three tactical moves every week.</h3>
             <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Our AI maps how your competitor moves prospects from awareness to conversion across platforms. See which platforms drive
-              top-of-funnel reach, where they retarget, how budget flows. The strategy — visualised in 30 seconds.
+              Skip the 47-page competitor reports. Rival reads your competitor&apos;s strategy weekly and outputs exactly three moves —
+              copy this angle, shift this budget, refresh this creative — each backed by your actual scrape data with specific numbers, not
+              generic advice.
             </p>
           </article>
 
           <article className="flex flex-col">
             <FeatureFig
-              src="https://8g55zxgme2.ufs.sh/f/Drcd6q9Ud57mauBEWMtFKU3Hr9N0RjMX5Y1Lc6PJiyQVdGCl"
-              alt="Strategy overview with funnel architecture, budget allocation, creative cadence and performance insight cards."
+              src="/landing/features/feature-timeline.png"
+              alt="Timeline view with ad lifespan stats, weekly launch and retirement activity, and a Gantt chart of creatives over time."
               width={1024}
               height={722}
             />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Find the gaps in your strategy.</h3>
+            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Know what changed in five seconds.</h3>
             <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Connect your own brand and Rival shows exactly where your competitor is outstanding, outpositioning, or outmanoeuvring you.
-              Walk into every meeting already knowing what to fix, test, and launch next.
+              Every Monday, Rival shows you exactly what your competitor did last week. New angles launched. Platform shifts. Budget
+              reallocations. No more scrolling dashboards to spot what&apos;s different — the changes are surfaced and explained automatically.
             </p>
           </article>
         </div>

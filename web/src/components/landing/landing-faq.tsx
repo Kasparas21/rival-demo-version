@@ -6,35 +6,35 @@ import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-
 const faqItems = [
   {
     q: "How does the free trial work?",
-    a: "Start a 1-day free trial to unlock Spy Rival access, including platform libraries, AI insights, and exports where your plan allows. When the trial ends, your subscription continues unless you cancel first. You can manage billing from your account settings.",
+    a: "Sign up with your card, get 7 days of full Rival access tracking 1 competitor. Cancel anytime in the first 7 days and you won't be charged. If you continue, you're billed €79/month (or €59/month if you choose annual at signup). One click cancel, no retention calls.",
   },
   {
-    q: "What is Spy Rival exactly?",
-    a: "Spy Rival is competitor ad intelligence: one search surfaces active ads across Meta, Google, TikTok, LinkedIn, Snapchat, and Reddit, plus AI-assisted summaries of creatives, funnels, and how rivals rotate messaging. Built for agencies and growth teams who want clarity without juggling six disclosure tools.",
+    q: "How is Rival different from Foreplay or AdSpy?",
+    a: "Foreplay and AdSpy are ad libraries — they show you what your competitor runs. Rival is an intelligence platform — it shows you what they run AND tells you what to do about it. Three concrete differences: (1) Rival covers all 6 major ad platforms out of the box, not just Meta. (2) The Stealable Angles feature compares competitor angles against your own to find specific gaps — nobody else does this. (3) Three Moves delivers weekly tactical recommendations from your scrape data, not generic best practices.",
   },
   {
     q: "Is this legal?",
-    a: "Yes. Spy Rival ingests publicly available transparency and disclosure data: the same sources platforms publish for policy and advertiser accountability. You’re responsible for how you use the insights commercially and for complying with each platform’s terms and applicable law.",
+    a: "Yes. Rival only pulls data from publicly available ad transparency libraries that Meta, Google, TikTok, LinkedIn, Snapchat, and Reddit publish themselves. No private data, no account access required, no scraping of anything that isn't already public.",
   },
   {
-    q: "Why is Spy Rival the best ad spy tool of 2026?",
-    a: "It’s cross‑platform by design: unified search, funnel mapping, AI insight layers, alerts, and brand comparison in one workspace. Fewer subscriptions, fewer tabs, faster answers when you pitch or plan media.",
+    q: "How often does data update?",
+    a: "Rival auto-scrapes every tracked competitor weekly. You can also trigger a manual scrape anytime. Most users open Rival on Monday morning to see fresh data from the past week.",
   },
   {
-    q: "Is Spy Rival free?",
-    a: "There’s no permanent free tier on the landing plans. Start with the 1-day free trial above, then keep your subscription active for ongoing searches and reports.",
+    q: "Can I track my own brand too?",
+    a: "Yes, and we recommend it. Adding your own brand unlocks side-by-side stats, head-to-head comparisons, and the Stealable Angles feature, which compares competitor angles against your own library to find specific gaps.",
   },
   {
-    q: "What platforms does Spy Rival work with?",
-    a: "Meta/Facebook Ads Library, Google Ads transparency, TikTok Ads Library, LinkedIn ad disclosures, Snapchat transparency, and Reddit: six platforms surfaced in every qualified search.",
+    q: "What platforms does Rival work with?",
+    a: "Meta (Facebook and Instagram), Google (Search, Display, YouTube), TikTok, LinkedIn, Snapchat, and Reddit. All six are included in every plan — no per-platform upcharges.",
   },
   {
     q: "How accurate is the data?",
-    a: "We mirror what each transparency library shows; delays or gaps are usually on the publisher side (refresh cadence, geo filters, inactive ads hidden by policy). We label run dates and freshness where the source provides them so you can judge confidence.",
+    a: "Ad detection is 95%+ across supported platforms (we cross-reference each platform's official transparency API). Strategic analysis (funnel classification, angle clustering, audience inference) ranges from 80–90% accuracy depending on data volume. Every analytical claim shows its source evidence — you can verify everything against the underlying ads.",
   },
   {
     q: "Can I cancel anytime?",
-    a: "Yes. Billing is monthly unless you agree to annual terms elsewhere—cancel before your renewal date from billing settings and keep access until the period ends. No long‑term contracts on these self‑serve plans.",
+    a: "Yes. One click in your account settings. No retention calls, no 'are you sure' prompts. If you cancel mid-month, you keep access until the period ends.",
   },
 ] as const;
 

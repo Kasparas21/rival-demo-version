@@ -1,5 +1,4 @@
 import Image from "next/image";
-import { Star } from "lucide-react";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { LandingSpySearchBar } from "@/components/landing/landing-spy-search-bar";
 import { RivalVideoBackdrop } from "@/components/ui/rival-video-shell";
@@ -85,14 +84,12 @@ export function LandingHero() {
       <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h1
           id="how-it-works"
-          className={`${landingNavAnchorScrollClasses} mx-auto mb-6 max-w-[11ch] text-[clamp(3.25rem,16vw,7rem)] font-extrabold leading-[0.96] tracking-[-0.055em] text-[#1a1a1a] sm:mb-8 sm:max-w-none sm:tracking-[-0.04em]`}
+          className={`${landingNavAnchorScrollClasses} mx-auto mb-6 w-full max-w-full text-[clamp(3.25rem,16vw,7rem)] font-extrabold leading-none tracking-[-0.055em] text-[#1a1a1a] sm:mb-8 sm:tracking-[-0.04em]`}
         >
-          Spy your
-          <br />
-          competitor
-          <br />
-          on{" "}
-          <span className="font-serif font-normal italic">all platforms</span>
+          <span className="block whitespace-nowrap">The only ad spy tool</span>
+          <span className="block -mt-[0.12em]">
+            that covers <span className="font-serif font-normal">all 6 platforms</span>
+          </span>
         </h1>
 
         <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">
@@ -149,7 +146,7 @@ export function LandingHero() {
             <div className="relative z-10 mx-auto mt-12 flex justify-center sm:mt-14 md:mt-16">
               <div
                 className={`${glassPillShellClass} inline-flex max-w-[calc(100vw-2rem)] items-center gap-3 rounded-full py-2 pl-2.5 pr-5`}
-                aria-label="4.9 out of 5 from 4,268 customers"
+                aria-label="Built for performance marketers"
               >
                 <div className="flex shrink-0 items-center ps-1" aria-hidden>
                   {HERO_REVIEW_AVATARS.map((src, i) => (
@@ -168,16 +165,8 @@ export function LandingHero() {
                     </div>
                   ))}
                 </div>
-                <Star
-                  className="size-[1.125rem] shrink-0 fill-amber-400 text-amber-400"
-                  strokeWidth={1.5}
-                  aria-hidden
-                />
                 <p className="min-w-0 text-left text-sm leading-tight text-[#1a1a1a]">
-                  <span className="font-semibold">4.9/5</span>{" "}
-                  <span className="font-normal text-gray-700">from</span>{" "}
-                  <span className="font-semibold">4,268</span>{" "}
-                  <span className="font-normal text-gray-700">customers</span>
+                  <span className="font-semibold">Built for performance marketers</span>
                 </p>
               </div>
             </div>

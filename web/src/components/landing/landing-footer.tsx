@@ -5,34 +5,34 @@ const columns = [
   {
     title: "PRODUCT",
     links: [
-      { label: "Solution", href: "#solution" },
+      { label: "Product", href: "#solution" },
       { label: "How It Works", href: "#how-it-works" },
       { label: "Pricing", href: "#pricing" },
       { label: "FAQ", href: "#faq" },
-      { label: "Start Trial", href: "/checkout" },
+      { label: "Start trial", href: "/checkout" },
     ],
   },
   {
     title: "RESOURCES",
     links: [
       { label: "Blog", href: "/blog" },
-      { label: "Help Center", href: "mailto:hello@spy-rival.com" },
-      { label: "Support", href: "mailto:hello@spy-rival.com" },
+      { label: "Help Center", href: "mailto:hello@rival.com" },
+      { label: "Support", href: "mailto:hello@rival.com" },
     ],
   },
   {
     title: "COMPANY",
     links: [
       { label: "About", href: "#solution" },
-      { label: "Contact", href: "mailto:hello@spy-rival.com" },
-      { label: "hello@spy-rival.com", href: "mailto:hello@spy-rival.com" },
+      { label: "Contact", href: "mailto:hello@rival.com" },
+      { label: "hello@rival.com", href: "mailto:hello@rival.com" },
     ],
   },
   {
     title: "LEGAL",
     links: [
-      { label: "Privacy Policy", href: "mailto:hello@spy-rival.com" },
-      { label: "Terms of Service", href: "mailto:hello@spy-rival.com" },
+      { label: "Privacy Policy", href: "mailto:hello@rival.com" },
+      { label: "Terms of Service", href: "mailto:hello@rival.com" },
     ],
   },
 ];
@@ -48,13 +48,6 @@ function SocialIcons() {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
         </svg>
-      </Link>
-      <Link
-        href="#"
-        aria-label="LinkedIn"
-        className="flex size-9 items-center justify-center rounded-full bg-white text-[#4a7fa5] shadow-sm hover:bg-neutral-50"
-      >
-        <span className="text-xs font-black">in</span>
       </Link>
       <Link
         href="#"
@@ -95,10 +88,10 @@ export function LandingFooter() {
         </div>
 
         <div className="mt-12 flex flex-col items-center gap-6 border-t border-gray-200 pt-6 text-xs text-gray-400 md:flex-row md:justify-between">
-          <span>© 2026 Spy Rival</span>
+          <span>© 2026 Rival</span>
           <SocialIcons />
-          <a href="mailto:hello@spy-rival.com" className="hover:text-[#4a7fa5]">
-            Support: hello@spy-rival.com
+          <a href="mailto:hello@rival.com" className="hover:text-[#4a7fa5]">
+            Support: hello@rival.com
           </a>
         </div>
       </div>
