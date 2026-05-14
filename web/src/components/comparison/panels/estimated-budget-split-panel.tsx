@@ -1,12 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowDown, ArrowRight, ArrowUp } from "lucide-react";
-import { Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer } from "recharts";
 
-import type { CompetitorStrategyOverviewPayload, SpendTrendByPlatformInsight, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import type { CompetitorStrategyOverviewPayload, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { COMPARISON_PLATFORM_ORDER, ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { ComparisonInsufficient, ComparisonPanelShell } from "@/components/comparison/panel-shell";
+import { Cell, Pie, PieChart } from "recharts";
 
 const PLATFORM_COLORS: Record<StrategyPlatform, string> = {
   meta: "#1877F2",
@@ -37,7 +36,7 @@ function computeShareComparison(
   leftSegments: DonutSeg[],
   rightSegments: DonutSeg[],
   leftBrandName: string,
-  rightBrandName: string,
+  rightBrandName: string
 ): { label: string; detail: string | null } {
   let biggestDiff: { platform: StrategyPlatform; ratio: number; leftPct: number; rightPct: number } | null = null;
 
@@ -73,14 +72,6 @@ function computeShareComparison(
     label: `${biggestDiff.ratio.toFixed(1)}× more on ${platformName}`,
     detail: higherSide,
   };
-}
-
-function trendMap(rows: SpendTrendByPlatformInsight[] | undefined): Map<StrategyPlatform, SpendTrendByPlatformInsight> {
-  const m = new Map<StrategyPlatform, SpendTrendByPlatformInsight>();
-  for (const r of rows ?? []) {
-    m.set(r.platform, r);
-  }
-  return m;
 }
 
 function BudgetDonutSlot({ brandName, segments, totalEur }: { brandName: string; segments: DonutSeg[]; totalEur: number }) {
@@ -128,38 +119,17 @@ function BudgetDonutSlot({ brandName, segments, totalEur }: { brandName: string;
   );
 }
 
-function SpendTrendSpark({ row }: { row: SpendTrendByPlatformInsight | undefined }) {
-  const pts = (row?.weekBuckets ?? []).slice(-7);
-  const chartData = pts.map((y, i) => ({ i, y }));
-  if (!row || chartData.length === 0) {
-    return <div className="h-8 w-full rounded bg-slate-100/80" />;
-  }
-  return (
-    <div className="h-8 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-          <Line type="monotone" dataKey="y" stroke="#64748b" strokeWidth={1.25} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export function EstimatedBudgetSplitPanel({ left, right }: Props) {
   const leftSegments = useMemo(() => segmentsFromPayload(left.payload), [left.payload]);
   const rightSegments = useMemo(() => segmentsFromPayload(right.payload), [right.payload]);
 
   const { label: comparisonLabel, detail: comparisonDetail } = useMemo(
-    () =>
-      computeShareComparison(leftSegments, rightSegments, left.name, right.name),
-    [leftSegments, rightSegments, left.name, right.name],
+    () => computeShareComparison(leftSegments, rightSegments, left.name, right.name),
+    [leftSegments, rightSegments, left.name, right.name]
   );
 
   const leftTotalEur = left.payload?.insights.budget_allocation.totalEstSpendEur ?? 0;
   const rightTotalEur = right.payload?.insights.budget_allocation.totalEstSpendEur ?? 0;
-
-  const leftTrend = trendMap(left.payload?.insights.spend_trend_by_platform);
-  const rightTrend = trendMap(right.payload?.insights.spend_trend_by_platform);
 
   const visiblePlatforms = useMemo(() => {
     return COMPARISON_PLATFORM_ORDER.filter((pl) => {
@@ -168,12 +138,6 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
       return leftHas || rightHas;
     });
   }, [leftSegments, rightSegments]);
-
-  const DirectionGlyph = ({ d }: { d: "up" | "down" | "flat" }) => {
-    if (d === "up") return <ArrowUp className="h-3 w-3 text-emerald-600" aria-hidden />;
-    if (d === "down") return <ArrowDown className="h-3 w-3 text-red-600" aria-hidden />;
-    return <ArrowRight className="h-3 w-3 text-slate-400" aria-hidden />;
-  };
 
   return (
     <ComparisonPanelShell
@@ -208,62 +172,6 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
                 <span className="text-[10px] capitalize text-slate-600">{platform}</span>
               </div>
             ))}
-          </div>
-
-          <div>
-            <p className="mb-2 text-[12px] font-semibold text-slate-800">Spend trend (last ~90 days)</p>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div>
-                <p className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-slate-500">{left.name}</p>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  {COMPARISON_PLATFORM_ORDER.map((pl) => {
-                    const row = leftTrend.get(pl);
-                    const active = (left.payload?.insights.budget_allocation.segments ?? []).some(
-                      (s) => s.platform === pl && s.adCount > 0,
-                    );
-                    return (
-                      <div
-                        key={pl}
-                        className={`rounded-lg border border-slate-100/90 p-1.5 ${
-                          active ? "bg-white/80" : "bg-slate-50/60 opacity-50"
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-0.5">
-                          <ComparisonPlatformIcon platform={pl} className="h-4 w-4" />
-                          <DirectionGlyph d={row?.direction ?? "flat"} />
-                        </div>
-                        <SpendTrendSpark row={row} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-[9px] font-semibold uppercase tracking-wider text-slate-500">{right.name}</p>
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  {COMPARISON_PLATFORM_ORDER.map((pl) => {
-                    const row = rightTrend.get(pl);
-                    const active = (right.payload?.insights.budget_allocation.segments ?? []).some(
-                      (s) => s.platform === pl && s.adCount > 0,
-                    );
-                    return (
-                      <div
-                        key={pl}
-                        className={`rounded-lg border border-slate-100/90 p-1.5 ${
-                          active ? "bg-white/80" : "bg-slate-50/60 opacity-50"
-                        }`}
-                      >
-                        <div className="mb-1 flex items-center justify-between gap-0.5">
-                          <ComparisonPlatformIcon platform={pl} className="h-4 w-4" />
-                          <DirectionGlyph d={row?.direction ?? "flat"} />
-                        </div>
-                        <SpendTrendSpark row={row} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       )}

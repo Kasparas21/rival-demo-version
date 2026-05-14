@@ -7,15 +7,25 @@ type Props = {
   brand: CompetitorPageBrand;
   onOpenAdsLibrary: () => void;
   competitorId?: string;
+  lastScrapedAt?: string | null;
+  onFreshnessRescrape?: () => void;
 };
 
-export function StrategyMapTab({ brand, onOpenAdsLibrary, competitorId }: Props) {
+export function StrategyMapTab({
+  brand,
+  onOpenAdsLibrary,
+  competitorId,
+  lastScrapedAt,
+  onFreshnessRescrape,
+}: Props) {
   return (
     <StrategyOverviewApp
       brand={brand}
       onOpenAdsLibrary={onOpenAdsLibrary}
       forceView="map"
       competitorId={competitorId}
+      lastScrapedAt={lastScrapedAt}
+      onFreshnessRescrape={onFreshnessRescrape}
     />
   );
 }

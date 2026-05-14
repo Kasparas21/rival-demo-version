@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { AudienceInferencePanel } from "@/components/comparison/panels/audience-inference-panel";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
@@ -16,6 +14,9 @@ type Props = {
   workspaceBadge?: string;
   competitorLabel: string;
   competitorLogoUrl: string | null;
+  comparisonPayload: ComparisonPayloadJson | null;
+  comparisonPayloadLoading: boolean;
+  comparisonPayloadError: string | null;
 };
 
 export function AudienceTab({
@@ -27,31 +28,11 @@ export function AudienceTab({
   workspaceBadge,
   competitorLabel,
   competitorLogoUrl,
+  comparisonPayload,
+  comparisonPayloadLoading,
+  comparisonPayloadError,
 }: Props) {
-  const [data, setData] = useState<ComparisonPayloadJson | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/comparison/payload?competitorDomain=${encodeURIComponent(competitorDomain)}`,
-          { credentials: "include" },
-        );
-        const json = (await res.json()) as ComparisonPayloadJson;
-        if (!cancelled) setData(json);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [competitorDomain]);
-
-  if (loading) {
+  if (comparisonPayloadLoading) {
     return (
       <RivalLoadingBlock
         title="Loading audience inference…"
@@ -61,6 +42,16 @@ export function AudienceTab({
       />
     );
   }
+
+  if (comparisonPayloadError) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-[13px] text-red-700">{comparisonPayloadError}</p>
+      </div>
+    );
+  }
+
+  const data = comparisonPayload;
 
   if (!data?.ok || !data.workspace?.payload || !data.competitor?.payload) {
     return (
@@ -77,8 +68,7 @@ export function AudienceTab({
   const wsLogo =
     workspaceLogoUrl?.trim() ||
     (workspaceDomain?.trim() ? googleFaviconUrlForDomain(workspaceDomain.trim()) : null);
-  const compLogo =
-    competitorLogoUrl?.trim() || googleFaviconUrlForDomain(competitorDomain);
+  const compLogo = competitorLogoUrl?.trim() || googleFaviconUrlForDomain(competitorDomain);
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">

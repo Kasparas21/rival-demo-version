@@ -9,6 +9,8 @@ export type BrandScaleAdInput = {
 
 export function normalizePlatform(p: string): StrategyPlatform | null {
   const x = p.toLowerCase().trim();
+  if (x === "facebook" || x === "fb" || x === "instagram" || x === "threads") return "meta";
+  if (x === "youtube" || x === "microsoft" || x === "bing") return "google";
   if (
     x === "meta" ||
     x === "google" ||
@@ -20,6 +22,13 @@ export function normalizePlatform(p: string): StrategyPlatform | null {
     return x;
   }
   return null;
+}
+
+/** Coerce LLM / legacy payload strings to a strategy platform so map icons never fall through to placeholders. */
+export function coerceStrategyPlatformForDisplay(p: string): StrategyPlatform {
+  const n = normalizePlatform(p);
+  if (n) return n;
+  return "meta";
 }
 
 export function deriveBrandScale(

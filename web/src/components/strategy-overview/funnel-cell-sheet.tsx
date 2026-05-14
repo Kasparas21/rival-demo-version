@@ -57,12 +57,13 @@ type Props = {
   open: boolean;
   cellId: FunnelCellId | null;
   competitorId: string;
+  /** Normalized brand domain for saved-ads list cache invalidation. */
+  cacheDomainNorm: string;
   onClose: () => void;
-  /** Header stats from cached map payload (ads load separately). */
   cellSummary: FunnelCellNodePayload | null;
 };
 
-export function FunnelCellSheet({ open, cellId, competitorId, onClose, cellSummary }: Props) {
+export function FunnelCellSheet({ open, cellId, competitorId, cacheDomainNorm, onClose, cellSummary }: Props) {
   const { openAd } = useAdDetailState();
   const parsed = useMemo(() => (cellId ? parseCellId(cellId) : null), [cellId]);
 
@@ -85,7 +86,8 @@ export function FunnelCellSheet({ open, cellId, competitorId, onClose, cellSumma
   const { savedMap, toggleSave, saveAd, unsaveAd } = useSavedAdsStatus(
     competitorId,
     libraryItems,
-    scrapedAdIds
+    scrapedAdIds,
+    cacheDomainNorm,
   );
 
   const resetAndFetch = useCallback(async () => {

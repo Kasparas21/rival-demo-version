@@ -396,23 +396,31 @@ export async function getCachedStrategyOverview(
   /** When set, empty cached overviews are invalidated if ads still live only in `ads_cache`. */
   domainHint?: string
 ): Promise<CompetitorStrategyOverviewPayload | null> {
-  const { data } = await supabase
-    .from("competitor_strategy_overview")
-    .select("payload, ai_model_version, source_scrape_batch_id, computed_at")
-    .eq("competitor_id", competitorId)
-    .eq("user_id", userId)
-    .maybeSingle();
+  const [{ data }, { data: savedMeta }, { data: latestBatchRow }] = await Promise.all([
+    supabase
+      .from("competitor_strategy_overview")
+      .select("payload, ai_model_version, source_scrape_batch_id, computed_at")
+      .eq("competitor_id", competitorId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("saved_competitors")
+      .select("last_scraped_at")
+      .eq("id", competitorId)
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("scrape_batches")
+      .select("id")
+      .eq("competitor_id", competitorId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (!data?.payload || typeof data.payload !== "object") return null;
 
   if (data.ai_model_version !== STRATEGY_OVERVIEW_MODEL_VERSION) return null;
-
-  const { data: savedMeta } = await supabase
-    .from("saved_competitors")
-    .select("last_scraped_at")
-    .eq("id", competitorId)
-    .eq("user_id", userId)
-    .maybeSingle();
 
   const lastScrapedMs = savedMeta?.last_scraped_at ? Date.parse(savedMeta.last_scraped_at) : NaN;
   const computedMs = data.computed_at ? Date.parse(data.computed_at) : NaN;
@@ -424,7 +432,7 @@ export async function getCachedStrategyOverview(
     return null;
   }
 
-  const latestBatch = await getLatestScrapeBatchId(supabase, competitorId);
+  const latestBatch = latestBatchRow?.id ?? null;
   if (latestBatch !== data.source_scrape_batch_id) return null;
 
   const payload = data.payload as CompetitorStrategyOverviewPayload;

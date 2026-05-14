@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayUrlShort, normalizeLandingPageUrl } from "../normalize-url";
+import { displayUrlShort, normalizeLandingPageUrl, unwrapOutboundRedirectUrl } from "../normalize-url";
 
 describe("normalizeLandingPageUrl", () => {
   it("strips utm tracking params", () => {
@@ -35,6 +35,13 @@ describe("normalizeLandingPageUrl", () => {
   it("adds protocol if missing", () => {
     const result = normalizeLandingPageUrl("denticija.lt/page");
     expect(result).toBe("https://denticija.lt/page");
+  });
+
+  it("unwraps Facebook l.php redirect targets before normalization", () => {
+    const wrapped =
+      "https://l.facebook.com/l.php?u=https%3A%2F%2Fhexclad.com%2Fknives%3Futm_source%3Dfb&h=abc";
+    const result = normalizeLandingPageUrl(unwrapOutboundRedirectUrl(wrapped));
+    expect(result).toBe("https://hexclad.com/knives");
   });
 });
 

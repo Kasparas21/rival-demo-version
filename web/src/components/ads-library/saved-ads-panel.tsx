@@ -1,11 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Bookmark, StickyNote, Trash2 } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
 import type { Json } from "@/lib/supabase/types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 
 function platformForIcon(p: string): StrategyPlatform {
@@ -37,65 +40,87 @@ export type SavedAdRow = {
   raw_payload: Json;
 };
 
+type SavedAdsApiResponse = {
+  ok?: boolean;
+  savedAds?: SavedAdRow[];
+  error?: string;
+};
+
 type SavedAdsPanelProps = {
   competitorId: string;
   competitorLabel: string;
+  cacheDomainNorm: string;
+  lastScrapedAt?: string | null;
+  onFreshnessRescrape?: () => void;
   onOpenAd: (scrapedAdId: string) => void;
 };
 
-export function SavedAdsPanel({ competitorId, competitorLabel, onOpenAd }: SavedAdsPanelProps) {
-  const [savedAds, setSavedAds] = useState<SavedAdRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
-  const [noteDraft, setNoteDraft] = useState("");
+export function SavedAdsPanel({
+  competitorId,
+  competitorLabel,
+  cacheDomainNorm,
+  lastScrapedAt = null,
+  onFreshnessRescrape,
+  onOpenAd,
+}: SavedAdsPanelProps) {
+  const domainKey = cacheDomainNorm.trim().toLowerCase();
+  const [savedRevision, setSavedRevision] = useState(0);
+  const cacheKey = `${domainKey}:saved-ads:${competitorId}:v${savedRevision}`;
 
-  const loadSavedAds = useCallback(async () => {
-    if (!competitorId.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
+  const bumpSaved = useCallback(() => {
+    const dom = cacheDomainNorm.trim().toLowerCase();
+    const cid = competitorId.trim();
+    if (dom && cid) invalidateSavedAdsCaches(dom, cid);
+    setSavedRevision((n) => n + 1);
+  }, [cacheDomainNorm, competitorId]);
+
+  const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<SavedAdsApiResponse>({
+    cacheKey,
+    enabled: Boolean(competitorId.trim() && domainKey),
+    validateCached: (c) => c.ok === true && Array.isArray(c.savedAds),
+    fetcher: async () => {
       const res = await fetch(`/api/saved-ads?competitorId=${encodeURIComponent(competitorId)}`, {
         credentials: "include",
       });
-      const json = (await res.json()) as { ok?: boolean; savedAds?: SavedAdRow[]; error?: string };
-      if (json.ok) {
-        setSavedAds(json.savedAds ?? []);
-      } else {
-        setError(json.error ?? "Failed to load");
+      const json = (await res.json()) as SavedAdsApiResponse;
+      if (!json.ok) {
+        throw new Error(json.error ?? "Failed to load");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Network error");
-    } finally {
-      setLoading(false);
-    }
-  }, [competitorId]);
+      return json;
+    },
+  });
 
-  useEffect(() => {
-    void loadSavedAds();
-  }, [loadSavedAds]);
+  const savedAds = useMemo(() => data?.savedAds ?? [], [data?.savedAds]);
+  const displayError = hookError?.message ?? null;
 
-  const handleUnsave = useCallback(async (savedAdId: string) => {
-    const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
-    const json = (await res.json()) as { ok?: boolean };
-    if (json.ok) {
-      setSavedAds((prev) => prev.filter((a) => a.id !== savedAdId));
-    }
-  }, []);
+  const [editingNotesId, setEditingNotesId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
-  const handleSaveNotes = useCallback(async (savedAdId: string, notes: string) => {
-    const res = await fetch(`/api/saved-ads/${savedAdId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ notes }),
-    });
-    const json = (await res.json()) as { ok?: boolean; savedAd?: SavedAdRow };
-    if (json.ok && json.savedAd) {
-      setSavedAds((prev) => prev.map((a) => (a.id === savedAdId ? { ...a, notes: json.savedAd!.notes } : a)));
-      setEditingNotesId(null);
-    }
-  }, []);
+  const handleUnsave = useCallback(
+    async (savedAdId: string) => {
+      const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
+      const json = (await res.json()) as { ok?: boolean };
+      if (json.ok) bumpSaved();
+    },
+    [bumpSaved],
+  );
+
+  const handleSaveNotes = useCallback(
+    async (savedAdId: string, notes: string) => {
+      const res = await fetch(`/api/saved-ads/${savedAdId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ notes }),
+      });
+      const json = (await res.json()) as { ok?: boolean; savedAd?: SavedAdRow };
+      if (json.ok && json.savedAd) {
+        setEditingNotesId(null);
+        void refetch();
+      }
+    },
+    [refetch],
+  );
 
   if (!competitorId.trim()) {
     return (
@@ -103,7 +128,7 @@ export function SavedAdsPanel({ competitorId, competitorLabel, onOpenAd }: Saved
     );
   }
 
-  if (loading) {
+  if (loading && !data && !displayError) {
     return (
       <div className="flex justify-center py-12 px-4">
         <RivalLoadingBlock title="Loading saved ads…" description="Syncing bookmarks and sticky notes." size="md" padded={false} />
@@ -111,9 +136,14 @@ export function SavedAdsPanel({ competitorId, competitorLabel, onOpenAd }: Saved
     );
   }
 
-  if (error) {
+  if (displayError) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</div>
+      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
+        {displayError}
+        <button type="button" className="mt-2 block text-[12px] font-semibold underline" onClick={() => void refetch()}>
+          Retry
+        </button>
+      </div>
     );
   }
 
@@ -130,13 +160,15 @@ export function SavedAdsPanel({ competitorId, competitorLabel, onOpenAd }: Saved
   }
 
   return (
-    <div>
-      <div className="mb-6">
+    <div className="relative">
+      <CacheRevalidatingDot show={isValidating && !!data} className="right-0 top-0" />
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <h2 className="text-[18px] font-semibold text-[#343434]">Saved ads from {competitorLabel}</h2>
-        <p className="mt-0.5 text-[12px] text-[#808080]">
-          {savedAds.length} saved — preserved even if removed from the source
-        </p>
+        <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />
       </div>
+      <p className="mb-4 mt-0.5 text-[12px] text-[#808080]">
+        {savedAds.length} saved — preserved even if removed from the source
+      </p>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {savedAds.map((sa) => (

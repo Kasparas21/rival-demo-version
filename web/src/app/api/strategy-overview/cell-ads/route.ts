@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { libraryItemIdFromRawPayload } from "@/lib/saved-ads/resolve-scraped-ad";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,12 +16,6 @@ const PLATFORMS = new Set([
 ]);
 
 const STAGES = new Set(["TOF", "MOF", "BOF"]);
-
-function libraryItemIdFromRaw(raw: unknown): string | null {
-  if (!raw || typeof raw !== "object") return null;
-  const id = (raw as { id?: unknown }).id;
-  return typeof id === "string" && id.trim() ? id.trim() : null;
-}
 
 function rawPayloadSubset(raw: unknown): {
   landing_page_url?: string;
@@ -128,7 +123,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       first_seen_at: r.first_seen_at,
       last_seen_at: r.last_seen_at,
       /** Ad library card id when present in raw_payload (for saved-ads check/toggle). */
-      library_item_id: libraryItemIdFromRaw(r.raw_payload),
+      library_item_id: libraryItemIdFromRawPayload(r.raw_payload),
       raw_payload_subset: rawPayloadSubset(r.raw_payload),
     })) ?? [];
 

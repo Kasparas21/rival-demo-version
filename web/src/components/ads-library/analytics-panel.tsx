@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Activity, BarChart3, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { BarChart3, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
 
-import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import { describeArcClockwise } from "@/lib/charts/arc-geometry";
 import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
+import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
+import type { SharedLandingPagesListCache } from "@/components/competitor/landing-pages-tab";
 import { RivalLoadingMicro } from "@/components/ui/rival-loading";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 type LandingPageGroup = {
   groupId: string;
@@ -15,6 +17,10 @@ type LandingPageGroup = {
   totalAds: number;
   activeAds: number;
   platformBreakdown: Record<string, number>;
+  /** Present on newer /api/landing-pages payloads (Foreplay-style tab). */
+  count?: number;
+  host?: string;
+  faviconUrl?: string;
 };
 
 type LandingPagesResponse = {
@@ -25,6 +31,9 @@ type LandingPagesResponse = {
 
 type Props = {
   competitorId: string;
+  /** Normalized domain for cache keys + invalidation. */
+  cacheDomainNorm: string;
+  lastScrapedAt?: string | null;
   platformCounts: {
     meta: number;
     google: number;
@@ -33,6 +42,11 @@ type Props = {
     pinterest: number;
     snapchat: number;
   };
+  /** Opens the full Landing Pages master-detail tab (Tests → Landing Pages). */
+  onViewAllLandingPages?: () => void;
+  onFreshnessRescrape?: () => void;
+  /** Parent-owned landing pages list (`limit=100`); skips duplicate fetch when set. */
+  landingPagesListCache?: SharedLandingPagesListCache | null;
 };
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -73,33 +87,37 @@ const PLATFORM_TEXT_COLORS: Record<string, string> = {
   snapchat: "#B8B600",
 };
 
-export function AdLibraryAnalyticsPanel({ competitorId, platformCounts }: Props) {
+export function AdLibraryAnalyticsPanel({
+  competitorId,
+  cacheDomainNorm,
+  lastScrapedAt = null,
+  platformCounts,
+  onViewAllLandingPages,
+  onFreshnessRescrape,
+  landingPagesListCache = null,
+}: Props) {
   const [expanded, setExpanded] = useState(true);
-  const [landingPages, setLandingPages] = useState<LandingPageGroup[]>([]);
-  const [loading, setLoading] = useState(true);
+  const domainKey = cacheDomainNorm.trim().toLowerCase();
+  const stamp = lastScrapedAt ?? "none";
+  const lpCacheKey = `${domainKey}:landing-pages:${competitorId}:${stamp}:100`;
 
-  useEffect(() => {
-    if (!competitorId) return;
-    let cancelled = false;
-    setLoading(true);
+  const internalLp = useScrapeKeyedCache<LandingPagesResponse>({
+    cacheKey: lpCacheKey,
+    enabled: landingPagesListCache == null && Boolean(competitorId && domainKey),
+    validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
+    fetcher: async () => {
+      const r = await fetch(`/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}&limit=100`);
+      return (await r.json()) as LandingPagesResponse;
+    },
+  });
 
-    fetch(`/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}`)
-      .then((r) => r.json())
-      .then((lpRes: LandingPagesResponse) => {
-        if (cancelled) return;
-        if (lpRes.ok && lpRes.landingPages) {
-          setLandingPages(lpRes.landingPages.slice(0, 5));
-        }
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!cancelled) setLoading(false);
-      });
+  const lpRes = (landingPagesListCache?.data as LandingPagesResponse | undefined) ?? internalLp.data;
+  const loading = landingPagesListCache?.loading ?? internalLp.loading;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [competitorId]);
+  const landingPages = useMemo(() => {
+    if (!lpRes?.ok || !lpRes.landingPages) return [];
+    return lpRes.landingPages.slice(0, 5);
+  }, [lpRes]);
 
   const totalActiveAds = useMemo(
     () => Object.values(platformCounts).reduce((sum, n) => sum + n, 0),
@@ -134,8 +152,8 @@ export function AdLibraryAnalyticsPanel({ competitorId, platformCounts }: Props)
       </button>
 
       {expanded ? (
-        <div className="grid grid-cols-1 gap-0 border-t border-[#e2e8f0]/90 lg:grid-cols-3">
-          <div className="min-h-0 border-b border-[#e2e8f0]/90 p-5 lg:border-b-0 lg:border-r">
+        <div className="grid grid-cols-1 gap-0 border-t border-[#e2e8f0]/90 xl:grid-cols-3">
+          <div className="min-h-0 border-b border-[#e2e8f0]/90 p-5 xl:border-b-0 xl:border-r">
             <div className="mb-3 flex items-center gap-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
                 Active ads · platform mix
@@ -148,27 +166,31 @@ export function AdLibraryAnalyticsPanel({ competitorId, platformCounts }: Props)
             />
           </div>
 
-          <div className="border-b border-[#e2e8f0]/90 p-5 lg:border-b-0 lg:border-r">
+          {competitorId ? (
+            <div className="min-h-0 border-b border-[#e2e8f0]/90 p-5 xl:border-b-0 xl:border-r">
+              <div className="mb-3 flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+                  Activity score
+                </span>
+              </div>
+              <ActivityScorePanel
+                competitorId={competitorId}
+                cacheDomainNorm={cacheDomainNorm}
+                variant="analytics"
+                lastScrapedAt={lastScrapedAt}
+                onFreshnessRefresh={onFreshnessRescrape}
+              />
+            </div>
+          ) : null}
+
+          <div className="p-5 xl:border-b-0">
             <div className="mb-3 flex items-center gap-1.5">
               <LinkIcon className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
                 Top landing pages
               </span>
             </div>
-            <LandingPagesList groups={landingPages} loading={loading} />
-          </div>
-
-          <div className="p-5">
-            <div className="mb-3 flex flex-col gap-0.5">
-              <div className="flex items-center gap-1.5">
-                <Activity className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
-                  Activity score
-                </span>
-              </div>
-              <p className="text-[10px] text-[#64748b]">Operational footprint in this market</p>
-            </div>
-            <ActivityScorePanel competitorId={competitorId} variant="analytics" />
+            <LandingPagesList groups={landingPages} loading={loading} onViewAll={onViewAllLandingPages} />
           </div>
         </div>
       ) : null}
@@ -411,7 +433,15 @@ function HoveredPlatformLabel({
   );
 }
 
-function LandingPagesList({ groups, loading }: { groups: LandingPageGroup[]; loading: boolean }) {
+function LandingPagesList({
+  groups,
+  loading,
+  onViewAll,
+}: {
+  groups: LandingPageGroup[];
+  loading: boolean;
+  onViewAll?: () => void;
+}) {
   if (loading) {
     return <RivalLoadingMicro caption="Loading landing pages…" />;
   }
@@ -467,6 +497,15 @@ function LandingPagesList({ groups, loading }: { groups: LandingPageGroup[]; loa
           </div>
         );
       })}
+      {onViewAll ? (
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="mt-2 w-full rounded-lg py-1.5 text-left text-[11px] font-semibold text-[#2563eb] transition-colors hover:text-[#1d4ed8]"
+        >
+          View all →
+        </button>
+      ) : null}
     </div>
   );
 }

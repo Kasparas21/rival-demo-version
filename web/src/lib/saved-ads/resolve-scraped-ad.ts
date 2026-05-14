@@ -2,6 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/types";
 
+export function libraryItemIdFromRawPayload(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const id = (raw as { id?: unknown }).id;
+  return typeof id === "string" && id.trim() ? id.trim() : null;
+}
+
 /** Match library card `id` stored in scraped_ads.raw_payload (see persist-scraped-ads). */
 export async function resolveScrapedAdIdForLibraryItem(
   supabase: SupabaseClient<Database>,

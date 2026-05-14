@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { maybeDetectMoves } from "@/lib/comparison/maybe-detect-moves";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
+import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
@@ -34,6 +35,7 @@ type ComparisonSideResponse = {
   needsScrape?: boolean;
   recent_moves: ComparisonMoveRow[];
   snapshot_count: number;
+  derivedStats: ComparisonDerivedStats;
 };
 
 export type ComparisonMoveApi = ComparisonMoveRow;
@@ -232,21 +234,30 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const wsDomainHint = (wsRow.brand_domain?.trim() || wsRow.slug || "").toLowerCase();
   const wsMeta = metaFromSavedRow(wsRow, wsDomainHint || "workspace");
-  const activeWsAds = await countActiveAdsForCompetitor(supabase, user.id, wsRow.id);
-  const needsScrape = activeWsAds === 0;
-
-  const wsResolved = await resolveSidePayload({
-    supabase,
-    userId: user.id,
-    competitorId: wsRow.id,
-    domainHint: wsDomainHint || wsMeta.domain,
-  });
 
   await ensureSavedCompetitorForStrategyOverview(supabase, user.id, competitorDomain);
   const rivalMeta = await loadSavedCompetitorForUser(supabase, user.id, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
+
+  const [activeWsAds, wsResolved, rivalResolved] = await Promise.all([
+    countActiveAdsForCompetitor(supabase, user.id, wsRow.id),
+    resolveSidePayload({
+      supabase,
+      userId: user.id,
+      competitorId: wsRow.id,
+      domainHint: wsDomainHint || wsMeta.domain,
+    }),
+    resolveSidePayload({
+      supabase,
+      userId: user.id,
+      competitorId: rivalMeta.competitorId,
+      domainHint: rivalMeta.brandDomain ?? rivalMeta.cacheDomain,
+    }),
+  ]);
+
+  const needsScrape = activeWsAds === 0;
 
   const rivalSideMeta: SideMeta = {
     competitorId: rivalMeta.competitorId,
@@ -255,13 +266,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     logoUrl: rivalMeta.logoUrl,
     lastScrapedAt: rivalMeta.lastScrapedAt,
   };
-
-  const rivalResolved = await resolveSidePayload({
-    supabase,
-    userId: user.id,
-    competitorId: rivalMeta.competitorId,
-    domainHint: rivalMeta.brandDomain ?? rivalMeta.cacheDomain,
-  });
 
   scheduleMoveDetection({
     userId: user.id,
@@ -274,11 +278,15 @@ export async function GET(req: Request): Promise<NextResponse> {
     rivalMoves,
     wsSnapCount,
     rivalSnapCount,
+    wsDerived,
+    rivalDerived,
   ] = await Promise.all([
     loadRecentMoves(supabase, user.id, wsRow.id),
     loadRecentMoves(supabase, user.id, rivalMeta.competitorId),
     countStrategySnapshots(supabase, user.id, wsRow.id),
     countStrategySnapshots(supabase, user.id, rivalMeta.competitorId),
+    computeScrapedAdsDerivedStats(supabase, user.id, wsRow.id),
+    computeScrapedAdsDerivedStats(supabase, user.id, rivalMeta.competitorId),
   ]);
 
   const workspace: ComparisonSideResponse = {
@@ -287,6 +295,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     recomputing: wsResolved.recomputing,
     recent_moves: wsMoves,
     snapshot_count: wsSnapCount,
+    derivedStats: wsDerived,
     ...(needsScrape ? { needsScrape: true } : {}),
   };
 
@@ -296,6 +305,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     recomputing: rivalResolved.recomputing,
     recent_moves: rivalMoves,
     snapshot_count: rivalSnapCount,
+    derivedStats: rivalDerived,
   };
 
   return NextResponse.json({

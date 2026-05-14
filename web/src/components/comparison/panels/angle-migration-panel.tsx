@@ -1,39 +1,43 @@
 "use client";
 
-import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import type {
+  AnglesByPlatformInsight,
+  CompetitorStrategyOverviewPayload,
+  StrategyPlatform,
+} from "@/lib/strategy-overview/payload-types";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { ComparisonInsufficient, ComparisonPanelShell } from "@/components/comparison/panel-shell";
 
 type Props = {
-  left: { name: string; payload: CompetitorStrategyOverviewPayload | null };
-  right: { name: string; payload: CompetitorStrategyOverviewPayload | null };
-  leftIsWorkspace: boolean;
+  workspace: { name: string; payload: CompetitorStrategyOverviewPayload | null };
+  competitor: { name: string; payload: CompetitorStrategyOverviewPayload | null };
 };
 
-type Tag = "Shared" | "Gap" | "Advantage";
+type Tag = "Shared" | "Theirs only" | "Yours only";
 
-export function AngleMigrationPanel({ left, right, leftIsWorkspace }: Props) {
-  const leftAngles = new Set(
-    (left.payload?.insights.angles_by_platform ?? []).map((x) => x.angle)
+function detailForAngle(payload: CompetitorStrategyOverviewPayload | null, angle: string): AnglesByPlatformInsight | undefined {
+  return (payload?.insights.angles_by_platform ?? []).find((x) => x.angle === angle);
+}
+
+export function AngleMigrationPanel({ workspace, competitor }: Props) {
+  const workspaceAngles = new Set(
+    (workspace.payload?.insights.angles_by_platform ?? []).map((x) => x.angle)
   );
-  const rightAngles = new Set(
-    (right.payload?.insights.angles_by_platform ?? []).map((x) => x.angle)
+  const competitorAngles = new Set(
+    (competitor.payload?.insights.angles_by_platform ?? []).map((x) => x.angle)
   );
 
-  const workspaceAngles = leftIsWorkspace ? leftAngles : rightAngles;
-  const competitorAngles = leftIsWorkspace ? rightAngles : leftAngles;
-
-  const union = new Set<string>([...leftAngles, ...rightAngles]);
+  const union = new Set<string>([...workspaceAngles, ...competitorAngles]);
 
   if (union.size === 0) {
     return (
-      <ComparisonPanelShell
-        title="Angle performance"
-        subtitle="Top creative angles by platform mix"
-        tooltip="Angles come from enrichment labels. Migration across platforms uses history (planned)."
-      >
-        <ComparisonInsufficient message="No angle rollups yet — enrich ads and recompute strategy overview." />
-      </ComparisonPanelShell>
+      <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+        <h3 className="text-base font-semibold uppercase tracking-wider text-slate-700">Full angle breakdown</h3>
+        <p className="mt-1 text-sm text-slate-500">Every angle detected across both brands, classified.</p>
+        <div className="mt-4">
+          <ComparisonInsufficient message="No angle rollups yet — enrich ads and recompute strategy overview." />
+        </div>
+      </div>
     );
   }
 
@@ -42,58 +46,117 @@ export function AngleMigrationPanel({ left, right, leftIsWorkspace }: Props) {
     const inC = competitorAngles.has(angle);
     let tag: Tag;
     if (inW && inC) tag = "Shared";
-    else if (inC && !inW) tag = "Gap";
-    else tag = "Advantage";
-    const detail =
-      (left.payload?.insights.angles_by_platform ?? []).find((x) => x.angle === angle) ??
-      (right.payload?.insights.angles_by_platform ?? []).find((x) => x.angle === angle);
-    return { angle, tag, detail };
+    else if (inC && !inW) tag = "Theirs only";
+    else tag = "Yours only";
+
+    const wDetail = detailForAngle(workspace.payload, angle);
+    const cDetail = detailForAngle(competitor.payload, angle);
+
+    return { angle, tag, wDetail, cDetail };
   });
 
   const tagStyle = (t: Tag) => {
-    if (t === "Gap") return "bg-rose-100 text-rose-900";
-    if (t === "Advantage") return "bg-emerald-100 text-emerald-900";
-    return "bg-slate-100 text-slate-800";
+    if (t === "Theirs only") return "bg-amber-100 text-amber-900 border border-amber-200/80";
+    if (t === "Yours only") return "bg-emerald-100 text-emerald-900 border border-emerald-200/80";
+    return "bg-slate-100 text-slate-800 border border-slate-200/80";
+  };
+
+  const formatAdsCell = (tag: Tag, wDetail?: AnglesByPlatformInsight, cDetail?: AnglesByPlatformInsight) => {
+    if (tag === "Shared") {
+      const w = wDetail?.totalCount ?? "—";
+      const t = cDetail?.totalCount ?? "—";
+      return (
+        <span className="text-slate-700">
+          <span className="font-medium text-slate-800">{workspace.name}:</span> {w}
+          <span className="mx-1 text-slate-400">·</span>
+          <span className="font-medium text-slate-800">{competitor.name}:</span> {t}
+        </span>
+      );
+    }
+    if (tag === "Theirs only") {
+      return <span className="tabular-nums text-slate-700">{cDetail?.totalCount ?? "—"}</span>;
+    }
+    return <span className="tabular-nums text-slate-700">{wDetail?.totalCount ?? "—"}</span>;
+  };
+
+  const formatPlatformsCell = (tag: Tag, wDetail?: AnglesByPlatformInsight, cDetail?: AnglesByPlatformInsight) => {
+    const renderList = (platforms: string[]) => (
+      <div className="flex flex-wrap gap-1">
+        {platforms.slice(0, 6).map((pl) => (
+          <span key={pl} className="inline-flex" title={pl}>
+            <ComparisonPlatformIcon platform={pl as StrategyPlatform} className="h-4 w-4" />
+          </span>
+        ))}
+      </div>
+    );
+
+    if (tag === "Shared") {
+      return (
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[9px] font-semibold uppercase text-slate-500">{workspace.name}</span>
+            {renderList(wDetail?.platforms ?? [])}
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="text-[9px] font-semibold uppercase text-slate-500">{competitor.name}</span>
+            {renderList(cDetail?.platforms ?? [])}
+          </div>
+        </div>
+      );
+    }
+    if (tag === "Theirs only") {
+      return renderList(cDetail?.platforms ?? []);
+    }
+    return renderList(wDetail?.platforms ?? []);
+  };
+
+  const formatLifeCell = (tag: Tag, wDetail?: AnglesByPlatformInsight, cDetail?: AnglesByPlatformInsight) => {
+    if (tag === "Shared") {
+      const w = wDetail != null ? `${wDetail.avgLifespanDays}d` : "—";
+      const t = cDetail != null ? `${cDetail.avgLifespanDays}d` : "—";
+      return (
+        <span className="text-slate-600">
+          {workspace.name}: {w} · {competitor.name}: {t}
+        </span>
+      );
+    }
+    if (tag === "Theirs only") {
+      return <span className="tabular-nums text-slate-600">{cDetail != null ? `${cDetail.avgLifespanDays}d` : "—"}</span>;
+    }
+    return <span className="tabular-nums text-slate-600">{wDetail != null ? `${wDetail.avgLifespanDays}d` : "—"}</span>;
   };
 
   return (
-    <ComparisonPanelShell
-      title="Angle performance"
-      subtitle="Angles ranked by presence; gap vs shared vs your edge"
-      tooltip="Gap = competitor runs this angle, you don’t. Advantage = you run it, they don’t. Shared = both."
-    >
-      <div className="overflow-x-auto">
-        <table className="w-full text-[10px] text-left border-collapse min-w-[480px]">
+    <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+      <h3 className="text-base font-semibold uppercase tracking-wider text-slate-700">Full angle breakdown</h3>
+      <p className="mt-1 text-sm text-slate-500">Every angle detected across both brands, classified.</p>
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-[520px] w-full border-collapse text-left text-[11px]">
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
-              <th className="py-1.5 pr-2 font-semibold">Angle</th>
-              <th className="py-1.5 px-1 font-semibold">Ads</th>
-              <th className="py-1.5 px-1 font-semibold">Platforms</th>
-              <th className="py-1.5 px-1 font-semibold">Avg life</th>
-              <th className="py-1.5 pl-1 font-semibold">Tag</th>
+            <tr className="divide-y border-b border-slate-200 text-slate-500">
+              <th className="py-2 pr-2 font-semibold text-[var(--rival-primary,#343434)]">Angle</th>
+              <th className="px-1 py-2 font-semibold text-[var(--rival-primary,#343434)]">Ads</th>
+              <th className="px-1 py-2 font-semibold text-[var(--rival-primary,#343434)]">Platforms</th>
+              <th className="px-1 py-2 font-semibold text-[var(--rival-primary,#343434)]">Avg life</th>
+              <th className="py-2 pl-1 font-semibold text-[var(--rival-primary,#343434)]">Tag</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-200">
             {rows
-              .sort((a, b) => (b.detail?.totalCount ?? 0) - (a.detail?.totalCount ?? 0))
-              .map(({ angle, tag, detail }) => (
-                <tr key={angle} className="border-b border-slate-100 align-top">
-                  <td className="py-2 pr-2 font-medium text-slate-800 max-w-[200px]">
+              .sort((a, b) => {
+                const maxA = Math.max(a.wDetail?.totalCount ?? 0, a.cDetail?.totalCount ?? 0);
+                const maxB = Math.max(b.wDetail?.totalCount ?? 0, b.cDetail?.totalCount ?? 0);
+                return maxB - maxA;
+              })
+              .map(({ angle, tag, wDetail, cDetail }) => (
+                <tr key={angle} className="align-top text-slate-800 [height:48px] hover:bg-[var(--rival-accent-blue,#DDF1FD)]">
+                  <td className="max-w-[220px] py-2 pr-2 font-medium">
                     <span className="line-clamp-2">{angle}</span>
                   </td>
-                  <td className="py-2 px-1 tabular-nums text-slate-700">{detail?.totalCount ?? "—"}</td>
-                  <td className="py-2 px-1">
-                    <div className="flex flex-wrap gap-1">
-                      {(detail?.platforms ?? []).slice(0, 6).map((pl) => (
-                        <span key={pl} className="inline-flex" title={pl}>
-                          <ComparisonPlatformIcon platform={pl} className="h-4 w-4" />
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="py-2 px-1 text-slate-600 tabular-nums">
-                    {detail ? `${detail.avgLifespanDays}d` : "—"}
-                  </td>
+                  <td className="px-1 py-2">{formatAdsCell(tag, wDetail, cDetail)}</td>
+                  <td className="px-1 py-2">{formatPlatformsCell(tag, wDetail, cDetail)}</td>
+                  <td className="px-1 py-2 tabular-nums">{formatLifeCell(tag, wDetail, cDetail)}</td>
                   <td className="py-2 pl-1">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-semibold ${tagStyle(tag)}`}>
                       {tag}
@@ -104,10 +167,6 @@ export function AngleMigrationPanel({ left, right, leftIsWorkspace }: Props) {
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-[10px] text-slate-400 leading-snug border-t border-slate-100 pt-2">
-        Migration tracking (angles scaling from one platform to another) begins after 7+ days of historical snapshots — not
-        yet available in this build.
-      </p>
-    </ComparisonPanelShell>
+    </div>
   );
 }

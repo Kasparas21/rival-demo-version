@@ -10,10 +10,7 @@ import {
   ADS_LIBRARY_UPDATED_EVENT,
   pendingStrategyRefreshStorageKey,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
-import type {
-  CompetitorStrategyOverviewPayload,
-  FunnelCellId,
-} from "@/lib/strategy-overview/payload-types";
+import type { CompetitorStrategyOverviewPayload, FunnelCellId } from "@/lib/strategy-overview/payload-types";
 import { useStrategyOverviewUi, type StrategyViewMode } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyViewToggle } from "@/components/strategy-overview/strategy-view-toggle";
 import { StrategyMapFlow } from "@/components/strategy-overview/strategy-map-flow";
@@ -21,15 +18,28 @@ import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy
 import { StrategyInsightView } from "@/components/strategy-overview/strategy-insight-view";
 import { FunnelCellSheet } from "@/components/strategy-overview/funnel-cell-sheet";
 import { NodeDetailSheet } from "@/components/strategy-overview/node-detail-sheet";
+import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 type Brand = { name: string; domain: string };
+
+type StrategyCompiledResponse = {
+  ok: boolean;
+  error?: string;
+  payload?: CompetitorStrategyOverviewPayload;
+  cached?: boolean;
+  recomputing?: boolean;
+  staleWhileRecomputing?: boolean;
+};
 
 type Props = {
   brand: Brand;
   onOpenAdsLibrary?: () => void;
-  /** When set, parent controls map vs insight; internal toggle is hidden. */
   forceView?: StrategyViewMode;
   competitorId?: string;
+  /** Account / sidebar scrape timestamp — bumps client cache key when new scrape lands. */
+  lastScrapedAt?: string | null;
+  onFreshnessRescrape?: () => void;
 };
 
 function readViewParam(raw: string | null): StrategyViewMode {
@@ -37,7 +47,14 @@ function readViewParam(raw: string | null): StrategyViewMode {
   return "map";
 }
 
-export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, competitorId }: Props) {
+export function StrategyOverviewApp({
+  brand,
+  onOpenAdsLibrary,
+  forceView,
+  competitorId,
+  lastScrapedAt = null,
+  onFreshnessRescrape,
+}: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -56,16 +73,16 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
   const setSelectedPlatform = useStrategyOverviewUi((s) => s.setSelectedPlatform);
   const selectedPlatform = useStrategyOverviewUi((s) => s.selectedPlatform);
 
-  const [payload, setPayload] = useState<CompetitorStrategyOverviewPayload | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [cached, setCached] = useState(false);
   const [recomputeBusy, setRecomputeBusy] = useState(false);
   const [sheetPlatform, setSheetPlatform] = useState<string | null>(null);
   const [openCellId, setOpenCellId] = useState<FunnelCellId | null>(null);
   const [edgeTip, setEdgeTip] = useState<{ reasoning: string; confidence: number } | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
 
   const domain = brand.domain.trim();
+  const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
+  const scrapeStamp = lastScrapedAt ?? "none";
+  const strategyCacheKey = `${domainNorm}:strategy-compiled:${scrapeStamp}`;
 
   const [backgroundRecompute, setBackgroundRecompute] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -78,123 +95,25 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
     }
   }, []);
 
-  const load = useCallback(
-    async (force?: boolean, isCancelled?: () => boolean) => {
-      const myGeneration = ++loadGenerationRef.current;
-      clearPoll();
-      setLoading(true);
-      setError(null);
-      try {
-        const q = new URLSearchParams({ competitorDomain: domain });
-        if (force) q.set("force", "1");
-        const res = await fetch(`/api/strategy-overview/compiled?${q}`);
-        if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-        const json = (await res.json()) as {
-          ok: boolean;
-          error?: string;
-          payload?: CompetitorStrategyOverviewPayload;
-          cached?: boolean;
-          recomputing?: boolean;
-          staleWhileRecomputing?: boolean;
-        };
-        if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-        if (!json.ok || !json.payload) {
-          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-          setPayload(null);
-          setError(json.error ?? "Failed to load strategy overview");
-          setCached(false);
-          setBackgroundRecompute(false);
-          return;
-        }
-        if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-        setPayload(json.payload);
-        setCached(json.cached === true);
-
-        const shouldPoll = json.recomputing === true || json.staleWhileRecomputing === true;
-        if (shouldPoll) {
-          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-          setBackgroundRecompute(true);
-          clearPoll();
-          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-          const triesRef = { n: 0 };
-          pollRef.current = setInterval(() => {
-            void (async () => {
-              triesRef.n += 1;
-              const maxPolls = 120;
-              let done = triesRef.n >= maxPolls;
-              let statusFailed = false;
-              let failedMessage: string | null = null;
-              try {
-                const st = await fetch(
-                  `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(domain)}`
-                );
-                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
-                const sj = (await st.json()) as {
-                  ok?: boolean;
-                  status?: string;
-                  error?: string | null;
-                };
-                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
-                statusFailed = sj.ok === true && sj.status === "failed";
-                failedMessage = sj.error?.trim() ?? null;
-                done =
-                  triesRef.n >= maxPolls ||
-                  (sj.ok === true && (sj.status === "idle" || sj.status === "failed"));
-              } catch {
-                done = triesRef.n >= maxPolls;
-              }
-              if (!done) return;
-              if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
-
-              if (pollRef.current) {
-                clearInterval(pollRef.current);
-                pollRef.current = null;
-              }
-              setBackgroundRecompute(false);
-              if (statusFailed) {
-                setError(failedMessage || "Strategy recomputation failed");
-              }
-
-              try {
-                const qQuiet = new URLSearchParams({ competitorDomain: domain });
-                const resQuiet = await fetch(`/api/strategy-overview/compiled?${qQuiet}`);
-                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
-                const jq = (await resQuiet.json()) as {
-                  ok: boolean;
-                  payload?: CompetitorStrategyOverviewPayload;
-                  cached?: boolean;
-                };
-                if (myGeneration !== loadGenerationRef.current || isCancelled?.()) return;
-                if (jq.ok && jq.payload) {
-                  setPayload(jq.payload);
-                  setCached(jq.cached === true);
-                  setError(null);
-                }
-              } catch {
-                /* ignore transient refresh errors */
-              }
-            })();
-          }, 5000);
-        } else {
-          if (isCancelled?.() || myGeneration !== loadGenerationRef.current) return;
-          setBackgroundRecompute(false);
-        }
-      } catch {
-        if (myGeneration !== loadGenerationRef.current) return;
-        setPayload(null);
-        setError("Network error");
-        setCached(false);
-        setBackgroundRecompute(false);
-      } finally {
-        if (myGeneration === loadGenerationRef.current) {
-          setLoading(false);
-        }
+  const { data: compiled, loading, isValidating, error: loadError, refetch } = useScrapeKeyedCache<StrategyCompiledResponse>({
+    cacheKey: strategyCacheKey,
+    enabled: Boolean(domainNorm),
+    validateCached: (c) => c.ok === true && Boolean(c.payload),
+    fetcher: async ({ force } = {}) => {
+      const q = new URLSearchParams({ competitorDomain: domain });
+      if (force) q.set("force", "1");
+      const res = await fetch(`/api/strategy-overview/compiled?${q}`);
+      const json = (await res.json()) as StrategyCompiledResponse;
+      if (!json.ok || !json.payload) {
+        throw new Error(json.error ?? "Failed to load strategy overview");
       }
+      return json;
     },
-    [clearPoll, domain]
-  );
+  });
 
-  const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
+  const payload = compiled?.payload ?? null;
+  const cached = compiled?.cached === true;
+  const displayError = loadError?.message ?? pollError;
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | null = null;
@@ -205,7 +124,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
       if (debounce) clearTimeout(debounce);
       debounce = setTimeout(() => {
         debounce = null;
-        void load(true);
+        void refetch();
       }, 350);
     };
     window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, handler);
@@ -213,10 +132,9 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
       if (debounce) clearTimeout(debounce);
       window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, handler);
     };
-  }, [domainNorm, load]);
+  }, [domainNorm, refetch]);
 
   useEffect(() => {
-    let cancelled = false;
     const k = pendingStrategyRefreshStorageKey(domainNorm);
     const pending = typeof window !== "undefined" ? window.sessionStorage.getItem(k) : null;
     if (pending) {
@@ -227,24 +145,90 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
       }
       const ts = Number(pending);
       if (Number.isFinite(ts) && Date.now() - ts < 120_000) {
-        void load(true, () => cancelled);
-        return () => {
-          cancelled = true;
-          clearPoll();
-        };
+        void refetch();
       }
     }
-    void load(false, () => cancelled);
     return () => {
-      cancelled = true;
       clearPoll();
     };
-  }, [clearPoll, load, domainNorm]);
+  }, [clearPoll, domainNorm, refetch]);
+
+  useEffect(() => {
+    if (!compiled?.ok || !compiled.payload) {
+      clearPoll();
+      setBackgroundRecompute(false);
+      return;
+    }
+    const shouldPoll = compiled.recomputing === true || compiled.staleWhileRecomputing === true;
+    if (!shouldPoll) {
+      clearPoll();
+      setBackgroundRecompute(false);
+      return;
+    }
+
+    const myGeneration = ++loadGenerationRef.current;
+    setBackgroundRecompute(true);
+    clearPoll();
+    const triesRef = { n: 0 };
+    pollRef.current = setInterval(() => {
+      void (async () => {
+        triesRef.n += 1;
+        const maxPolls = 120;
+        let done = triesRef.n >= maxPolls;
+        let statusFailed = false;
+        let failedMessage: string | null = null;
+        try {
+          const st = await fetch(
+            `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(domain)}`
+          );
+          if (myGeneration !== loadGenerationRef.current) return;
+          const sj = (await st.json()) as {
+            ok?: boolean;
+            status?: string;
+            error?: string | null;
+          };
+          if (myGeneration !== loadGenerationRef.current) return;
+          statusFailed = sj.ok === true && sj.status === "failed";
+          failedMessage = sj.error?.trim() ?? null;
+          done = triesRef.n >= maxPolls || (sj.ok === true && (sj.status === "idle" || sj.status === "failed"));
+        } catch {
+          done = triesRef.n >= maxPolls;
+        }
+        if (!done) return;
+        if (myGeneration !== loadGenerationRef.current) return;
+
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+        setBackgroundRecompute(false);
+        if (statusFailed) {
+          setPollError(failedMessage || "Strategy recomputation failed");
+        } else {
+          setPollError(null);
+        }
+        try {
+          void refetch();
+        } catch {
+          /* refetch handles errors */
+        }
+      })();
+    }, 5000);
+
+    return () => {
+      clearPoll();
+    };
+  }, [
+    clearPoll,
+    compiled?.recomputing,
+    compiled?.staleWhileRecomputing,
+    domain,
+    refetch,
+  ]);
 
   const emptyStrategy = useMemo(
     () =>
-      !!payload &&
-      (payload.pipelineStatus === "no_ads_found" || payload.map.activeAdCount === 0),
+      !!payload && (payload.pipelineStatus === "no_ads_found" || payload.map.activeAdCount === 0),
     [payload]
   );
 
@@ -261,17 +245,14 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
   }, [openCellId, payload]);
 
   const funnelClassificationBanner =
-    !loading &&
-    !error &&
+    !displayError &&
     payload &&
     payload.map.activeAdCount > 0 &&
     Array.isArray(payload.map.funnelCells) &&
     payload.map.funnelCells.length === 0 ? (
       <div className="mb-4 rounded-xl border border-sky-200/90 bg-sky-50/90 px-4 py-3 text-[13px] text-sky-950">
         <p className="font-semibold text-sky-950">Funnel classification is still processing for this competitor.</p>
-        <p className="mt-1 text-sky-950/95">
-          Showing platform-level view in the meantime.
-        </p>
+        <p className="mt-1 text-sky-950/95">Showing platform-level view in the meantime.</p>
       </div>
     ) : null;
 
@@ -282,8 +263,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
     : null;
 
   const enrichmentBanner =
-    !loading &&
-    !error &&
+    !displayError &&
     payload &&
     payload.map.activeAdCount > 0 &&
     (payload.insufficientEnrichedAds === true || payload.lowEnrichmentConfidence === true) ? (
@@ -294,14 +274,16 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
             ? "Fewer than five ads finished funnel and angle analysis, so the deep AI insight pass was skipped. Sidebar and map numbers still come from benchmarks and your scraped creatives."
             : "Less than half of saved ads are fully enriched yet, so AI narratives may stay generic until analysis catches up."}{" "}
           Open the Ads Library tab to load creatives, wait for enrichment, or use{" "}
-          <span className="font-medium">Refresh insights</span> / <span className="font-medium">Rebuild from saved ads</span>{" "}
-          after more rows analyze.
+          <span className="font-medium">Refresh insights</span> / <span className="font-medium">Rebuild from saved ads</span> after more rows analyze.
         </p>
       </div>
     ) : null;
 
+  const showInitialSpinner = loading && !payload;
+
   return (
-    <div className="w-full max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-10 py-8">
+    <div className="relative w-full max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-10 py-8">
+      <CacheRevalidatingDot show={isValidating && !!payload} className="right-4 top-4" />
       <div className="mb-2">
         <h2 className="text-[18px] font-semibold text-[#343434]">Strategy overview</h2>
         <p className="text-[14px] text-[#71717a] mt-0.5">
@@ -328,22 +310,25 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
         </div>
       ) : null}
 
-      {loading ? <RivalLoadingBlock title="Loading strategy data…" padded className="py-20" /> : null}
+      {showInitialSpinner ? <RivalLoadingBlock title="Loading strategy data…" padded className="py-20" /> : null}
 
-      {!loading && error ? (
+      {!showInitialSpinner && displayError ? (
         <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900 mb-4">
-          {error}
+          {displayError}
           <button
             type="button"
             className="mt-2 block text-[13px] font-medium underline"
-            onClick={() => void load(false)}
+            onClick={() => {
+              setPollError(null);
+              void refetch({ force: true });
+            }}
           >
             Try again
           </button>
         </div>
       ) : null}
 
-      {!loading && !error && backgroundRecompute && emptyStrategy ? (
+      {!showInitialSpinner && !displayError && backgroundRecompute && emptyStrategy ? (
         <RivalLoadingBlock
           title="Building strategy overview…"
           description="Analyzing scraped ads and generating your funnel map. This usually takes under two minutes."
@@ -353,22 +338,22 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
         />
       ) : null}
 
-      {!loading && !error && !backgroundRecompute && emptyStrategy ? (
+      {!showInitialSpinner && !displayError && !backgroundRecompute && emptyStrategy ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f4f4f5] text-[#a1a1aa]">
             <BarChart3 className="h-6 w-6" />
           </div>
           <p className="text-[15px] font-semibold text-[#3f3f46]">No scraped ads in strategy pipeline yet</p>
           <p className="mt-1.5 max-w-md text-[13px] text-[#71717a]">
-            Strategy map and insights are built from ads saved when the Ads Library API runs (including cached
-            responses). Open the Ads Library tab first so creatives load, then use{" "}
-            <span className="font-medium text-[#52525b]">Reload</span> here — or rebuild after a fresh scrape.
+            Strategy map and insights are built from ads saved when the Ads Library API runs (including cached responses).
+            Open the Ads Library tab first so creatives load, then use <span className="font-medium text-[#52525b]">Reload</span>{" "}
+            here — or rebuild after a fresh scrape.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <button
               type="button"
               disabled={recomputeBusy}
-              onClick={() => void load(true)}
+              onClick={() => void refetch({ force: true })}
               className="rounded-full border border-[#e4e4e7] bg-white px-4 py-2 text-[13px] font-medium text-[#3f3f46] shadow-sm hover:bg-[#fafafa]"
             >
               Reload overview
@@ -386,7 +371,10 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
                       body: JSON.stringify({ competitorDomain: domain }),
                     });
                     const json = (await res.json()) as { ok: boolean; payload?: CompetitorStrategyOverviewPayload };
-                    if (json.ok && json.payload) setPayload(json.payload);
+                    if (json.ok) {
+                      setPollError(null);
+                      void refetch();
+                    }
                   } finally {
                     setRecomputeBusy(false);
                   }
@@ -400,7 +388,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
         </div>
       ) : null}
 
-      {!loading && !error && payload && payload.map.activeAdCount > 0 ? (
+      {!showInitialSpinner && !displayError && payload && payload.map.activeAdCount > 0 ? (
         <>
           {enrichmentBanner}
 
@@ -427,6 +415,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
                       Confidence: {payload.derivationQuality ?? payload.map.derivationQuality}
                     </span>
                   ) : null}
+                  <DataFreshnessBadge lastScrapedAt={lastScrapedAt ?? null} onRefresh={onFreshnessRescrape} />
                 </div>
                 {funnelClassificationBanner}
                 <StrategyMapFlow
@@ -445,7 +434,13 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
                 />
               </div>
               <aside className="w-full xl:w-[300px] shrink-0">
-                <StrategyOverviewSidebar map={payload.map} competitorId={competitorId} />
+                <StrategyOverviewSidebar
+                  map={payload.map}
+                  competitorId={competitorId}
+                  cacheDomainNorm={domainNorm}
+                  lastScrapedAt={lastScrapedAt ?? null}
+                  onFreshnessRescrape={onFreshnessRescrape}
+                />
               </aside>
             </div>
           ) : (
@@ -456,12 +451,12 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
                   <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200/80">
                     AI-generated
                   </span>
+                  <DataFreshnessBadge lastScrapedAt={lastScrapedAt ?? null} onRefresh={onFreshnessRescrape} />
                 </div>
                 <p className="text-[13px] text-[#64748b] mt-1 max-w-[720px]">
                   AI-powered analysis of{" "}
                   <span className="font-medium text-[#334155]">{payload.map.competitor.name}</span>
-                  &apos;s advertising strategy, creative performance, and audience signals — grounded in your
-                  scraped ad library.
+                  &apos;s advertising strategy, creative performance, and audience signals — grounded in your scraped ad library.
                 </p>
               </div>
               <StrategyInsightView insights={payload.insights} selectedPlatform={selectedPlatform} />
@@ -482,7 +477,10 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
                       body: JSON.stringify({ competitorDomain: domain }),
                     });
                     const json = (await res.json()) as { ok: boolean; payload?: CompetitorStrategyOverviewPayload };
-                    if (json.ok && json.payload) setPayload(json.payload);
+                    if (json.ok) {
+                      setPollError(null);
+                      void refetch();
+                    }
                   } finally {
                     setRecomputeBusy(false);
                   }
@@ -505,6 +503,7 @@ export function StrategyOverviewApp({ brand, onOpenAdsLibrary, forceView, compet
             open={openCellId != null}
             cellId={openCellId}
             competitorId={competitorId ?? ""}
+            cacheDomainNorm={domainNorm}
             cellSummary={cellSummary}
             onClose={() => setOpenCellId(null)}
           />

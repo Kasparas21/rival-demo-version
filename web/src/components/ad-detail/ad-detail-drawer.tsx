@@ -21,6 +21,7 @@ import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import type { Json } from "@/lib/supabase/types";
+import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 
 function platformForIcon(p: string): StrategyPlatform {
   const x = p.toLowerCase();
@@ -175,7 +176,12 @@ export function AdDetailDrawer({
       if (savedRowId) {
         const res = await fetch(`/api/saved-ads/${savedRowId}`, { method: "DELETE", credentials: "include" });
         const json = (await res.json()) as { ok?: boolean };
-        if (json.ok) setSavedRowId(null);
+        if (json.ok) {
+          setSavedRowId(null);
+          const dom = data.competitor.domain.trim().toLowerCase();
+          const cid = data.competitor.id.trim();
+          if (dom && cid) invalidateSavedAdsCaches(dom, cid);
+        }
       } else {
         const res = await fetch("/api/saved-ads", {
           method: "POST",
@@ -184,7 +190,12 @@ export function AdDetailDrawer({
           body: JSON.stringify({ scrapedAdId: data.ad.id }),
         });
         const json = (await res.json()) as { ok?: boolean; savedAd?: { id: string } };
-        if (json.ok && json.savedAd?.id) setSavedRowId(json.savedAd.id);
+        if (json.ok && json.savedAd?.id) {
+          setSavedRowId(json.savedAd.id);
+          const dom = data.competitor.domain.trim().toLowerCase();
+          const cid = data.competitor.id.trim();
+          if (dom && cid) invalidateSavedAdsCaches(dom, cid);
+        }
       }
     } finally {
       setSaveInFlight(false);
@@ -354,16 +365,13 @@ export function AdDetailDrawer({
                   <button
                     type="button"
                     onClick={() => setActiveTab("ai")}
-                    className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors ${
+                    className={`border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors ${
                       activeTab === "ai"
                         ? "border-slate-900 text-slate-900"
                         : "border-transparent text-slate-500 hover:text-slate-700"
                     }`}
                   >
                     AI Analysis
-                    <span className="rounded-full bg-rose-100 px-1.5 py-0.5 text-[9px] font-bold text-rose-700">
-                      NEW
-                    </span>
                   </button>
                 </div>
 

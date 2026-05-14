@@ -12,6 +12,7 @@ import {
   countLibraryAdsForPlatform,
   persistScrapedAdsFromAdsLibraryResponse,
 } from "@/lib/ad-library/persist-scraped-ads";
+import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import type { Database, Json } from "@/lib/supabase/types";
 
 function isCacheablePlatform(p: AdsLibraryPlatform): p is CacheablePlatform {
@@ -121,8 +122,8 @@ export async function finalizeAdsLibraryAfterFreshScrape(
 
     for (const p of platformsNeedingScrape) {
       if (!isCacheablePlatform(p)) continue;
-      const adsData: Json = (
-        p === "meta"
+      const adsData: Json = sanitizeJsonForPostgres(
+        (p === "meta"
           ? out.meta
           : p === "google"
             ? out.google
@@ -134,8 +135,8 @@ export async function finalizeAdsLibraryAfterFreshScrape(
                   ? out.microsoft
                   : p === "pinterest"
                     ? out.pinterest
-                    : out.snapchat
-      ) as unknown as Json;
+                    : out.snapchat) as unknown
+      );
       rows.push({
         user_id: userId,
         competitor_domain: adsCacheDomain,

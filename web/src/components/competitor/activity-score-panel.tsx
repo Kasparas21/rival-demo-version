@@ -1,14 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
 
 import type { ActivityScoreResult, ActivitySignalName } from "@/lib/activity-score/types";
+import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 type ApiPayload = ActivityScoreResult & {
   ok?: boolean;
   error?: string;
   calculatedAt?: string | null;
+  calculated_at?: string | null;
   staleRefreshing?: boolean;
 };
 
@@ -62,52 +65,50 @@ function tierBadgeClass(tier: number): string {
 
 type Props = {
   competitorId: string;
+  /** Normalized competitor domain for cache namespacing + scrape invalidation. */
+  cacheDomainNorm: string;
   enabled?: boolean;
-  /**
-   * `card` — standalone bordered panel (e.g. strategy sidebar).
-   * `analytics` — third column in Ads Library “Analytics” strip (gauge / landing page palette).
-   */
   variant?: "card" | "analytics";
+  lastScrapedAt?: string | null;
+  onFreshnessRefresh?: () => void;
 };
 
-export function ActivityScorePanel({ competitorId, enabled = true, variant = "card" }: Props) {
-  const [data, setData] = useState<ApiPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+export function ActivityScorePanel({
+  competitorId,
+  cacheDomainNorm,
+  enabled = true,
+  variant = "card",
+  lastScrapedAt = null,
+  onFreshnessRefresh,
+}: Props) {
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!enabled || !competitorId) return;
-    setLoading(true);
-    setError(null);
-    try {
+  const domainKey = cacheDomainNorm.trim().toLowerCase();
+  const cacheKey = `${domainKey}:activity-score:${competitorId}`;
+
+  const { data, loading, isValidating, error, refetch } = useScrapeKeyedCache<ApiPayload>({
+    cacheKey,
+    enabled: enabled && !!competitorId && !!domainKey,
+    fetcher: async () => {
       const res = await fetch(
         `/api/competitor/activity-score?competitorId=${encodeURIComponent(competitorId)}`
       );
       const json = (await res.json()) as ApiPayload & { ok?: boolean; error?: string };
       if (json.ok === false) {
-        setError(json.error ?? "Failed to load");
-        setData(null);
-      } else {
-        setData(json);
+        throw new Error(json.error ?? `Failed: ${res.status}`);
       }
-    } catch {
-      setError("Network error");
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [competitorId, enabled]);
+      return json;
+    },
+    validateCached: (cached) =>
+      cached != null &&
+      typeof cached === "object" &&
+      (typeof cached.calculatedAt === "string" || typeof cached.calculated_at === "string"),
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const forceRefresh = useCallback(async () => {
+  const forceRecompute = useCallback(async () => {
     if (!competitorId) return;
     setRefreshing(true);
-    setError(null);
     try {
       const res = await fetch("/api/competitor/activity-score", {
         method: "POST",
@@ -116,16 +117,16 @@ export function ActivityScorePanel({ competitorId, enabled = true, variant = "ca
       });
       const json = (await res.json()) as ApiPayload & { ok?: boolean; error?: string };
       if (json.ok === false) {
-        setError(json.error ?? "Refresh failed");
-      } else {
-        setData(json);
+        throw new Error(json.error ?? "Refresh failed");
       }
+      await refetch();
     } catch {
-      setError("Network error");
+      /* surfaced via next GET error state */
+      await refetch();
     } finally {
       setRefreshing(false);
     }
-  }, [competitorId]);
+  }, [competitorId, refetch]);
 
   if (!enabled || !competitorId) {
     return null;
@@ -133,7 +134,7 @@ export function ActivityScorePanel({ competitorId, enabled = true, variant = "ca
 
   const isAnalytics = variant === "analytics";
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div
         className={
@@ -159,11 +160,11 @@ export function ActivityScorePanel({ competitorId, enabled = true, variant = "ca
             : "rounded-2xl border border-red-200 bg-red-50/80 p-4 text-[13px] text-red-900 shadow-sm"
         }
       >
-        {error ?? "Unable to load activity score."}
+        {error?.message ?? "Unable to load activity score."}
         <button
           type="button"
           className="mt-2 block text-[12px] font-semibold underline"
-          onClick={() => void load()}
+          onClick={() => void refetch()}
         >
           Retry
         </button>
@@ -177,7 +178,7 @@ export function ActivityScorePanel({ competitorId, enabled = true, variant = "ca
 
   const shell = isAnalytics
     ? "min-w-0"
-    : "rounded-2xl border border-[#e5e7eb]/90 bg-white/95 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]";
+    : "relative rounded-2xl border border-[#e5e7eb]/90 bg-white/95 p-4 shadow-[0_1px_3px_rgba(15,23,42,0.06)]";
 
   const scoreColor = isAnalytics ? "text-[#343434]" : "text-[color:var(--rival-primary)]";
   const subtext = isAnalytics ? "text-[#64748b]" : "text-[#71717a]";
@@ -198,6 +199,7 @@ export function ActivityScorePanel({ competitorId, enabled = true, variant = "ca
 
   return (
     <div className={shell}>
+      <CacheRevalidatingDot show={isValidating && !!data} />
       <div className={`flex items-start justify-between gap-2 ${isAnalytics ? "mb-2" : "mb-3"}`}>
         <div className="min-w-0 flex-1">
           {!isAnalytics ? (
@@ -209,20 +211,25 @@ export function ActivityScorePanel({ competitorId, enabled = true, variant = "ca
             <p className="text-[10px] text-[#2563eb]">{staleNote}</p>
           ) : null}
         </div>
-        <button
-          type="button"
-          title="Refresh score"
-          aria-label="Refresh activity score"
-          disabled={refreshing}
-          onClick={() => void forceRefresh()}
-          className={`shrink-0 ${refreshBtn}`}
-        >
-          {refreshing ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          ) : (
-            <RefreshCw className="h-4 w-4" aria-hidden />
-          )}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {!isAnalytics ? (
+            <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRefresh} />
+          ) : null}
+          <button
+            type="button"
+            title="Refresh score"
+            aria-label="Refresh activity score"
+            disabled={refreshing}
+            onClick={() => void forceRecompute()}
+            className={`shrink-0 ${refreshBtn}`}
+          >
+            {refreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            ) : (
+              <RefreshCw className="h-4 w-4" aria-hidden />
+            )}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-2 sm:gap-3 mb-2">

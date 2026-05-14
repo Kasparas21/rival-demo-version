@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { anthropicSonnet } from "@/lib/llm/anthropic";
 
+/** Bumps cache rows in `brand_comparison_results` when prompt/schema changes. */
+export const BRAND_COMPARISON_CACHE_MODEL_VERSION = "sonnet-4-6-v2-moves";
+
 function stripJsonFences(text: string): string {
   let t = text.trim();
   if (t.startsWith("```")) {
@@ -10,33 +13,31 @@ function stripJsonFences(text: string): string {
   return t.trim();
 }
 
+const moveCategorySchema = z.enum(["COPY_ANGLE", "SHIFT_BUDGET", "REFRESH_CREATIVE", "DEFEND", "EXPAND"]);
+
+const primaryActionSchema = z.object({
+  label: z.string(),
+  type: z.enum(["create_brief", "view_ads", "view_analysis"]),
+  angleRef: z.string().optional(),
+  adIdsRef: z.array(z.string()).optional(),
+});
+
 export const brandComparisonResponseSchema = z.object({
-  competitorArchetype: z.object({
-    headline: z.string(),
-    subtitle: z.string(),
+  headlineTitles: z.object({
+    userArchetype: z.string(),
+    competitorArchetype: z.string(),
   }),
-  userArchetype: z.object({
-    headline: z.string(),
-    subtitle: z.string(),
-  }),
-  theirAdvantage: z.object({
-    title: z.string(),
-    body: z.string(),
-  }),
-  yourAdvantage: z.object({
-    title: z.string(),
-    body: z.string(),
-  }),
-  recommendation: z.object({
-    title: z.string(),
-    body: z.string(),
-  }),
-  actionItems: z.array(z.string()).length(3),
-  biggestGapNarrative: z.string(),
-  biggestAdvantageNarrative: z.string(),
-  voiceMapCaption: z.string(),
-  velocityCaption: z.string(),
-  audienceComparisonNarrative: z.string(),
+  moves: z
+    .array(
+      z.object({
+        category: moveCategorySchema,
+        title: z.string(),
+        evidence: z.string(),
+        primaryAction: primaryActionSchema,
+      })
+    )
+    .min(1)
+    .max(4),
 });
 
 export type BrandComparisonLlmResult = z.infer<typeof brandComparisonResponseSchema>;
@@ -52,8 +53,8 @@ export async function runBrandComparisonLlm(params: {
   /** JSON string of structured strategy aggregates for both brands */
   structuredDigest?: string;
 }): Promise<
-  | { ok: true; result: BrandComparisonLlmResult; model: string }
-  | { ok: false; error: string; model?: string }
+  | { ok: true; result: BrandComparisonLlmResult; model: string; costUsd: number; cacheModelVersion: string }
+  | { ok: false; error: string; model?: string; costUsd?: number }
 > {
   const {
     competitorName,
@@ -78,60 +79,68 @@ export async function runBrandComparisonLlm(params: {
 
   const digestSection =
     structuredDigest && structuredDigest.trim().length > 0
-      ? `STRUCTURED_STRATEGY_JSON (ground truth from Rival — use for platform mix, funnel, voice-by-platform, angles, testing velocity). Do not invent platforms or percentages beyond what is implied here:\n${structuredDigest.trim()}`
+      ? `STRUCTURED_STRATEGY_AND_NUMERIC_FACTS_JSON (ground truth from Rival). Use comparisonNumericFacts and per-brand stats for quantities. Do not invent platforms or figures beyond this object:\n${structuredDigest.trim()}`
       : "";
 
   const evidenceSection =
     adEvidence && adEvidence.trim().length > 0
-      ? `Optional raw ad creative samples (may be empty if structured JSON above is primary):\n${adEvidence.trim()}`
-      : "No raw ad creative blocks provided; rely on STRUCTURED_STRATEGY_JSON and brand names.";
+      ? `Optional raw ad creative samples (secondary):\n${adEvidence.trim()}`
+      : "No raw ad creative blocks provided; rely on STRUCTURED_STRATEGY_AND_NUMERIC_FACTS_JSON.";
 
   const res = await anthropicSonnet({
-    maxTokens: 4_096,
-    systemPrompt: `You are Rival's strategic comparison analyst. You compare a user's brand vs a competitor using structured data from Rival's strategy engine.
+    maxTokens: 3_000,
+    systemPrompt: `You are Rival's tactical comparison analyst. You output ONLY actionable moves for a paid social / search operator comparing their brand vs a competitor.
 
 STRICT RULES:
-1. NEVER invent specific Euro amounts, percentages, day counts, or campaign names that are not explicitly present in the structured data passed to you.
-2. NEVER invent product names, offers, or claims that aren't observable in the data.
-3. NEVER fabricate prices like "€2,062.70" or specific timeframes like "111 days" unless you can directly reference the exact field in the structured JSON.
-4. When referring to estimated spend, say "estimated" or "modeled" — never imply you have invoiced spend data.
-5. Compare brands by what they observably do, not by inventing financial details.
-6. If you don't have data for a specific claim, OMIT it. Do not fabricate.
+1. Every evidence sentence MUST cite at least one specific number that appears in STRUCTURED_STRATEGY_AND_NUMERIC_FACTS_JSON (ad counts, days, percentages, modeled spend EUR, platform counts, angle counts, etc.).
+2. NEVER invent amounts, percentages, or day counts not present in that JSON.
+3. When citing modeled spend, say "modeled" or "estimated".
+4. If a numeric field is null or missing for a brand, do not fabricate — work from what exists.
+5. Output ONLY valid JSON (no markdown fences, no commentary).
 
-Output ONLY valid JSON (no markdown fences, no commentary) with this exact structure and key casing:
+JSON shape:
 {
-  "competitorArchetype": { "headline": string, "subtitle": string },
-  "userArchetype": { "headline": string, "subtitle": string },
-  "theirAdvantage": { "title": string, "body": string },
-  "yourAdvantage": { "title": string, "body": string },
-  "recommendation": { "title": string, "body": string },
-  "actionItems": [ string, string, string ],
-  "biggestGapNarrative": string,
-  "biggestAdvantageNarrative": string,
-  "voiceMapCaption": string,
-  "velocityCaption": string,
-  "audienceComparisonNarrative": string
+  "headlineTitles": {
+    "userArchetype": string,
+    "competitorArchetype": string
+  },
+  "moves": [
+    {
+      "category": "COPY_ANGLE" | "SHIFT_BUDGET" | "REFRESH_CREATIVE" | "DEFEND" | "EXPAND",
+      "title": string,
+      "evidence": string,
+      "primaryAction": {
+        "label": string,
+        "type": "create_brief" | "view_ads" | "view_analysis",
+        "angleRef": string (optional),
+        "adIdsRef": string[] (optional)
+      }
+    }
+  ]
 }
 
-FORBIDDEN PHRASES / PATTERNS (never use):
-- Specific Euro amounts you did not see in STRUCTURED_STRATEGY_JSON.
-- Day-count claims you can't trace to fields in the JSON.
-- Product names or offer details not grounded in angles or provided text.
-- Industry jargon abbreviations (e.g. made-up codes) unless the literal token appears in the structured data.
+TASK:
+- headlineTitles: exactly two strings, 4–6 words each, title case — positioning labels only (no subtitles).
+- moves: between 1 and 4 objects.
+  • Prefer exactly 3 high-impact moves when the data supports them; each must be doable in one week, imperative voice ("Launch…", "Move…", "Test…"), not vague ("Consider…").
+  • If fewer than 3 moves are defensible from the data, output only those, then optionally add a final move with category EXPAND or DEFEND explaining briefly why no further priority moves are justified (still grounded in data gaps).
+- Categories:
+  • COPY_ANGLE — replicate a competitor angle/hook they use more.
+  • SHIFT_BUDGET — reallocate modeled spend emphasis across platforms.
+  • REFRESH_CREATIVE — fatigue / velocity / creative age issues.
+  • DEFEND — protect an edge or baseline.
+  • EXPAND — new platform/format/Creative breadth.
+- primaryAction: set type to create_brief for creative work, view_ads for inspecting competitor creatives, view_analysis for spend/platform mix. Include angleRef when the move names a specific angle string from the JSON.
 
-ALLOWED CLAIMS (ground in STRUCTURED_STRATEGY_JSON):
-- Platform presence and funnel gaps.
-- Voice differences using formal/emotional numbers from the JSON.
-- Testing velocity using new-in-30 patterns from the JSON.
-- Angle gaps using angle labels/counts from the JSON.
+FORBIDDEN:
+- Long essays, audience narratives, voice-map commentary, "stable presence" filler, archetype bullet lists, subtitles under archetypes.
+- Generic advice without numeric evidence from the JSON.
 
-Headlines/subtitles are short positioning labels, not questions. "theirAdvantage" = competitor strength in paid/media; "yourAdvantage" = user brand strengths. actionItems = exactly 3 imperative bullets. biggestGapNarrative / biggestAdvantageNarrative = one concise sentence each. voiceMapCaption / velocityCaption = one sentence each when data exists. audienceComparisonNarrative = exactly ONE sentence on audience overlap or divergence, grounded ONLY in audienceInference fields inside STRUCTURED_STRATEGY_JSON when present; if missing or null for both brands, state that audience inference is not available.
-
-Use the real brand names from the user message. JSON only.`,
+Use competitor and user brand names from the user message. JSON only.`,
     messages: [
       {
         role: "user",
-        content: `COMPETITOR (viewed on dashboard): ${competitorName} (${competitorDomain})
+        content: `COMPETITOR (dashboard context): ${competitorName} (${competitorDomain})
 
 ${userBits}
 
@@ -144,17 +153,26 @@ ${digestSection ? `${digestSection}\n\n` : ""}${evidenceSection}`,
     return { ok: false, error: res.error };
   }
 
+  const model = res.model;
+  const costUsd = res.usage.costUsd;
+
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripJsonFences(res.text));
   } catch {
-    return { ok: false, error: "Model returned non-JSON", model: res.model };
+    return { ok: false, error: "Model returned non-JSON", model, costUsd };
   }
 
   const checked = brandComparisonResponseSchema.safeParse(parsed);
   if (!checked.success) {
-    return { ok: false, error: "Model JSON failed validation", model: res.model };
+    return { ok: false, error: "Model JSON failed validation", model, costUsd };
   }
 
-  return { ok: true, result: checked.data, model: res.model };
+  return {
+    ok: true,
+    result: checked.data,
+    model,
+    costUsd,
+    cacheModelVersion: BRAND_COMPARISON_CACHE_MODEL_VERSION,
+  };
 }

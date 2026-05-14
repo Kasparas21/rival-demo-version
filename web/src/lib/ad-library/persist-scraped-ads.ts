@@ -3,7 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
 import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-recompute";
-import type { Database, Json } from "@/lib/supabase/types";
+import type { Database } from "@/lib/supabase/types";
+import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 
 type ScrapedAdInsert = Database["public"]["Tables"]["scraped_ads"]["Insert"];
 
@@ -235,7 +236,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           const launch = extractLaunchDate(ad, "meta");
           return launch ? launch.toISOString() : null;
         })(),
-        raw_payload: ad as unknown as Json,
+        raw_payload: sanitizeJsonForPostgres(ad),
       }));
     case "google": {
       const rows: ScrapedAdInsert[] = [];
@@ -260,7 +261,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
               const launch = extractLaunchDate(row, "google");
               return launch ? launch.toISOString() : null;
             })(),
-            raw_payload: row as unknown as Json,
+            raw_payload: sanitizeJsonForPostgres(row),
           });
         } else {
           rows.push({
@@ -276,7 +277,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
               const launch = extractLaunchDate(row, "youtube");
               return launch ? launch.toISOString() : null;
             })(),
-            raw_payload: row as unknown as Json,
+            raw_payload: sanitizeJsonForPostgres(row),
           });
         }
       }
@@ -296,7 +297,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           const launch = extractLaunchDate(ad, "linkedin");
           return launch ? launch.toISOString() : null;
         })(),
-        raw_payload: ad as unknown as Json,
+        raw_payload: sanitizeJsonForPostgres(ad),
       }));
     case "tiktok":
       return (out.tiktok.ads ?? []).map((ad) => ({
@@ -312,7 +313,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           const launch = extractLaunchDate(ad, "tiktok");
           return launch ? launch.toISOString() : null;
         })(),
-        raw_payload: ad as unknown as Json,
+        raw_payload: sanitizeJsonForPostgres(ad),
       }));
     case "microsoft":
       return (out.microsoft.ads ?? []).map((ad) => ({
@@ -328,7 +329,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           const launch = extractLaunchDate(ad, "microsoft");
           return launch ? launch.toISOString() : null;
         })(),
-        raw_payload: ad as unknown as Json,
+        raw_payload: sanitizeJsonForPostgres(ad),
       }));
     case "pinterest":
       return (out.pinterest.ads ?? []).map((ad) => ({
@@ -344,7 +345,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           const launch = extractLaunchDate(ad, "pinterest");
           return launch ? launch.toISOString() : null;
         })(),
-        raw_payload: ad as unknown as Json,
+        raw_payload: sanitizeJsonForPostgres(ad),
       }));
     case "snapchat":
       return (out.snapchat.ads ?? []).map((ad) => ({
@@ -360,7 +361,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
           const launch = extractLaunchDate(ad, "snapchat");
           return launch ? launch.toISOString() : null;
         })(),
-        raw_payload: ad as unknown as Json,
+        raw_payload: sanitizeJsonForPostgres(ad),
       }));
     default:
       return [];

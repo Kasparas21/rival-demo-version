@@ -9,15 +9,31 @@ type Props = {
   dimmed?: boolean;
   /** Saved competitor row id for activity score API; omit on legacy callers without DB id. */
   competitorId?: string;
+  cacheDomainNorm: string;
+  lastScrapedAt?: string | null;
+  onFreshnessRescrape?: () => void;
 };
 
-export function StrategyOverviewSidebar({ map, dimmed, competitorId }: Props) {
+export function StrategyOverviewSidebar({
+  map,
+  dimmed,
+  competitorId,
+  cacheDomainNorm,
+  lastScrapedAt = null,
+  onFreshnessRescrape,
+}: Props) {
   return (
     <div
       className={`flex flex-col gap-3 min-w-0 transition-opacity ${dimmed ? "opacity-45 pointer-events-none" : ""}`}
     >
       {competitorId ? (
-        <ActivityScorePanel competitorId={competitorId} enabled={!dimmed} />
+        <ActivityScorePanel
+          competitorId={competitorId}
+          cacheDomainNorm={cacheDomainNorm}
+          enabled={!dimmed}
+          lastScrapedAt={lastScrapedAt}
+          onFreshnessRefresh={onFreshnessRescrape}
+        />
       ) : (
         <div className="rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/90 p-4 text-[12px] text-slate-600 shadow-sm">
           Activity score needs a saved competitor record. Open this brand from your sidebar after tracking it in Rival.

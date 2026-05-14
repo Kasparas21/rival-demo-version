@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { libraryItemKey, resolveScrapedAdIdForLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
+import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -43,17 +43,37 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const resolvedToScraped: Record<string, string> = {};
 
-  for (const item of libraryItems) {
-    const key = libraryItemKey(item.platform, item.libraryItemId);
-    if (resolvedToScraped[key]) continue;
-    const sid = await resolveScrapedAdIdForLibraryItem(
-      supabase,
-      user.id,
-      competitorId,
-      item.platform,
-      item.libraryItemId,
-    );
-    if (sid) resolvedToScraped[key] = sid;
+  if (libraryItems.length > 0) {
+    const platformSet = new Set<string>();
+    const wantKeys = new Set<string>();
+    for (const item of libraryItems) {
+      const pl = item.platform.trim().toLowerCase();
+      if (!pl) continue;
+      platformSet.add(pl);
+      wantKeys.add(libraryItemKey(item.platform, item.libraryItemId));
+    }
+
+    if (platformSet.size > 0) {
+      const { data: candidates, error: candErr } = await supabase
+        .from("scraped_ads")
+        .select("id, platform, raw_payload")
+        .eq("user_id", user.id)
+        .eq("competitor_id", competitorId)
+        .in("platform", [...platformSet]);
+
+      if (candErr) {
+        return NextResponse.json({ ok: false, error: candErr.message }, { status: 500 });
+      }
+
+      for (const row of candidates ?? []) {
+        const cardId = libraryItemIdFromRawPayload(row.raw_payload);
+        if (!cardId) continue;
+        const key = libraryItemKey(String(row.platform), cardId);
+        if (wantKeys.has(key) && !resolvedToScraped[key]) {
+          resolvedToScraped[key] = row.id;
+        }
+      }
+    }
   }
 
   const allScrapedIds = [...new Set([...scrapedAdIds, ...Object.values(resolvedToScraped)])];

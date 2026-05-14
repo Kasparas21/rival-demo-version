@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type SavedMap = Record<string, string>;
 
+import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
+
 /** Placeholder row id while POST /api/saved-ads is in flight — UI treats as saved */
 export const PENDING_SAVED_AD_ID = "__pending__";
 
@@ -19,8 +21,8 @@ export function isAdSaved(savedMap: SavedMap, scrapedAdId: string): boolean {
 export function useSavedAdsStatus(
   competitorId: string,
   libraryItems: LibraryItemRef[],
-  /** Also check saved state for these scraped_ads ids (e.g. when library card id is missing). */
-  scrapedAdIds: readonly string[] = EMPTY_SCRAPED_IDS,
+  scrapedAdIds: readonly string[] | undefined = undefined,
+  cacheDomainNorm?: string | null
 ) {
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
@@ -43,8 +45,9 @@ export function useSavedAdsStatus(
   }, [libraryItems]);
 
   const dedupedScrapedIds = useMemo(() => {
+    const source = scrapedAdIds ?? EMPTY_SCRAPED_IDS;
     const m = new Map<string, string>();
-    for (const id of scrapedAdIds) {
+    for (const id of source) {
       const u = id.trim();
       if (u) m.set(u, u);
     }
@@ -104,6 +107,13 @@ export function useSavedAdsStatus(
     [resolvedToScraped],
   );
 
+  const bumpSavedAdsListCache = useCallback(() => {
+    const dom = cacheDomainNorm?.trim().toLowerCase();
+    const cid = competitorId.trim();
+    if (!dom || !cid) return;
+    invalidateSavedAdsCaches(dom, cid);
+  }, [cacheDomainNorm, competitorId]);
+
   const postSaveAd = useCallback(
     async (args: {
       scrapedAdId?: string;
@@ -141,11 +151,12 @@ export function useSavedAdsStatus(
       const id = await postSaveAd({ ...args });
       const sid = args.scrapedAdId?.trim();
       if (id && sid) {
+        bumpSavedAdsListCache();
         setSavedMap((prev) => ({ ...prev, [sid]: id }));
       }
       return id;
     },
-    [postSaveAd],
+    [postSaveAd, bumpSavedAdsListCache],
   );
 
   const unsaveAd = useCallback(async (scrapedAdId: string) => {
@@ -154,6 +165,7 @@ export function useSavedAdsStatus(
     const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
     const json = (await res.json()) as { ok?: boolean };
     if (json.ok) {
+      bumpSavedAdsListCache();
       setSavedMap((prev) => {
         const next = { ...prev };
         delete next[scrapedAdId];
@@ -162,7 +174,7 @@ export function useSavedAdsStatus(
       return true;
     }
     return false;
-  }, []);
+  }, [bumpSavedAdsListCache]);
 
   const toggleSave = useCallback(
     async (platform: string, libraryItemId: string, notes?: string | null) => {
@@ -214,6 +226,8 @@ export function useSavedAdsStatus(
             const json = (await res.json()) as { ok?: boolean };
             if (!json.ok) {
               setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+            } else {
+              bumpSavedAdsListCache();
             }
           } catch {
             setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
@@ -231,6 +245,7 @@ export function useSavedAdsStatus(
           const id = await postSaveAd({ scrapedAdId: sid, notes, signal: ac.signal });
           if (ac.signal.aborted) return;
           if (id) {
+            bumpSavedAdsListCache();
             setSavedMap((prev) => ({ ...prev, [sid]: id }));
           } else {
             setSavedMap((prev) => {
@@ -251,7 +266,7 @@ export function useSavedAdsStatus(
         }
       })();
     },
-    [competitorId, scrapedIdForCard, postSaveAd],
+    [competitorId, scrapedIdForCard, postSaveAd, bumpSavedAdsListCache],
   );
 
   return { savedMap, resolvedToScraped, loading, scrapedIdForCard, saveAd, unsaveAd, toggleSave };

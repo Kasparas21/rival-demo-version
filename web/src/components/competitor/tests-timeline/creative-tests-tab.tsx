@@ -1,11 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Beaker, ChevronDown, ChevronRight, HelpCircle, Info, Play, Skull, Trophy } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 type CreativeTestAd = {
@@ -43,54 +45,56 @@ type Summary = {
 
 type FilterStatus = "all" | "winner_identified" | "running" | "all_killed_fast" | "no_clear_winner";
 
+type CreativeTestsApiResponse = {
+  ok?: boolean;
+  error?: string;
+  tests?: CreativeTest[];
+  summary?: Summary | null;
+};
+
 type Props = {
   competitorId: string;
   competitorLabel: string;
   onOpenAd: (adId: string) => void;
+  cacheDomainNorm: string;
+  lastScrapedAt?: string | null;
+  onFreshnessRescrape?: () => void;
 };
 
-export function CreativeTestsTab({ competitorId, competitorLabel, onOpenAd }: Props) {
-  const [tests, setTests] = useState<CreativeTest[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function CreativeTestsTab({
+  competitorId,
+  competitorLabel,
+  onOpenAd,
+  cacheDomainNorm,
+  lastScrapedAt = null,
+  onFreshnessRescrape,
+}: Props) {
+  const domainKey = cacheDomainNorm.trim().toLowerCase();
+  const stamp = lastScrapedAt ?? "none";
+  const cacheKey = `${domainKey}:creative-tests:${competitorId}:${stamp}`;
+
+  const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<CreativeTestsApiResponse>({
+    cacheKey,
+    enabled: Boolean(competitorId && domainKey),
+    validateCached: (c) => Boolean(c.ok),
+    fetcher: async () => {
+      const r = await fetch(`/api/creative-tests?competitorId=${encodeURIComponent(competitorId)}`, {
+        credentials: "include",
+      });
+      const json = (await r.json()) as CreativeTestsApiResponse;
+      if (!json.ok) {
+        throw new Error(json.error ?? "Failed to load");
+      }
+      return json;
+    },
+  });
+
+  const tests = useMemo(() => data?.tests ?? [], [data?.tests]);
+  const summary = data?.summary ?? null;
+  const loadErr = hookError?.message ?? null;
+
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!competitorId) {
-      setLoading(false);
-      setTests([]);
-      setSummary(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    void fetch(`/api/creative-tests?competitorId=${encodeURIComponent(competitorId)}`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((data: { ok?: boolean; error?: string; tests?: CreativeTest[]; summary?: Summary }) => {
-        if (cancelled) return;
-        if (!data.ok) {
-          setError(data.error ?? "Failed to load");
-        } else {
-          setTests(data.tests ?? []);
-          setSummary(data.summary ?? null);
-        }
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Network error");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [competitorId]);
 
   const filteredTests = useMemo(() => {
     if (filter === "all") return tests;
@@ -114,7 +118,7 @@ export function CreativeTestsTab({ competitorId, competitorLabel, onOpenAd }: Pr
     );
   }
 
-  if (loading) {
+  if (loading && !data && !loadErr) {
     return (
       <RivalLoadingBlock
         title="Loading creative tests…"
@@ -125,11 +129,14 @@ export function CreativeTestsTab({ competitorId, competitorLabel, onOpenAd }: Pr
     );
   }
 
-  if (error) {
+  if (loadErr) {
     return (
       <div className="mx-auto max-w-5xl px-6 py-6">
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
-          Failed to load creative tests: {error}
+          Failed to load creative tests: {loadErr}
+          <button type="button" className="mt-2 block text-[12px] font-semibold underline" onClick={() => void refetch()}>
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -152,23 +159,17 @@ export function CreativeTestsTab({ competitorId, competitorLabel, onOpenAd }: Pr
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6">
+    <div className="relative mx-auto max-w-5xl px-6 py-6">
+      <CacheRevalidatingDot show={isValidating && !!data} />
       <div className="mb-6">
-        <h2 className="text-[20px] font-bold tracking-tight text-slate-900">Creative Tests</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-[20px] font-bold tracking-tight text-slate-900">Creative Tests</h2>
+          <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />
+        </div>
         <p className="mt-1 text-[13px] text-slate-600">
           Ads {competitorLabel} launched together on the same day. Winners appear when one ad outlives the group median
           by 2× and ran ≥14 days, with all variants inactive.
         </p>
-        {tests.some((t) => t.platform === "google") ? (
-          <div className="mb-4 mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
-            <p className="text-[11px] leading-relaxed text-amber-800">
-              <strong>Google Search ads:</strong> we can detect when ads were grouped/launched together, but precise
-              lifespan tracking is limited because Google doesn&apos;t expose start/end dates via the scraper. Meta and
-              TikTok lifespan data is fully tracked.
-            </p>
-          </div>
-        ) : null}
       </div>
 
       {summary ? (

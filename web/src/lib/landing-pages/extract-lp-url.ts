@@ -1,5 +1,5 @@
 import type { Json } from "@/lib/supabase/types";
-import { normalizeLandingPageUrl } from "./normalize-url";
+import { normalizeLandingPageUrl, unwrapOutboundRedirectUrl } from "./normalize-url";
 
 /**
  * Extract the landing page URL from a scraped_ad's raw_payload.
@@ -23,7 +23,7 @@ export function extractLandingPageUrl(platform: string, rawPayload: Json): strin
   switch (pl) {
     case "meta": {
       const dest = typeof payload.destinationUrl === "string" ? payload.destinationUrl : null;
-      return dest ? normalizeLandingPageUrl(dest) : null;
+      return dest ? normalizeLandingPageUrl(unwrapOutboundRedirectUrl(dest)) : null;
     }
 
     case "linkedin":
@@ -43,7 +43,7 @@ export function extractLandingPageUrl(platform: string, rawPayload: Json): strin
       const isPlatformOwn = platformDomains.some((d) => low.includes(d));
       if (isPlatformOwn) return null;
 
-      return normalizeLandingPageUrl(adUrl);
+      return normalizeLandingPageUrl(unwrapOutboundRedirectUrl(adUrl));
     }
 
     case "google":

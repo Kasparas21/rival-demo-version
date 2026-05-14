@@ -88,6 +88,45 @@ export type Database = {
         };
         Relationships: [];
       };
+      brand_comparison_results: {
+        Row: {
+          id: string;
+          user_id: string;
+          your_brand_id: string;
+          competitor_id: string;
+          your_brand_scraped_at: string;
+          competitor_scraped_at: string;
+          result_payload: Json;
+          ai_model_version: string;
+          ai_cost_usd: number;
+          computed_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          your_brand_id: string;
+          competitor_id: string;
+          your_brand_scraped_at: string;
+          competitor_scraped_at: string;
+          result_payload: Json;
+          ai_model_version?: string;
+          ai_cost_usd?: number;
+          computed_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          your_brand_id?: string;
+          competitor_id?: string;
+          your_brand_scraped_at?: string;
+          competitor_scraped_at?: string;
+          result_payload?: Json;
+          ai_model_version?: string;
+          ai_cost_usd?: number;
+          computed_at?: string;
+        };
+        Relationships: [];
+      };
       saved_competitors: {
         Row: {
           id: string;

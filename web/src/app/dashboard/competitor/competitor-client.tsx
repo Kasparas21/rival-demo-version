@@ -20,6 +20,7 @@ import {
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
+import { setupGlobalCacheInvalidator } from "@/lib/cache/cache-invalidator";
 import { findSidebarRowForHost, resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
 import { useActiveBrand } from "../brand-context";
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
@@ -107,6 +108,8 @@ import {
 } from "@/lib/ad-library/scrape-request-fields";
 import { ComparisonPage } from "@/components/comparison/comparison-page";
 import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
+import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 import {
   fetchSavedCompetitorsFromAccount,
   saveCompetitorToAccount,
@@ -134,12 +137,16 @@ import {
   WORKSPACE_MARKETING_IMPROVEMENTS_TAB,
   findCompetitorTab,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
-import { StrategyMapTab } from "@/components/competitor/insights/strategy-map-tab";
-import { StrategyInsightTab } from "@/components/competitor/insights/strategy-insight-tab";
+import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
 import { StrategicMovesTab } from "@/components/competitor/insights/strategic-moves-tab";
 import { CreativeTestsTab } from "@/components/competitor/tests-timeline/creative-tests-tab";
 import { TimelineTab } from "@/components/competitor/tests-timeline/timeline-tab";
-import { LandingPagesTab } from "@/components/competitor/tests-timeline/landing-pages-tab";
+import {
+  LandingPagesTab,
+  type LandingPagesApiResponse,
+  type SharedLandingPagesListCache,
+} from "@/components/competitor/landing-pages-tab";
+import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-overview-app";
 import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
 import { HooksTab } from "@/components/competitor/audience-copy/hooks-tab";
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
@@ -1613,6 +1620,13 @@ function CompetitorDashboardBody({
     },
     [activeTab, pathname, router, searchParams],
   );
+
+  const navigateToLandingPagesExplorer = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "tests");
+    params.set("sub", "landing-pages");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
   const [visibleAdPlatforms, setVisibleAdPlatforms] = useState<AdsLibraryPlatform[] | null>(null);
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [googleAdsModalOpen, setGoogleAdsModalOpen] = useState(false);
@@ -1642,6 +1656,10 @@ function CompetitorDashboardBody({
   /** Bumps every minute so `getTimeAgo` in the header stays fresh while the page is open. */
   const [lastScrapeRelativeTick, setLastScrapeRelativeTick] = useState(0);
 
+  useEffect(() => {
+    return setupGlobalCacheInvalidator();
+  }, []);
+
   /** Apify-backed platforms to fetch — from resolver `channels` (discovery / sidebar); omit = all API-backed platforms */
   const adsPlatforms: AdsLibraryPlatform[] = useMemo(() => {
     if (!channelsFromResolver.trim()) {
@@ -1655,6 +1673,8 @@ function CompetitorDashboardBody({
     () => effectiveCompetitorBrandLabel(brand.name, brand.domain) || brand.name,
     [brand.name, brand.domain],
   );
+
+  const cacheDomainNorm = useMemo(() => brand.domain.trim().toLowerCase(), [brand.domain]);
 
   const competitorSidebarMatch = useMemo(() => {
     if (!sidebarSnapshot?.length) return undefined;
@@ -2013,6 +2033,75 @@ function CompetitorDashboardBody({
 
   const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
 
+  const comparisonPayloadScrapeStamp = accountLastScrapedAt ?? "none";
+  const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:${comparisonPayloadScrapeStamp}`;
+
+  const {
+    data: comparisonPayloadData,
+    loading: comparisonPayloadLoading,
+    error: comparisonPayloadCacheError,
+    refetch: refetchComparisonPayload,
+  } = useScrapeKeyedCache<ComparisonPayloadJson>({
+    cacheKey: comparisonPayloadCacheKey,
+    enabled: Boolean(cacheDomainNorm.trim()),
+    validateCached: (c) =>
+      c.ok === true &&
+      Boolean(c.workspace && c.competitor) &&
+      typeof c.workspace?.derivedStats?.avgAdAgeDays === "number" &&
+      typeof c.competitor?.derivedStats?.avgAdAgeDays === "number",
+    fetcher: async () => {
+      const res = await fetch(
+        `/api/comparison/payload?competitorDomain=${encodeURIComponent(brand.domain)}`,
+        { credentials: "include" }
+      );
+      const json = (await res.json()) as ComparisonPayloadJson;
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `comparison/payload failed (${res.status})`);
+      }
+      return json;
+    },
+  });
+
+  const comparisonPayloadErrorMessage = comparisonPayloadCacheError?.message ?? null;
+
+  const landingPagesListStamp = accountLastScrapedAt ?? "none";
+  const landingPagesListDomainKey = cacheDomainNorm.trim().toLowerCase();
+  const landingPagesListCacheKey = `${landingPagesListDomainKey}:landing-pages:${competitorDbIdForSaved}:${landingPagesListStamp}:100`;
+
+  const landingPagesListHook = useScrapeKeyedCache<LandingPagesApiResponse>({
+    cacheKey: landingPagesListCacheKey,
+    enabled: Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()),
+    validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
+    fetcher: async () => {
+      const res = await fetch(
+        `/api/landing-pages?competitorId=${encodeURIComponent(competitorDbIdForSaved)}&limit=100`
+      );
+      const json = (await res.json()) as LandingPagesApiResponse;
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `landing-pages failed (${res.status})`);
+      }
+      return json;
+    },
+  });
+
+  const landingPagesListCacheForChildren: SharedLandingPagesListCache | null = useMemo(() => {
+    if (!competitorDbIdForSaved) return null;
+    return {
+      data: landingPagesListHook.data,
+      loading: landingPagesListHook.loading,
+      isValidating: landingPagesListHook.isValidating,
+      error: landingPagesListHook.error,
+      refetch: landingPagesListHook.refetch,
+    };
+  }, [
+    competitorDbIdForSaved,
+    landingPagesListHook.data,
+    landingPagesListHook.loading,
+    landingPagesListHook.isValidating,
+    landingPagesListHook.error,
+    landingPagesListHook.refetch,
+  ]);
+
   useEffect(() => {
     const id = competitorDbIdForSaved;
     if (!id || isOwnWorkspace) {
@@ -2085,7 +2174,12 @@ function CompetitorDashboardBody({
     filteredGoogleRows,
   ]);
 
-  const { savedMap, scrapedIdForCard, toggleSave } = useSavedAdsStatus(competitorDbIdForSaved, savedAdsLibraryItems);
+  const { savedMap, scrapedIdForCard, toggleSave } = useSavedAdsStatus(
+    competitorDbIdForSaved,
+    savedAdsLibraryItems,
+    undefined,
+    cacheDomainNorm,
+  );
 
   const adSaveProps = useCallback(
     (platform: string, libraryItemId: string) => {
@@ -2441,8 +2535,8 @@ function CompetitorDashboardBody({
       </div>
 
       {/* Tab Content Areas */}
-      {activeTab === "workspace-ads" && isOwnWorkspace ? (
-        <div className="flex-1 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={activeTab === "workspace-ads" && isOwnWorkspace} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
             <WorkspaceAdSourcesPanel
               brandId={myBrand.id}
@@ -2452,10 +2546,10 @@ function CompetitorDashboardBody({
             />
           </div>
         </div>
-      ) : null}
+      </KeepMountedTab>
 
-      {activeTab === "workspace-marketing-improvements" && isOwnWorkspace ? (
-        <div className="flex-1 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={activeTab === "workspace-marketing-improvements" && isOwnWorkspace} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <div className="mx-auto max-w-[900px] px-6 py-8 sm:px-8 lg:px-10 animate-in fade-in duration-200">
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2594,15 +2688,18 @@ function CompetitorDashboardBody({
             ) : null}
           </div>
         </div>
-      ) : null}
+      </KeepMountedTab>
 
-      {activeTab === 'ads library' && (
-        <div className="flex-1 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={activeTab === "ads library"} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
             {activeSubTab === "saved" ? (
               <SavedAdsPanel
                 competitorId={competitorDbIdForSaved}
                 competitorLabel={competitorDisplayLabel}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
+                onFreshnessRescrape={handleForceRescrape}
                 onOpenAd={openAd}
               />
             ) : (
@@ -2610,6 +2707,8 @@ function CompetitorDashboardBody({
             {competitorDbIdForSaved ? (
               <AdLibraryAnalyticsPanel
                 competitorId={competitorDbIdForSaved}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
                 platformCounts={{
                   meta: filteredMetaAds.length,
                   google: filteredGoogleRows.length,
@@ -2618,6 +2717,9 @@ function CompetitorDashboardBody({
                   pinterest: pinterestAds.length,
                   snapchat: snapchatAds.length,
                 }}
+                onViewAllLandingPages={navigateToLandingPagesExplorer}
+                onFreshnessRescrape={handleForceRescrape}
+                landingPagesListCache={landingPagesListCacheForChildren}
               />
             ) : null}
             {adsPlatforms.length > 0 ? (
@@ -3393,70 +3495,80 @@ function CompetitorDashboardBody({
             )}
           </div>
         </div>
-      )}
+      </KeepMountedTab>
 
-      {activeTab === "insights" && (
-        <div className="flex-1 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={activeTab === "insights"} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <Suspense
             fallback={
               <RivalLoadingBlock title="Loading insights" description="Fetching strategy overview and enrichment…" padded className="py-14" />
             }
           >
-            {activeSubTab === "strategy-map" ? (
-              <StrategyMapTab
+            <KeepMountedTab active={activeSubTab === "strategy-map" || activeSubTab === "strategy-insight"} className="min-h-0">
+              <StrategyOverviewApp
                 brand={brand}
                 onOpenAdsLibrary={() => handleTabChange("ads library")}
+                forceView={activeSubTab === "strategy-insight" ? "insight" : "map"}
                 competitorId={competitorDbIdForSaved || undefined}
+                lastScrapedAt={accountLastScrapedAt}
+                onFreshnessRescrape={handleForceRescrape}
               />
-            ) : null}
-            {activeSubTab === "strategy-insight" ? (
-              <StrategyInsightTab
-                brand={brand}
-                onOpenAdsLibrary={() => handleTabChange("ads library")}
-                competitorId={competitorDbIdForSaved || undefined}
-              />
-            ) : null}
-            {activeSubTab === "moves" ? (
+            </KeepMountedTab>
+            <KeepMountedTab active={activeSubTab === "moves"} className="min-h-0">
               <StrategicMovesTab
                 competitorDomain={brand.domain}
                 workspaceName={myBrand.name}
                 competitorLabel={competitorDisplayLabel}
                 workspaceDomain={myBrand.domain?.trim() ?? ""}
+                comparisonPayload={comparisonPayloadData}
+                comparisonPayloadLoading={comparisonPayloadLoading}
+                comparisonPayloadError={comparisonPayloadErrorMessage}
               />
-            ) : null}
+            </KeepMountedTab>
           </Suspense>
         </div>
-      )}
+      </KeepMountedTab>
 
-      {activeTab === "tests" && (
-        <div className="flex-1 overflow-y-auto bg-transparent">
-          {activeSubTab === "creative-tests" ? (
+      <KeepMountedTab active={activeTab === "tests"} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+          <KeepMountedTab active={activeSubTab === "creative-tests"} className="min-h-0">
             <CreativeTestsTab
               competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
               competitorLabel={competitorDisplayLabel}
+              cacheDomainNorm={cacheDomainNorm}
+              lastScrapedAt={accountLastScrapedAt}
+              onFreshnessRescrape={handleForceRescrape}
               onOpenAd={openAd}
             />
-          ) : null}
-          {activeSubTab === "timeline" ? (
+          </KeepMountedTab>
+          <KeepMountedTab active={activeSubTab === "timeline"} className="min-h-0">
             <TimelineTab
               competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
               competitorLabel={competitorDisplayLabel}
+              cacheDomainNorm={cacheDomainNorm}
+              lastScrapedAt={accountLastScrapedAt}
+              onFreshnessRescrape={handleForceRescrape}
               onOpenAd={openAd}
             />
-          ) : null}
-          {activeSubTab === "landing-pages" ? (
+          </KeepMountedTab>
+          <KeepMountedTab active={activeSubTab === "landing-pages"} className="min-h-0">
             <LandingPagesTab
               competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
               competitorLabel={competitorDisplayLabel}
+              cacheDomainNorm={cacheDomainNorm}
+              lastScrapedAt={accountLastScrapedAt}
+              onFreshnessRescrape={handleForceRescrape}
               onOpenAd={openAd}
+              onBackToTests={() => handleSubTabChange("creative-tests")}
+              landingPagesListCache={landingPagesListCacheForChildren}
             />
-          ) : null}
+          </KeepMountedTab>
         </div>
-      )}
+      </KeepMountedTab>
 
-      {activeTab === "audience-copy" && (
-        <div className="flex-1 overflow-y-auto bg-transparent">
-          {activeSubTab === "audience" ? (
+      <KeepMountedTab active={activeTab === "audience-copy"} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+          <KeepMountedTab active={activeSubTab === "audience"} className="min-h-0">
             <AudienceTab
               competitorDomain={brand.domain}
               workspaceName={myBrand.name}
@@ -3466,22 +3578,29 @@ function CompetitorDashboardBody({
               workspaceBadge={myBrand.badge ?? undefined}
               competitorLabel={competitorDisplayLabel}
               competitorLogoUrl={brand.logoUrl}
+              comparisonPayload={comparisonPayloadData}
+              comparisonPayloadLoading={comparisonPayloadLoading}
+              comparisonPayloadError={comparisonPayloadErrorMessage}
             />
-          ) : null}
-          {activeSubTab === "hooks" ? <HooksTab /> : null}
-          {activeSubTab === "copy-vault" ? (
+          </KeepMountedTab>
+          <KeepMountedTab active={activeSubTab === "hooks"} className="min-h-0">
+            <HooksTab />
+          </KeepMountedTab>
+          <KeepMountedTab active={activeSubTab === "copy-vault"} className="min-h-0">
             <CopyVaultTab
               competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
               competitorLabel={competitorDisplayLabel}
               onOpenAd={openAd}
             />
-          ) : null}
-          {activeSubTab === "briefs" ? <BriefsTab /> : null}
+          </KeepMountedTab>
+          <KeepMountedTab active={activeSubTab === "briefs"} className="min-h-0">
+            <BriefsTab />
+          </KeepMountedTab>
         </div>
-      )}
+      </KeepMountedTab>
 
-      {activeTab === "comparison" && !isOwnWorkspace ? (
-        <div className="flex-1 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={activeTab === "comparison" && !isOwnWorkspace} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <div className="mx-auto w-full max-w-[1400px] px-6 py-8 sm:px-8 lg:px-10 animate-in fade-in duration-200">
             <ComparisonPage
               isConfirmed={isConfirmed}
@@ -3495,16 +3614,22 @@ function CompetitorDashboardBody({
                 color: myBrand.color,
                 badge: myBrand.badge,
               }}
+              comparisonPayload={comparisonPayloadData}
+              comparisonPayloadLoading={comparisonPayloadLoading}
+              comparisonPayloadError={comparisonPayloadErrorMessage}
+              onRefreshComparisonPayload={() => void refetchComparisonPayload()}
+              cacheDomainNorm={cacheDomainNorm}
+              onOpenAd={openAd}
             />
           </div>
         </div>
-      ) : null}
+      </KeepMountedTab>
 
-      {activeTab === "alerts" ? (
-        <div className="flex-1 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={activeTab === "alerts"} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <AlertsTab />
         </div>
-      ) : null}
+      </KeepMountedTab>
 
       <AdDetailDrawer adId={activeAdId} onClose={closeAd} />
     </div>

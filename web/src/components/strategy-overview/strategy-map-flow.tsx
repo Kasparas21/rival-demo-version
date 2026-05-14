@@ -14,12 +14,13 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 
 import { FunnelCellNode, type FunnelCellNodeData } from "@/components/strategy-overview/funnel-cell-node";
 import { FunnelEdge } from "@/components/strategy-overview/funnel-edge";
 import type { PlatformNodeData } from "@/components/strategy-overview/platform-node";
 import { PlatformNode } from "@/components/strategy-overview/platform-node";
+import { coerceStrategyPlatformForDisplay } from "@/lib/strategy-overview/brand-scale-score";
 import type { FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
 
 type Props = {
@@ -40,8 +41,19 @@ function stageForPlatform(payload: StrategyMapPayload, platform: string): Funnel
   return n?.funnelStage ?? "MOF";
 }
 
-function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
+function FlowInner({
+  map,
+  onNodeClick,
+  onEdgeHover,
+  fitContainerRef,
+}: Omit<Props, "mapKey"> & { fitContainerRef: RefObject<HTMLDivElement | null> }) {
   const { fitView } = useReactFlow();
+
+  const runFit = useCallback(() => {
+    requestAnimationFrame(() => {
+      fitView({ padding: 0.2, duration: 200, maxZoom: 1.35 });
+    });
+  }, [fitView]);
 
   const useCellsLayout = map.funnelCells != null && map.funnelCells.length > 0;
 
@@ -71,7 +83,7 @@ function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
         selectable: true,
         data: {
           label: c.label,
-          platform: c.platform,
+          platform: coerceStrategyPlatformForDisplay(String(c.platform)),
           funnelStage: c.funnelStage,
           adCount: c.adCount,
           estSpendEurLow: c.estSpendEurLow,
@@ -132,9 +144,29 @@ function FlowInner({ map, onNodeClick, onEdgeHover }: Omit<Props, "mapKey">) {
     setEdges(initialEdges);
   }, [initialNodes, initialEdges, setNodes, setEdges]);
 
+  /** KeepMountedTab uses `display:none` while mounted — fitView with 0×0 viewport corrupts pan/zoom. Refit when the pane gets real dimensions. */
   useEffect(() => {
-    requestAnimationFrame(() => fitView({ padding: 0.2, duration: 200 }));
-  }, [fitView, initialNodes, initialEdges]);
+    const el = fitContainerRef?.current;
+    if (!el) return;
+    let debounce: ReturnType<typeof setTimeout> | undefined;
+    const scheduleFit = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width < 48 || height < 48) return;
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => runFit(), 60);
+    };
+    const ro = new ResizeObserver(scheduleFit);
+    ro.observe(el);
+    scheduleFit();
+    return () => {
+      ro.disconnect();
+      if (debounce) clearTimeout(debounce);
+    };
+  }, [fitContainerRef, runFit]);
+
+  useEffect(() => {
+    runFit();
+  }, [runFit, initialNodes, initialEdges]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -196,12 +228,14 @@ export function StrategyMapFlow(props: Props) {
   const { mapKey, map, ...rest } = props;
   const useCellsLayout = map.funnelCells != null && map.funnelCells.length > 0;
   const heightClass = useCellsLayout ? "h-[min(640px,76vh)]" : "h-[min(520px,70vh)]";
+  const containerRef = useRef<HTMLDivElement>(null);
   return (
     <div
+      ref={containerRef}
       className={`${heightClass} w-full rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/60 overflow-hidden`}
     >
       <ReactFlowProvider>
-        <FlowInner key={mapKey} map={map} {...rest} />
+        <FlowInner key={mapKey} map={map} fitContainerRef={containerRef} {...rest} />
       </ReactFlowProvider>
     </div>
   );

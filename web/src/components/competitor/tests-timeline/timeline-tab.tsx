@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { CalendarRange, Info, Trophy } from "lucide-react";
+import { CalendarRange, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { COMPARISON_PLATFORM_ORDER, ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 type TimelineAd = {
@@ -65,53 +67,52 @@ type Props = {
   competitorId: string;
   competitorLabel: string;
   onOpenAd: (adId: string) => void;
+  cacheDomainNorm: string;
+  lastScrapedAt?: string | null;
+  onFreshnessRescrape?: () => void;
 };
 
-export function TimelineTab({ competitorId, competitorLabel, onOpenAd }: Props) {
-  const [data, setData] = useState<TimelineResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function TimelineTab({
+  competitorId,
+  competitorLabel,
+  onOpenAd,
+  cacheDomainNorm,
+  lastScrapedAt = null,
+  onFreshnessRescrape,
+}: Props) {
+  const domainKey = cacheDomainNorm.trim().toLowerCase();
+  const stamp = lastScrapedAt ?? "none";
+  const cacheKey = `${domainKey}:timeline:${competitorId}:${stamp}`;
+
+  const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<TimelineResponse>({
+    cacheKey,
+    enabled: Boolean(competitorId && domainKey),
+    validateCached: (c) => c.ok === true && Array.isArray(c.ads),
+    fetcher: async () => {
+      const r = await fetch(`/api/timeline?competitorId=${encodeURIComponent(competitorId)}`, {
+        credentials: "include",
+      });
+      const res = (await r.json()) as TimelineResponse;
+      if (!res.ok) {
+        throw new Error(res.error ?? "Failed to load");
+      }
+      return res;
+    },
+  });
+
+  const loadErr = hookError?.message ?? null;
+
   const [zoom, setZoom] = useState<ZoomLevel>("90d");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!competitorId) {
-      setData(null);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    void fetch(`/api/timeline?competitorId=${encodeURIComponent(competitorId)}`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((res: TimelineResponse) => {
-        if (cancelled) return;
-        if (!res.ok) {
-          setError(res.error ?? "Failed to load");
-          setData(null);
-        } else {
-          setData(res);
-          const counts = res.platformCounts ?? {};
-          const withData = Object.keys(counts)
-            .filter((p) => (counts[p] ?? 0) > 0)
-            .sort((a, b) => platformSortIndex(a) - platformSortIndex(b) || a.localeCompare(b));
-          setSelectedPlatforms(new Set(withData));
-        }
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Network error");
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [competitorId]);
+    if (!data?.ok || !data.platformCounts) return;
+    const counts = data.platformCounts;
+    const withData = Object.keys(counts)
+      .filter((p) => (counts[p] ?? 0) > 0)
+      .sort((a, b) => platformSortIndex(a) - platformSortIndex(b) || a.localeCompare(b));
+    setSelectedPlatforms(new Set(withData));
+  }, [data]);
 
   const viewWindow = useMemo(() => {
     if (!data?.dateRange) return null;
@@ -183,7 +184,7 @@ export function TimelineTab({ competitorId, competitorLabel, onOpenAd }: Props) 
     );
   }
 
-  if (loading) {
+  if (loading && !data && !loadErr) {
     return (
       <RivalLoadingBlock
         title="Loading timeline…"
@@ -194,11 +195,14 @@ export function TimelineTab({ competitorId, competitorLabel, onOpenAd }: Props) 
     );
   }
 
-  if (error) {
+  if (loadErr) {
     return (
       <div className="mx-auto max-w-6xl px-6 py-6">
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
-          Failed to load timeline: {error}
+          Failed to load timeline: {loadErr}
+          <button type="button" className="mt-2 block text-[12px] font-semibold underline" onClick={() => void refetch()}>
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -219,26 +223,16 @@ export function TimelineTab({ competitorId, competitorLabel, onOpenAd }: Props) 
     );
   }
 
-  const hasGoogleAds = (data.platformCounts?.google ?? 0) > 0;
-
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6">
-      <div className="mb-4">
+    <div className="relative mx-auto max-w-6xl px-6 py-6">
+      <CacheRevalidatingDot show={isValidating && !!data} />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <h2 className="text-[20px] font-bold tracking-tight text-slate-900">Timeline</h2>
-        <p className="mt-1 text-[13px] text-slate-600">
-          One row per ad {competitorLabel} has run. Bar length = lifespan. Gold = identified winner. Newest first.
-        </p>
+        <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />
       </div>
-
-      {hasGoogleAds ? (
-        <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden />
-          <p className="text-[11px] leading-relaxed text-amber-800">
-            <strong>Google Search ads:</strong> shown as dots at scrape date because Google doesn&apos;t expose precise
-            start/end dates via the scraper. Meta and TikTok bars show real lifespans.
-          </p>
-        </div>
-      ) : null}
+      <p className="mt-1 text-[13px] text-slate-600 mb-4">
+        One row per ad {competitorLabel} has run. Bar length = lifespan. Gold = identified winner. Newest first.
+      </p>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
         <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">

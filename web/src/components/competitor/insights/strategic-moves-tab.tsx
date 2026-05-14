@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 import { StrategicMoveDetectorPanel } from "@/components/comparison/panels/strategic-move-detector-panel";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
@@ -11,6 +9,9 @@ type Props = {
   workspaceName: string;
   competitorLabel: string;
   workspaceDomain: string;
+  comparisonPayload: ComparisonPayloadJson | null;
+  comparisonPayloadLoading: boolean;
+  comparisonPayloadError: string | null;
 };
 
 export function StrategicMovesTab({
@@ -18,33 +19,11 @@ export function StrategicMovesTab({
   workspaceName,
   competitorLabel,
   workspaceDomain,
+  comparisonPayload,
+  comparisonPayloadLoading,
+  comparisonPayloadError,
 }: Props) {
-  const [data, setData] = useState<ComparisonPayloadJson | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/comparison/payload?competitorDomain=${encodeURIComponent(competitorDomain)}`,
-          { credentials: "include" },
-        );
-        const json = (await res.json()) as ComparisonPayloadJson;
-        if (!cancelled) {
-          setData(json);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [competitorDomain]);
-
-  if (loading) {
+  if (comparisonPayloadLoading) {
     return (
       <RivalLoadingBlock
         title="Loading moves…"
@@ -54,6 +33,16 @@ export function StrategicMovesTab({
       />
     );
   }
+
+  if (comparisonPayloadError) {
+    return (
+      <div className="flex items-center justify-center py-12 px-6">
+        <div className="text-center text-[13px] text-red-700">{comparisonPayloadError}</div>
+      </div>
+    );
+  }
+
+  const data = comparisonPayload;
 
   if (!data?.ok || !data.workspace || !data.competitor) {
     return (

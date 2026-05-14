@@ -182,19 +182,20 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
 
   const lpUrl = extractLandingPageUrl(ad.platform, ad.raw_payload);
 
-  const { data: winnerTest } = await supabase
-    .from("creative_tests")
-    .select("launch_date, ad_count, test_status")
-    .eq("winner_ad_id", ad.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  const { data: copyCache } = await supabase
-    .from("ad_copy_structure_cache")
-    .select("structure")
-    .eq("ad_id", ad.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [{ data: winnerTest }, { data: copyCache }] = await Promise.all([
+    supabase
+      .from("creative_tests")
+      .select("launch_date, ad_count, test_status")
+      .eq("winner_ad_id", ad.id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("ad_copy_structure_cache")
+      .select("structure")
+      .eq("ad_id", ad.id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
   let copyStructure: CopyStructureResult | undefined;
   if (copyCache?.structure) {

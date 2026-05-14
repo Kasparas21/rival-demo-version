@@ -1,3 +1,44 @@
+const FB_REDIRECT_HOSTS = new Set([
+  "facebook.com",
+  "l.facebook.com",
+  "m.facebook.com",
+  "lm.facebook.com",
+]);
+
+/**
+ * Unwrap common outbound redirect trackers (e.g. facebook l.php?u=) before normalization.
+ * Best-effort only — unknown trackers stay as-is.
+ */
+export function unwrapOutboundRedirectUrl(raw: string, depth = 0): string {
+  if (depth > 6 || !raw || typeof raw !== "string") return raw;
+  const trimmed = raw.trim();
+  if (!trimmed) return raw;
+
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(withProtocol);
+  } catch {
+    return raw;
+  }
+
+  const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+  const isFbRedirect =
+    FB_REDIRECT_HOSTS.has(host) && (url.pathname.includes("/l.php") || url.searchParams.has("u"));
+  if (isFbRedirect) {
+    const u = url.searchParams.get("u");
+    if (u) {
+      try {
+        return unwrapOutboundRedirectUrl(decodeURIComponent(u), depth + 1);
+      } catch {
+        /* ignore decode errors */
+      }
+    }
+  }
+
+  return trimmed;
+}
+
 /**
  * Normalize a landing page URL for deduplication.
  * - Strips utm_*, fbclid, gclid, mc_*, ref tracking params
@@ -54,6 +95,18 @@ export function normalizeLandingPageUrl(rawUrl: string): string | null {
   url.hash = "";
 
   return url.toString();
+}
+
+/** Hostname for favicon / display; uses same unwrap as extraction for tracker URLs. */
+export function hostFromLandingPageUrl(url: string): string | null {
+  const unwrapped = unwrapOutboundRedirectUrl(url);
+  const norm = normalizeLandingPageUrl(unwrapped);
+  if (!norm) return null;
+  try {
+    return new URL(norm).hostname;
+  } catch {
+    return null;
+  }
 }
 
 /**

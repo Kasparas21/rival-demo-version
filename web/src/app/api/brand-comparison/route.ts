@@ -1,19 +1,70 @@
 import { NextResponse } from "next/server";
 
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
+import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
+import {
+  brandComparisonResponseSchema,
+  runBrandComparisonLlm,
+  type BrandComparisonLlmResult,
+} from "@/lib/brand-comparison/run-brand-comparison-llm";
+import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { runBrandComparisonLlm } from "@/lib/brand-comparison/run-brand-comparison-llm";
+import type { Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 type Body = {
+  yourBrandId?: string;
+  competitorId?: string;
   competitor?: { name?: string; domain?: string };
   userBrand?: { name?: string; domain?: string; brandContext?: string };
   adEvidence?: string;
-  /** JSON string of structured strategy aggregates (workspace + competitor) */
   structuredDigest?: string;
 };
+
+function normalizeScrapeStampForCache(iso: string | null | undefined): string {
+  if (!iso?.trim()) return "1970-01-01T00:00:00.000Z";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "1970-01-01T00:00:00.000Z";
+  return new Date(t).toISOString();
+}
+
+type CachedPayloadShape = {
+  ok?: boolean;
+  model?: string;
+  comparison?: BrandComparisonLlmResult;
+};
+
+async function resolveComparisonIds(params: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  userId: string;
+  competitorDomain: string;
+  bodyYourBrandId?: string;
+  bodyCompetitorId?: string;
+}): Promise<{ yourBrandId: string; competitorId: string } | null> {
+  const { supabase, userId, competitorDomain, bodyYourBrandId, bodyCompetitorId } = params;
+  let yourBrandId = bodyYourBrandId?.trim() ?? "";
+  let competitorId = bodyCompetitorId?.trim() ?? "";
+
+  if (!yourBrandId) {
+    const { data } = await supabase
+      .from("saved_competitors")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("is_workspace_brand", true)
+      .maybeSingle();
+    yourBrandId = data?.id ?? "";
+  }
+
+  if (!competitorId) {
+    const { competitorId: cid } = await resolveAdsCacheDomainForUser(supabase, userId, competitorDomain);
+    competitorId = cid ?? "";
+  }
+
+  if (!yourBrandId || !competitorId) return null;
+  return { yourBrandId, competitorId };
+}
 
 export async function POST(req: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
@@ -48,6 +99,85 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
+  const pair = await resolveComparisonIds({
+    supabase,
+    userId: user.id,
+    competitorDomain,
+    bodyYourBrandId: body.yourBrandId,
+    bodyCompetitorId: body.competitorId,
+  });
+  if (!pair) {
+    return NextResponse.json(
+      { ok: false, error: "Could not resolve workspace brand or competitor saved row for cache." },
+      { status: 400 }
+    );
+  }
+
+  const [{ data: yourRow }, { data: rivalRow }] = await Promise.all([
+    supabase
+      .from("saved_competitors")
+      .select("last_scraped_at")
+      .eq("id", pair.yourBrandId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("saved_competitors")
+      .select("last_scraped_at")
+      .eq("id", pair.competitorId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+
+  if (!yourRow || !rivalRow) {
+    return NextResponse.json({ ok: false, error: "Saved competitor rows not found." }, { status: 404 });
+  }
+
+  const yourBrandScrapedAt = normalizeScrapeStampForCache(yourRow.last_scraped_at);
+  const competitorScrapedAt = normalizeScrapeStampForCache(rivalRow.last_scraped_at);
+
+  const { data: cached, error: cacheReadErr } = await supabase
+    .from("brand_comparison_results")
+    .select("result_payload, computed_at")
+    .eq("user_id", user.id)
+    .eq("your_brand_id", pair.yourBrandId)
+    .eq("competitor_id", pair.competitorId)
+    .eq("your_brand_scraped_at", yourBrandScrapedAt)
+    .eq("competitor_scraped_at", competitorScrapedAt)
+    .maybeSingle();
+
+  if (cacheReadErr) {
+    console.warn("[brand-comparison] cache read", cacheReadErr.message);
+  }
+
+  if (cached?.result_payload && typeof cached.result_payload === "object" && !Array.isArray(cached.result_payload)) {
+    const p = cached.result_payload as CachedPayloadShape;
+    const v2 = p.ok === true && p.comparison ? brandComparisonResponseSchema.safeParse(p.comparison) : null;
+    if (v2?.success) {
+      if (process.env.NODE_ENV === "development") {
+        console.log("[brand-comparison] Supabase cache HIT", {
+          yourBrandId: pair.yourBrandId,
+          competitorId: pair.competitorId,
+          yourBrandScrapedAt,
+          competitorScrapedAt,
+        });
+      }
+      return NextResponse.json({
+        ok: true,
+        model: p.model,
+        comparison: v2.data,
+        fromCache: true,
+        computed_at: cached.computed_at,
+      });
+    }
+  } else if (process.env.NODE_ENV === "development") {
+    console.log("[brand-comparison] Supabase cache MISS", {
+      yourBrandId: pair.yourBrandId,
+      competitorId: pair.competitorId,
+      yourBrandScrapedAt,
+      competitorScrapedAt,
+    });
+  }
+
   const adEvidence = typeof body.adEvidence === "string" ? body.adEvidence : "";
   const structuredDigest = typeof body.structuredDigest === "string" ? body.structuredDigest : "";
 
@@ -66,5 +196,27 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: out.error, model: out.model }, { status });
   }
 
-  return NextResponse.json({ ok: true, model: out.model, comparison: out.result });
+  const responseBody = { ok: true as const, model: out.model, comparison: out.result };
+
+  const { error: upsertErr } = await supabase.from("brand_comparison_results").upsert(
+    {
+      user_id: user.id,
+      your_brand_id: pair.yourBrandId,
+      competitor_id: pair.competitorId,
+      your_brand_scraped_at: yourBrandScrapedAt,
+      competitor_scraped_at: competitorScrapedAt,
+      result_payload: sanitizeJsonForPostgres(responseBody) as Json,
+      ai_model_version: out.cacheModelVersion,
+      ai_cost_usd: out.costUsd,
+    },
+    {
+      onConflict: "user_id,your_brand_id,competitor_id,your_brand_scraped_at,competitor_scraped_at",
+    }
+  );
+
+  if (upsertErr) {
+    console.error("[brand-comparison] cache upsert", upsertErr);
+  }
+
+  return NextResponse.json(responseBody);
 }

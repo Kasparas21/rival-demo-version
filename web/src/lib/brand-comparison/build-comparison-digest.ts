@@ -1,9 +1,53 @@
+import { listStealableAngleRows } from "@/lib/comparison/angle-compare";
+import type { ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+
+type NumericFactsSide = {
+  activeAds: number | null;
+  platformsActive: number | null;
+  modeledSpendEurMid: number | null;
+  avgAdAgeDays: number | null;
+  newAdsLast30d: number | null;
+  videoPercent: number | null;
+  uniqueAnglesCount: number | null;
+};
+
+function numericFactsForSide(
+  payload: CompetitorStrategyOverviewPayload | null,
+  derived: ComparisonDerivedStats | null | undefined
+): NumericFactsSide {
+  return {
+    activeAds: payload?.map.activeAdCount ?? null,
+    platformsActive: payload?.map.platformCount ?? null,
+    modeledSpendEurMid: payload?.map.totalAdSpend?.value ?? null,
+    avgAdAgeDays: derived?.avgAdAgeDays ?? null,
+    newAdsLast30d: derived?.newAdsLast30d ?? null,
+    videoPercent: derived?.videoPercent ?? null,
+    uniqueAnglesCount: derived?.uniqueAnglesCount ?? null,
+  };
+}
+
+function topAngles(payload: CompetitorStrategyOverviewPayload | null, limit = 5) {
+  return (payload?.insights.angles_by_platform ?? [])
+    .slice()
+    .sort((a, b) => (b.totalCount ?? 0) - (a.totalCount ?? 0))
+    .slice(0, limit)
+    .map((x) => ({
+      angle: x.angle,
+      ads: x.totalCount ?? 0,
+      platforms: x.platforms ?? [],
+      avgLifespanDays: x.avgLifespanDays ?? null,
+    }));
+}
 
 /** Compact structured summary for Sonnet (strategy payloads — no raw ad copy). */
 export function buildComparisonDigest(
   workspace: CompetitorStrategyOverviewPayload | null,
-  competitor: CompetitorStrategyOverviewPayload | null
+  competitor: CompetitorStrategyOverviewPayload | null,
+  opts?: {
+    workspaceDerived?: ComparisonDerivedStats | null;
+    competitorDerived?: ComparisonDerivedStats | null;
+  }
 ): string {
   const pack = (p: CompetitorStrategyOverviewPayload | null, role: "user" | "competitor") => {
     if (!p) return { role, available: false as const };
@@ -42,10 +86,24 @@ export function buildComparisonDigest(
     };
   };
 
+  const stealableAnglesFromCompetitor = listStealableAngleRows(workspace, competitor).slice(0, 15).map((r) => ({
+    angle: r.angle,
+    adCount: r.totalCount ?? 0,
+    platforms: r.platforms ?? [],
+    avgLifespanDays: r.avgLifespanDays ?? null,
+  }));
+
   return JSON.stringify(
     {
       userBrandStrategy: pack(workspace, "user"),
       competitorStrategy: pack(competitor, "competitor"),
+      comparisonNumericFacts: {
+        user: numericFactsForSide(workspace, opts?.workspaceDerived),
+        competitor: numericFactsForSide(competitor, opts?.competitorDerived),
+        userTopAngles: topAngles(workspace),
+        competitorTopAngles: topAngles(competitor),
+        stealableAnglesFromCompetitor,
+      },
     },
     null,
     0
