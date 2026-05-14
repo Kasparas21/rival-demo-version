@@ -139,10 +139,10 @@ export function AdLibraryAnalyticsPanel({
         <div className="flex min-w-0 flex-col items-start gap-0.5 text-left sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 shrink-0 text-[#2563eb]" aria-hidden />
-            <span className="text-[14px] font-semibold text-[#0f172a]">Analytics</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Analytics</span>
           </div>
-          <span className="hidden text-[11px] text-[#64748b] sm:inline sm:pl-1">·</span>
-          <span className="text-[11px] font-medium text-[#64748b]">Across all platforms</span>
+          <span className="hidden text-xs text-slate-500 sm:inline sm:pl-1">·</span>
+          <span className="text-xs font-medium text-slate-500">Across all platforms</span>
         </div>
         {expanded ? (
           <ChevronUp className="h-4 w-4 shrink-0 text-[#64748b]" aria-hidden />

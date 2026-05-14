@@ -1,9 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bookmark, X } from "lucide-react";
+import { Bookmark, ChevronDown, Eye, X } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 
 import { listStealableAngleRows } from "@/lib/comparison/angle-compare";
+import {
+  angleCategoryPill,
+  filterBrandAwarenessStealableRows,
+  lifespanDotClass,
+  parseAngleForDisplay,
+} from "@/lib/comparison/stealable-angle-present";
 import type { CompetitorStrategyOverviewPayload, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { readCache, writeCache } from "@/lib/cache/use-scrape-keyed-cache";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
@@ -25,16 +32,61 @@ type Props = {
   competitorPayload: CompetitorStrategyOverviewPayload | null;
   competitorId: string;
   competitorBrandName: string;
+  competitorDomain: string;
   workspaceBrandName: string;
   cacheDomainNorm: string;
   competitorScrapeStamp: string;
   onOpenAd: (adId: string) => void;
 };
 
-function trunc(s: string, n: number): string {
-  const t = s.trim();
-  if (t.length <= n) return t;
-  return `${t.slice(0, n - 1)}…`;
+function AdThumb96({
+  ad,
+  loading,
+  onOpen,
+}: {
+  ad: VaultExampleAd | null | undefined;
+  loading: boolean;
+  onOpen: () => void;
+}) {
+  const [broken, setBroken] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="flex size-24 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100">
+        <RivalLoadingMicro />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => ad?.id && onOpen()}
+      className="relative size-24 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    >
+      {ad?.ad_creative_url && !broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={ad.ad_creative_url}
+          alt=""
+          className="size-full object-cover"
+          loading="lazy"
+          decoding="async"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div className="flex size-full flex-col items-center justify-center gap-1 p-2 text-center">
+          <ComparisonPlatformIcon platform={(ad?.platform ?? "meta") as StrategyPlatform} className="h-8 w-8 opacity-60" />
+          <span className="line-clamp-3 text-[9px] font-medium text-slate-600">{(ad?.ad_text ?? "").slice(0, 48)}</span>
+        </div>
+      )}
+      {ad?.platform ? (
+        <span className="absolute bottom-1 right-1 rounded-full bg-white/95 p-0.5 shadow-sm ring-1 ring-slate-200/80">
+          <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-4 w-4" />
+        </span>
+      ) : null}
+    </button>
+  );
 }
 
 export function StealableAnglesPanel({
@@ -42,17 +94,23 @@ export function StealableAnglesPanel({
   competitorPayload,
   competitorId,
   competitorBrandName,
+  competitorDomain,
   workspaceBrandName,
   cacheDomainNorm,
   competitorScrapeStamp,
   onOpenAd,
 }: Props) {
-  const fullStealable = useMemo(
-    () => listStealableAngleRows(workspacePayload, competitorPayload),
-    [workspacePayload, competitorPayload]
-  );
-  const stealable = useMemo(() => fullStealable.slice(0, 10), [fullStealable]);
-  const remainder = Math.max(0, fullStealable.length - stealable.length);
+  const rm = useReducedMotion() ?? false;
+
+  const fullStealable = useMemo(() => {
+    const raw = listStealableAngleRows(workspacePayload, competitorPayload);
+    return filterBrandAwarenessStealableRows(raw, competitorBrandName, competitorDomain);
+  }, [workspacePayload, competitorPayload, competitorBrandName, competitorDomain]);
+
+  const stealable = useMemo(() => fullStealable.slice(0, 5), [fullStealable]);
+  const [showAll, setShowAll] = useState(false);
+  const visibleRows = showAll ? fullStealable.slice(0, 10) : stealable;
+  const remainder = Math.max(0, fullStealable.length - visibleRows.length);
 
   const [examples, setExamples] = useState<Record<string, VaultExampleAd | null>>({});
   const [loadingAngles, setLoadingAngles] = useState<Record<string, boolean>>({});
@@ -73,12 +131,12 @@ export function StealableAnglesPanel({
 
   useEffect(() => {
     const cid = competitorId.trim();
-    if (!cid || stealable.length === 0) return;
+    if (!cid || visibleRows.length === 0) return;
 
     let cancelled = false;
 
     void (async () => {
-      for (const row of stealable) {
+      for (const row of visibleRows) {
         if (cancelled) return;
         const angle = row.angle;
         const sk = storageKeyForAngle(angle);
@@ -114,7 +172,7 @@ export function StealableAnglesPanel({
     return () => {
       cancelled = true;
     };
-  }, [competitorId, stealable, storageKeyForAngle]);
+  }, [competitorId, visibleRows, storageKeyForAngle]);
 
   const openDrawer = useCallback(
     async (angle: string) => {
@@ -136,133 +194,150 @@ export function StealableAnglesPanel({
     [competitorId]
   );
 
-  if (stealable.length === 0) {
+  if (fullStealable.length === 0) {
     return (
-      <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-        <h3 className="text-base font-semibold uppercase tracking-wider text-slate-700">Stealable angles</h3>
-        <p className="mt-1 text-sm text-slate-500">
-          Angles {competitorBrandName} uses that {workspaceBrandName} doesn&apos;t
-        </p>
-        <p className="mt-4 text-sm text-slate-500">
+      <div
+        id="comparison-stealable"
+        className="relative mb-12 scroll-mt-36 pt-8 pb-2"
+      >
+        <div
+          className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"
+          aria-hidden
+        />
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stealable angles</p>
+            <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
+              Creative lanes {competitorBrandName} runs that you do not
+            </h3>
+          </div>
+        </div>
+        <p className="mt-4 text-sm leading-relaxed text-slate-600">
           {competitorPayload?.insights.angles_by_platform?.length
-            ? "No angle gaps detected. Your angle coverage matches or exceeds theirs across all measured dimensions."
-            : "Few angles detected. Consider waiting for more scrape cycles."}
+            ? `Your angle coverage matches ${competitorBrandName} across the creative patterns we measure after filtering brand-navigation placements. Strong baseline.`
+            : "Few angles detected yet — give the scraper another cycle."}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
-      <h3 className="text-base font-semibold uppercase tracking-wider text-slate-700">Stealable angles</h3>
-      <p className="mt-1 text-sm text-slate-500">
-        Angles {competitorBrandName} uses that {workspaceBrandName} doesn&apos;t
-      </p>
+    <div
+      id="comparison-stealable"
+      className="relative mb-12 scroll-mt-36 pt-8 pb-2"
+    >
+      <div
+        className="pointer-events-none absolute inset-x-8 -top-px h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"
+        aria-hidden
+      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Stealable angles</p>
+          <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">
+            {fullStealable.length} angles {competitorBrandName} uses that {workspaceBrandName} doesn&apos;t
+          </h3>
+        </div>
+        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+          Filtered
+        </span>
+      </div>
 
-      <ul className="mt-4 divide-y divide-slate-200">
-        {stealable.map((row, idx) => {
+      <div className="mt-6 flex flex-col gap-4">
+        {visibleRows.map((row, idx) => {
           const ex = examples[row.angle];
           const busy = loadingAngles[row.angle];
-          const line = ex?.ad_text?.trim() ?? "";
-          const title = `${row.angle} · ${trunc(line || "—", 60)}`;
+          const { hook, blurb } = parseAngleForDisplay(row.angle);
+          const pill = angleCategoryPill(row.angle);
+          const dot = lifespanDotClass(row.avgLifespanDays ?? null);
+          const plat = row.platforms?.[0] ?? "meta";
           const saved = ex?.id ? isAdSaved(savedMap, ex.id) : false;
 
           return (
-            <li
+            <motion.div
               key={row.angle}
               data-stealable-angle={row.angle}
-              className="flex flex-col gap-3 py-4 first:pt-0 sm:flex-row sm:items-start"
+              initial={rm ? false : { opacity: 0, y: 10 }}
+              whileInView={rm ? undefined : { opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: idx * 0.04 }}
+              className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div className="text-xs font-semibold text-slate-400 tabular-nums">{idx + 1}.</div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <p className="text-sm font-semibold text-slate-900">{title}</p>
-                <p className="text-xs text-slate-500">
-                  {row.totalCount ?? 0} ads
-                  {row.platforms?.length ? (
-                    <>
-                      {" "}
-                      ·{" "}
-                      <span className="inline-flex items-center gap-1">
-                        {row.platforms.slice(0, 4).map((pl) => (
-                          <ComparisonPlatformIcon key={pl} platform={pl as StrategyPlatform} className="h-3.5 w-3.5" />
-                        ))}
-                      </span>
-                    </>
-                  ) : null}{" "}
-                  · Avg life: {row.avgLifespanDays ?? "—"}d
-                </p>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    disabled={!ex?.id || saved}
-                    onClick={() => void saveAd({ scrapedAdId: ex?.id })}
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40"
-                  >
-                    <Bookmark className="h-3 w-3" />
-                    {saved ? "Saved" : "Save the example"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void openDrawer(row.angle)}
-                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-medium text-slate-700 hover:bg-[var(--rival-accent-blue,#DDF1FD)]"
-                  >
-                    See all {row.totalCount ?? 0} ads →
-                  </button>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                <AdThumb96 ad={ex} loading={busy} onOpen={() => ex?.id && onOpenAd(ex.id)} />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${pill.className}`}
+                    >
+                      {pill.label}
+                    </span>
+                    <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-500">
+                      <ComparisonPlatformIcon platform={plat as StrategyPlatform} className="h-3.5 w-3.5" />
+                      <span className="capitalize">{plat}</span>
+                      <span className="text-slate-300">·</span>
+                      <span>{row.totalCount ?? 0} ads</span>
+                      <span className="text-slate-300">·</span>
+                      <span className={`inline-block size-2 rounded-full ${dot}`} title="Avg lifespan signal" />
+                      <span className="tabular-nums">{row.avgLifespanDays ?? "—"}d avg</span>
+                    </span>
+                  </div>
+                  <p className="text-base font-semibold leading-snug text-slate-900">&ldquo;{hook}&rdquo;</p>
+                  <p className="line-clamp-2 text-sm text-slate-600">{blurb}</p>
+                  <div className="flex flex-wrap justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={!ex?.id || saved}
+                      onClick={() => void saveAd({ scrapedAdId: ex?.id })}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      <Bookmark className="h-3.5 w-3.5" />
+                      {saved ? "Saved" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void openDrawer(row.angle)}
+                      className="inline-flex h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      See all {row.totalCount ?? 0}
+                      <ChevronDown className="h-3 w-3 -rotate-90" />
+                    </button>
+                  </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => ex?.id && onOpenAd(ex.id)}
-                className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-100"
-                disabled={busy || !ex}
-              >
-                {busy ? (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <RivalLoadingMicro />
-                  </div>
-                ) : ex?.ad_creative_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={ex.ad_creative_url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="flex h-full items-center justify-center text-[10px] text-slate-400">No image</span>
-                )}
-                {ex?.platform ? (
-                  <span className="absolute bottom-0.5 right-0.5 rounded bg-white/90 p-0.5 shadow">
-                    <ComparisonPlatformIcon platform={ex.platform as StrategyPlatform} className="h-3.5 w-3.5" />
-                  </span>
-                ) : null}
-              </button>
-            </li>
+            </motion.div>
           );
         })}
-      </ul>
+      </div>
 
-      {remainder > 0 ? (
-        <p className="mt-2 text-xs text-slate-500">+ {remainder} more angle gaps (showing top {stealable.length}).</p>
+      {remainder > 0 && !showAll ? (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="mt-4 text-sm font-semibold text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-900"
+        >
+          + {remainder} more angle gaps · Show all
+        </button>
       ) : null}
 
       {drawerAngle ? (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-black/30"
+          className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-[1px]"
           role="presentation"
           onClick={() => setDrawerAngle(null)}
         >
           <div
             role="dialog"
             aria-modal
-            className="flex h-full w-full max-w-md flex-col bg-white shadow-2xl"
+            className="flex h-full w-full max-w-lg flex-col bg-white shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">All ads</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">All ads · angle</p>
                 <p className="line-clamp-2 text-sm font-semibold text-slate-900">{drawerAngle}</p>
               </div>
-              <button
-                type="button"
-                className="rounded-md p-1 text-slate-500 hover:bg-slate-100"
-                onClick={() => setDrawerAngle(null)}
-              >
+              <button type="button" className="rounded-md p-1 text-slate-500 hover:bg-slate-100" onClick={() => setDrawerAngle(null)}>
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -272,21 +347,21 @@ export function StealableAnglesPanel({
                   <RivalLoadingMicro />
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {drawerAds.map((a) => (
                     <button
                       key={a.id}
                       type="button"
                       onClick={() => onOpenAd(a.id)}
-                      className="relative aspect-square overflow-hidden rounded-md border border-slate-200 bg-slate-50"
+                      className="relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-200 shadow-sm"
                     >
                       {a.ad_creative_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={a.ad_creative_url} alt="" className="h-full w-full object-cover" />
+                        <img src={a.ad_creative_url} alt="" className="size-full object-cover" loading="lazy" />
                       ) : (
-                        <span className="p-1 text-[10px] text-slate-500">{trunc(a.ad_text, 80)}</span>
+                        <span className="p-2 text-[10px] text-slate-600">{a.ad_text.slice(0, 80)}</span>
                       )}
-                      <span className="absolute bottom-1 right-1 rounded bg-white/90 p-0.5">
+                      <span className="absolute bottom-1 right-1 rounded-full bg-white/90 p-0.5 shadow-sm">
                         <ComparisonPlatformIcon platform={a.platform as StrategyPlatform} className="h-3 w-3" />
                       </span>
                     </button>

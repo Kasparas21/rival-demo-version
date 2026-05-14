@@ -6,6 +6,7 @@ import { Beaker, ChevronDown, ChevronRight, HelpCircle, Info, Play, Skull, Troph
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
@@ -161,16 +162,18 @@ export function CreativeTestsTab({
   return (
     <div className="relative mx-auto max-w-5xl px-6 py-6">
       <CacheRevalidatingDot show={isValidating && !!data} />
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[20px] font-bold tracking-tight text-slate-900">Creative Tests</h2>
-          <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />
-        </div>
-        <p className="mt-1 text-[13px] text-slate-600">
-          Ads {competitorLabel} launched together on the same day. Winners appear when one ad outlives the group median
-          by 2× and ran ≥14 days, with all variants inactive.
-        </p>
-      </div>
+      <FeatureSectionHeader
+        className="mb-6"
+        overline="Creative tests"
+        title="Creative Tests"
+        titleTrailing={<DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />}
+        description={
+          <>
+            Ads {competitorLabel} launched together on the same day. Winners appear when one ad outlives the group median
+            by 2× and ran ≥14 days, with all variants inactive.
+          </>
+        }
+      />
 
       {summary ? (
         <div className="mb-6 flex flex-wrap items-center gap-2">

@@ -15,7 +15,6 @@ import {
   tryHydrateScrapedAdsFromAdsCache,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
-import { enrichStrategyOverviewWithInsightLLM } from "@/lib/strategy-overview/insightNarratives";
 import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
 
 /**
@@ -359,13 +358,14 @@ export async function loadSavedCompetitorForUser(
   brandDomain: string | null;
   logoUrl: string | null;
   lastScrapedAt: string | null;
+  lastMoveDetectionAt: string | null;
 } | null> {
   const { competitorId, cacheDomain } = await resolveAdsCacheDomainForUser(supabase, userId, domainHint);
   if (!competitorId) return null;
 
   const { data: row } = await supabase
     .from("saved_competitors")
-    .select("id, name, brand_name, brand_domain, brand_logo_url, logo_url, last_scraped_at")
+    .select("id, name, brand_name, brand_domain, brand_logo_url, logo_url, last_scraped_at, last_move_detection_at")
     .eq("id", competitorId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -379,6 +379,7 @@ export async function loadSavedCompetitorForUser(
     brandDomain: row.brand_domain,
     logoUrl: row.brand_logo_url ?? row.logo_url,
     lastScrapedAt: row.last_scraped_at,
+    lastMoveDetectionAt: row.last_move_detection_at ?? null,
   };
 }
 
@@ -782,10 +783,6 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     await tryComputeCreativeTestsForCompetitor({ supabase, userId, competitorId });
 
-    const insightOut = await enrichStrategyOverviewWithInsightLLM(payload, freshInputs);
-    payload = insightOut.payload;
-    aiCostUsdTotal += insightOut.usageCostUsd;
-
     if (payload.pipelineStatus !== "no_ads_found" && (payload.totalAdCount ?? 0) > 0) {
       const domain = meta.brandDomain ?? meta.cacheDomain;
       const audIn = buildAudienceInferenceInputFromPayload(
@@ -849,30 +846,6 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       const { error: edgeErr } = await supabase.from("funnel_flow_edges").insert(edgeRows);
       if (edgeErr) console.error("[recompute] funnel_flow_edges", edgeErr.message);
     }
-
-    await supabase.from("strategy_insights_cards").delete().eq("competitor_id", competitorId).eq("user_id", userId);
-
-    const cardTypes = [
-      "platform_footprint",
-      "budget_allocation",
-      "library_activity_timeline",
-      "funnel_distribution",
-      "angle_clustering",
-      "voice_tone_position",
-      "ad_format_mix",
-    ] as const;
-
-    const insightPayload = payload.insights;
-    const inserts = cardTypes.map((ct) => ({
-      user_id: userId,
-      competitor_id: competitorId,
-      card_type: ct,
-      payload: insightPayload[ct] as unknown as Json,
-      generated_at: new Date().toISOString(),
-    }));
-
-    const { error: cardErr } = await supabase.from("strategy_insights_cards").insert(inserts);
-    if (cardErr) console.error("[recompute] strategy_insights_cards", cardErr.message);
 
     await markLockReleased({ enrichedAds: enrichedDb, totalAds: totalActive });
 

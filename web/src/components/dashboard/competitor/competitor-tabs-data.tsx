@@ -14,15 +14,12 @@ export type CompetitorSubTabId =
   | "all"
   | "saved"
   | "strategy-map"
-  | "strategy-insight"
-  | "moves"
+  | "activity-feed"
   | "creative-tests"
   | "timeline"
   | "landing-pages"
   | "audience"
-  | "hooks"
-  | "copy-vault"
-  | "briefs";
+  | "copy-vault";
 
 export type CompetitorPageTabId =
   | "ads library"
@@ -68,8 +65,7 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     defaultSubTab: "strategy-map",
     subTabs: [
       { id: "strategy-map", label: "Strategy Map" },
-      { id: "strategy-insight", label: "Strategy Insight" },
-      { id: "moves", label: "Strategic Moves", isNew: true },
+      { id: "activity-feed", label: "Activity Feed", isNew: true },
     ],
   },
   {
@@ -89,10 +85,8 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     icon: Users,
     defaultSubTab: "audience",
     subTabs: [
-      { id: "audience", label: "Audience", isNew: true },
-      { id: "hooks", label: "Hooks", isNew: true, isStub: true },
+      { id: "audience", label: "Audience" },
       { id: "copy-vault", label: "Copy Vault" },
-      { id: "briefs", label: "Briefs", isNew: true, isStub: true },
     ],
   },
   {

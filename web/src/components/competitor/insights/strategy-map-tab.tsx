@@ -22,7 +22,6 @@ export function StrategyMapTab({
     <StrategyOverviewApp
       brand={brand}
       onOpenAdsLibrary={onOpenAdsLibrary}
-      forceView="map"
       competitorId={competitorId}
       lastScrapedAt={lastScrapedAt}
       onFreshnessRescrape={onFreshnessRescrape}

@@ -95,6 +95,123 @@ async function loadFunnelBuckets(
   return buckets;
 }
 
+type VaultSort = "lifespan_desc" | "lifespan_asc" | "newest" | "platform" | "angle";
+
+function parseCsvLower(raw: string | null): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function parseFunnelCsv(raw: string | null): FunnelKey[] {
+  if (!raw?.trim()) return [];
+  const out: FunnelKey[] = [];
+  for (const p of raw.split(",")) {
+    const n = normalizeFunnelStage(p);
+    if (!out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+function sortVaultRows(rows: WallAdRow[], sort: VaultSort): WallAdRow[] {
+  const r = [...rows];
+  switch (sort) {
+    case "lifespan_asc":
+      return r.sort((a, b) => a.lifespanDays - b.lifespanDays);
+    case "newest":
+      return r.sort((a, b) => Date.parse(b.first_seen_at) - Date.parse(a.first_seen_at));
+    case "platform":
+      return r.sort((a, b) => a.platform.localeCompare(b.platform));
+    case "angle":
+      return r.sort((a, b) => (a.ai_extracted_angle ?? "").localeCompare(b.ai_extracted_angle ?? ""));
+    case "lifespan_desc":
+    default:
+      return r.sort((a, b) => b.lifespanDays - a.lifespanDays);
+  }
+}
+
+async function vaultListing(params: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  userId: string;
+  competitorId: string;
+  url: URL;
+}): Promise<NextResponse> {
+  const { supabase, userId, competitorId, url } = params;
+
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
+  const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
+  const sort = (url.searchParams.get("sort") ?? "lifespan_desc").trim() as VaultSort;
+  const sortSafe: VaultSort =
+    sort === "lifespan_asc" || sort === "newest" || sort === "platform" || sort === "angle"
+      ? sort
+      : "lifespan_desc";
+
+  const platforms = parseCsvLower(url.searchParams.get("platforms"));
+  const funnels = parseFunnelCsv(url.searchParams.get("funnels"));
+  const anglesParam = url.searchParams.get("angles");
+  const anglesList = anglesParam?.trim()
+    ? anglesParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const angleContains = (url.searchParams.get("angleContains") ?? "").trim();
+
+  const { count: enrichCount, error: cErr } = await supabase
+    .from("scraped_ads")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .eq("is_active", true)
+    .eq("ai_enrichment_status", "enriched")
+    .not("ai_extracted_angle", "is", null);
+  if (cErr) {
+    return NextResponse.json({ ok: false, error: cErr.message }, { status: 500 });
+  }
+  const minLifespan = (enrichCount ?? 0) < 10 ? 0 : 30;
+
+  let q = supabase
+    .from("scraped_ads")
+    .select(
+      "id, platform, format, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, ad_creative_url, funnel_stage"
+    )
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .eq("is_active", true)
+    .eq("ai_enrichment_status", "enriched")
+    .not("ai_extracted_angle", "is", null);
+
+  if (anglesList.length > 0) {
+    q = q.in("ai_extracted_angle", anglesList);
+  }
+  if (angleContains) {
+    q = q.ilike("ai_extracted_angle", `%${angleContains}%`);
+  }
+
+  const { data: ads, error } = await q.limit(1500);
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  let mapped = (ads ?? []).map((a) => mapWallRow(a));
+  if (platforms.length > 0) {
+    const allow = new Set(platforms);
+    mapped = mapped.filter((a) => allow.has((a.platform ?? "").toLowerCase()));
+  }
+  if (funnels.length > 0) {
+    const allow = new Set(funnels);
+    mapped = mapped.filter((a) => allow.has(normalizeFunnelStage(a.funnel_stage)));
+  }
+  mapped = mapped.filter((a) => a.lifespanDays >= minLifespan);
+  const sorted = sortVaultRows(mapped, sortSafe);
+  const total = sorted.length;
+  const page = sorted.slice(offset, offset + limit);
+
+  return NextResponse.json({ ok: true, ads: page, total, minLifespanUsed: minLifespan });
+}
+
 export async function GET(req: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -156,6 +273,11 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (byFunnel && !angleFilter) {
     const grouped = await loadFunnelBuckets(supabase, user.id, competitorId, perStage);
     return NextResponse.json({ ok: true, ...grouped });
+  }
+
+  const vaultMode = url.searchParams.get("vault") === "1";
+  if (vaultMode) {
+    return vaultListing({ supabase, userId: user.id, competitorId, url });
   }
 
   let q = supabase

@@ -7,7 +7,6 @@
  */
 
 import {
-  ArrowLeft,
   Copy,
   ExternalLink,
   Globe,
@@ -19,6 +18,7 @@ import { toast } from "sonner";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
@@ -102,7 +102,6 @@ export type LandingPagesTabProps = {
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
   onOpenAd: (adId: string) => void;
-  onBackToTests?: () => void;
   onFreshnessRescrape?: () => void;
   /** Parent-owned list fetch (dedupes with Ads Library analytics). When set, skips internal list cache hook. */
   landingPagesListCache?: SharedLandingPagesListCache | null;
@@ -143,7 +142,6 @@ export function LandingPagesTab({
   cacheDomainNorm,
   lastScrapedAt = null,
   onOpenAd,
-  onBackToTests,
   onFreshnessRescrape,
   landingPagesListCache = null,
 }: LandingPagesTabProps) {
@@ -304,7 +302,6 @@ export function LandingPagesTab({
     return (
       <div className="mx-auto w-full max-w-[1400px] px-6 py-6 sm:px-8 lg:px-10">
         <HeaderBar
-          onBackToTests={onBackToTests}
           dataSince={null}
           lastScrapedAt={lastScrapedAt}
           onFreshnessRescrape={onFreshnessRescrape}
@@ -348,7 +345,6 @@ export function LandingPagesTab({
     <div className="relative mx-auto w-full max-w-[1400px] px-6 py-6 sm:px-8 lg:px-10">
       <CacheRevalidatingDot show={Boolean((listValidating && listData) || (adsValidating && adsPayload))} />
       <HeaderBar
-        onBackToTests={onBackToTests}
         dataSince={dataSince}
         lastScrapedAt={lastScrapedAt}
         onFreshnessRescrape={onFreshnessRescrape}
@@ -365,7 +361,7 @@ export function LandingPagesTab({
             placeholder="Search URLs…"
             className="mb-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[13px] text-slate-900 outline-none ring-[color:var(--rival-accent-blue)]/35 placeholder:text-slate-400 focus:ring-2"
           />
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Landing Pages</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Landing pages</p>
           <div className="flex flex-col gap-3">
             {filteredRows.length === 0 ? (
               <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-8 text-center text-[13px] text-slate-500">
@@ -428,39 +424,31 @@ function HeaderBar({
   dataSince,
   lastScrapedAt,
   onFreshnessRescrape,
-  onBackToTests,
 }: {
   title: string;
   subtitle: string;
   dataSince: string | null;
   lastScrapedAt: string | null;
   onFreshnessRescrape?: () => void;
-  onBackToTests?: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
-      <div className="flex min-w-0 items-center gap-3">
-        {onBackToTests ? (
-          <button
-            type="button"
-            onClick={onBackToTests}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition-colors hover:bg-slate-50"
-            aria-label="Back to tests"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-        ) : null}
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[18px] font-bold tracking-tight text-slate-900">{title}</h2>
-            <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />
-          </div>
-          <p className="mt-0.5 truncate text-[12px] text-slate-500">{subtitle}</p>
-        </div>
-      </div>
-      {dataSince ? (
-        <p className="text-[11px] font-medium text-slate-500">Data since {dataSince}</p>
-      ) : null}
+    <div className="border-b border-slate-100 pb-4">
+      <FeatureSectionHeader
+        overline="Landing pages"
+        title={title}
+        description={
+          <>
+            {subtitle}
+            {dataSince ? (
+              <>
+                {" "}
+                · Data since {dataSince}
+              </>
+            ) : null}
+          </>
+        }
+        titleTrailing={<DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />}
+      />
     </div>
   );
 }

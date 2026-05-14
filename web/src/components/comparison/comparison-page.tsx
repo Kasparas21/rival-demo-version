@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeftRight, Download, RefreshCw } from "lucide-react";
 
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 
@@ -17,6 +17,7 @@ import { SideBySideStatsPanel } from "@/components/comparison/panels/side-by-sid
 import { StealableAnglesPanel } from "@/components/comparison/panels/stealable-angles-panel";
 import { TestingVelocityMatrixPanel } from "@/components/comparison/panels/testing-velocity-matrix-panel";
 import { ThreeMovesPanel } from "@/components/comparison/panels/three-moves-panel";
+import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 
 export type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 
@@ -56,6 +57,32 @@ type BrandComparisonApi = {
   computed_at?: string;
 };
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const onChange = () => setIsMobile(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return isMobile;
+}
+
+function relativeScrapeLabel(iso: string | null): string {
+  if (!iso?.trim()) return "—";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "—";
+  const diff = Date.now() - t;
+  const days = Math.floor(diff / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "1 day ago";
+  if (days < 7) return `${days} days ago`;
+  const weeks = Math.round(days / 7);
+  if (weeks === 1) return "1 week ago";
+  return `${weeks} weeks ago`;
+}
+
 export function ComparisonPage({
   isConfirmed,
   competitorDisplayLabel,
@@ -69,6 +96,7 @@ export function ComparisonPage({
   onOpenAd,
 }: ComparisonPageProps) {
   const [swapSides, setSwapSides] = useState(false);
+  const isMobile = useIsMobile();
 
   const analyticsFired = useRef(false);
 
@@ -86,6 +114,14 @@ export function ComparisonPage({
 
   const wsDerived = workspaceSide?.derivedStats ?? EMPTY_DERIVED;
   const compDerived = competitorSide?.derivedStats ?? EMPTY_DERIVED;
+
+  const freshLabel = useMemo(() => {
+    const a = wsScrape !== "none" ? Date.parse(wsScrape) : 0;
+    const b = rivalScrape !== "none" ? Date.parse(rivalScrape) : 0;
+    const newest = Math.max(a, b);
+    if (!Number.isFinite(newest) || newest <= 0) return relativeScrapeLabel(competitorSide?.meta.lastScrapedAt ?? null);
+    return relativeScrapeLabel(new Date(newest).toISOString());
+  }, [wsScrape, rivalScrape, competitorSide?.meta.lastScrapedAt]);
 
   const {
     data: brandLlmPayload,
@@ -172,64 +208,88 @@ export function ComparisonPage({
 
   if (!isConfirmed) {
     return (
-      <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
-        Confirm this competitor (finish discovery / sidebar sync) to load comparison data.
+      <div className="px-6 pt-8 sm:px-8 lg:px-10">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
+          Confirm this competitor (finish discovery / sidebar sync) to load comparison data.
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-[60vh] rounded-3xl bg-gradient-to-br from-[#FDF8F0] via-white/40 to-[#E8F0F7] px-4 py-6 sm:px-6">
-      <div className="mx-auto max-w-[1100px] space-y-0">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[22px] font-bold tracking-[-0.02em] text-[#343434]">Comparison to Your Brand</h2>
-            <p className="mt-0.5 text-[14px] text-[#71717a]">
-              How <span className="font-medium text-[#3f3f46]">{competitorDisplayLabel}</span> stacks up against{" "}
-              <span className="font-medium text-[#3f3f46]">{workspace.name}</span>
-            </p>
-            <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Head-to-head · stealable angles · tactical moves
-            </p>
+    <div className="min-h-[60vh] pb-16">
+      <div className="mx-auto w-full max-w-[1400px] px-6 pb-6 pt-8 sm:px-8 lg:px-10">
+        <FeatureSectionHeader
+          overline="Comparison"
+          title={
+            <>
+              <span className="text-slate-900">{workspace.name}</span>{" "}
+              <span className="text-sm font-normal text-slate-400">vs</span>{" "}
+              <span className="text-slate-900">{competitorDisplayLabel}</span>
+            </>
+          }
+          description={
+            <>
+              Updated {freshLabel} · 6 sections · Auto-refreshed with scrapes
+            </>
+          }
+          actions={
+            <>
+              <button
+                type="button"
+                onClick={() => setSwapSides((s) => !s)}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5" />
+                Swap
+              </button>
+              <button
+                type="button"
+                disabled={payloadLoading}
+                onClick={() => {
+                  invalidateBrandComparisonCache();
+                  onRefreshComparisonPayload();
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                {payloadLoading ? (
+                  <span className="inline-flex rounded-md border border-neutral-200/80 bg-white p-[3px]">
+                    <RivalLogoVideo size="inline" />
+                  </span>
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export PDF
+              </button>
+            </>
+          }
+        />
+      </div>
+
+      <div className="mx-auto w-full max-w-[1400px] px-6 pb-12 pt-2 sm:px-8 lg:px-10">
+        {isMobile ? (
+          <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            Comparison view is optimized for larger screens. Below is a mobile-friendly snapshot — open on desktop for the full
+            canvas.
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSwapSides((s) => !s)}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 shadow-sm hover:bg-slate-50"
-            >
-              <ArrowLeftRight className="h-3.5 w-3.5" />
-              Swap sides
-            </button>
-            <button
-              type="button"
-              disabled={payloadLoading}
-              onClick={() => {
-                invalidateBrandComparisonCache();
-                onRefreshComparisonPayload();
-              }}
-              className="inline-flex items-center gap-2 rounded-full border border-[#e4e4e7] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3f3f46] shadow-sm hover:bg-[#fafafa] disabled:opacity-50"
-            >
-              {payloadLoading ? (
-                <span className="inline-flex rounded-md border border-neutral-200/80 bg-white p-[3px]">
-                  <RivalLogoVideo size="inline" />
-                </span>
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-              Refresh
-            </button>
-          </div>
-        </div>
+        ) : null}
 
         {workspaceSide?.needsScrape ? (
-          <div className="mb-6 rounded-xl border border-sky-100 bg-sky-50/90 px-4 py-3 text-[13px] text-sky-950">
+          <div className="mb-8 rounded-xl border border-sky-100 bg-sky-50/90 px-4 py-3 text-[13px] text-sky-950">
             Your workspace brand has no active scraped ads yet. Add your brand to the scrape queue in workspace settings, then return
             here.
           </div>
         ) : null}
 
-        {recomputingNote ? <div className="mb-6">{recomputingNote}</div> : null}
+        {recomputingNote ? <div className="mb-8">{recomputingNote}</div> : null}
 
         {payloadLoading && !wsPayload && !compPayload ? (
           <RivalLoadingBlock
@@ -249,6 +309,16 @@ export function ComparisonPage({
               Retry
             </button>
           </div>
+        ) : isMobile ? (
+          <ThreeMovesPanel
+            headlineTitles={llm?.headlineTitles ?? null}
+            moves={llm?.moves ?? null}
+            isLoading={llmLoading}
+            errorMessage={llmError}
+            workspaceName={workspace.name}
+            competitorName={competitorDisplayLabel}
+            onInvalidate={() => invalidateBrandComparisonCache()}
+          />
         ) : (
           <>
             <SideBySideStatsPanel
@@ -261,7 +331,11 @@ export function ComparisonPage({
               workspaceDataIncomplete={workspaceSide?.needsScrape === true}
             />
 
-            <div id="comparison-budget-split" className="mb-6 rounded-2xl bg-white p-6 shadow-sm">
+            <div id="comparison-budget-split" className="relative mb-12 scroll-mt-36 pt-8">
+              <div
+                className="pointer-events-none absolute inset-x-8 -top-6 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"
+                aria-hidden
+              />
               <EstimatedBudgetSplitPanel left={left} right={right} />
             </div>
 
@@ -270,6 +344,7 @@ export function ComparisonPage({
               competitorPayload={compPayload}
               competitorId={rivalId}
               competitorBrandName={competitorDisplayLabel}
+              competitorDomain={competitor.domain}
               workspaceBrandName={workspace.name}
               cacheDomainNorm={cacheDomainNorm}
               competitorScrapeStamp={rivalScrape}
@@ -298,13 +373,19 @@ export function ComparisonPage({
               onOpenAd={onOpenAd}
             />
 
-            <div className="mb-6">
+            <div id="comparison-velocity" className="relative mb-12 scroll-mt-36 pt-8">
+              <div
+                className="pointer-events-none absolute inset-x-8 -top-6 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent"
+                aria-hidden
+              />
               <TestingVelocityMatrixPanel left={left} right={right} />
             </div>
 
             <AngleMigrationPanel
               workspace={{ name: workspace.name, payload: wsPayload }}
               competitor={{ name: competitorDisplayLabel, payload: compPayload }}
+              competitorId={rivalId}
+              onOpenAd={onOpenAd}
             />
           </>
         )}

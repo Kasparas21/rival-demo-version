@@ -1,4 +1,5 @@
 import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { isBrandBidAngle } from "@/lib/comparison/move-brand-bid";
 import type { CompetitorStrategyOverviewPayload, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 export type MoveEventType =
@@ -20,11 +21,18 @@ export type DetectedMove = {
   narrative?: string;
 };
 
+function angleEvidenceHook(after: CompetitorStrategyOverviewPayload, angle: string): string | null {
+  const row = after.insights.angle_clustering.angles.find((x) => x.angle === angle);
+  const snip = row?.exampleSnippet?.trim();
+  return snip || null;
+}
+
 export function detectMoves(
   before: CompetitorStrategyOverviewPayload,
   after: CompetitorStrategyOverviewPayload
 ): DetectedMove[] {
   const moves: DetectedMove[] = [];
+  const brandName = after.map?.competitor?.name?.trim() || before.map?.competitor?.name?.trim() || "";
 
   const beforePlatforms = new Set(
     before.insights.platform_footprint.platforms.map((p) => p.platform as StrategyPlatform)
@@ -63,8 +71,11 @@ export function detectMoves(
 
   for (const ang of afterAngles) {
     if (!beforeAngles.has(ang)) {
+      if (brandName && isBrandBidAngle(ang, brandName)) continue;
+
       const angleData = after.insights.angles_by_platform?.find((x) => x.angle === ang);
       if (angleData && angleData.totalCount >= 2) {
+        const evidenceHook = angleEvidenceHook(after, ang);
         moves.push({
           event_type: "new_angle",
           significance: angleData.totalCount >= 5 ? "high" : "medium",
@@ -73,6 +84,7 @@ export function detectMoves(
             angle: ang,
             count: angleData.totalCount,
             platforms: angleData.platforms,
+            evidenceHook,
           },
         });
       }
@@ -80,6 +92,8 @@ export function detectMoves(
   }
 
   for (const angleAfter of after.insights.angles_by_platform ?? []) {
+    if (brandName && isBrandBidAngle(angleAfter.angle, brandName)) continue;
+
     const angleBefore = before.insights.angles_by_platform?.find((x) => x.angle === angleAfter.angle);
     if (angleBefore && angleAfter.platforms.length > angleBefore.platforms.length) {
       const newPlats = angleAfter.platforms.filter((p) => !angleBefore.platforms.includes(p));
@@ -88,7 +102,12 @@ export function detectMoves(
           event_type: "angle_migration",
           significance: "medium",
           before_state: { angle: angleAfter.angle, platforms: angleBefore.platforms },
-          after_state: { angle: angleAfter.angle, platforms: angleAfter.platforms, newPlatforms: newPlats },
+          after_state: {
+            angle: angleAfter.angle,
+            platforms: angleAfter.platforms,
+            newPlatforms: newPlats,
+            evidenceHook: angleEvidenceHook(after, angleAfter.angle),
+          },
         });
       }
     }
@@ -105,7 +124,7 @@ export function detectMoves(
     if (Math.abs(delta) >= 20) {
       moves.push({
         event_type: "budget_shift",
-        significance: Math.abs(delta) >= 35 ? "high" : "medium",
+        significance: Math.abs(delta) > 30 ? "high" : "medium",
         platform: platform as StrategyPlatform,
         before_state: { pct: beforePct },
         after_state: { pct: afterPct, delta },
@@ -122,9 +141,10 @@ export function detectMoves(
     const dFormal = afterVoice.formal - prev.formal;
     const dEmotional = afterVoice.emotional - prev.emotional;
     if (Math.abs(dFormal) >= 0.25 || Math.abs(dEmotional) >= 0.25) {
+      const mag = Math.max(Math.abs(dFormal), Math.abs(dEmotional));
       moves.push({
         event_type: "voice_shift",
-        significance: "medium",
+        significance: mag > 0.3 ? "high" : "medium",
         platform: afterVoice.platform,
         before_state: { formal: prev.formal, emotional: prev.emotional },
         after_state: {
@@ -140,19 +160,42 @@ export function detectMoves(
   return moves;
 }
 
+function moveDescriptionForNarrative(move: DetectedMove): string {
+  const after = move.after_state as Record<string, unknown>;
+  const before = move.before_state as Record<string, unknown>;
+  switch (move.event_type) {
+    case "new_angle":
+      return `New creative angle "${after.angle}" with ${after.count} ads on ${JSON.stringify(after.platforms)}`;
+    case "angle_migration":
+      return `Angle "${after.angle}" expanded to platforms: ${JSON.stringify(after.newPlatforms)}`;
+    case "new_platform":
+      return `Started advertising on ${move.platform ?? after.platform}`;
+    case "dropped_platform":
+      return `Stopped advertising on ${move.platform ?? before.platform}`;
+    case "budget_shift":
+      return `Modeled budget share on ${move.platform} moved from ${before.pct}% to ${after.pct}%`;
+    case "voice_shift":
+      return `Voice on ${move.platform}: formal ${before.formal}→${after.formal}, emotional ${before.emotional}→${after.emotional}`;
+    default:
+      return JSON.stringify({ before: move.before_state, after: move.after_state });
+  }
+}
+
 export async function generateMoveNarrative(move: DetectedMove): Promise<string | null> {
-  if (move.significance !== "high") return null;
+  if (move.significance === "low") return null;
   if (!process.env.ANTHROPIC_API_KEY?.trim()) return null;
+  if (move.narrative?.trim()) return move.narrative.trim();
 
-  const systemPrompt =
-    "You are a marketing strategist. Given a competitor's strategic move, write ONE sentence explaining why it matters. Be specific, observant, non-speculative. No more than 25 words.";
+  const after = move.after_state as { evidenceHook?: string | null };
+  const evidence = (after?.evidenceHook ?? "").trim();
 
-  const userPrompt = `Move: ${move.event_type}
-Platform: ${move.platform ?? "n/a"}
-Before: ${JSON.stringify(move.before_state)}
-After: ${JSON.stringify(move.after_state)}
+  const systemPrompt = `You analyze competitive intelligence moves detected from ad library diffs.
+In one sentence (max 30 words), explain what this move suggests about the competitor's strategy. Be specific and actionable.
+Avoid vague phrases like "strategic shift" or "key change." Output only the sentence, no preamble.`;
 
-Why does this matter for someone watching this competitor?`;
+  const userPrompt = `Move type: ${move.event_type}
+Change: ${moveDescriptionForNarrative(move)}
+${evidence ? `Evidence (ad hook): ${evidence}` : ""}`;
 
   const result = await anthropicSonnet({
     systemPrompt,

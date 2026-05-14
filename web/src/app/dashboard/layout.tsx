@@ -997,7 +997,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main content */}
-      <main className="rival-subtle-scroll flex-1 flex flex-col relative min-w-0 overflow-x-hidden overflow-y-auto scroll-auto z-10">
+      <main className="rival-subtle-scroll relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-auto bg-slate-50">
         <div
           className="relative z-10 flex h-full min-h-0 w-full flex-1 flex-col"
           onClick={() => setIsBrandMenuOpen(false)}

@@ -17,6 +17,7 @@ type Props = {
   comparisonPayload: ComparisonPayloadJson | null;
   comparisonPayloadLoading: boolean;
   comparisonPayloadError: string | null;
+  onRequestAudienceRefresh?: () => void;
 };
 
 export function AudienceTab({
@@ -31,6 +32,7 @@ export function AudienceTab({
   comparisonPayload,
   comparisonPayloadLoading,
   comparisonPayloadError,
+  onRequestAudienceRefresh,
 }: Props) {
   if (comparisonPayloadLoading) {
     return (
@@ -70,6 +72,15 @@ export function AudienceTab({
     (workspaceDomain?.trim() ? googleFaviconUrlForDomain(workspaceDomain.trim()) : null);
   const compLogo = competitorLogoUrl?.trim() || googleFaviconUrlForDomain(competitorDomain);
 
+  const audienceHistory = data.competitor?.audienceHistory ?? [];
+  const lastScrapedAt = data.competitor?.meta?.lastScrapedAt ?? null;
+  const activeAdCount =
+    typeof compPayload.totalAdCount === "number"
+      ? compPayload.totalAdCount
+      : typeof compPayload.enrichedAdCount === "number"
+        ? compPayload.enrichedAdCount
+        : 0;
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
       <AudienceInferencePanel
@@ -89,6 +100,10 @@ export function AudienceTab({
         }}
         audienceComparisonNarrative={null}
         standaloneMode
+        competitorAudienceHistory={audienceHistory}
+        competitorLastScrapedAt={lastScrapedAt}
+        competitorActiveAdCount={activeAdCount}
+        onRequestAudienceRefresh={onRequestAudienceRefresh}
       />
     </div>
   );

@@ -5,6 +5,7 @@ import { Bookmark, StickyNote, Trash2 } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import type { Json } from "@/lib/supabase/types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
@@ -162,13 +163,13 @@ export function SavedAdsPanel({
   return (
     <div className="relative">
       <CacheRevalidatingDot show={isValidating && !!data} className="right-0 top-0" />
-      <div className="mb-6 flex flex-wrap items-center gap-2">
-        <h2 className="text-[18px] font-semibold text-[#343434]">Saved ads from {competitorLabel}</h2>
-        <DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />
-      </div>
-      <p className="mb-4 mt-0.5 text-[12px] text-[#808080]">
-        {savedAds.length} saved — preserved even if removed from the source
-      </p>
+      <FeatureSectionHeader
+        className="mb-6"
+        overline="Saved ads"
+        title={<>Saved ads from {competitorLabel}</>}
+        titleTrailing={<DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />}
+        description={<>{savedAds.length} saved — preserved even if removed from the source</>}
+      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {savedAds.map((sa) => (

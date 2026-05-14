@@ -14,8 +14,8 @@ export function ComparisonPanelShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border-[0.5px] border-slate-200/95 bg-white/[0.78] backdrop-blur-lg px-5 py-5 shadow-[0_8px_24px_rgba(15,23,42,0.05)] flex flex-col transition-shadow hover:shadow-[0_12px_28px_rgba(15,23,42,0.07)]">
-      <div className="flex items-start justify-between gap-2 mb-2">
+    <div className="flex flex-col">
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[14px] font-semibold tracking-tight text-slate-900">{title}</p>
           {subtitle ? (

@@ -26,6 +26,7 @@ type SideMeta = {
   domain: string;
   logoUrl: string | null;
   lastScrapedAt: string | null;
+  lastMoveDetectionAt: string | null;
 };
 
 type ComparisonSideResponse = {
@@ -35,6 +36,7 @@ type ComparisonSideResponse = {
   needsScrape?: boolean;
   recent_moves: ComparisonMoveRow[];
   snapshot_count: number;
+  audienceHistory: Array<{ snapshotDate: string; primarySegmentName: string; primaryConfidence: number }>;
   derivedStats: ComparisonDerivedStats;
 };
 
@@ -72,6 +74,36 @@ async function countStrategySnapshots(
     return 0;
   }
   return count ?? 0;
+}
+
+async function loadAudienceHistory(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+  competitorId: string,
+  limit = 4
+): Promise<Array<{ snapshotDate: string; primarySegmentName: string; primaryConfidence: number }>> {
+  const { data, error } = await supabase
+    .from("competitor_strategy_overview_snapshots")
+    .select("computed_at, payload")
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .order("computed_at", { ascending: false })
+    .limit(limit);
+
+  if (error || !data?.length) return [];
+
+  const chronological = [...data].reverse();
+  return chronological.map((row) => {
+    const p = row.payload as CompetitorStrategyOverviewPayload | null;
+    const ai = p?.audience_inference;
+    const primary =
+      ai?.segments?.find((s) => s.name === ai?.primarySegmentName) ?? ai?.segments?.[0];
+    return {
+      snapshotDate: row.computed_at,
+      primarySegmentName: primary?.name ?? ai?.primarySegmentName ?? "—",
+      primaryConfidence: typeof primary?.confidence === "number" ? primary.confidence : 0,
+    };
+  });
 }
 
 async function loadRecentMoves(
@@ -167,6 +199,7 @@ function metaFromSavedRow(
     domain,
     logoUrl: row.brand_logo_url ?? row.logo_url,
     lastScrapedAt: row.last_scraped_at,
+    lastMoveDetectionAt: row.last_move_detection_at ?? null,
   };
 }
 
@@ -265,6 +298,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     domain: (rivalMeta.brandDomain ?? rivalMeta.cacheDomain).toLowerCase(),
     logoUrl: rivalMeta.logoUrl,
     lastScrapedAt: rivalMeta.lastScrapedAt,
+    lastMoveDetectionAt: rivalMeta.lastMoveDetectionAt,
   };
 
   scheduleMoveDetection({
@@ -280,6 +314,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     rivalSnapCount,
     wsDerived,
     rivalDerived,
+    wsAudienceHistory,
+    rivalAudienceHistory,
   ] = await Promise.all([
     loadRecentMoves(supabase, user.id, wsRow.id),
     loadRecentMoves(supabase, user.id, rivalMeta.competitorId),
@@ -287,6 +323,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     countStrategySnapshots(supabase, user.id, rivalMeta.competitorId),
     computeScrapedAdsDerivedStats(supabase, user.id, wsRow.id),
     computeScrapedAdsDerivedStats(supabase, user.id, rivalMeta.competitorId),
+    loadAudienceHistory(supabase, user.id, wsRow.id),
+    loadAudienceHistory(supabase, user.id, rivalMeta.competitorId),
   ]);
 
   const workspace: ComparisonSideResponse = {
@@ -295,6 +333,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     recomputing: wsResolved.recomputing,
     recent_moves: wsMoves,
     snapshot_count: wsSnapCount,
+    audienceHistory: wsAudienceHistory,
     derivedStats: wsDerived,
     ...(needsScrape ? { needsScrape: true } : {}),
   };
@@ -305,6 +344,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     recomputing: rivalResolved.recomputing,
     recent_moves: rivalMoves,
     snapshot_count: rivalSnapCount,
+    audienceHistory: rivalAudienceHistory,
     derivedStats: rivalDerived,
   };
 

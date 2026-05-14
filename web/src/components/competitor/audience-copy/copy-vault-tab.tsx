@@ -6,9 +6,17 @@ type Props = {
   competitorId: string;
   competitorLabel: string;
   onOpenAd: (adId: string) => void;
+  cacheDomainNorm?: string | null;
+  lastScrapedAt?: string | null;
 };
 
-export function CopyVaultTab({ competitorId, competitorLabel, onOpenAd }: Props) {
+export function CopyVaultTab({
+  competitorId,
+  competitorLabel,
+  onOpenAd,
+  cacheDomainNorm,
+  lastScrapedAt,
+}: Props) {
   if (!competitorId) {
     return (
       <div className="mx-auto max-w-5xl px-6 py-12 text-center text-[13px] text-slate-500">
@@ -19,7 +27,14 @@ export function CopyVaultTab({ competitorId, competitorLabel, onOpenAd }: Props)
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-6">
-      <CopyVaultPanel competitorId={competitorId} competitorLabel={competitorLabel} standaloneMode onOpenAd={onOpenAd} />
+      <CopyVaultPanel
+        competitorId={competitorId}
+        competitorLabel={competitorLabel}
+        standaloneMode
+        onOpenAd={onOpenAd}
+        cacheDomainNorm={cacheDomainNorm}
+        lastScrapedAt={lastScrapedAt}
+      />
     </div>
   );
 }

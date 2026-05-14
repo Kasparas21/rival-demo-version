@@ -138,7 +138,7 @@ import {
   findCompetitorTab,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
-import { StrategicMovesTab } from "@/components/competitor/insights/strategic-moves-tab";
+import { ActivityFeedTab } from "@/components/competitor/insights/activity-feed-tab";
 import { CreativeTestsTab } from "@/components/competitor/tests-timeline/creative-tests-tab";
 import { TimelineTab } from "@/components/competitor/tests-timeline/timeline-tab";
 import {
@@ -148,9 +148,7 @@ import {
 } from "@/components/competitor/landing-pages-tab";
 import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-overview-app";
 import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
-import { HooksTab } from "@/components/competitor/audience-copy/hooks-tab";
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
-import { BriefsTab } from "@/components/competitor/audience-copy/briefs-tab";
 import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
@@ -161,6 +159,7 @@ import {
   platformRefreshOnlyButtonClass,
   platformSectionPanelClass,
 } from "@/components/dashboard/competitor/competitor-platform-styles";
+import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import {
   readStoredGoogleRegion,
   readStoredPinterestCountry,
@@ -1515,13 +1514,12 @@ function CompetitorDashboardBody({
     let fix = false;
     if (lower === "ai insight") {
       params.set("tab", "insights");
-      params.set("sub", "strategy-insight");
-      params.set("view", "insight");
+      params.set("sub", "activity-feed");
+      params.delete("view");
       fix = true;
     } else if (lower === "strategy overview") {
       params.set("tab", "insights");
-      const view = searchParams.get("view");
-      params.set("sub", view === "insight" ? "strategy-insight" : "strategy-map");
+      params.set("sub", "strategy-map");
       params.delete("view");
       fix = true;
     } else if (lower === "workspace ads") {
@@ -1535,6 +1533,15 @@ function CompetitorDashboardBody({
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
   }, [searchParams, pathname, router]);
+
+  useEffect(() => {
+    const sub = (searchParams.get("sub") ?? "").trim();
+    if (sub !== "strategy-insight" && sub !== "moves") return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sub", "activity-feed");
+    params.delete("view");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
 
   const tabParamRaw = (searchParams.get("tab") ?? "").trim();
   const isValidTab = (id: string) => {
@@ -1553,6 +1560,15 @@ function CompetitorDashboardBody({
   }, [activeTab, searchParams]);
 
   useEffect(() => {
+    if (activeTab !== "audience-copy") return;
+    const sub = (searchParams.get("sub") ?? "").trim();
+    if (sub !== "hooks" && sub !== "briefs") return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sub", "audience");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [activeTab, pathname, router, searchParams]);
+
+  useEffect(() => {
     const def = findCompetitorTab(activeTab);
     if (!def?.subTabs?.length || !def.defaultSubTab) return;
     const sub = (searchParams.get("sub") ?? "").trim();
@@ -1561,7 +1577,7 @@ function CompetitorDashboardBody({
     const params = new URLSearchParams(searchParams.toString());
     params.set("sub", def.defaultSubTab);
     if (activeTab === "insights") {
-      params.set("view", def.defaultSubTab === "strategy-insight" ? "insight" : "map");
+      params.delete("view");
     }
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [activeTab, pathname, router, searchParams]);
@@ -1595,7 +1611,7 @@ function CompetitorDashboardBody({
       if (tab?.defaultSubTab) {
         params.set("sub", tab.defaultSubTab);
         if (tabId === "insights") {
-          params.set("view", tab.defaultSubTab === "strategy-insight" ? "insight" : "map");
+          params.delete("view");
         }
       } else {
         params.delete("sub");
@@ -1613,8 +1629,7 @@ function CompetitorDashboardBody({
       const params = new URLSearchParams(searchParams.toString());
       params.set("sub", subTabId);
       if (activeTab === "insights") {
-        if (subTabId === "strategy-map") params.set("view", "map");
-        else if (subTabId === "strategy-insight") params.set("view", "insight");
+        params.delete("view");
       }
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
@@ -2322,13 +2337,7 @@ function CompetitorDashboardBody({
   );
 
   return (
-    <div
-      className={`flex min-h-0 flex-1 flex-col w-full ${
-        isOwnWorkspace
-          ? "bg-[linear-gradient(180deg,rgba(224,242,254,0.14)_0%,transparent_min(32%,420px))]"
-          : ""
-      }`}
-    >
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       {/* Top Header */}
       <div
         className={`relative shrink-0 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)] border-b ${
@@ -2704,6 +2713,21 @@ function CompetitorDashboardBody({
               />
             ) : (
               <>
+            {competitorDbIdForSaved ? (
+              <FeatureSectionHeader
+                className="mb-6"
+                overline="Ad library"
+                title={<>Scraped creatives for {competitorDisplayLabel}</>}
+                description={
+                  <>
+                    {accountLastScrapedAt
+                      ? <>Last scraped {getTimeAgo(new Date(accountLastScrapedAt))} · </>
+                      : null}
+                    Choose platforms below, then browse each channel section.
+                  </>
+                }
+              />
+            ) : null}
             {competitorDbIdForSaved ? (
               <AdLibraryAnalyticsPanel
                 competitorId={competitorDbIdForSaved}
@@ -3498,28 +3522,26 @@ function CompetitorDashboardBody({
       </KeepMountedTab>
 
       <KeepMountedTab active={activeTab === "insights"} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <Suspense
             fallback={
               <RivalLoadingBlock title="Loading insights" description="Fetching strategy overview and enrichment…" padded className="py-14" />
             }
           >
-            <KeepMountedTab active={activeSubTab === "strategy-map" || activeSubTab === "strategy-insight"} className="min-h-0">
+            <KeepMountedTab active={activeSubTab === "strategy-map"} className="min-h-0">
               <StrategyOverviewApp
                 brand={brand}
                 onOpenAdsLibrary={() => handleTabChange("ads library")}
-                forceView={activeSubTab === "strategy-insight" ? "insight" : "map"}
                 competitorId={competitorDbIdForSaved || undefined}
                 lastScrapedAt={accountLastScrapedAt}
                 onFreshnessRescrape={handleForceRescrape}
               />
             </KeepMountedTab>
-            <KeepMountedTab active={activeSubTab === "moves"} className="min-h-0">
-              <StrategicMovesTab
+            <KeepMountedTab active={activeSubTab === "activity-feed"} className="min-h-0">
+              <ActivityFeedTab
                 competitorDomain={brand.domain}
-                workspaceName={myBrand.name}
                 competitorLabel={competitorDisplayLabel}
-                workspaceDomain={myBrand.domain?.trim() ?? ""}
+                competitorId={competitorDbIdForSaved}
                 comparisonPayload={comparisonPayloadData}
                 comparisonPayloadLoading={comparisonPayloadLoading}
                 comparisonPayloadError={comparisonPayloadErrorMessage}
@@ -3530,7 +3552,7 @@ function CompetitorDashboardBody({
       </KeepMountedTab>
 
       <KeepMountedTab active={activeTab === "tests"} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <KeepMountedTab active={activeSubTab === "creative-tests"} className="min-h-0">
             <CreativeTestsTab
               competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
@@ -3559,7 +3581,6 @@ function CompetitorDashboardBody({
               lastScrapedAt={accountLastScrapedAt}
               onFreshnessRescrape={handleForceRescrape}
               onOpenAd={openAd}
-              onBackToTests={() => handleSubTabChange("creative-tests")}
               landingPagesListCache={landingPagesListCacheForChildren}
             />
           </KeepMountedTab>
@@ -3581,27 +3602,24 @@ function CompetitorDashboardBody({
               comparisonPayload={comparisonPayloadData}
               comparisonPayloadLoading={comparisonPayloadLoading}
               comparisonPayloadError={comparisonPayloadErrorMessage}
+              onRequestAudienceRefresh={() => void refetchComparisonPayload()}
             />
-          </KeepMountedTab>
-          <KeepMountedTab active={activeSubTab === "hooks"} className="min-h-0">
-            <HooksTab />
           </KeepMountedTab>
           <KeepMountedTab active={activeSubTab === "copy-vault"} className="min-h-0">
             <CopyVaultTab
               competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
               competitorLabel={competitorDisplayLabel}
               onOpenAd={openAd}
+              cacheDomainNorm={cacheDomainNorm}
+              lastScrapedAt={accountLastScrapedAt}
             />
-          </KeepMountedTab>
-          <KeepMountedTab active={activeSubTab === "briefs"} className="min-h-0">
-            <BriefsTab />
           </KeepMountedTab>
         </div>
       </KeepMountedTab>
 
       <KeepMountedTab active={activeTab === "comparison" && !isOwnWorkspace} className="min-h-0">
         <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
-          <div className="mx-auto w-full max-w-[1400px] px-6 py-8 sm:px-8 lg:px-10 animate-in fade-in duration-200">
+          <div className="animate-in fade-in duration-200">
             <ComparisonPage
               isConfirmed={isConfirmed}
               competitorDisplayLabel={competitorDisplayLabel}

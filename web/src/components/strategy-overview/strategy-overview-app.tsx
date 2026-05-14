@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BarChart3, RefreshCw } from "lucide-react";
 
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
@@ -11,14 +10,13 @@ import {
   pendingStrategyRefreshStorageKey,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import type { CompetitorStrategyOverviewPayload, FunnelCellId } from "@/lib/strategy-overview/payload-types";
-import { useStrategyOverviewUi, type StrategyViewMode } from "@/lib/strategy-overview/strategy-overview-store";
-import { StrategyViewToggle } from "@/components/strategy-overview/strategy-view-toggle";
+import { useStrategyOverviewUi } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyMapFlow } from "@/components/strategy-overview/strategy-map-flow";
 import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy-sidebar";
-import { StrategyInsightView } from "@/components/strategy-overview/strategy-insight-view";
 import { FunnelCellSheet } from "@/components/strategy-overview/funnel-cell-sheet";
 import { NodeDetailSheet } from "@/components/strategy-overview/node-detail-sheet";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 type Brand = { name: string; domain: string };
@@ -35,55 +33,31 @@ type StrategyCompiledResponse = {
 type Props = {
   brand: Brand;
   onOpenAdsLibrary?: () => void;
-  forceView?: StrategyViewMode;
   competitorId?: string;
   /** Account / sidebar scrape timestamp — bumps client cache key when new scrape lands. */
   lastScrapedAt?: string | null;
   onFreshnessRescrape?: () => void;
 };
 
-function readViewParam(raw: string | null): StrategyViewMode {
-  if (raw === "insight") return "insight";
-  return "map";
-}
-
 export function StrategyOverviewApp({
   brand,
   onOpenAdsLibrary,
-  forceView,
   competitorId,
   lastScrapedAt = null,
   onFreshnessRescrape,
 }: Props) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const urlView = readViewParam(searchParams.get("view"));
-  const view: StrategyViewMode = forceView ?? urlView;
-
-  const setView = useCallback(
-    (v: StrategyViewMode) => {
-      const p = new URLSearchParams(searchParams.toString());
-      p.set("view", v);
-      router.replace(`${pathname}?${p.toString()}`, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
+  const domain = brand.domain.trim();
+  const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
+  const scrapeStamp = lastScrapedAt ?? "none";
+  const strategyCacheKey = `${domainNorm}:strategy-compiled:${scrapeStamp}`;
 
   const setSelectedPlatform = useStrategyOverviewUi((s) => s.setSelectedPlatform);
-  const selectedPlatform = useStrategyOverviewUi((s) => s.selectedPlatform);
 
   const [recomputeBusy, setRecomputeBusy] = useState(false);
   const [sheetPlatform, setSheetPlatform] = useState<string | null>(null);
   const [openCellId, setOpenCellId] = useState<FunnelCellId | null>(null);
   const [edgeTip, setEdgeTip] = useState<{ reasoning: string; confidence: number } | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
-
-  const domain = brand.domain.trim();
-  const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
-  const scrapeStamp = lastScrapedAt ?? "none";
-  const strategyCacheKey = `${domainNorm}:strategy-compiled:${scrapeStamp}`;
-
   const [backgroundRecompute, setBackgroundRecompute] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const loadGenerationRef = useRef(0);
@@ -218,13 +192,7 @@ export function StrategyOverviewApp({
     return () => {
       clearPoll();
     };
-  }, [
-    clearPoll,
-    compiled?.recomputing,
-    compiled?.staleWhileRecomputing,
-    domain,
-    refetch,
-  ]);
+  }, [clearPoll, compiled?.recomputing, compiled?.staleWhileRecomputing, domain, refetch]);
 
   const emptyStrategy = useMemo(
     () =>
@@ -268,43 +236,80 @@ export function StrategyOverviewApp({
     payload.map.activeAdCount > 0 &&
     (payload.insufficientEnrichedAds === true || payload.lowEnrichmentConfidence === true) ? (
       <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-[13px] text-amber-950">
-        <p className="font-semibold text-amber-950">Some strategy copy is still heuristic</p>
+        <p className="font-semibold text-amber-950">Some strategy signals are still filling in</p>
         <p className="mt-1 text-amber-950/95">
           {payload.insufficientEnrichedAds
-            ? "Fewer than five ads finished funnel and angle analysis, so the deep AI insight pass was skipped. Sidebar and map numbers still come from benchmarks and your scraped creatives."
-            : "Less than half of saved ads are fully enriched yet, so AI narratives may stay generic until analysis catches up."}{" "}
-          Open the Ads Library tab to load creatives, wait for enrichment, or use{" "}
-          <span className="font-medium">Refresh insights</span> / <span className="font-medium">Rebuild from saved ads</span> after more rows analyze.
+            ? "Fewer than five ads finished funnel and angle analysis. Sidebar and map numbers still come from benchmarks and your scraped creatives."
+            : "Less than half of saved ads are fully enriched yet — run more scrapes or trigger a rebuild after enrichment catches up."}{" "}
+          Open the Ads Library tab to load creatives, or use{" "}
+          <span className="font-medium">Refresh strategy</span> / <span className="font-medium">Rebuild from saved ads</span>.
         </p>
       </div>
     ) : null;
 
+  const mapHeadline =
+    payload && payload.map.activeAdCount > 0 && payload.map.title?.trim()
+      ? payload.map.title
+      : "Strategy overview";
+
+  const confidenceLabel = (payload?.derivationQuality ?? payload?.map.derivationQuality)?.trim();
+
+  const strategyDescription =
+    !displayError && payload ? (
+      <>
+        Full funnel map and enrichment from scraped ads for <span className="font-medium text-slate-700">{brand.name}</span>
+        {cached ? (
+          <>
+            {" "}
+            ·{" "}
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">Cached</span>
+          </>
+        ) : null}
+        {confidenceLabel ? (
+          <>
+            {" "}
+            · Confidence: {confidenceLabel}
+          </>
+        ) : null}
+      </>
+    ) : (
+      <>
+        Full funnel map and enrichment from scraped ads for <span className="font-medium text-slate-700">{brand.name}</span>
+        {cached ? (
+          <>
+            {" "}
+            ·{" "}
+            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">Cached</span>
+          </>
+        ) : null}
+      </>
+    );
+
   const showInitialSpinner = loading && !payload;
 
   return (
-    <div className="relative w-full max-w-[1400px] mx-auto px-6 sm:px-8 lg:px-10 py-8">
+    <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 sm:px-8 lg:px-10">
       <CacheRevalidatingDot show={isValidating && !!payload} className="right-4 top-4" />
-      <div className="mb-2">
-        <h2 className="text-[18px] font-semibold text-[#343434]">Strategy overview</h2>
-        <p className="text-[14px] text-[#71717a] mt-0.5">
-          Full funnel map and enriched insights from scraped ads for{" "}
-          <span className="font-medium text-[#3f3f46]">{brand.name}</span>.
-          {cached ? (
-            <span className="ml-2 text-[11px] font-medium text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5">
-              Cached
-            </span>
-          ) : null}
-        </p>
-      </div>
-
-      {!forceView ? <StrategyViewToggle view={view} onChange={setView} /> : null}
+      {!showInitialSpinner ? (
+        <FeatureSectionHeader
+          className="mb-4"
+          overline="Strategy map"
+          title={mapHeadline}
+          description={strategyDescription}
+          titleTrailing={
+            !displayError && payload && payload.map.activeAdCount > 0 ? (
+              <DataFreshnessBadge lastScrapedAt={lastScrapedAt ?? null} onRefresh={onFreshnessRescrape} />
+            ) : undefined
+          }
+        />
+      ) : null}
 
       {backgroundRecompute && !emptyStrategy ? (
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-indigo-200/90 bg-indigo-50/90 px-4 py-2.5 text-[13px] text-indigo-950">
           <span className="mt-0.5 inline-flex shrink-0 rounded-lg border border-indigo-200/80 bg-white/90 p-[3px] shadow-sm ring-1 ring-indigo-900/[0.05]">
             <RivalLogoVideo size="inline" />
           </span>
-          <span className="leading-snug pt-px">
+          <span className="pt-px leading-snug">
             Building strategy overview in the background… this page will update when recomputation finishes.
           </span>
         </div>
@@ -313,7 +318,7 @@ export function StrategyOverviewApp({
       {showInitialSpinner ? <RivalLoadingBlock title="Loading strategy data…" padded className="py-20" /> : null}
 
       {!showInitialSpinner && displayError ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900 mb-4">
+        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
           {displayError}
           <button
             type="button"
@@ -345,9 +350,9 @@ export function StrategyOverviewApp({
           </div>
           <p className="text-[15px] font-semibold text-[#3f3f46]">No scraped ads in strategy pipeline yet</p>
           <p className="mt-1.5 max-w-md text-[13px] text-[#71717a]">
-            Strategy map and insights are built from ads saved when the Ads Library API runs (including cached responses).
-            Open the Ads Library tab first so creatives load, then use <span className="font-medium text-[#52525b]">Reload</span>{" "}
-            here — or rebuild after a fresh scrape.
+            Strategy map is built from ads saved when the Ads Library API runs (including cached responses). Open the Ads
+            Library tab first so creatives load, then use <span className="font-medium text-[#52525b]">Reload</span> here —
+            or rebuild after a fresh scrape.
           </p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <button
@@ -399,69 +404,40 @@ export function StrategyOverviewApp({
           ) : null}
 
           {edgeTip ? (
-            <div className="fixed bottom-24 left-1/2 z-40 max-w-md -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-lg pointer-events-none">
+            <div className="pointer-events-none fixed bottom-24 left-1/2 z-40 max-w-md -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-lg">
               <span className="font-semibold"> {(edgeTip.confidence * 100).toFixed(0)}% — </span>
               {edgeTip.reasoning}
             </div>
           ) : null}
 
-          {view === "map" ? (
-            <div className="flex flex-col xl:flex-row gap-6 items-start">
-              <div className="flex-1 min-w-0 w-full space-y-3">
-                <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                  <h3 className="text-[16px] font-bold text-[#0f172a] tracking-tight">{payload.map.title}</h3>
-                  {payload.map.derivationQuality || payload.derivationQuality ? (
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/80">
-                      Confidence: {payload.derivationQuality ?? payload.map.derivationQuality}
-                    </span>
-                  ) : null}
-                  <DataFreshnessBadge lastScrapedAt={lastScrapedAt ?? null} onRefresh={onFreshnessRescrape} />
-                </div>
-                {funnelClassificationBanner}
-                <StrategyMapFlow
-                  mapKey={mapKey}
-                  map={payload.map}
-                  onNodeClick={(nodeId) => {
-                    if (nodeId.includes(":")) {
-                      setOpenCellId(nodeId as FunnelCellId);
-                      setSheetPlatform(null);
-                      return;
-                    }
-                    setSelectedPlatform(nodeId as never);
-                    setSheetPlatform(nodeId);
-                  }}
-                  onEdgeHover={setEdgeTip}
-                />
-              </div>
-              <aside className="w-full xl:w-[300px] shrink-0">
-                <StrategyOverviewSidebar
-                  map={payload.map}
-                  competitorId={competitorId}
-                  cacheDomainNorm={domainNorm}
-                  lastScrapedAt={lastScrapedAt ?? null}
-                  onFreshnessRescrape={onFreshnessRescrape}
-                />
-              </aside>
+          <div className="flex flex-col items-start gap-6 xl:flex-row">
+            <div className="min-w-0 w-full flex-1 space-y-3">
+              {funnelClassificationBanner}
+              <StrategyMapFlow
+                mapKey={mapKey}
+                map={payload.map}
+                onNodeClick={(nodeId) => {
+                  if (nodeId.includes(":")) {
+                    setOpenCellId(nodeId as FunnelCellId);
+                    setSheetPlatform(null);
+                    return;
+                  }
+                  setSelectedPlatform(nodeId as never);
+                  setSheetPlatform(nodeId);
+                }}
+                onEdgeHover={setEdgeTip}
+              />
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                  <h3 className="text-[17px] font-bold text-[#0f172a] tracking-tight">Strategic insights</h3>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200/80">
-                    AI-generated
-                  </span>
-                  <DataFreshnessBadge lastScrapedAt={lastScrapedAt ?? null} onRefresh={onFreshnessRescrape} />
-                </div>
-                <p className="text-[13px] text-[#64748b] mt-1 max-w-[720px]">
-                  AI-powered analysis of{" "}
-                  <span className="font-medium text-[#334155]">{payload.map.competitor.name}</span>
-                  &apos;s advertising strategy, creative performance, and audience signals — grounded in your scraped ad library.
-                </p>
-              </div>
-              <StrategyInsightView insights={payload.insights} selectedPlatform={selectedPlatform} />
-            </div>
-          )}
+            <aside className="w-full shrink-0 xl:w-[300px]">
+              <StrategyOverviewSidebar
+                map={payload.map}
+                competitorId={competitorId}
+                cacheDomainNorm={domainNorm}
+                lastScrapedAt={lastScrapedAt ?? null}
+                onFreshnessRescrape={onFreshnessRescrape}
+              />
+            </aside>
+          </div>
 
           <div className="mt-6 flex justify-center">
             <button
@@ -486,7 +462,7 @@ export function StrategyOverviewApp({
                   }
                 })();
               }}
-              className="border border-[#e4e4e7] rounded-full px-4 py-2 text-[13px] text-[#71717a] hover:text-[#3f3f46] flex items-center gap-2"
+              className="flex items-center gap-2 rounded-full border border-[#e4e4e7] px-4 py-2 text-[13px] text-[#71717a] hover:text-[#3f3f46]"
             >
               {recomputeBusy ? (
                 <span className="inline-flex rounded-md border border-neutral-200/80 bg-white/90 p-[3px]">
@@ -495,7 +471,7 @@ export function StrategyOverviewApp({
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}
-              Refresh insights
+              Refresh strategy
             </button>
           </div>
 
