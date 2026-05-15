@@ -109,10 +109,10 @@ export function ActivityFeedTab({
 
   const angleActive = useCallback(
     (angle: string) => {
-      const angles = side?.payload?.insights.angle_clustering.angles ?? [];
+      const angles = side?.payload?.insights?.angle_clustering?.angles ?? [];
       return angles.some((a) => a.angle === angle);
     },
-    [side?.payload?.insights.angle_clustering.angles]
+    [side?.payload?.insights?.angle_clustering?.angles]
   );
 
   const filteredMoves = useMemo(() => {

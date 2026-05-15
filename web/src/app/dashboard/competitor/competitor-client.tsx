@@ -110,6 +110,7 @@ import { ComparisonPage } from "@/components/comparison/comparison-page";
 import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
+import { normalizeComparisonPayloadJson } from "@/lib/comparison/normalize-comparison-payload-json";
 import {
   fetchSavedCompetitorsFromAccount,
   saveCompetitorToAccount,
@@ -2049,7 +2050,7 @@ function CompetitorDashboardBody({
   const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
 
   const comparisonPayloadScrapeStamp = accountLastScrapedAt ?? "none";
-  const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:${comparisonPayloadScrapeStamp}`;
+  const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
   const {
     data: comparisonPayloadData,
@@ -2073,9 +2074,14 @@ function CompetitorDashboardBody({
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? `comparison/payload failed (${res.status})`);
       }
-      return json;
+      return normalizeComparisonPayloadJson(json) ?? json;
     },
   });
+
+  const comparisonPayload = useMemo(
+    () => normalizeComparisonPayloadJson(comparisonPayloadData),
+    [comparisonPayloadData]
+  );
 
   const comparisonPayloadErrorMessage = comparisonPayloadCacheError?.message ?? null;
 
@@ -3542,7 +3548,7 @@ function CompetitorDashboardBody({
                 competitorDomain={brand.domain}
                 competitorLabel={competitorDisplayLabel}
                 competitorId={competitorDbIdForSaved}
-                comparisonPayload={comparisonPayloadData}
+                comparisonPayload={comparisonPayload}
                 comparisonPayloadLoading={comparisonPayloadLoading}
                 comparisonPayloadError={comparisonPayloadErrorMessage}
               />
@@ -3599,7 +3605,7 @@ function CompetitorDashboardBody({
               workspaceBadge={myBrand.badge ?? undefined}
               competitorLabel={competitorDisplayLabel}
               competitorLogoUrl={brand.logoUrl}
-              comparisonPayload={comparisonPayloadData}
+              comparisonPayload={comparisonPayload}
               comparisonPayloadLoading={comparisonPayloadLoading}
               comparisonPayloadError={comparisonPayloadErrorMessage}
               onRequestAudienceRefresh={() => void refetchComparisonPayload()}
@@ -3632,7 +3638,7 @@ function CompetitorDashboardBody({
                 color: myBrand.color,
                 badge: myBrand.badge,
               }}
-              comparisonPayload={comparisonPayloadData}
+              comparisonPayload={comparisonPayload}
               comparisonPayloadLoading={comparisonPayloadLoading}
               comparisonPayloadError={comparisonPayloadErrorMessage}
               onRefreshComparisonPayload={() => void refetchComparisonPayload()}

@@ -213,7 +213,7 @@ export function StealableAnglesPanel({
           </div>
         </div>
         <p className="mt-4 text-sm leading-relaxed text-slate-600">
-          {competitorPayload?.insights.angles_by_platform?.length
+          {competitorPayload?.insights?.angles_by_platform?.length
             ? `Your angle coverage matches ${competitorBrandName} across the creative patterns we measure after filtering brand-navigation placements. Strong baseline.`
             : "Few angles detected yet — give the scraper another cycle."}
         </p>

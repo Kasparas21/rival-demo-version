@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { detectMoves, generateMoveNarrative } from "@/lib/comparison/move-detector";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import type { Database, Json } from "@/lib/supabase/types";
 
 const DETECTION_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -79,7 +80,10 @@ export async function maybeDetectMoves(params: {
   const beforePayload = asPayload(older.payload);
   if (!afterPayload || !beforePayload) return;
 
-  const rawMoves = detectMoves(beforePayload, afterPayload);
+  const rawMoves = detectMoves(
+    normalizeCompetitorStrategyOverviewPayload(beforePayload),
+    normalizeCompetitorStrategyOverviewPayload(afterPayload)
+  );
 
   const moves = [];
   for (const move of rawMoves) {

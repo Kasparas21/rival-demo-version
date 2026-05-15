@@ -120,8 +120,9 @@ function relativeAnalyzedLabel(iso: string | null | undefined): string {
 function RichCard({ side, accent }: { side: Side; accent: string }) {
   const inf = side.audience;
   if (!inf) return null;
-  const primary = inf.segments.find((s) => s.name === inf.primarySegmentName) ?? inf.segments[0];
-  const others = inf.segments.filter((s) => s !== primary);
+  const segments = Array.isArray(inf.segments) ? inf.segments : [];
+  const primary = segments.find((s) => s.name === inf.primarySegmentName) ?? segments[0];
+  const others = segments.filter((s) => s !== primary);
   const pct = Math.round((primary?.confidence ?? 0) * 100);
 
   return (
@@ -244,8 +245,9 @@ function StandaloneAudienceView({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const inf = competitor.audience!;
-  const primary = inf.segments.find((s) => s.name === inf.primarySegmentName) ?? inf.segments[0];
-  const secondaries = inf.segments.filter((s) => s !== primary);
+  const segments = Array.isArray(inf.segments) ? inf.segments : [];
+  const primary = segments.find((s) => s.name === inf.primarySegmentName) ?? segments[0];
+  const secondaries = segments.filter((s) => s !== primary);
   const primaryPct = Math.round((primary?.confidence ?? 0) * 100);
   const lowData = activeAdCount > 0 && activeAdCount < 5;
   const shift = lastPrimarySegmentShift(audienceHistory);
@@ -293,7 +295,7 @@ function StandaloneAudienceView({
         </div>
       ) : null}
 
-      {!inf.segments?.length ? (
+      {!segments.length ? (
         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm text-center">
           <p className="text-sm font-medium text-slate-900">Not enough creative variation to identify distinct segments</p>
           <p className="mt-2 text-sm text-slate-600">
@@ -378,7 +380,7 @@ function StandaloneAudienceView({
                         />
                       </div>
                       <ul className="mt-4 space-y-2">
-                        {seg.signals.slice(0, 4).map((s, i) => {
+                        {(Array.isArray(seg.signals) ? seg.signals : []).slice(0, 4).map((s, i) => {
                           const Icon = signalIconForText(s);
                           return (
                             <li key={i} className="flex gap-2 text-xs text-slate-600 leading-relaxed">
@@ -390,7 +392,7 @@ function StandaloneAudienceView({
                       </ul>
                       <button
                         type="button"
-                        onClick={() => navigateVault(seg.signals)}
+                        onClick={() => navigateVault(Array.isArray(seg.signals) ? seg.signals : [])}
                         className="mt-4 text-sm font-semibold text-slate-900 underline-offset-2 hover:underline"
                       >
                         See {activeAdCount > 0 ? `${activeAdCount} ` : ""}ads →

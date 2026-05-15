@@ -16,6 +16,7 @@ import {
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
 import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
+import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 
 /**
  * Bump this string any time the spend formula, derivation logic, output schema,
@@ -450,7 +451,7 @@ export async function getCachedStrategyOverview(
     }
   }
 
-  return payload;
+  return normalizeCompetitorStrategyOverviewPayload(payload);
 }
 
 /** Any stored payload for this competitor (ignore batch / model version) — for stale-while-recomputing. */
@@ -466,7 +467,7 @@ export async function getStaleStrategyOverviewPayload(
     .eq("user_id", userId)
     .maybeSingle();
   if (!data?.payload || typeof data.payload !== "object") return null;
-  return data.payload as CompetitorStrategyOverviewPayload;
+  return normalizeCompetitorStrategyOverviewPayload(data.payload as CompetitorStrategyOverviewPayload);
 }
 
 export async function getRecomputeLockRow(

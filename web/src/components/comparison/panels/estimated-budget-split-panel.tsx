@@ -24,7 +24,7 @@ type Props = {
 type Seg = { platform: StrategyPlatform; pct: number; estEur: number; adCount: number; label: string };
 
 function segmentsFromPayload(payload: CompetitorStrategyOverviewPayload | null): Seg[] {
-  if (!payload) return [];
+  if (!payload?.insights?.budget_allocation?.segments?.length) return [];
   return payload.insights.budget_allocation.segments.map((s) => ({
     platform: s.platform,
     pct: s.pct,
@@ -158,8 +158,8 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
   const leftSegments = useMemo(() => segmentsFromPayload(left.payload), [left.payload]);
   const rightSegments = useMemo(() => segmentsFromPayload(right.payload), [right.payload]);
 
-  const leftTotal = left.payload?.insights.budget_allocation.totalEstSpendEur ?? 0;
-  const rightTotal = right.payload?.insights.budget_allocation.totalEstSpendEur ?? 0;
+  const leftTotal = left.payload?.insights?.budget_allocation?.totalEstSpendEur ?? 0;
+  const rightTotal = right.payload?.insights?.budget_allocation?.totalEstSpendEur ?? 0;
 
   const insight = useMemo(
     () =>
@@ -178,7 +178,7 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
     <ComparisonPanelShell
       title="Budget allocation"
       subtitle="Where each brand puts its modeled monthly spend"
-      tooltip={left.payload?.insights.budget_allocation.tooltip ?? "Estimated spend share."}
+      tooltip={left.payload?.insights?.budget_allocation?.tooltip ?? "Estimated spend share."}
     >
       {!left.payload && !right.payload ? (
         <ComparisonInsufficient message="Budget comparison needs strategy payloads for both brands." />

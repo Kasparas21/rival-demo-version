@@ -10,6 +10,7 @@ import {
   pendingStrategyRefreshStorageKey,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import type { CompetitorStrategyOverviewPayload, FunnelCellId } from "@/lib/strategy-overview/payload-types";
+import { normalizeCompetitorStrategyOverviewPayload, normalizeStrategyMapPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { useStrategyOverviewUi } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyMapFlow } from "@/components/strategy-overview/strategy-map-flow";
 import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy-sidebar";
@@ -49,7 +50,8 @@ export function StrategyOverviewApp({
   const domain = brand.domain.trim();
   const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
   const scrapeStamp = lastScrapedAt ?? "none";
-  const strategyCacheKey = `${domainNorm}:strategy-compiled:${scrapeStamp}`;
+  /** Bump suffix when compiled payload shape expectations change (invalidates stale local/session cache). */
+  const strategyCacheKey = `${domainNorm}:strategy-compiled:v2:${scrapeStamp}`;
 
   const setSelectedPlatform = useStrategyOverviewUi((s) => s.setSelectedPlatform);
 
@@ -72,7 +74,11 @@ export function StrategyOverviewApp({
   const { data: compiled, loading, isValidating, error: loadError, refetch } = useScrapeKeyedCache<StrategyCompiledResponse>({
     cacheKey: strategyCacheKey,
     enabled: Boolean(domainNorm),
-    validateCached: (c) => c.ok === true && Boolean(c.payload),
+    validateCached: (c) =>
+      c.ok === true &&
+      Boolean(c.payload) &&
+      typeof c.payload.map === "object" &&
+      c.payload.map != null,
     fetcher: async ({ force } = {}) => {
       const q = new URLSearchParams({ competitorDomain: domain });
       if (force) q.set("force", "1");
@@ -81,11 +87,17 @@ export function StrategyOverviewApp({
       if (!json.ok || !json.payload) {
         throw new Error(json.error ?? "Failed to load strategy overview");
       }
-      return json;
+      return {
+        ...json,
+        payload: normalizeCompetitorStrategyOverviewPayload(json.payload),
+      };
     },
   });
 
-  const payload = compiled?.payload ?? null;
+  const payload = useMemo(() => {
+    const raw = compiled?.payload;
+    return raw ? normalizeCompetitorStrategyOverviewPayload(raw) : null;
+  }, [compiled?.payload]);
   const cached = compiled?.cached === true;
   const displayError = loadError?.message ?? pollError;
 
@@ -196,19 +208,22 @@ export function StrategyOverviewApp({
 
   const emptyStrategy = useMemo(
     () =>
-      !!payload && (payload.pipelineStatus === "no_ads_found" || payload.map.activeAdCount === 0),
+      !!payload &&
+      (payload.pipelineStatus === "no_ads_found" || (payload.map?.activeAdCount ?? 0) === 0),
     [payload]
   );
 
   const mapKey = useMemo(() => {
-    if (!payload) return "empty";
-    const fc = payload.map.funnelCells;
+    if (!payload?.map) return "empty";
+    const m = normalizeStrategyMapPayload(payload.map);
+    const fc = m.funnelCells;
     const fcKey = fc?.length ? fc.map((c) => c.id).join("|") : "legacy-cells";
-    return `${payload.map.activeAdCount}-${fcKey}-${payload.map.platformNodes.map((n) => n.adCount).join(",")}`;
+    const nodes = Array.isArray(m.platformNodes) ? m.platformNodes : [];
+    return `${m.activeAdCount}-${fcKey}-${nodes.map((n) => n.adCount).join(",")}`;
   }, [payload]);
 
   const cellSummary = useMemo(() => {
-    if (!openCellId || !payload?.map.funnelCells?.length) return null;
+    if (!openCellId || !payload?.map?.funnelCells?.length) return null;
     return payload.map.funnelCells.find((c) => c.id === openCellId) ?? null;
   }, [openCellId, payload]);
 
@@ -224,10 +239,10 @@ export function StrategyOverviewApp({
       </div>
     ) : null;
 
-  const suppressBanner = payload?.map.suppressEdgesReason
-    ? payload.map.suppressEdgesReason === "low_sample"
+  const suppressBanner = payload?.map?.suppressEdgesReason
+    ? payload.map?.suppressEdgesReason === "low_sample"
       ? "More ads are needed to detect funnel flow with confidence. Run a fresh scrape to gather additional creatives."
-      : `This competitor only advertises on ${payload.map.platformCount} channel(s). Cross-platform funnel lines are hidden.`
+      : `This competitor only advertises on ${payload.map?.platformCount ?? 0} channel(s). Cross-platform funnel lines are hidden.`
     : null;
 
   const enrichmentBanner =
@@ -252,7 +267,7 @@ export function StrategyOverviewApp({
       ? payload.map.title
       : "Strategy overview";
 
-  const confidenceLabel = (payload?.derivationQuality ?? payload?.map.derivationQuality)?.trim();
+  const confidenceLabel = (payload?.derivationQuality ?? payload?.map?.derivationQuality)?.trim();
 
   const strategyDescription =
     !displayError && payload ? (

@@ -21,6 +21,7 @@ import { FunnelEdge } from "@/components/strategy-overview/funnel-edge";
 import type { PlatformNodeData } from "@/components/strategy-overview/platform-node";
 import { PlatformNode } from "@/components/strategy-overview/platform-node";
 import { coerceStrategyPlatformForDisplay } from "@/lib/strategy-overview/brand-scale-score";
+import { normalizeStrategyMapPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import type { FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
 
 type Props = {
@@ -37,7 +38,8 @@ const STAGE_STROKE: Record<FunnelStage, string> = {
 };
 
 function stageForPlatform(payload: StrategyMapPayload, platform: string): FunnelStage {
-  const n = payload.platformNodes.find((p) => p.platform === platform);
+  const rows = payload.platformNodes ?? [];
+  const n = rows.find((p) => p.platform === platform);
   return n?.funnelStage ?? "MOF";
 }
 
@@ -92,7 +94,8 @@ function FlowInner({
         },
       }));
     }
-    return map.platformNodes.map((n) => ({
+    const nodesRows = Array.isArray(map.platformNodes) ? map.platformNodes : [];
+    return nodesRows.map((n) => ({
       id: n.platform,
       type: "platform",
       position: n.position,
@@ -116,7 +119,8 @@ function FlowInner({
     // TODO: design cell-level relationship edges (e.g., TOF → MOF cross-platform) in a future pass.
     if (useCellsLayout) return [];
 
-    return map.funnelEdges.map((e) => {
+    const edgesRows = Array.isArray(map.funnelEdges) ? map.funnelEdges : [];
+    return edgesRows.map((e) => {
       const st = stageForPlatform(map, e.from);
       const stroke = STAGE_STROKE[st];
       return {
@@ -226,7 +230,8 @@ function FlowInner({
 
 export function StrategyMapFlow(props: Props) {
   const { mapKey, map, ...rest } = props;
-  const useCellsLayout = map.funnelCells != null && map.funnelCells.length > 0;
+  const safeMap = normalizeStrategyMapPayload(map);
+  const useCellsLayout = safeMap.funnelCells != null && safeMap.funnelCells.length > 0;
   const heightClass = useCellsLayout ? "h-[min(640px,76vh)]" : "h-[min(520px,70vh)]";
   const containerRef = useRef<HTMLDivElement>(null);
   return (
@@ -235,7 +240,7 @@ export function StrategyMapFlow(props: Props) {
       className={`${heightClass} w-full rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/60 overflow-hidden`}
     >
       <ReactFlowProvider>
-        <FlowInner key={mapKey} map={map} fitContainerRef={containerRef} {...rest} />
+        <FlowInner key={mapKey} map={safeMap} fitContainerRef={containerRef} {...rest} />
       </ReactFlowProvider>
     </div>
   );

@@ -14,6 +14,7 @@ import {
 import { deriveStrategyOverviewPayload } from "@/lib/strategy-overview/strategyDerivation";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { tryHydrateScrapedAdsFromAdsCache } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import type { Database } from "@/lib/supabase/types";
 
@@ -146,7 +147,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const cached = await getCachedStrategyOverview(supabase, user.id, meta.competitorId, domain);
     if (cached) {
       return NextResponse.json(
-        { ok: true, cached: true, payload: cached },
+        { ok: true, cached: true, payload: normalizeCompetitorStrategyOverviewPayload(cached) },
         {
           headers: {
             "Cache-Control": "private, max-age=300, stale-while-revalidate=3600",
@@ -167,7 +168,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         refreshAdEnrichment: true,
       });
       return NextResponse.json(
-        { ok: true, cached: true, recomputing: true, payload: stale },
+        { ok: true, cached: true, recomputing: true, payload: normalizeCompetitorStrategyOverviewPayload(stale) },
         {
           headers: {
             "Cache-Control": "private, no-cache",
@@ -209,18 +210,19 @@ export async function GET(req: Request): Promise<NextResponse> {
           domain: meta.brandDomain ?? meta.cacheDomain,
           logoUrl: meta.logoUrl,
         });
+        const outPayload = normalizeCompetitorStrategyOverviewPayload(stalePayload ?? empty);
         return NextResponse.json({
           ok: true,
           cached: false,
           staleWhileRecomputing: true,
-          payload: stalePayload ?? empty,
+          payload: outPayload,
         });
       }
       return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
     }
 
     return NextResponse.json(
-      { ok: true, cached: false, payload: result.payload },
+      { ok: true, cached: false, payload: normalizeCompetitorStrategyOverviewPayload(result.payload) },
       {
         headers: {
           "Cache-Control": "private, max-age=300, stale-while-revalidate=3600",
@@ -244,11 +246,11 @@ export async function GET(req: Request): Promise<NextResponse> {
   const enrichedDb =
     rows.filter((r) => r.ai_enrichment_status === "enriched").length;
   const enrichmentRate = rows.length > 0 ? enrichedDb / rows.length : 0;
-  quickPayload = {
+  quickPayload = normalizeCompetitorStrategyOverviewPayload({
     ...quickPayload,
     lowEnrichmentConfidence: rows.length > 0 && enrichmentRate < 0.5,
     insufficientEnrichedAds: enrichedDb < 5,
-  };
+  });
 
   scheduleBackgroundRecompute({
     competitorDomain: domain,

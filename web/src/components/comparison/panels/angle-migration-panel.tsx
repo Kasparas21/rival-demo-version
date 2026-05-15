@@ -25,7 +25,7 @@ type Tag = "Shared" | "Theirs only" | "Yours only";
 type TagFilter = "All" | Tag;
 
 function detailForAngle(payload: CompetitorStrategyOverviewPayload | null, angle: string): AnglesByPlatformInsight | undefined {
-  return (payload?.insights.angles_by_platform ?? []).find((x) => x.angle === angle);
+  return (payload?.insights?.angles_by_platform ?? []).find((x) => x.angle === angle);
 }
 
 type VaultAd = {
@@ -51,8 +51,8 @@ export function AngleMigrationPanel({ workspace, competitor, competitorId, onOpe
   const [drawerLoading, setDrawerLoading] = useState(false);
 
   const rows = useMemo(() => {
-    const wAngles = new Set((workspace.payload?.insights.angles_by_platform ?? []).map((x) => x.angle));
-    const cAngles = new Set((competitor.payload?.insights.angles_by_platform ?? []).map((x) => x.angle));
+    const wAngles = new Set((workspace.payload?.insights?.angles_by_platform ?? []).map((x) => x.angle));
+    const cAngles = new Set((competitor.payload?.insights?.angles_by_platform ?? []).map((x) => x.angle));
     const u = new Set<string>([...wAngles, ...cAngles]);
     return [...u].map((angle) => {
       const inW = wAngles.has(angle);

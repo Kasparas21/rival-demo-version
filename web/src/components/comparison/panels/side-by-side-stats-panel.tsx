@@ -159,10 +159,10 @@ export function SideBySideStatsPanel({
   const dashThem = !competitorPayload;
 
   const data = useMemo(() => {
-    const youActive = workspacePayload?.map.activeAdCount ?? NaN;
-    const themActive = competitorPayload?.map.activeAdCount ?? NaN;
-    const youPlat = workspacePayload?.map.platformCount ?? NaN;
-    const themPlat = competitorPayload?.map.platformCount ?? NaN;
+    const youActive = workspacePayload?.map?.activeAdCount ?? NaN;
+    const themActive = competitorPayload?.map?.activeAdCount ?? NaN;
+    const youPlat = workspacePayload?.map?.platformCount ?? NaN;
+    const themPlat = competitorPayload?.map?.platformCount ?? NaN;
     const youNew = workspaceDerived.newAdsLast30d;
     const themNew = competitorDerived.newAdsLast30d;
     const youAge = workspaceDerived.avgAdAgeDays;
@@ -171,8 +171,8 @@ export function SideBySideStatsPanel({
     const themVideo = competitorDerived.videoPercent;
     const youAngles = workspaceDerived.uniqueAnglesCount;
     const themAngles = competitorDerived.uniqueAnglesCount;
-    const youSpend = workspacePayload?.map.totalAdSpend?.value ?? NaN;
-    const themSpend = competitorPayload?.map.totalAdSpend?.value ?? NaN;
+    const youSpend = workspacePayload?.map?.totalAdSpend?.value ?? NaN;
+    const themSpend = competitorPayload?.map?.totalAdSpend?.value ?? NaN;
 
     type Cand = {
       key: string;
@@ -346,14 +346,14 @@ export function SideBySideStatsPanel({
   ]);
 
   const secondaries = useMemo(() => {
-    const youActive = workspacePayload?.map.activeAdCount;
-    const themActive = competitorPayload?.map.activeAdCount;
-    const youPlat = workspacePayload?.map.platformCount;
-    const themPlat = competitorPayload?.map.platformCount;
+    const youActive = workspacePayload?.map?.activeAdCount;
+    const themActive = competitorPayload?.map?.activeAdCount;
+    const youPlat = workspacePayload?.map?.platformCount;
+    const themPlat = competitorPayload?.map?.platformCount;
     const youNew = workspaceDerived.newAdsLast30d;
     const themNew = competitorDerived.newAdsLast30d;
-    const youSpend = workspacePayload?.map.totalAdSpend?.value;
-    const themSpend = competitorPayload?.map.totalAdSpend?.value;
+    const youSpend = workspacePayload?.map?.totalAdSpend?.value;
+    const themSpend = competitorPayload?.map?.totalAdSpend?.value;
 
     const items: { label: string; you: string; them: string; ind: string }[] = [];
 
@@ -402,8 +402,8 @@ export function SideBySideStatsPanel({
 
   const formatMix = useMemo(
     () => ({
-      you: formatBucketCounts(workspacePayload?.insights.ad_format_mix.formats),
-      them: formatBucketCounts(competitorPayload?.insights.ad_format_mix.formats),
+      you: formatBucketCounts(workspacePayload?.insights?.ad_format_mix?.formats),
+      them: formatBucketCounts(competitorPayload?.insights?.ad_format_mix?.formats),
     }),
     [workspacePayload, competitorPayload]
   );

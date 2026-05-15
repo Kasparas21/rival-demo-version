@@ -106,10 +106,10 @@ function MiniTrend({ buckets }: { buckets: number[] | undefined }) {
 }
 
 export function TestingVelocityMatrixPanel({ left, right }: Props) {
-  const lRows = left.payload?.insights.testing_velocity_by_platform ?? [];
-  const rRows = right.payload?.insights.testing_velocity_by_platform ?? [];
-  const leftTrend = trendByPlatform(left.payload?.insights.spend_trend_by_platform);
-  const rightTrend = trendByPlatform(right.payload?.insights.spend_trend_by_platform);
+  const lRows = left.payload?.insights?.testing_velocity_by_platform ?? [];
+  const rRows = right.payload?.insights?.testing_velocity_by_platform ?? [];
+  const leftTrend = trendByPlatform(left.payload?.insights?.spend_trend_by_platform);
+  const rightTrend = trendByPlatform(right.payload?.insights?.spend_trend_by_platform);
 
   const caption = useMemo(() => {
     let maxRatio = 0;

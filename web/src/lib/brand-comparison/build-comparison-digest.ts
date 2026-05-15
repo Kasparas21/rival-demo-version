@@ -1,6 +1,7 @@
 import { listStealableAngleRows } from "@/lib/comparison/angle-compare";
 import type { ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 
 type NumericFactsSide = {
   activeAds: number | null;
@@ -17,9 +18,9 @@ function numericFactsForSide(
   derived: ComparisonDerivedStats | null | undefined
 ): NumericFactsSide {
   return {
-    activeAds: payload?.map.activeAdCount ?? null,
-    platformsActive: payload?.map.platformCount ?? null,
-    modeledSpendEurMid: payload?.map.totalAdSpend?.value ?? null,
+    activeAds: payload?.map?.activeAdCount ?? null,
+    platformsActive: payload?.map?.platformCount ?? null,
+    modeledSpendEurMid: payload?.map?.totalAdSpend?.value ?? null,
     avgAdAgeDays: derived?.avgAdAgeDays ?? null,
     newAdsLast30d: derived?.newAdsLast30d ?? null,
     videoPercent: derived?.videoPercent ?? null,
@@ -28,7 +29,7 @@ function numericFactsForSide(
 }
 
 function topAngles(payload: CompetitorStrategyOverviewPayload | null, limit = 5) {
-  return (payload?.insights.angles_by_platform ?? [])
+  return (payload?.insights?.angles_by_platform ?? [])
     .slice()
     .sort((a, b) => (b.totalCount ?? 0) - (a.totalCount ?? 0))
     .slice(0, limit)
@@ -51,17 +52,18 @@ export function buildComparisonDigest(
 ): string {
   const pack = (p: CompetitorStrategyOverviewPayload | null, role: "user" | "competitor") => {
     if (!p) return { role, available: false as const };
-    const ins = p.insights;
+    const safe = normalizeCompetitorStrategyOverviewPayload(p);
+    const ins = safe.insights;
     return {
       role,
       available: true as const,
-      platformNodes: p.map.platformNodes.map((n) => ({
+      platformNodes: safe.map.platformNodes.map((n) => ({
         platform: n.platform,
         funnelStage: n.funnelStage,
         adCount: n.adCount,
         estSpendEurMid: Math.round(n.estSpendEur),
       })),
-      funnelEdges: p.map.funnelEdges.map((e) => ({
+      funnelEdges: safe.map.funnelEdges.map((e) => ({
         from: e.from,
         to: e.to,
         confidence: e.confidence,
@@ -80,9 +82,9 @@ export function buildComparisonDigest(
       voiceByPlatform: ins.voice_tone_by_platform ?? [],
       anglesByPlatform: (ins.angles_by_platform ?? []).slice(0, 12),
       testingVelocityByPlatform: ins.testing_velocity_by_platform ?? [],
-      enrichmentRate: p.enrichmentRate ?? null,
-      totalAds: p.totalAdCount ?? null,
-      audienceInference: p.audience_inference ?? null,
+      enrichmentRate: safe.enrichmentRate ?? null,
+      totalAds: safe.totalAdCount ?? null,
+      audienceInference: safe.audience_inference ?? null,
     };
   };
 
