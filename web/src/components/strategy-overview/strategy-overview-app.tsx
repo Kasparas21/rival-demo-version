@@ -74,11 +74,10 @@ export function StrategyOverviewApp({
   const { data: compiled, loading, isValidating, error: loadError, refetch } = useScrapeKeyedCache<StrategyCompiledResponse>({
     cacheKey: strategyCacheKey,
     enabled: Boolean(domainNorm),
-    validateCached: (c) =>
-      c.ok === true &&
-      Boolean(c.payload) &&
-      typeof c.payload.map === "object" &&
-      c.payload.map != null,
+    validateCached: (c) => {
+      const p = c.payload;
+      return c.ok === true && !!p && typeof p.map === "object" && p.map != null;
+    },
     fetcher: async ({ force } = {}) => {
       const q = new URLSearchParams({ competitorDomain: domain });
       if (force) q.set("force", "1");

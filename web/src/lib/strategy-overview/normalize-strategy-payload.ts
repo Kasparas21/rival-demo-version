@@ -222,7 +222,10 @@ export function normalizeInsightCardsPayload(rawUnknown: unknown): InsightCardsP
     const d = fb.library_activity_timeline;
     if (!r.library_activity_timeline || typeof r.library_activity_timeline !== "object") return d;
     const x = r.library_activity_timeline;
-    const dq = x.dataQuality && typeof x.dataQuality === "object" ? x.dataQuality : {};
+    const dq: Record<string, unknown> =
+      x.dataQuality && typeof x.dataQuality === "object"
+        ? { ...(x.dataQuality as Record<string, unknown>) }
+        : {};
     const ql = dq.qualityLabel;
     return {
       ...d,
