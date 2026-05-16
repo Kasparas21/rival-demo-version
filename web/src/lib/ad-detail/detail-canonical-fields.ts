@@ -1,4 +1,6 @@
+import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import type { GoogleFamilyAdDetailFields } from "@/lib/ad-detail/google-family-ad-detail-fields";
+import { metaTargetingRegionDisplayLine } from "@/lib/ad-detail/meta-ad-detail-fields";
 import {
   formatImpressionsDetailLabel,
   mergeReachAndImpressionsLine,
@@ -53,7 +55,7 @@ export function buildCanonicalDetailSlices(
   rawPayload: unknown,
   googleDetail: GoogleFamilyAdDetailFields | null
 ): CanonicalDetailSlices {
-  const pl = platform.trim().toLowerCase();
+  const pl = normalizeAdDetailPlatformKey(platform.trim());
   let runStartUtcMs: number | null = null;
   let impressionsFormatted: string | null = null;
   let regionDisplay: string | null = null;
@@ -71,6 +73,8 @@ export function buildCanonicalDetailSlices(
     }
     const ir = typeof p.impressionsRange === "string" ? p.impressionsRange.trim() : "";
     if (ir) impressionsFormatted = formatImpressionsDetailLabel(ir);
+    const rf = metaTargetingRegionDisplayLine(rawPayload);
+    if (rf) regionDisplay = rf;
   }
 
   if (pl === "google" || pl === "youtube") {

@@ -41,14 +41,16 @@ import {
 import { buildGoogleFamilyAdDetailFields } from "@/lib/ad-detail/google-family-ad-detail-fields";
 import { buildTikTokAdLibraryDetailRows } from "@/lib/ad-detail/tiktok-ad-detail-rows";
 import { resolveDetailRunningDays } from "@/lib/ad-detail/detail-time-running";
+import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import {
   buildCanonicalDetailSlices,
   formatCanonicalRunStartLabel,
 } from "@/lib/ad-detail/detail-canonical-fields";
 import {
-  metaBroadAudienceDetailLabel,
-  metaEuRegionDetailLabel,
+  metaAgeAudienceDetailLabel,
+  metaGenderAudienceDetailLabel,
   metaPublisherDetailRows,
+  metaTargetMarketFooterLine,
   type MetaPublisherDetailRow,
 } from "@/lib/ad-detail/meta-ad-detail-fields";
 import {
@@ -620,7 +622,7 @@ function AdCreativePreview({
   });
   const lifespanLabel = `${previewLifespanDays}D`;
 
-  const metaPl = ad.platform.toLowerCase() === "meta";
+  const metaPl = normalizeAdDetailPlatformKey(ad.platform) === "meta";
   const linkedinPl = ad.platform.toLowerCase() === "linkedin";
   const pinterestPl = ad.platform.toLowerCase() === "pinterest";
   const snapchatPl = ad.platform.toLowerCase() === "snapchat";
@@ -863,7 +865,7 @@ function DetailsTab({ data }: { data: AdDetailData }) {
   const runningDays = resolveDetailRunningDays(ad.platform, ad.raw_payload, runningApiSlice);
   const timeRunningLabel = `${runningDays} days`;
 
-  const pl = ad.platform.toLowerCase();
+  const pl = normalizeAdDetailPlatformKey(ad.platform);
 
   const adLibrarySourceUrl = resolveAdLibrarySourceUrl(ad.platform, ad.raw_payload);
   const isGoogleFamily = pl === "google" || pl === "youtube";
@@ -952,13 +954,6 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     },
   ];
 
-  if (canonical.impressionsFormatted) {
-    rows.push({
-      label: "Impressions",
-      value: textVal(canonical.impressionsFormatted),
-    });
-  }
-
   if (canonical.regionDisplay) {
     rows.push({
       label: "Region",
@@ -971,10 +966,18 @@ function DetailsTab({ data }: { data: AdDetailData }) {
   }
 
   if (pl === "meta") {
-    const metaEu = metaEuRegionDetailLabel(ad.raw_payload);
-    if (metaEu) rows.push({ label: "Region", value: textVal(metaEu) });
-    const metaAud = metaBroadAudienceDetailLabel(ad.raw_payload);
-    if (metaAud) rows.push({ label: "Audience", value: textVal(metaAud) });
+    const ageLabel = metaAgeAudienceDetailLabel(ad.raw_payload);
+    if (ageLabel) rows.push({ label: "Age range", value: textVal(ageLabel) });
+
+    const genderLabel = metaGenderAudienceDetailLabel(ad.raw_payload);
+    if (genderLabel) rows.push({ label: "Gender", value: textVal(genderLabel) });
+  }
+
+  if (canonical.impressionsFormatted) {
+    rows.push({
+      label: "Impressions",
+      value: textVal(canonical.impressionsFormatted),
+    });
   }
 
   rows.push(...tailBeforeActions);
@@ -1048,6 +1051,8 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     });
   }
 
+  const metaTargetMarketFooter = pl === "meta" ? metaTargetMarketFooterLine(ad.raw_payload) : null;
+
   return (
     <div className="p-4">
       {context.is_creative_test_winner && context.creative_test ? (
@@ -1080,9 +1085,15 @@ function DetailsTab({ data }: { data: AdDetailData }) {
             <span>Niche</span>
             <span>—</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span>Target Market</span>
-            <span>—</span>
+          <div
+            className={`flex items-start justify-between gap-2 ${metaTargetMarketFooter ? "" : "text-slate-400"}`}
+          >
+            <span className={metaTargetMarketFooter ? "text-slate-500" : undefined}>Target Market</span>
+            <span
+              className={`max-w-[62%] text-right ${metaTargetMarketFooter ? "font-medium text-slate-900 [overflow-wrap:anywhere]" : ""}`}
+            >
+              {metaTargetMarketFooter ?? "—"}
+            </span>
           </div>
         </div>
       </div>

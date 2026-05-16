@@ -1,4 +1,5 @@
 import { parseGoogleShownSummaryRange } from "@/lib/ad-library/google-shown-range";
+import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import { parseLooseDateStringToUtcMs } from "@/lib/ad-detail/detail-field-format";
 import { buildGoogleFamilyAdDetailFields } from "@/lib/ad-detail/google-family-ad-detail-fields";
 import {
@@ -159,7 +160,7 @@ export function resolveDetailRunningDays(
   rawPayload: unknown,
   api: DetailRunningApiSlice
 ): number {
-  const pl = platform.trim().toLowerCase();
+  const pl = normalizeAdDetailPlatformKey(platform);
 
   if (pl === "google" || pl === "youtube") {
     const g = googleRunningDays(platform, rawPayload, api);

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   formatMetaPublisherPlatformsLine,
-  metaBroadAudienceDetailLabel,
+  metaAgeAudienceDetailLabel,
   metaEuRegionDetailLabel,
+  metaGenderAudienceDetailLabel,
+  metaLocationAudienceDetailLabel,
   metaPrimaryDescriptionFromPayload,
   metaPublisherDetailRows,
+  metaTargetMarketFooterLine,
+  metaTargetingRegionDisplayLine,
   metaTitleFromPayload,
 } from "@/lib/ad-detail/meta-ad-detail-fields";
 
@@ -25,10 +29,69 @@ describe("meta ad detail helpers", () => {
     expect(metaEuRegionDetailLabel({ targets_eu: false })).toBeNull();
   });
 
-  it('maps gender_audience "All" to broad audience copy', () => {
-    expect(metaBroadAudienceDetailLabel({ gender_audience: "All" })).toBe("All ages · All genders");
-    expect(metaBroadAudienceDetailLabel({ genderAudience: "all" })).toBe("All ages · All genders");
-    expect(metaBroadAudienceDetailLabel({ gender_audience: "Men" })).toBeNull();
+  it("formats granular location_audience", () => {
+    expect(
+      metaLocationAudienceDetailLabel({
+        location_audience: [{ name: "France", type: "countries", excluded: false }],
+      })
+    ).toBe("France");
+    expect(metaLocationAudienceDetailLabel({ locationAudience: [{ name: "Belgium", excluded: true }] })).toBe(
+      "Exclude Belgium"
+    );
+  });
+
+  it("reads Meta transparency fields nested anywhere in the scrape blob", () => {
+    expect(
+      metaLocationAudienceDetailLabel({
+        headline: "X",
+        adsLibraryItem: {
+          location_audience: [{ name: "France", type: "countries", excluded: false }],
+          gender_audience: "All",
+          age_audience: { min: 18, max: 44 },
+        },
+      })
+    ).toBe("France");
+    expect(
+      metaAgeAudienceDetailLabel({
+        snapshot: {},
+        targeting: {
+          age_audience: { min: 18, max: 44 },
+        },
+      })
+    ).toBe("18–44");
+    expect(metaGenderAudienceDetailLabel({ json: { genderAudience: "Men" } })).toBe("Men");
+    expect(metaEuRegionDetailLabel({ outer: { targets_eu: true } })).toBe("EU");
+  });
+
+  it("formats age_audience numeric bands", () => {
+    expect(metaAgeAudienceDetailLabel({ age_audience: { min: 18, max: 44 } })).toBe("18–44");
+    expect(metaAgeAudienceDetailLabel({ ageAudience: { min: 25 } })).toBe("25+");
+  });
+
+  it("passes through gender_audience copy from the scraper", () => {
+    expect(metaGenderAudienceDetailLabel({ gender_audience: "All" })).toBe("All");
+    expect(metaGenderAudienceDetailLabel({ genderAudience: "Men" })).toBe("Men");
+  });
+
+  it("prefers granular locations when EU flag also set", () => {
+    expect(
+      metaTargetingRegionDisplayLine({
+        targets_eu: true,
+        location_audience: [{ name: "France" }],
+      })
+    ).toBe("France");
+    expect(metaTargetingRegionDisplayLine({ targets_eu: true })).toBe("EU");
+  });
+
+  it("builds a compact footer line for scraped targeting", () => {
+    expect(
+      metaTargetMarketFooterLine({
+        location_audience: [{ name: "France" }],
+        age_audience: { min: 18, max: 44 },
+        gender_audience: "All",
+      })
+    ).toBe("France · 18–44 · All");
+    expect(metaTargetMarketFooterLine({ targets_eu: true })).toBe("EU");
   });
 
   it("extracts Meta title (link headline)", () => {

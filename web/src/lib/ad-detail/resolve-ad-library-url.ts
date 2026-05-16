@@ -3,6 +3,8 @@
  * `scraped_ads.raw_payload` (same shapes as normalized library cards).
  */
 
+import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
+
 function stringField(o: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
     const v = o[k];
@@ -23,14 +25,15 @@ function isSyntheticFallbackId(platform: string, id: string): boolean {
   if (/^fb-\d+$/i.test(t)) return true;
   if (/^li-\d+$/i.test(t)) return true;
   if (/^ms-\d+$/i.test(t)) return true;
-  if (platform === "meta" && /^fb-/i.test(t)) return true;
+  const plNorm = normalizeAdDetailPlatformKey(platform);
+  if (plNorm === "meta" && /^fb-/i.test(t)) return true;
   return false;
 }
 
 export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown): string | null {
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) return null;
   const p = rawPayload as Record<string, unknown>;
-  const pl = platform.trim().toLowerCase();
+  const pl = normalizeAdDetailPlatformKey(platform);
 
   switch (pl) {
     case "meta": {
@@ -100,7 +103,8 @@ export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown)
 }
 
 export function adLibraryLinkLabel(platform: string): string {
-  switch (platform.trim().toLowerCase()) {
+  const pl = normalizeAdDetailPlatformKey(platform);
+  switch (pl) {
     case "meta":
       return "View in Meta Ads Library";
     case "tiktok":

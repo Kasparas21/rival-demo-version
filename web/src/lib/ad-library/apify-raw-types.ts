@@ -35,6 +35,19 @@ export type FacebookAdSnapshot = {
   page_profile_picture_url?: string | null;
 };
 
+/** Meta Ad Library API / scraper geographic targeting snippet. */
+export type MetaLocationAudienceEntry = {
+  name: string;
+  type?: string;
+  excluded?: boolean;
+};
+
+/** `age_audience` when the actor exposes numeric bounds (e.g. 18–44). */
+export type MetaAgeAudienceBounds = {
+  min?: number;
+  max?: number;
+};
+
 export type FacebookAdLibraryItem = {
   ad_archive_id?: string;
   collation_id?: string;
@@ -47,6 +60,8 @@ export type FacebookAdLibraryItem = {
   publisher_platform?: string[];
   gender_audience?: string;
   targets_eu?: boolean;
+  location_audience?: MetaLocationAudienceEntry[];
+  age_audience?: MetaAgeAudienceBounds;
   ad_library_url?: string;
   impressions_with_index?: {
     impressions_text?: string | null;

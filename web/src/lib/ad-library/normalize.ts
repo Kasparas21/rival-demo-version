@@ -5,6 +5,8 @@ import type {
   LinkedInAdItem,
   LinkedInAudienceTargetingRow,
   LinkedInCountryShare,
+  MetaAgeAudienceBounds,
+  MetaLocationAudienceEntry,
 } from "@/lib/ad-library/apify-raw-types";
 import {
   cleanDomainHost,
@@ -12,6 +14,7 @@ import {
   junkUserBrandDisplayName,
 } from "@/lib/ad-library/competitor-brand-display";
 import { stableIdForGoogleItemRow } from "@/lib/ad-library/google-stable-id";
+import { harvestDeepMetaTransparencyFields } from "@/lib/ad-detail/meta-ad-detail-fields";
 
 /** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
 export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
@@ -68,6 +71,8 @@ export type MetaAdCard = {
   publisher_platform?: string[];
   targets_eu?: boolean;
   gender_audience?: string;
+  location_audience?: MetaLocationAudienceEntry[];
+  age_audience?: MetaAgeAudienceBounds;
 };
 
 /** Google / YouTube style row */
@@ -340,6 +345,45 @@ function cleanMetaText(value: string): string {
   return trimmed;
 }
 
+function parseBoundIntMeta(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v === "string") {
+    const t = v.trim();
+    if (/^-?\d+$/.test(t)) return parseInt(t, 10);
+  }
+  return undefined;
+}
+
+function parseMetaAgeAudiencePayload(v: unknown): MetaAgeAudienceBounds | undefined {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  const min = parseBoundIntMeta(o.min);
+  const max = parseBoundIntMeta(o.max);
+  if (min == null && max == null) return undefined;
+  const out: MetaAgeAudienceBounds = {};
+  if (min != null) out.min = min;
+  if (max != null) out.max = max;
+  return out;
+}
+
+function parseMetaLocationAudiencePayload(v: unknown): MetaLocationAudienceEntry[] | undefined {
+  if (!Array.isArray(v) || v.length === 0) return undefined;
+  const out: MetaLocationAudienceEntry[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const o = raw as Record<string, unknown>;
+    const name = typeof o.name === "string" ? o.name.trim() : "";
+    if (!name) continue;
+    const type = typeof o.type === "string" ? o.type.trim() : undefined;
+    const excluded = typeof o.excluded === "boolean" ? o.excluded : undefined;
+    out.push({
+      name,
+      ...(type ? { type } : {}),
+      ...(typeof excluded === "boolean" ? { excluded } : {}),
+    });
+  }
+  return out.length ? out : undefined;
+}
 
 /**
  * Converts common Apify / actor variants (camelCase keys, `{ url }` wrappers, nested `adsLibraryItem`)
@@ -423,8 +467,19 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
     return undefined;
   })();
 
-  const gender_audience = pickStr("gender_audience", "genderAudience");
-  const targets_eu = (() => {
+  const deepT = harvestDeepMetaTransparencyFields(raw);
+
+  let gender_audience = pickStr("gender_audience", "genderAudience");
+  if (!gender_audience) {
+    const g =
+      typeof deepT.gender_audience === "string" ? deepT.gender_audience.trim()
+      : typeof deepT.genderAudience === "string"
+        ? (deepT.genderAudience as string).trim()
+        : "";
+    if (g) gender_audience = g;
+  }
+
+  let targets_eu = (() => {
     for (const k of ["targets_eu", "targetsEu"] as const) {
       const v = baseObj[k];
       if (typeof v === "boolean") return v;
@@ -433,6 +488,21 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
     }
     return undefined;
   })();
+  if (typeof targets_eu !== "boolean") {
+    const dv = deepT.targets_eu ?? deepT.targetsEu;
+    if (typeof dv === "boolean") targets_eu = dv;
+    else if (dv === 1 || dv === "1" || dv === "true") targets_eu = true;
+    else if (dv === 0 || dv === "0" || dv === "false") targets_eu = false;
+    else targets_eu = undefined;
+  }
+
+  const location_audience =
+    parseMetaLocationAudiencePayload(baseObj.location_audience ?? baseObj.locationAudience) ??
+    parseMetaLocationAudiencePayload(deepT.location_audience ?? deepT.locationAudience);
+
+  const age_audience =
+    parseMetaAgeAudiencePayload(baseObj.age_audience ?? baseObj.ageAudience) ??
+    parseMetaAgeAudiencePayload(deepT.age_audience ?? deepT.ageAudience);
 
   return {
     ad_archive_id: pickStr("ad_archive_id", "adArchiveId", "archive_id", "adId", "id"),
@@ -457,6 +527,8 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
     ...(publisher_platform?.length ? { publisher_platform } : {}),
     ...(gender_audience ? { gender_audience } : {}),
     ...(typeof targets_eu === "boolean" ? { targets_eu } : {}),
+    ...(location_audience?.length ? { location_audience } : {}),
+    ...(age_audience ? { age_audience } : {}),
   };
 }
 
@@ -916,6 +988,8 @@ export function facebookItemToMetaCard(
     ...(item.publisher_platform?.length ? { publisher_platform: item.publisher_platform } : {}),
     ...(typeof item.targets_eu === "boolean" ? { targets_eu: item.targets_eu } : {}),
     ...(item.gender_audience?.trim() ? { gender_audience: item.gender_audience.trim() } : {}),
+    ...(item.location_audience?.length ? { location_audience: item.location_audience } : {}),
+    ...(item.age_audience ? { age_audience: item.age_audience } : {}),
   };
 }
 
