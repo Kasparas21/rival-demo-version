@@ -52,8 +52,8 @@ function AdThumb96({
 
   if (loading) {
     return (
-      <div className="flex size-24 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-100">
-        <RivalLoadingMicro />
+      <div className="flex size-24 shrink-0 items-center justify-center rounded-md bg-slate-100">
+        <RivalLoadingMicro size="sm" />
       </div>
     );
   }

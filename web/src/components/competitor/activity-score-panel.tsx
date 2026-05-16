@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Check, ChevronDown, ChevronUp, Loader2, RefreshCw } from "lucide-react";
 
 import type { ActivityScoreResult, ActivitySignalName } from "@/lib/activity-score/types";
@@ -71,6 +71,10 @@ type Props = {
   variant?: "card" | "analytics";
   lastScrapedAt?: string | null;
   onFreshnessRefresh?: () => void;
+  /** Fires when initial fetch state changes (`loading && !data`). For unified parent loaders. */
+  onInitialLoadingChange?: (loading: boolean) => void;
+  /** When true (e.g. ad library analytics fox overlay), skip spinner for the initial load. */
+  suppressInitialLoadingUi?: boolean;
 };
 
 export function ActivityScorePanel({
@@ -80,6 +84,8 @@ export function ActivityScorePanel({
   variant = "card",
   lastScrapedAt = null,
   onFreshnessRefresh,
+  onInitialLoadingChange,
+  suppressInitialLoadingUi = false,
 }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -105,6 +111,10 @@ export function ActivityScorePanel({
       typeof cached === "object" &&
       (typeof cached.calculatedAt === "string" || typeof cached.calculated_at === "string"),
   });
+
+  useEffect(() => {
+    onInitialLoadingChange?.(loading && !data);
+  }, [loading, data, onInitialLoadingChange]);
 
   const forceRecompute = useCallback(async () => {
     if (!competitorId) return;
@@ -135,6 +145,9 @@ export function ActivityScorePanel({
   const isAnalytics = variant === "analytics";
 
   if (loading && !data) {
+    if (suppressInitialLoadingUi && isAnalytics) {
+      return <div className="min-h-[140px]" aria-busy="true" />;
+    }
     return (
       <div
         className={

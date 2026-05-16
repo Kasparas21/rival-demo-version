@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import { parseGoogleShownSummaryRange } from "@/lib/ad-library/google-shown-range";
+import type { GoogleAdRow } from "@/lib/ad-library/normalize";
 import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
 import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-recompute";
 import type { Database } from "@/lib/supabase/types";
@@ -52,6 +54,65 @@ function looseDateToIso(label: string | null | undefined, fallbackIso: string): 
   return d.toISOString();
 }
 
+/** LinkedIn Ad Library uses `MM/DD/YYYY`; `Date.parse` is locale-dependent on that shape. */
+function linkedInPublicationLabelToIso(label: string | null | undefined, fallbackIso: string): string {
+  if (!label?.trim()) return fallbackIso;
+  const t = label.trim();
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (m) {
+    const month = Number(m[1]) - 1;
+    const day = Number(m[2]);
+    const year = Number(m[3]);
+    const d = new Date(Date.UTC(year, month, day));
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return looseDateToIso(t, fallbackIso);
+}
+
+function pinterestDisclosureWindowSeenAtIso(
+  disclosureWindow: string | null | undefined,
+  nowIso: string
+): { first: string; last: string } {
+  const t = disclosureWindow?.trim() ?? "";
+  const ran = /^Ran\s+(.+?)\s+[–-]\s+(.+)$/i.exec(t);
+  if (ran) {
+    const first = looseDateToIso(ran[1].trim(), nowIso);
+    return {
+      first,
+      last: looseDateToIso(ran[2].trim(), first),
+    };
+  }
+
+  const from = /^From\s+(.+)$/i.exec(t);
+  if (from) {
+    const first = looseDateToIso(from[1].trim(), nowIso);
+    return { first, last: nowIso };
+  }
+
+  return { first: nowIso, last: nowIso };
+}
+
+/** Persisted `first_seen_at` / `last_seen_at` for normalized Google / YouTube library rows. */
+function googleYouTubeRowSeenAtIso(row: GoogleAdRow, nowIso: string): { first: string; last: string } {
+  if (row.type === "youtube") {
+    const firstRaw = row.firstShown?.trim() || nowIso;
+    const lastRaw = row.lastShown?.trim() || row.firstShown?.trim() || nowIso;
+    return {
+      first: looseDateToIso(firstRaw, nowIso),
+      last: looseDateToIso(lastRaw, nowIso),
+    };
+  }
+  const fromSummary = parseGoogleShownSummaryRange(row.shownSummary);
+  const firstRaw =
+    row.firstShown?.trim() || fromSummary.first || row.lastShownLabel?.trim() || null;
+  const lastRaw =
+    row.lastShown?.trim() || fromSummary.last || row.lastShownLabel?.trim() || firstRaw;
+  return {
+    first: looseDateToIso(firstRaw, nowIso),
+    last: looseDateToIso(lastRaw, looseDateToIso(firstRaw, nowIso)),
+  };
+}
+
 const SOON_MS = 86400000; // reject dates clearly in the future (clock skew)
 
 function coerceUnknownToDate(value: unknown): Date | null {
@@ -100,10 +161,10 @@ export function extractLaunchDate(rawAd: unknown, platform: string): Date | null
       d = tryKeys(["ad_creation_time", "start_date", "started_running_on", "startedAt"]);
       break;
     case "google":
-      d = tryKeys(["first_shown", "start_date", "lastShownLabel"]);
+      d = tryKeys(["firstShown", "first_shown", "start_date"]);
       break;
     case "youtube":
-      d = tryKeys(["first_shown", "start_date", "create_time"]);
+      d = tryKeys(["firstShown", "first_shown", "start_date", "create_time"]);
       break;
     case "tiktok":
       d = tryKeys(["first_shown_date", "create_time", "firstShown", "lastShown"]);
@@ -242,6 +303,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
       const rows: ScrapedAdInsert[] = [];
       for (const row of out.google.rows ?? []) {
         if (row.type === "google") {
+          const { first, last } = googleYouTubeRowSeenAtIso(row, nowIso);
           rows.push({
             ...base,
             platform: "google",
@@ -255,8 +317,8 @@ export function buildScrapedAdInsertsForPlatform(params: {
             ]),
             ad_creative_url: row.img?.trim() || null,
             format: normalizeCreativeFormat(row.format, row.img ? "image" : "text"),
-            first_seen_at: looseDateToIso(row.lastShownLabel, nowIso),
-            last_seen_at: looseDateToIso(row.lastShownLabel, nowIso),
+            first_seen_at: first,
+            last_seen_at: last,
             ai_extracted_launch_date: (() => {
               const launch = extractLaunchDate(row, "google");
               return launch ? launch.toISOString() : null;
@@ -264,6 +326,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
             raw_payload: sanitizeJsonForPostgres(row),
           });
         } else {
+          const { first, last } = googleYouTubeRowSeenAtIso(row, nowIso);
           rows.push({
             ...base,
             platform: "youtube",
@@ -271,8 +334,8 @@ export function buildScrapedAdInsertsForPlatform(params: {
             ad_text: joinedText([row.title, row.channel, row.views]),
             ad_creative_url: row.thumbnail?.trim() || null,
             format: "video",
-            first_seen_at: nowIso,
-            last_seen_at: nowIso,
+            first_seen_at: first,
+            last_seen_at: last,
             ai_extracted_launch_date: (() => {
               const launch = extractLaunchDate(row, "youtube");
               return launch ? launch.toISOString() : null;
@@ -284,21 +347,35 @@ export function buildScrapedAdInsertsForPlatform(params: {
       return rows;
     }
     case "linkedin":
-      return (out.linkedin.ads ?? []).map((ad) => ({
-        ...base,
-        platform: "linkedin",
-        stable_ad_key: stableAdKeyForLibraryItem("linkedin", ad),
-        ad_text: joinedText([ad.headline, ad.desc]),
-        ad_creative_url: ad.img?.trim() || null,
-        format: ad.videoUrl ? "video" : "image",
-        first_seen_at: nowIso,
-        last_seen_at: nowIso,
-        ai_extracted_launch_date: (() => {
-          const launch = extractLaunchDate(ad, "linkedin");
-          return launch ? launch.toISOString() : null;
-        })(),
-        raw_payload: sanitizeJsonForPostgres(ad),
-      }));
+      return (out.linkedin.ads ?? []).map((ad) => {
+        const pubStart =
+          typeof (ad as { publicationStart?: string }).publicationStart === "string"
+            ? (ad as { publicationStart: string }).publicationStart
+            : null;
+        const pubEnd =
+          typeof (ad as { publicationEnd?: string }).publicationEnd === "string"
+            ? (ad as { publicationEnd: string }).publicationEnd
+            : null;
+        const first = linkedInPublicationLabelToIso(pubStart, nowIso);
+        const last = pubEnd?.trim()
+          ? linkedInPublicationLabelToIso(pubEnd, first)
+          : nowIso;
+        return {
+          ...base,
+          platform: "linkedin",
+          stable_ad_key: stableAdKeyForLibraryItem("linkedin", ad),
+          ad_text: joinedText([ad.headline, ad.desc]),
+          ad_creative_url: ad.img?.trim() || null,
+          format: ad.videoUrl ? "video" : "image",
+          first_seen_at: first,
+          last_seen_at: last,
+          ai_extracted_launch_date: (() => {
+            const launch = extractLaunchDate(ad, "linkedin");
+            return launch ? launch.toISOString() : null;
+          })(),
+          raw_payload: sanitizeJsonForPostgres(ad),
+        };
+      });
     case "tiktok":
       return (out.tiktok.ads ?? []).map((ad) => ({
         ...base,
@@ -332,21 +409,24 @@ export function buildScrapedAdInsertsForPlatform(params: {
         raw_payload: sanitizeJsonForPostgres(ad),
       }));
     case "pinterest":
-      return (out.pinterest.ads ?? []).map((ad) => ({
-        ...base,
-        platform: "pinterest",
-        stable_ad_key: stableAdKeyForLibraryItem("pinterest", ad),
-        ad_text: joinedText([ad.headline, ad.desc]),
-        ad_creative_url: ad.img?.trim() || null,
-        format: ad.videoUrl ? "video" : "image",
-        first_seen_at: nowIso,
-        last_seen_at: nowIso,
-        ai_extracted_launch_date: (() => {
-          const launch = extractLaunchDate(ad, "pinterest");
-          return launch ? launch.toISOString() : null;
-        })(),
-        raw_payload: sanitizeJsonForPostgres(ad),
-      }));
+      return (out.pinterest.ads ?? []).map((ad) => {
+        const seen = pinterestDisclosureWindowSeenAtIso(ad.disclosureWindow, nowIso);
+        return {
+          ...base,
+          platform: "pinterest",
+          stable_ad_key: stableAdKeyForLibraryItem("pinterest", ad),
+          ad_text: joinedText([ad.headline, ad.desc]),
+          ad_creative_url: ad.img?.trim() || null,
+          format: ad.videoUrl ? "video" : "image",
+          first_seen_at: seen.first,
+          last_seen_at: seen.last,
+          ai_extracted_launch_date: (() => {
+            const launch = extractLaunchDate(ad, "pinterest");
+            return launch ? launch.toISOString() : null;
+          })(),
+          raw_payload: sanitizeJsonForPostgres(ad),
+        };
+      });
     case "snapchat":
       return (out.snapchat.ads ?? []).map((ad) => ({
         ...base,

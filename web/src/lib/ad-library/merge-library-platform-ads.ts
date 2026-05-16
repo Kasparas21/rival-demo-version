@@ -45,6 +45,39 @@ function metaTimeToMs(u: number | undefined): number {
   return u > 1e12 ? u : u * 1000;
 }
 
+function minOptionalDateString(a?: string | null, b?: string | null): string | null {
+  const ta = a?.trim() || null;
+  const tb = b?.trim() || null;
+  if (!ta) return tb;
+  if (!tb) return ta;
+  const da = new Date(ta).getTime();
+  const db = new Date(tb).getTime();
+  if (Number.isNaN(da)) return tb;
+  if (Number.isNaN(db)) return ta;
+  return da <= db ? ta : tb;
+}
+
+function maxOptionalDateString(a?: string | null, b?: string | null): string | null {
+  const ta = a?.trim() || null;
+  const tb = b?.trim() || null;
+  if (!ta) return tb;
+  if (!tb) return ta;
+  const da = new Date(ta).getTime();
+  const db = new Date(tb).getTime();
+  if (Number.isNaN(da)) return tb;
+  if (Number.isNaN(db)) return ta;
+  return da >= db ? ta : tb;
+}
+
+function mergeOptionalEnrichmentText(a?: string | null, b?: string | null): string | null {
+  const ta = a?.trim() || "";
+  const tb = b?.trim() || "";
+  if (!ta) return tb || null;
+  if (!tb) return ta || null;
+  if (tb.length >= ta.length) return tb;
+  return ta;
+}
+
 function metaLastSeenMs(card: MetaAdCard): number {
   const t = maxOptionalUnix(card.endedAt, card.startedAt);
   return metaTimeToMs(t ?? undefined) || 0;
@@ -67,6 +100,13 @@ function mergeGoogleRows(a: GoogleAdRow, b: GoogleAdRow): GoogleAdRow {
       youtubeVideoId: b.youtubeVideoId ?? a.youtubeVideoId,
       videoUrl: b.videoUrl ?? a.videoUrl,
       thumbnail: b.thumbnail?.trim() ? b.thumbnail : a.thumbnail,
+      firstShown: minOptionalDateString(a.firstShown, b.firstShown),
+      lastShown: maxOptionalDateString(a.lastShown, b.lastShown),
+      libraryRegionSummary: mergeOptionalEnrichmentText(a.libraryRegionSummary, b.libraryRegionSummary),
+      libraryTargetingSummary: mergeOptionalEnrichmentText(
+        a.libraryTargetingSummary,
+        b.libraryTargetingSummary
+      ),
     };
   }
   if (a.type === "google" && b.type === "google") {
@@ -76,6 +116,13 @@ function mergeGoogleRows(a: GoogleAdRow, b: GoogleAdRow): GoogleAdRow {
       img: b.img ?? a.img,
       previewUrl: b.previewUrl ?? a.previewUrl,
       creativeCopy: b.creativeCopy ?? a.creativeCopy,
+      firstShown: minOptionalDateString(a.firstShown, b.firstShown),
+      lastShown: maxOptionalDateString(a.lastShown, b.lastShown),
+      libraryRegionSummary: mergeOptionalEnrichmentText(a.libraryRegionSummary, b.libraryRegionSummary),
+      libraryTargetingSummary: mergeOptionalEnrichmentText(
+        a.libraryTargetingSummary,
+        b.libraryTargetingSummary
+      ),
     };
   }
   return b;
@@ -86,9 +133,12 @@ function mergePlain<T extends Record<string, unknown>>(a: T, b: T): T {
 }
 
 function googleRowLastSeenMs(row: GoogleAdRow, nowMs: number): number {
-  if (row.type === "google" && row.lastShownLabel) {
-    const d = new Date(row.lastShownLabel);
-    if (!Number.isNaN(d.getTime())) return d.getTime();
+  if (row.type === "google" || row.type === "youtube") {
+    const iso = row.lastShown?.trim() || (row.type === "google" ? row.lastShownLabel?.trim() : null);
+    if (iso) {
+      const d = new Date(iso);
+      if (!Number.isNaN(d.getTime())) return d.getTime();
+    }
   }
   return nowMs;
 }

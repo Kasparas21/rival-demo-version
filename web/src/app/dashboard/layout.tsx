@@ -1083,7 +1083,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <Suspense
       fallback={
         <div className="flex h-screen w-full items-center justify-center bg-[color:var(--rival-bg-soft,#fafafa)] px-6">
-          <RivalLoadingBlock title="Loading dashboard" description="Preparing sidebar and workspaces." padded={false} />
+          <RivalLoadingBlock padded={false} />
         </div>
       }
     >

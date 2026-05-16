@@ -24,7 +24,7 @@ export type SearchingFlowSnapshot = {
   } | null;
   fieldConfidence: Partial<Record<ChannelId, "high" | "medium" | "low">>;
   fieldPreviewUrls: Partial<Record<ChannelId, string>>;
-  /** Keyword suggestions from discover — TikTok / Snapchat / Pinterest. */
+  /** Unused; kept for older session snapshots. */
   recommendedKeywords?: string[];
   /** Ad library region / market prefs from the confirm screen (session is also updated on submit). */
   adLibraryRegionPrefs?: Partial<AdLibraryRegionPrefs>;

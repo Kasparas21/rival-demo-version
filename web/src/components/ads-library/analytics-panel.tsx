@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { BarChart3, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
 
 import { describeArcClockwise } from "@/lib/charts/arc-geometry";
 import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
 import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import type { SharedLandingPagesListCache } from "@/components/competitor/landing-pages-tab";
-import { RivalLoadingMicro } from "@/components/ui/rival-loading";
+import { RivalLogoVideo } from "@/components/ui/rival-loading";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 type LandingPageGroup = {
@@ -75,7 +75,7 @@ const PLATFORM_COLORS_HOVER: Record<string, string> = {
   tiktok: "#000000",
   linkedin: "#08518E",
   pinterest: "#B30019",
-  snapchat: "#E6E300",
+  snapchat: "#C9B800",
 };
 
 const PLATFORM_TEXT_COLORS: Record<string, string> = {
@@ -84,7 +84,7 @@ const PLATFORM_TEXT_COLORS: Record<string, string> = {
   tiktok: "#000000",
   linkedin: "#0A66C2",
   pinterest: "#E60023",
-  snapchat: "#B8B600",
+  snapchat: "#5c4f00",
 };
 
 export function AdLibraryAnalyticsPanel({
@@ -97,6 +97,15 @@ export function AdLibraryAnalyticsPanel({
   landingPagesListCache = null,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
+  const [activityScoreLoading, setActivityScoreLoading] = useState(() => Boolean(competitorId));
+  const onActivityScoreLoadingChange = useCallback((v: boolean) => {
+    setActivityScoreLoading(v);
+  }, []);
+
+  useEffect(() => {
+    setActivityScoreLoading(Boolean(competitorId));
+  }, [competitorId]);
+
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
   const lpCacheKey = `${domainKey}:landing-pages:${competitorId}:${stamp}:100`;
@@ -128,6 +137,11 @@ export function AdLibraryAnalyticsPanel({
     () => Object.values(platformCounts).filter((n) => n > 0).length,
     [platformCounts]
   );
+
+  const landingLoading = loading;
+  const bothAsyncLoading = Boolean(competitorId) && activityScoreLoading && landingLoading;
+  const activityFoxOnly = Boolean(competitorId) && activityScoreLoading && !landingLoading;
+  const landingFoxOnly = !activityScoreLoading && landingLoading;
 
   return (
     <section className="mb-5 overflow-hidden rounded-2xl border border-[#cfe8f8]/80 bg-gradient-to-br from-[#e8f4fc]/90 via-[#f8fafc]/95 to-white shadow-[0_2px_8px_rgba(15,23,42,0.06)] ring-1 ring-white/80">
@@ -167,31 +181,74 @@ export function AdLibraryAnalyticsPanel({
           </div>
 
           {competitorId ? (
-            <div className="min-h-0 border-b border-[#e2e8f0]/90 p-5 xl:border-b-0 xl:border-r">
+            <div className="relative min-h-0 xl:col-span-2">
+              <div className="relative grid min-h-0 grid-cols-1 gap-0 xl:grid-cols-2">
+                <div
+                  className={`min-h-0 p-5 xl:border-b-0 ${
+                    bothAsyncLoading ? "" : "border-b border-[#e2e8f0]/90 xl:border-r"
+                  }`}
+                >
+                  {!bothAsyncLoading ? (
+                    <div className="mb-3 flex items-center gap-1.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+                        Activity score
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="relative min-h-[140px]">
+                    {activityFoxOnly ? <AdLibraryAnalyticsFoxOverlay /> : null}
+                    <ActivityScorePanel
+                      competitorId={competitorId}
+                      cacheDomainNorm={cacheDomainNorm}
+                      variant="analytics"
+                      lastScrapedAt={lastScrapedAt}
+                      onFreshnessRefresh={onFreshnessRescrape}
+                      onInitialLoadingChange={onActivityScoreLoadingChange}
+                      suppressInitialLoadingUi
+                    />
+                  </div>
+                </div>
+                <div className="min-h-0 p-5">
+                  {!bothAsyncLoading ? (
+                    <div className="mb-3 flex items-center gap-1.5">
+                      <LinkIcon className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+                        Top landing pages
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="relative min-h-[140px]">
+                    {landingFoxOnly ? <AdLibraryAnalyticsFoxOverlay /> : null}
+                    <LandingPagesList
+                      groups={landingPages}
+                      loading={landingLoading}
+                      onViewAll={onViewAllLandingPages}
+                      suppressLocalLoader
+                    />
+                  </div>
+                </div>
+                {bothAsyncLoading ? <AdLibraryAnalyticsFoxOverlay /> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="min-h-0 p-5 xl:border-b-0">
               <div className="mb-3 flex items-center gap-1.5">
+                <LinkIcon className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
-                  Activity score
+                  Top landing pages
                 </span>
               </div>
-              <ActivityScorePanel
-                competitorId={competitorId}
-                cacheDomainNorm={cacheDomainNorm}
-                variant="analytics"
-                lastScrapedAt={lastScrapedAt}
-                onFreshnessRefresh={onFreshnessRescrape}
-              />
+              <div className="relative min-h-[140px]">
+                {landingLoading ? <AdLibraryAnalyticsFoxOverlay /> : null}
+                <LandingPagesList
+                  groups={landingPages}
+                  loading={landingLoading}
+                  onViewAll={onViewAllLandingPages}
+                  suppressLocalLoader
+                />
+              </div>
             </div>
-          ) : null}
-
-          <div className="p-5 xl:border-b-0">
-            <div className="mb-3 flex items-center gap-1.5">
-              <LinkIcon className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
-                Top landing pages
-              </span>
-            </div>
-            <LandingPagesList groups={landingPages} loading={loading} onViewAll={onViewAllLandingPages} />
-          </div>
+          )}
         </div>
       ) : null}
     </section>
@@ -433,17 +490,39 @@ function HoveredPlatformLabel({
   );
 }
 
+function AdLibraryAnalyticsFoxOverlay() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
+      <RivalLogoVideo size="xl" className="scale-[1.45] object-contain" />
+    </div>
+  );
+}
+
 function LandingPagesList({
   groups,
   loading,
   onViewAll,
+  suppressLocalLoader = false,
 }: {
   groups: LandingPageGroup[];
   loading: boolean;
   onViewAll?: () => void;
+  /** When true, omit inline fox/caption; parent shows a unified overlay (ad library analytics). */
+  suppressLocalLoader?: boolean;
 }) {
   if (loading) {
-    return <RivalLoadingMicro caption="Loading landing pages…" />;
+    return suppressLocalLoader ? (
+      <div className="min-h-[140px]" aria-busy="true" />
+    ) : (
+      <div className="flex justify-center py-4">
+        <RivalLogoVideo size="sm" className="object-contain" />
+      </div>
+    );
   }
 
   if (groups.length === 0) {
@@ -487,7 +566,7 @@ function LandingPagesList({
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               {platformsInUrl.slice(0, 4).map(([platform, count]) => (
                 <span key={platform} className="text-[10px] text-[#64748b]">
-                  <span className="font-medium" style={{ color: PLATFORM_COLORS[platform] ?? "#64748b" }}>
+                  <span className="font-medium" style={{ color: PLATFORM_TEXT_COLORS[platform] ?? "#64748b" }}>
                     {PLATFORM_LABELS[platform] ?? platform}
                   </span>
                   : {count}

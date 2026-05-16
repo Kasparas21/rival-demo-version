@@ -394,30 +394,14 @@ export function AIInsightChat({
                   )
                 )}
                 {isLoading && (
-                  <div className="flex items-start gap-3">
-                    <div
-                      className="relative flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/[0.08] bg-gradient-to-br from-[#2a2a2a] to-[#474747]"
-                      aria-hidden
-                    >
-                      <RivalLogoVideo size="xs" />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-1.5 pb-4 pt-1">
-                      <p className="text-[13px] font-medium tracking-tight text-[#52525b]">Thinking…</p>
-                      <div className="flex items-center gap-1.5" aria-hidden>
-                        <span
-                          className="size-2 rounded-full bg-[#DDF1FD] motion-safe:animate-bounce"
-                          style={{ animationDelay: "0ms" }}
-                        />
-                        <span
-                          className="size-2 rounded-full bg-[#DDF1FD] motion-safe:animate-bounce"
-                          style={{ animationDelay: "150ms" }}
-                        />
-                        <span
-                          className="size-2 rounded-full bg-[#DDF1FD] motion-safe:animate-bounce"
-                          style={{ animationDelay: "300ms" }}
-                        />
-                      </div>
-                    </div>
+                  <div
+                    className="flex justify-start py-3"
+                    role="status"
+                    aria-label="Loading"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <RivalLogoVideo size="sm" className="object-contain" />
                   </div>
                 )}
                 <div ref={messagesEndRef} />

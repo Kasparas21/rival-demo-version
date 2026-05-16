@@ -121,12 +121,7 @@ export function CreativeTestsTab({
 
   if (loading && !data && !loadErr) {
     return (
-      <RivalLoadingBlock
-        title="Loading creative tests…"
-        description="Clustering launches by day and platform to infer test groups and winners."
-        padded
-        className="mx-auto max-w-5xl py-16 sm:py-24"
-      />
+      <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16 sm:py-24" />
     );
   }
 

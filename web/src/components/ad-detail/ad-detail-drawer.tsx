@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Bookmark,
   BookmarkCheck,
@@ -16,12 +17,47 @@ import {
 } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { FacebookLogo } from "@/components/icons/facebook-logo";
+import { InstagramMark } from "@/components/icons/instagram-mark";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import type { Json } from "@/lib/supabase/types";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
+import {
+  adLibraryLinkLabel,
+  resolveAdLibrarySourceUrl,
+} from "@/lib/ad-detail/resolve-ad-library-url";
+import {
+  isMostlyVerticalCreativePlatform,
+  resolveAdDetailCreativeMedia,
+} from "@/lib/ad-detail/resolve-creative-media";
+import {
+  buildLinkedInLibraryDetailRows,
+  buildPinterestLibraryDetailRows,
+  buildSnapchatLibraryDetailRows,
+} from "@/lib/ad-detail/linkedin-pinterest-snapchat-detail-rows";
+import { buildGoogleFamilyAdDetailFields } from "@/lib/ad-detail/google-family-ad-detail-fields";
+import { buildTikTokAdLibraryDetailRows } from "@/lib/ad-detail/tiktok-ad-detail-rows";
+import { resolveDetailRunningDays } from "@/lib/ad-detail/detail-time-running";
+import {
+  buildCanonicalDetailSlices,
+  formatCanonicalRunStartLabel,
+} from "@/lib/ad-detail/detail-canonical-fields";
+import {
+  metaBroadAudienceDetailLabel,
+  metaEuRegionDetailLabel,
+  metaPublisherDetailRows,
+  type MetaPublisherDetailRow,
+} from "@/lib/ad-detail/meta-ad-detail-fields";
+import {
+  cleanLinkedInScraperAdDescription,
+  cleanPinterestAdPreviewDescription,
+  pinterestCaptionFieldsFromPayload,
+  snapchatPreviewHeadlineFromPayload,
+} from "@/lib/ad-library/normalize";
+import { hostFromLandingPageUrl } from "@/lib/landing-pages/normalize-url";
 
 function platformForIcon(p: string): StrategyPlatform {
   const x = p.toLowerCase();
@@ -37,6 +73,30 @@ function platformForIcon(p: string): StrategyPlatform {
     return x;
   }
   return "meta";
+}
+
+function MetaPublisherPlatformGlyph({ slug, index }: { slug: string; index: number }) {
+  switch (slug) {
+    case "FACEBOOK":
+      return <FacebookLogo idSuffix={`apd-${index}`} className="h-3.5 w-3.5 shrink-0" />;
+    case "INSTAGRAM":
+      return <InstagramMark className="h-3.5 w-3.5 shrink-0" />;
+    default:
+      return null;
+  }
+}
+
+function MetaPublisherPlatformsDetailValue({ rows }: { rows: MetaPublisherDetailRow[] }) {
+  return (
+    <div className="flex max-w-[280px] flex-wrap items-center justify-end gap-x-4 gap-y-1.5">
+      {rows.map((row, i) => (
+        <span key={`${row.key}-${i}`} className="inline-flex items-center gap-1.5">
+          <MetaPublisherPlatformGlyph slug={row.key} index={i} />
+          <span className="font-medium text-slate-900">{row.label}</span>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export type AdDetailDrawerPayload = {
@@ -107,6 +167,11 @@ export function AdDetailDrawer({
   const [generatingStructure, setGeneratingStructure] = useState(false);
   const [savedRowId, setSavedRowId] = useState<string | null>(null);
   const [saveInFlight, setSaveInFlight] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!adId) {
@@ -239,9 +304,10 @@ export function AdDetailDrawer({
   }, [adId, generatingStructure]);
 
   if (!adId) return null;
+  if (!mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-[130] flex justify-end" role="dialog" aria-modal="true">
+  return createPortal(
+    <div className="fixed inset-0 z-[150] flex justify-end" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
 
       <div className="relative flex h-full w-full max-w-[1080px] animate-in border-l border-slate-200 bg-white shadow-2xl slide-in-from-right duration-200">
@@ -303,7 +369,7 @@ export function AdDetailDrawer({
 
           {loading ? (
             <div className="flex flex-1 flex-col overflow-y-auto py-16">
-              <RivalLoadingBlock title="Loading ad…" description="Fetching creative, copy, and save state." padded className="min-h-[200px]" />
+              <RivalLoadingBlock size="2xl" padded className="min-h-[280px]" />
             </div>
           ) : null}
 
@@ -390,7 +456,8 @@ export function AdDetailDrawer({
           ) : null}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -402,6 +469,140 @@ function safeExtractHost(url: string): string | null {
   }
 }
 
+function normalizePreviewWhitespace(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+/** When joined `ad_text` glues Snapchat gallery status on the same line, keep the headline only. */
+function snapchatHeadlineStripGalleryStatusGlue(block: string): string {
+  const line = block.split(/\r?\n/)[0]?.trim() ?? "";
+  const narrowed = line
+    .replace(/\s+ACTIVE\s*[·•]\s*Review\s*:[^\n]*$/iu, "")
+    .replace(/\s+PAUSED\s*[·•]\s*Review\s*:[^\n]*$/iu, "")
+    .trim();
+  return narrowed || line;
+}
+
+function safeExternalHref(url: string | null | undefined): string | null {
+  const t = url?.trim();
+  if (!t) return null;
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+}
+
+function landingDetailHostTrailingSlash(hrefOrRaw: string | null | undefined): string | null {
+  const t = hrefOrRaw?.trim();
+  if (!t) return null;
+  const host = hostFromLandingPageUrl(t);
+  return host ? `${host.toLowerCase()}/` : null;
+}
+
+function detailCreativeMediaClasses(vertical: boolean, forVideo: boolean): string {
+  const base = "mx-auto block w-full object-contain";
+  if (vertical) {
+    return `${base} max-h-[min(600px,85vh)] max-w-[min(100%,min(340px,100vw))]`;
+  }
+  return `${base} max-h-[600px]${forVideo ? " min-h-[200px]" : ""}`;
+}
+
+function DetailCreativeVideo({
+  src,
+  poster,
+  vertical,
+  platformKey,
+}: {
+  src: string;
+  poster?: string;
+  vertical: boolean;
+  platformKey: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (failed) {
+    if (poster) {
+      return (
+        <img
+          src={poster}
+          alt=""
+          loading="lazy"
+          className={detailCreativeMediaClasses(vertical, false)}
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      );
+    }
+    return (
+      <div className="flex aspect-square w-full items-center justify-center">
+        <ComparisonPlatformIcon platform={platformForIcon(platformKey)} className="h-12 w-12 opacity-30" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative inline-block max-w-full">
+      <video
+        controls
+        playsInline
+        preload="auto"
+        poster={poster}
+        src={src}
+        className={`${detailCreativeMediaClasses(vertical, true)} bg-black`}
+        onError={() => setFailed(true)}
+      />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600 pl-1 shadow-lg"
+          aria-hidden
+        >
+          <div className="h-0 w-0 border-b-[7px] border-b-transparent border-l-[12px] border-l-white border-t-[7px] border-t-transparent" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
+  const resolved = resolveAdDetailCreativeMedia(ad);
+  const vertical = isMostlyVerticalCreativePlatform(ad.platform);
+
+  if (resolved.kind === "empty") {
+    return (
+      <div className="flex aspect-square w-full items-center justify-center">
+        <ComparisonPlatformIcon platform={platformForIcon(ad.platform)} className="h-12 w-12 opacity-30" />
+      </div>
+    );
+  }
+
+  if (resolved.kind === "image") {
+    return (
+      <img
+        src={resolved.src}
+        alt=""
+        loading="lazy"
+        className={detailCreativeMediaClasses(vertical, false)}
+        referrerPolicy="no-referrer"
+        onError={(e) => {
+          (e.target as HTMLImageElement).style.display = "none";
+        }}
+      />
+    );
+  }
+
+  return (
+    <DetailCreativeVideo
+      src={resolved.src}
+      poster={resolved.poster}
+      vertical={vertical}
+      platformKey={ad.platform}
+    />
+  );
+}
+
 function AdCreativePreview({
   ad,
   competitor,
@@ -411,13 +612,35 @@ function AdCreativePreview({
   competitor: AdDetailData["competitor"];
   context: AdDetailData["context"];
 }) {
-  const lifespanLabel =
-    ad.lifespan_days === 0 && ad.platform === "google" ? "Lifespan N/A" : `${ad.lifespan_days}D`;
-  const creative = ad.ad_creative_url?.trim() ?? "";
-  const isVideo = /\.(mp4|webm)(\?|$)/i.test(creative) || ad.format === "video";
+  const previewLifespanDays = resolveDetailRunningDays(ad.platform, ad.raw_payload, {
+    lifespan_days: ad.lifespan_days,
+    first_seen_at: ad.first_seen_at,
+    last_seen_at: ad.last_seen_at,
+    is_killed: ad.is_killed,
+  });
+  const lifespanLabel = `${previewLifespanDays}D`;
 
+  const metaPl = ad.platform.toLowerCase() === "meta";
+  const linkedinPl = ad.platform.toLowerCase() === "linkedin";
+  const pinterestPl = ad.platform.toLowerCase() === "pinterest";
+  const snapchatPl = ad.platform.toLowerCase() === "snapchat";
   const meta =
-    ad.platform === "meta" && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+    metaPl && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+      ? (ad.raw_payload as Record<string, unknown>)
+      : null;
+
+  const linkedin =
+    linkedinPl && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+      ? (ad.raw_payload as Record<string, unknown>)
+      : null;
+
+  const pinterest =
+    pinterestPl && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+      ? (ad.raw_payload as Record<string, unknown>)
+      : null;
+
+  const snapchatPayload =
+    snapchatPl && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
       ? (ad.raw_payload as Record<string, unknown>)
       : null;
 
@@ -428,9 +651,41 @@ function AdCreativePreview({
         ? meta.destinationUrl
         : null;
   const landingFromContext = context.landing_page_url?.trim() || null;
+  const linkedinLandingHost =
+    linkedin && typeof linkedin.url === "string" && linkedin.url.trim()
+      ? hostFromLandingPageUrl(linkedin.url.trim())?.replace(/^www\./i, "")
+      : null;
+  const pinterestLandingHostRaw =
+    pinterest && typeof pinterest.url === "string" ? pinterest.url.trim() : "";
+  const pinterestLandingHost =
+    pinterestLandingHostRaw &&
+    pinterestLandingHostRaw !== "—" &&
+    !/\s/.test(pinterestLandingHostRaw) &&
+    !/^https?:\/\//i.test(pinterestLandingHostRaw)
+      ? pinterestLandingHostRaw.replace(/^www\./i, "")
+      : pinterestLandingHostRaw && pinterestLandingHostRaw !== "—"
+        ? hostFromLandingPageUrl(
+            pinterestLandingHostRaw.includes("://") ? pinterestLandingHostRaw : `https://${pinterestLandingHostRaw}`
+          )?.replace(/^www\./i, "")
+        : null;
+
+  const snapchatLandingRaw =
+    snapchatPayload && typeof snapchatPayload.url === "string" ? snapchatPayload.url.trim() : "";
+  const snapchatLandingHost =
+    snapchatLandingRaw && snapchatLandingRaw !== "—"
+      ? !/\s/.test(snapchatLandingRaw) && !/^https?:\/\//i.test(snapchatLandingRaw)
+        ? snapchatLandingRaw.replace(/^www\./i, "")
+        : hostFromLandingPageUrl(
+            snapchatLandingRaw.includes("://") ? snapchatLandingRaw : `https://${snapchatLandingRaw}`
+          )?.replace(/^www\./i, "")
+      : null;
+
   const landingHost =
     (linkDest ? safeExtractHost(linkDest) : null) ??
-    (landingFromContext ? safeExtractHost(landingFromContext) : null);
+    (landingFromContext ? safeExtractHost(landingFromContext) : null) ??
+    (linkedinLandingHost ?? null) ??
+    (pinterestLandingHost ?? null) ??
+    (snapchatLandingHost ?? null);
 
   const headline =
     (meta && typeof meta.linkHeadline === "string" && meta.linkHeadline.trim()) ||
@@ -438,6 +693,85 @@ function AdCreativePreview({
     null;
   const linkDescription =
     meta && typeof meta.linkDescription === "string" && meta.linkDescription.trim() ? meta.linkDescription : null;
+
+  const metaPrimaryDesc =
+    meta && typeof meta.desc === "string" && meta.desc.trim() ? meta.desc.trim() : null;
+
+  let storyTitle: string | null = null;
+  let storyBody: string | null = null;
+
+  if (metaPl) {
+    storyTitle = headline;
+    storyBody = metaPrimaryDesc || ad.ad_text?.trim() || null;
+  } else if (linkedinPl) {
+    // LinkedIn sponsored updates are a single primary text block — no headline row in the preview.
+    storyTitle = null;
+    const rawLiDesc =
+      linkedin && typeof linkedin.desc === "string" && linkedin.desc.trim() ? linkedin.desc.trim() : "";
+    const cleanedLiDesc = rawLiDesc ? cleanLinkedInScraperAdDescription(rawLiDesc).trim() : "";
+    const cleanedJoined =
+      ad.ad_text?.trim() ? cleanLinkedInScraperAdDescription(ad.ad_text.trim()).trim() : "";
+    storyBody = (cleanedLiDesc || cleanedJoined || "") || null;
+  } else if (pinterestPl) {
+    const pinCaps = pinterest ? pinterestCaptionFieldsFromPayload(pinterest) : { headline: "", desc: "" };
+    const rawPinHead = pinCaps.headline.trim() || null;
+    storyTitle = rawPinHead && !/^pinterest ad$/i.test(rawPinHead) ? rawPinHead : null;
+
+    const fromPayloadDesc = pinCaps.desc ? cleanPinterestAdPreviewDescription(pinCaps.desc.trim()) : "";
+
+    const rawJoined = ad.ad_text?.trim() ?? "";
+    let fromJoinedDesc = "";
+    if (rawJoined && rawJoined !== "—") {
+      const blocks = rawJoined.split(/\n\n+/).map((p) => p.trim()).filter(Boolean);
+      const hNorm = storyTitle ? normalizePreviewWhitespace(storyTitle) : "";
+      if (blocks.length >= 2 && hNorm && normalizePreviewWhitespace(blocks[0] ?? "") === hNorm) {
+        fromJoinedDesc = cleanPinterestAdPreviewDescription(blocks.slice(1).join("\n\n"));
+      }
+    }
+
+    let pinBody = (fromPayloadDesc.trim() || fromJoinedDesc.trim() || "").trim();
+
+    if (!pinBody && rawJoined && rawJoined !== "—") {
+      const cleanedAll = cleanPinterestAdPreviewDescription(rawJoined);
+      const ht = storyTitle?.trim() ?? "";
+      if (!ht) {
+        pinBody = cleanedAll.trim();
+      } else if (normalizePreviewWhitespace(cleanedAll) !== normalizePreviewWhitespace(ht)) {
+        if (cleanedAll.startsWith(ht)) {
+          const rest = cleanedAll.slice(ht.length).replace(/^[\s\u00a0:：·•\-\u2013\u2014\r\n]+/u, "").trim();
+          pinBody = rest;
+        } else {
+          pinBody = cleanedAll.trim();
+        }
+      }
+    }
+
+    if (storyTitle && pinBody && normalizePreviewWhitespace(pinBody) === normalizePreviewWhitespace(storyTitle)) {
+      pinBody = "";
+    }
+
+    storyBody = pinBody.trim() || null;
+  } else if (snapchatPl) {
+    /** Gallery status/`desc` stays in Details; preview shows creative headline only. */
+    let snapHead = snapchatPayload ? snapchatPreviewHeadlineFromPayload(snapchatPayload) : "";
+    if (!snapHead && ad.ad_text?.trim() && ad.ad_text !== "—") {
+      const firstPara = ad.ad_text.trim().split(/\n\n+/)[0]?.trim() ?? "";
+      snapHead = snapchatHeadlineStripGalleryStatusGlue(firstPara);
+    }
+    storyTitle = snapHead && !/^snapchat ad$/i.test(snapHead) ? snapHead : null;
+    storyBody = null;
+  } else {
+    storyBody = ad.ad_text?.trim() || null;
+  }
+
+  const structuredPl = metaPl || linkedinPl || pinterestPl || snapchatPl;
+  const structuredTitleTrimmed = structuredPl ? (storyTitle?.trim() ?? "") : "";
+  const structuredBodyTrimmed = structuredPl ? (storyBody?.trim() ?? "") : "";
+  const plainBodyTrimmed = !structuredPl ? (storyBody?.trim() ?? "") : "";
+  const spacerBetweenTitleAndBody =
+    structuredPl && Boolean(structuredTitleTrimmed) && Boolean(structuredBodyTrimmed);
+  /** Meta headline is shown above the creative; omit from the grey footer strip. */
+  const metaFooterHeadline = metaPl ? null : headline;
 
   return (
     <div className="w-full max-w-[520px]">
@@ -465,41 +799,40 @@ function AdCreativePreview({
           </div>
         </div>
 
-        {ad.ad_text?.trim() ? (
+        {structuredPl ? (
+          structuredTitleTrimmed || structuredBodyTrimmed ? (
+            <div className="px-4 pb-3">
+              {structuredTitleTrimmed ? (
+                <p className="text-[15px] font-semibold leading-snug text-slate-900">{structuredTitleTrimmed}</p>
+              ) : null}
+              {spacerBetweenTitleAndBody ? (
+                <div className="h-[1lh] min-h-[1.125rem] shrink-0" aria-hidden />
+              ) : null}
+              {structuredBodyTrimmed ? (
+                <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-900">
+                  {structuredBodyTrimmed}
+                </p>
+              ) : null}
+            </div>
+          ) : null
+        ) : plainBodyTrimmed ? (
           <div className="px-4 pb-3">
-            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-900">{ad.ad_text}</p>
+            <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-900">{plainBodyTrimmed}</p>
           </div>
         ) : null}
 
-        <div className="relative bg-slate-100">
-          {creative && isVideo ? (
-            <video controls playsInline preload="metadata" className="mx-auto block max-h-[600px] w-full object-contain" src={creative} />
-          ) : creative ? (
-            <img
-              src={creative}
-              alt=""
-              loading="lazy"
-              className="mx-auto block max-h-[600px] w-full object-contain"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          ) : (
-            <div className="flex aspect-square w-full items-center justify-center">
-              <ComparisonPlatformIcon platform={platformForIcon(ad.platform)} className="h-12 w-12 opacity-30" />
-            </div>
-          )}
+        <div className="relative flex justify-center bg-slate-100">
+          <CreativeMediaBlock ad={ad} />
         </div>
 
-        {(landingHost || headline || linkDescription || ad.cta) && (
+        {(landingHost || metaFooterHeadline || linkDescription || ad.cta) && (
           <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3">
             <div className="min-w-0 flex-1">
               {landingHost ? (
                 <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">{landingHost}</p>
               ) : null}
-              {headline ? (
-                <p className="truncate text-[13px] font-semibold text-slate-900">{headline}</p>
+              {metaFooterHeadline ? (
+                <p className="truncate text-[13px] font-semibold text-slate-900">{metaFooterHeadline}</p>
               ) : null}
               {linkDescription ? (
                 <p className="mt-0.5 truncate text-[11px] text-slate-600">{linkDescription}</p>
@@ -520,9 +853,72 @@ function AdCreativePreview({
 function DetailsTab({ data }: { data: AdDetailData }) {
   const { ad, competitor, context } = data;
 
+  const runningApiSlice = {
+    lifespan_days: ad.lifespan_days,
+    first_seen_at: ad.first_seen_at,
+    last_seen_at: ad.last_seen_at,
+    is_killed: ad.is_killed,
+  };
+
+  const runningDays = resolveDetailRunningDays(ad.platform, ad.raw_payload, runningApiSlice);
+  const timeRunningLabel = `${runningDays} days`;
+
+  const pl = ad.platform.toLowerCase();
+
+  const adLibrarySourceUrl = resolveAdLibrarySourceUrl(ad.platform, ad.raw_payload);
+  const isGoogleFamily = pl === "google" || pl === "youtube";
+  const gDetail = isGoogleFamily ? buildGoogleFamilyAdDetailFields(ad.platform, ad.raw_payload) : null;
+
+  const linkedInRaw =
+    pl === "linkedin" && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+      ? (ad.raw_payload as Record<string, unknown>)
+      : null;
+  const linkedInLandingRaw =
+    linkedInRaw && typeof linkedInRaw.url === "string" ? linkedInRaw.url.trim() : "";
+  const detailLandingPageHref =
+    context.landing_page_url?.trim() || safeExternalHref(linkedInLandingRaw);
+
+  const landingPageButtonLabel = detailLandingPageHref
+    ? landingDetailHostTrailingSlash(detailLandingPageHref)
+    : null;
+
+  const canonical = buildCanonicalDetailSlices(pl, ad.raw_payload, gDetail);
+  const runStartLabel = formatCanonicalRunStartLabel(canonical);
+  const metaPublisherRows = pl === "meta" ? metaPublisherDetailRows(ad.raw_payload) : null;
+
+  const extraTargetingRows =
+    pl === "tiktok"
+      ? buildTikTokAdLibraryDetailRows(ad.raw_payload)
+      : pl === "linkedin"
+        ? buildLinkedInLibraryDetailRows(ad.raw_payload)
+        : pl === "pinterest"
+          ? buildPinterestLibraryDetailRows(ad.raw_payload)
+          : pl === "snapchat"
+            ? buildSnapchatLibraryDetailRows(ad.raw_payload)
+            : [];
+
   const statusLabel = ad.is_killed
     ? `Killed · last seen ${formatDate(ad.last_seen_at)}`
     : `Still running · from ${formatDate(ad.first_seen_at)}`;
+
+  const tailBeforeActions: { label: string; value: ReactNode }[] = [];
+
+  const textVal = (s: string) => <span className="font-medium text-slate-900">{s}</span>;
+
+  if ((pl === "google" || pl === "youtube") && gDetail?.targeting?.trim()) {
+    tailBeforeActions.push({
+      label: "Targeting",
+      value: (
+        <span className="max-w-[240px] whitespace-pre-wrap text-right font-medium text-slate-900">
+          {gDetail.targeting!.trim()}
+        </span>
+      ),
+    });
+  }
+
+  for (const r of extraTargetingRows) {
+    tailBeforeActions.push({ label: r.label, value: textVal(r.value) });
+  }
 
   const rows: { label: string; value: ReactNode }[] = [
     {
@@ -549,49 +945,108 @@ function DetailsTab({ data }: { data: AdDetailData }) {
         </div>
       ),
     },
+    ...(runStartLabel ? [{ label: "Run start", value: textVal(runStartLabel) }] : []),
     {
       label: "Time Running",
+      value: textVal(timeRunningLabel),
+    },
+  ];
+
+  if (canonical.impressionsFormatted) {
+    rows.push({
+      label: "Impressions",
+      value: textVal(canonical.impressionsFormatted),
+    });
+  }
+
+  if (canonical.regionDisplay) {
+    rows.push({
+      label: "Region",
       value: (
-        <span className="font-medium text-slate-900">
-          {ad.lifespan_days === 0 && ad.platform === "google" ? "N/A (Google)" : `${ad.lifespan_days} days`}
+        <span className="max-w-[260px] whitespace-pre-wrap text-right font-medium text-slate-900">
+          {canonical.regionDisplay}
         </span>
       ),
-    },
-    {
-      label: "CTA",
-      value: ad.cta ? <span className="text-slate-900">{ad.cta}</span> : <span className="text-slate-400">—</span>,
-    },
-    {
+    });
+  }
+
+  if (pl === "meta") {
+    const metaEu = metaEuRegionDetailLabel(ad.raw_payload);
+    if (metaEu) rows.push({ label: "Region", value: textVal(metaEu) });
+    const metaAud = metaBroadAudienceDetailLabel(ad.raw_payload);
+    if (metaAud) rows.push({ label: "Audience", value: textVal(metaAud) });
+  }
+
+  rows.push(...tailBeforeActions);
+
+  if (ad.cta?.trim()) {
+    rows.push({ label: "CTA", value: textVal(ad.cta.trim()) });
+  }
+
+  if (ad.format?.trim()) {
+    const snapPayload =
+      pl === "snapchat" && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+        ? (ad.raw_payload as Record<string, unknown>)
+        : null;
+    const scraperFormat =
+      typeof snapPayload?.creativeTypeLabel === "string" ? snapPayload.creativeTypeLabel.trim() : "";
+    rows.push({
       label: "Format",
-      value: <span className="capitalize text-slate-900">{ad.format || "—"}</span>,
-    },
-    {
-      label: "Platforms",
-      value: (
+      value:
+        scraperFormat ? (
+          textVal(scraperFormat)
+        ) : (
+          <span className="capitalize text-slate-900">{ad.format.trim()}</span>
+        ),
+    });
+  }
+
+  rows.push({
+    label: "Platforms",
+    value:
+      metaPublisherRows?.length ? (
+        <MetaPublisherPlatformsDetailValue rows={metaPublisherRows} />
+      ) : (
         <div className="flex items-center justify-end gap-1.5">
-          <ComparisonPlatformIcon platform={platformForIcon(ad.platform)} className="h-3.5 w-3.5" />
+          <ComparisonPlatformIcon platform={platformForIcon(ad.platform)} className="h-3.5 w-3.5 flex-shrink-0" />
           <span className="capitalize text-slate-900">{ad.platform}</span>
         </div>
       ),
-    },
-    {
+  });
+
+  if (adLibrarySourceUrl) {
+    rows.push({
+      label: "Ad library",
+      value: (
+        <a
+          href={adLibrarySourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex max-w-[220px] items-center justify-end gap-1 text-right text-[12px] font-medium text-blue-600 hover:text-blue-800"
+        >
+          <span className="min-w-0 truncate">{adLibraryLinkLabel(ad.platform)}</span>
+          <ExternalLink className="h-3 w-3 flex-shrink-0" aria-hidden />
+        </a>
+      ),
+    });
+  }
+
+  if (pl !== "snapchat" && detailLandingPageHref && landingPageButtonLabel) {
+    rows.push({
       label: "Landing Page",
-      value:
-        context.landing_page_url && context.landing_page_display ? (
-          <a
-            href={context.landing_page_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex max-w-[200px] items-center gap-1 truncate font-mono text-[11px] text-blue-600 hover:text-blue-800"
-          >
-            {context.landing_page_display}
-            <ExternalLink className="h-3 w-3 flex-shrink-0" />
-          </a>
-        ) : (
-          <span className="text-slate-400">—</span>
-        ),
-    },
-  ];
+      value: (
+        <a
+          href={detailLandingPageHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex max-w-[200px] items-center justify-end gap-1 truncate font-mono text-[11px] font-medium text-blue-600 hover:text-blue-800"
+        >
+          {landingPageButtonLabel}
+          <ExternalLink className="h-3 w-3 flex-shrink-0" aria-hidden />
+        </a>
+      ),
+    });
+  }
 
   return (
     <div className="p-4">
@@ -606,8 +1061,8 @@ function DetailsTab({ data }: { data: AdDetailData }) {
       ) : null}
 
       <div className="space-y-3">
-        {rows.map(({ label, value }) => (
-          <div key={label} className="flex items-start justify-between gap-3 text-[12px]">
+        {rows.map(({ label, value }, rowIdx) => (
+          <div key={`${label}-${rowIdx}`} className="flex items-start justify-between gap-3 text-[12px]">
             <span className="flex-shrink-0 text-slate-500">{label}</span>
             <div className="min-w-0 text-right">{value}</div>
           </div>

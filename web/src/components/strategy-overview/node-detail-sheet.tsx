@@ -73,7 +73,7 @@ export function NodeDetailSheet({ open, onClose, competitorDomain, platform, onO
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {loading ? (
-            <RivalLoadingBlock title="Loading samples…" description="Fetching ads referenced on this funnel node." padded className="py-12" />
+            <RivalLoadingBlock padded className="py-12" />
           ) : null}
           {err ? <p className="text-[13px] text-red-600">{err}</p> : null}
           {!loading && !err

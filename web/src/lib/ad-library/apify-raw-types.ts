@@ -45,6 +45,8 @@ export type FacebookAdLibraryItem = {
   end_date?: number;
   snapshot?: FacebookAdSnapshot;
   publisher_platform?: string[];
+  gender_audience?: string;
+  targets_eu?: boolean;
   ad_library_url?: string;
   impressions_with_index?: {
     impressions_text?: string | null;
@@ -72,6 +74,23 @@ export type GoogleCompanyAdItem = {
   headline?: string | null;
   description?: string | null;
   title?: string | null;
+  /** From actor `includeRegionEnrichment` / nested geo fields — human-readable for UI. */
+  libraryRegionSummary?: string;
+  /** From actor `includeTargetingLocations` / targeting blobs — human-readable for UI. */
+  libraryTargetingSummary?: string;
+};
+
+/** Row from LinkedIn transparency scrapers — audience by country when disclosed. */
+export type LinkedInCountryShare = {
+  country: string;
+  percentage: string;
+};
+
+/** Row from e.g. `adTargetingAudience` — language, location, criteria. */
+export type LinkedInAudienceTargetingRow = {
+  type: string;
+  value: string;
+  status?: string;
 };
 
 /** Legacy ScrapeCreators-shaped row; map Apify LinkedIn items into this for linkedInItemToCard. */
@@ -98,6 +117,10 @@ export type LinkedInAdItem = {
   endDate?: string | null;
   totalImpressions?: string | null;
   targeting?: Record<string, string>;
+  /** Structured rows from `adTargetingAudience` (data_xplorer actor). */
+  targetingAudience?: LinkedInAudienceTargetingRow[];
+  /** Country + share when scraper exposes breakdown objects. */
+  countryDistribution?: LinkedInCountryShare[];
   /** LinkedIn company / org id from transparency actor when present (for advertiser verification). */
   advertiserCompanyId?: string | null;
 };

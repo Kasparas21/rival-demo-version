@@ -266,11 +266,17 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   let pinterestAdvertiserNameForApify = "";
+  let pinterestConfirmedAdvertiserQuery: string | undefined;
   if (platformsRequested.has("pinterest")) {
-    pinterestAdvertiserNameForApify =
+    const fromPinterestIds =
       extractPinterestHandleFromUrlOrString(ids.pinterest ?? "") ||
       extractPinterestHandleFromUrlOrString(ids.pinterestAdvertiserName ?? "") ||
-      extractPinterestHandleFromUrlOrString(brandName);
+      "";
+    if (fromPinterestIds.trim()) {
+      pinterestConfirmedAdvertiserQuery = fromPinterestIds.trim();
+    }
+    pinterestAdvertiserNameForApify =
+      fromPinterestIds.trim() || extractPinterestHandleFromUrlOrString(brandName);
     if (!pinterestAdvertiserNameForApify.trim()) {
       const err = "Add a Pinterest profile URL or advertiser handle.";
       return NextResponse.json(
@@ -290,6 +296,9 @@ export async function POST(req: Request): Promise<NextResponse> {
       );
     }
   }
+
+  const snapchatConfirmedAdvertiserQuery =
+    typeof ids.snapchat === "string" && ids.snapchat.trim() ? ids.snapchat.trim() : undefined;
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -439,6 +448,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     googleRegion,
     googleResultsLimit,
     pinterestCountry,
+    pinterestConfirmedAdvertiserQuery,
+    snapchatConfirmedAdvertiserQuery,
   });
 
   if (userId) {

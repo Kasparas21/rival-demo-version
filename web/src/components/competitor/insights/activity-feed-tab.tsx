@@ -143,12 +143,7 @@ export function ActivityFeedTab({
 
   if (comparisonPayloadLoading) {
     return (
-      <RivalLoadingBlock
-        title="Loading activity…"
-        description="Reading strategy snapshots and recent competitive moves."
-        padded
-        className="mx-auto max-w-3xl py-16"
-      />
+      <RivalLoadingBlock padded className="mx-auto max-w-3xl py-16" />
     );
   }
 

@@ -132,7 +132,7 @@ export function SavedAdsPanel({
   if (loading && !data && !displayError) {
     return (
       <div className="flex justify-center py-12 px-4">
-        <RivalLoadingBlock title="Loading saved ads…" description="Syncing bookmarks and sticky notes." size="md" padded={false} />
+        <RivalLoadingBlock size="md" padded={false} />
       </div>
     );
   }

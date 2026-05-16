@@ -36,12 +36,7 @@ export function AudienceTab({
 }: Props) {
   if (comparisonPayloadLoading) {
     return (
-      <RivalLoadingBlock
-        title="Loading audience inference…"
-        description="Contrasting scraped copy and angles between your workspace and this competitor."
-        padded
-        className="mx-auto max-w-5xl py-16"
-      />
+      <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16" />
     );
   }
 

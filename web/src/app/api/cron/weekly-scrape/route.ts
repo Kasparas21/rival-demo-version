@@ -138,15 +138,24 @@ async function runWeeklyJobForRow(
     const platformsNeedingScrape = new Set(platformsRequested);
 
     let pinterestAdvertiserNameForApify = "";
+    let pinterestConfirmedAdvertiserQuery: string | undefined;
     if (platformsRequested.has("pinterest")) {
-      pinterestAdvertiserNameForApify =
+      const fromPinterestIds =
         extractPinterestHandleFromUrlOrString(ids.pinterest ?? "") ||
         extractPinterestHandleFromUrlOrString(ids.pinterestAdvertiserName ?? "") ||
-        extractPinterestHandleFromUrlOrString(brandName);
+        "";
+      if (fromPinterestIds.trim()) {
+        pinterestConfirmedAdvertiserQuery = fromPinterestIds.trim();
+      }
+      pinterestAdvertiserNameForApify =
+        fromPinterestIds.trim() || extractPinterestHandleFromUrlOrString(brandName);
       if (!pinterestAdvertiserNameForApify.trim()) {
         pinterestAdvertiserNameForApify = brandName;
       }
     }
+
+    const snapchatConfirmedAdvertiserQuery =
+      typeof ids.snapchat === "string" && ids.snapchat.trim() ? ids.snapchat.trim() : undefined;
 
     const resolved = await resolveAdsCacheDomainForUser(admin, row.user_id, domainNorm.toLowerCase());
     const resolvedCompetitorId = resolved.competitorId ?? row.id;
@@ -219,6 +228,8 @@ async function runWeeklyJobForRow(
       googleRegion,
       googleResultsLimit,
       pinterestCountry,
+      pinterestConfirmedAdvertiserQuery,
+      snapchatConfirmedAdvertiserQuery,
     });
 
     await finalizeAdsLibraryAfterFreshScrape(admin, {

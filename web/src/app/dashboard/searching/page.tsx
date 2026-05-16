@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { RefreshCw, AlertCircle, ArrowRight } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import { ManualIdentifiersForm, type PlatformIdentifier } from "@/components/manual-identifiers-form";
 import { looksLikeUrl } from "@/lib/discovery";
@@ -9,7 +9,7 @@ import type { TermHint } from "@/lib/competitor-query";
 import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { RivalLogoImg } from "@/components/rival-logo";
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 import {
   findMatchingCompetitorIndex,
   loadSidebarCompetitors,
@@ -123,6 +123,7 @@ type DiscoveryInterpretation = {
 
 function SearchingContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const q = searchParams.get("q") || "competitor";
   const termsParam = searchParams.get("terms") ?? "";
@@ -164,7 +165,6 @@ function SearchingContent() {
     Partial<Record<ChannelId, "high" | "medium" | "low">>
   >({});
   const [fieldPreviewUrls, setFieldPreviewUrls] = useState<Partial<Record<ChannelId, string>>>({});
-  const [recommendedKeywords, setRecommendedKeywords] = useState<string[]>([]);
   const [scanProgress, setScanProgress] = useState(0);
   /** Live ads fetch: completed platform requests vs total (for progress label). */
   const [scanFraction, setScanFraction] = useState({ done: 0, total: 0 });
@@ -179,6 +179,10 @@ function SearchingContent() {
   const flowKey = useMemo(
     () => searchingFlowStorageKey(q, termsParam, channelsParam),
     [q, termsParam, channelsParam]
+  );
+  const manualFormMountKey = useMemo(
+    () => searchingFlowStorageKey(q, termsParam, ""),
+    [q, termsParam]
   );
   const [flowRehydrated, setFlowRehydrated] = useState(false);
   const [adLibraryRegions, setAdLibraryRegions] = useState<AdLibraryRegionPrefs>(() =>
@@ -205,16 +209,12 @@ function SearchingContent() {
       setDiscoveryInterpretation(saved.discoveryInterpretation);
       setFieldConfidence(saved.fieldConfidence ?? {});
       setFieldPreviewUrls(saved.fieldPreviewUrls ?? {});
-      setRecommendedKeywords(
-        Array.isArray(saved.recommendedKeywords) ? saved.recommendedKeywords : []
-      );
       setAdLibraryRegions({
         ...readAdLibraryRegionPrefsFromSession(),
         ...snapshotAdLibraryRegionPrefs(saved.adLibraryRegionPrefs),
       });
     } else {
       setAdLibraryRegions(readAdLibraryRegionPrefsFromSession());
-      setRecommendedKeywords([]);
     }
     setFlowRehydrated(true);
   }, [flowKey]);
@@ -242,6 +242,23 @@ function SearchingContent() {
 
   const displayName = q.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || q;
 
+  const handleRemoveChannel = useCallback(
+    (channelId: ChannelId) => {
+      if (selectedChannels.length <= 1) return;
+      const next = selectedChannels.filter((c) => c !== channelId);
+      const p = new URLSearchParams(searchParams.toString());
+      if (next.length === CHANNELS.length) {
+        p.delete("channels");
+      } else {
+        p.set("channels", next.join(","));
+      }
+      const qs = p.toString();
+      const base = pathname?.trim() || "/dashboard/searching";
+      router.replace(qs ? `${base}?${qs}` : base, { scroll: false });
+    },
+    [pathname, router, searchParams, selectedChannels]
+  );
+
   useEffect(() => {
     if (!flowRehydrated) return;
     if (phase === "discovering" && !discoveryError) return;
@@ -257,7 +274,6 @@ function SearchingContent() {
       discoveryInterpretation,
       fieldConfidence,
       fieldPreviewUrls,
-      recommendedKeywords,
       adLibraryRegionPrefs: adLibraryRegions,
     };
     writeSearchingFlowSnapshot(flowKey, snapshot);
@@ -274,7 +290,6 @@ function SearchingContent() {
     discoveryInterpretation,
     fieldConfidence,
     fieldPreviewUrls,
-    recommendedKeywords,
     adLibraryRegions,
   ]);
 
@@ -393,9 +408,6 @@ function SearchingContent() {
       );
       setFieldConfidence(data.fieldConfidence ?? {});
       setFieldPreviewUrls(data.fieldPreviewUrls ?? {});
-      setRecommendedKeywords(
-        Array.isArray(data.recommendedKeywords) ? data.recommendedKeywords : []
-      );
       if (typeof data.warning === "string" && data.warning.trim()) {
         setDiscoveryWarning(data.warning.trim());
       }
@@ -641,73 +653,81 @@ function SearchingContent() {
           </p>
         ) : null}
 
-        {/* Target badge with logo */}
-        <div className={`w-full sm:max-w-2xl flex justify-center px-2 ${isManualNeeded ? "mb-6 sm:mb-8" : "mb-14 sm:mb-20"}`}>
-          <div className="w-full bg-white/80 border border-gray-200/80 rounded-[20px] py-4 sm:py-5 px-6 sm:px-8 flex items-center justify-center gap-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
-            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gray-200 sm:h-12 sm:w-12">
+        {/* Competitor preview, or single discovering loader (no duplicate skeleton + fox) */}
+        <div
+          className={`w-full sm:max-w-2xl flex justify-center px-2 ${
+            isManualNeeded ? "mb-6 sm:mb-8" : isDiscovering ? "mb-10 sm:mb-14" : "mb-14 sm:mb-20"
+          }`}
+        >
+          {isDiscovering && !discoveryError ? (
+            <div
+              className="flex w-full flex-col items-center justify-center rounded-[20px] border border-gray-200/80 bg-white/90 px-6 py-12 sm:py-14 shadow-[0_4px_24px_rgba(0,0,0,0.06)]"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+              aria-label="Loading competitor details"
+            >
+              <RivalLogoVideo size="2xl" className="object-contain" />
+              <p className="mt-6 max-w-sm text-center text-[13px] font-medium leading-relaxed text-[#71717a] sm:text-[14px]">
+                Fetching logo, domain, and social profiles…
+              </p>
+            </div>
+          ) : (
+            <div className="flex w-full items-center justify-center gap-4 rounded-[20px] border border-gray-200/80 bg-white/80 px-6 py-4 shadow-[0_4px_20px_rgba(0,0,0,0.06)] sm:py-5 sm:px-8">
+              <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-gray-200 sm:h-12 sm:w-12">
+                {isDiscovering ? (
+                  <BrandLogoSkeleton className="h-full w-full" />
+                ) : discoveredBrand?.domain || discoveredBrand?.logoUrl ? (
+                  <CompetitorLogo
+                    sources={{
+                      primary: discoveredBrand?.logoUrl,
+                      domain: discoveredBrand?.domain,
+                    }}
+                    name={discoveredBrand?.name ?? "Brand"}
+                    size="lg"
+                    shape="rounded"
+                    className="rounded-xl border-gray-200 bg-gray-50"
+                  />
+                ) : (
+                  <BrandLogoSkeleton className="h-full w-full" />
+                )}
+              </div>
               {isDiscovering ? (
-                <BrandLogoSkeleton className="h-full w-full" />
-              ) : discoveredBrand?.domain || discoveredBrand?.logoUrl ? (
-                <CompetitorLogo
-                  sources={{
-                    primary: discoveredBrand?.logoUrl,
-                    domain: discoveredBrand?.domain,
-                  }}
-                  name={discoveredBrand?.name ?? "Brand"}
-                  size="lg"
-                  shape="rounded"
-                  className="rounded-xl border-gray-200 bg-gray-50"
+                <div
+                  className="h-7 max-w-[min(280px,70vw)] flex-1 rounded-lg bg-gradient-to-r from-slate-200/90 via-slate-100 to-slate-200/90 animate-pulse sm:h-8"
+                  aria-hidden
                 />
               ) : (
-                <BrandLogoSkeleton className="h-full w-full" />
+                <span className="max-w-[200px] truncate text-[18px] font-bold text-[#343434] sm:max-w-none sm:text-[22px]">
+                  {discoveredBrand?.name ?? displayName}
+                </span>
               )}
             </div>
-            {isDiscovering ? (
-              <div
-                className="h-7 sm:h-8 max-w-[min(280px,70vw)] flex-1 rounded-lg bg-gradient-to-r from-slate-200/90 via-slate-100 to-slate-200/90 animate-pulse"
-                aria-hidden
-              />
-            ) : (
-              <span className="text-[18px] sm:text-[22px] font-bold text-[#343434] truncate max-w-[200px] sm:max-w-none">
-                {discoveredBrand?.name ?? displayName}
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Phase: Discovering */}
-        {isDiscovering && (
-          <div className="flex flex-col items-center gap-6 w-full">
-            {discoveryError ? (
-              <>
-                <div
-                  role="alert"
-                  className="flex max-w-md flex-col items-center gap-3 rounded-2xl border border-red-100 bg-red-50/70 px-5 py-4 text-center"
-                >
-                  <div className="flex items-center gap-2 text-[14px] font-medium leading-snug text-[#9f1239]">
-                  <AlertCircle className="w-5 h-5 shrink-0 text-[#e11d48]" aria-hidden />
-                  {discoveryError}
-                  </div>
-                </div>
-                <button
-                  onClick={() => runDiscovery()}
-                  className="flex items-center gap-2 h-11 px-5 rounded-xl bg-[#343434] text-white font-semibold text-[14px] hover:bg-[#2a2a2a] transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Try again
-                </button>
-              </>
-            ) : (
-              <RivalLoadingBlock
-                title={discoveryStep}
-                description="Profiling the brand domain and locating public accounts — usually under a minute."
-                size="xl"
-                padded
-                className="py-10"
-              />
-            )}
+        {/* Phase: Discovering — errors only (loader lives in card above) */}
+        {isDiscovering && discoveryError ? (
+          <div className="flex w-full flex-col items-center gap-6">
+            <div
+              role="alert"
+              className="flex max-w-md flex-col items-center gap-3 rounded-2xl border border-red-100 bg-red-50/70 px-5 py-4 text-center"
+            >
+              <div className="flex items-center gap-2 text-[14px] font-medium leading-snug text-[#9f1239]">
+                <AlertCircle className="h-5 w-5 shrink-0 text-[#e11d48]" aria-hidden />
+                {discoveryError}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => runDiscovery()}
+              className="flex h-11 items-center gap-2 rounded-xl bg-[#343434] px-5 text-[14px] font-semibold text-white transition-colors hover:bg-[#2a2a2a]"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Try again
+            </button>
           </div>
-        )}
+        ) : null}
 
         {/* Phase: Manual identifiers form */}
         {isManualNeeded && (
@@ -721,7 +741,7 @@ function SearchingContent() {
               </div>
             )}
             <ManualIdentifiersForm
-              key={flowKey}
+              key={manualFormMountKey}
               selectedChannels={selectedChannels}
               discoveredIds={discoveredIds}
               onSubmit={handleManualSubmit}
@@ -733,7 +753,7 @@ function SearchingContent() {
               brandLogoUrl={discoveredBrand?.logoUrl}
               adLibraryRegions={adLibraryRegions}
               onAdLibraryRegionsChange={setAdLibraryRegions}
-              recommendedKeywords={recommendedKeywords}
+              onRemoveChannel={handleRemoveChannel}
             />
           </div>
         )}
@@ -859,7 +879,7 @@ export default function SearchingViewWrapper() {
     <Suspense
       fallback={
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-16">
-          <RivalLoadingBlock title="Loading search" description="Preparing competitor discovery." padded={false} />
+          <RivalLoadingBlock padded={false} />
           <span className="sr-only">Loading search</span>
         </div>
       }

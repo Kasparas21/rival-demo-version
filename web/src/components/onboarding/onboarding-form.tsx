@@ -802,13 +802,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
 
             {brandLoading ? (
               <div className="rounded-2xl border border-white/50 bg-white/30" aria-busy="true">
-                <RivalLoadingBlock
-                  title="Scanning your homepage…"
-                  description="We are pulling your logo, category, and a quick positioning read."
-                  size="xl"
-                  padded
-                  className="py-12"
-                />
+                <RivalLoadingBlock size="xl" padded className="py-12" />
               </div>
             ) : brandInsights ? (
               <div className="space-y-5">

@@ -23,6 +23,7 @@ function readGoogleAdsMemoryMbytes(): number {
  * Google Ads Transparency via Apify (`lurkapi/google-ads-scraper`).
  * Pass Transparency advertiser/creative URLs or `?domain=` listing URLs in `startUrls`.
  * Paid add-ons (OCR, landing pages, etc.) stay off by default to limit cost.
+ * Region enrichment and targeting locations are enabled for richer scrape output.
  */
 export async function scrapeGoogleAdsTransparency(params: {
   startUrls: string[];

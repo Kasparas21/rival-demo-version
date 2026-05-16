@@ -81,6 +81,10 @@ export type RunAdsLibraryParallelScrapeParams = {
   googleRegion: string;
   googleResultsLimit: number;
   pinterestCountry: string;
+  /** Set when the user provided Pinterest ids (not brand fallback) — drives Unverified source vs row advertiser. */
+  pinterestConfirmedAdvertiserQuery?: string;
+  /** Set when the user provided a Snapchat gallery advertiser string — drives Unverified source vs row advertiser. */
+  snapchatConfirmedAdvertiserQuery?: string;
 };
 
 /**
@@ -125,6 +129,8 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
     googleRegion,
     googleResultsLimit,
     pinterestCountry,
+    pinterestConfirmedAdvertiserQuery,
+    snapchatConfirmedAdvertiserQuery,
   } = params;
 
   await Promise.all([
@@ -241,7 +247,15 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
         });
         out.pinterest.ads = rows
           .slice(0, pinterestMaxResults)
-          .map((raw, i) => pinterestDatasetItemToCard(raw, i, { brandName, brandDomain: domain }));
+          .map((raw, i) =>
+            pinterestDatasetItemToCard(raw, i, {
+              brandName,
+              brandDomain: domain,
+              ...(pinterestConfirmedAdvertiserQuery
+                ? { confirmedAdvertiserQuery: pinterestConfirmedAdvertiserQuery }
+                : {}),
+            })
+          );
       } catch (e) {
         out.pinterest.error =
           e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Pinterest ads failed";
@@ -275,7 +289,15 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
         out.snapchat.ads = [...raw]
           .sort((a, b) => snapchatDatasetRowMediaPriority(b) - snapchatDatasetRowMediaPriority(a))
           .slice(0, snapchatMaxItems)
-          .map((row, i) => snapchatDatasetItemToCard(row, i, { brandName, brandDomain: domain }));
+          .map((row, i) =>
+            snapchatDatasetItemToCard(row, i, {
+              brandName,
+              brandDomain: domain,
+              ...(snapchatConfirmedAdvertiserQuery
+                ? { confirmedAdvertiserQuery: snapchatConfirmedAdvertiserQuery }
+                : {}),
+            })
+          );
       } catch (e) {
         out.snapchat.error =
           e instanceof ApifyRunnerError || e instanceof Error ? e.message : "Snapchat ads failed";

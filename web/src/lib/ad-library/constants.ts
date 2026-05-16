@@ -19,7 +19,7 @@ export const GOOGLE_ADS_LIBRARY_MAX_ITEMS = 100;
  */
 export const ADS_LIBRARY_MERGED_CAP_PER_PLATFORM = Math.max(ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM * 5, 500);
 
-/** Inline preview count per platform on competitor Ads Library (before “View all”). Matches `xl:grid-cols-3` so one row on wide viewports. */
+/** Inline preview grids — align with competitor Ads Library (max 3 cards per row on md+). */
 export const META_ADS_INLINE_PREVIEW = 3;
 
 /** Meta “View all” modal: ads rendered per page (DOM capped). */

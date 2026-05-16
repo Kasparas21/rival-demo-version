@@ -148,11 +148,7 @@ export function ThreeMovesPanel({
           <h3 className="mt-1 text-xl font-semibold tracking-tight text-slate-900">This week&apos;s tactical priorities</h3>
           <p className="mt-1 text-sm text-slate-500">Grounded in your latest scrape, not generic advice.</p>
         </div>
-        {isLoading ? (
-          <span className="inline-flex shrink-0 rounded-md border border-slate-200/80 bg-white p-[3px]">
-            <RivalLogoVideo size="inline" />
-          </span>
-        ) : null}
+        {isLoading ? <RivalLogoVideo size="inline" className="shrink-0" /> : null}
       </div>
 
       {headlineTitles ? (
@@ -182,7 +178,7 @@ export function ThreeMovesPanel({
           </button>
         </div>
       ) : isLoading && !moves ? (
-        <RivalLoadingBlock title="Generating three moves…" description="Grounding recommendations in your live stats." padded className="mt-6 py-10" />
+        <RivalLoadingBlock padded className="mt-6 py-10" />
       ) : !moves || moves.length === 0 ? (
         <p className="mt-6 text-sm text-slate-500">No moves available yet.</p>
       ) : (

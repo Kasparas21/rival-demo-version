@@ -16,7 +16,9 @@ export function UnverifiedSourceBadge({ className }: { className?: string }) {
     >
       <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
       <span className="truncate">Unverified source</span>
-      <span className="sr-only">Unverified source — advertiser may not match your competitor</span>
+      <span className="sr-only">
+        Unverified source — this ad&apos;s advertiser name does not match the advertiser name you entered
+      </span>
     </span>
   );
 }

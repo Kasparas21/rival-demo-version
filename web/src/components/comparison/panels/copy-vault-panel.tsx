@@ -486,7 +486,7 @@ export function CopyVaultPanel({
         <p className="text-sm text-red-700">{vaultError.message}</p>
       ) : vaultLoading && !rawAds ? (
         <div className="flex justify-center py-14">
-          <RivalLoadingRow label="Loading copy vault…" description="Pulling enriched, long-running creatives." />
+          <RivalLoadingRow />
         </div>
       ) : !rawAds?.length ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-600">

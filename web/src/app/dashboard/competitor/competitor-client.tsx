@@ -2,15 +2,11 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from "react";
 import {
   Sparkles,
-  MessageCircle,
-  Repeat2,
   BarChart2,
   Globe,
   RefreshCw,
   Clock,
   SatelliteDish,
-  ThumbsUp,
-  Send,
   ExternalLink,
   Play,
   Video,
@@ -193,7 +189,12 @@ function formatSpySubtitle(fireUtcYmd: string): string {
   return `Last spy run: ${wd} ${mon} ${dom} (UTC)`;
 }
 
-const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+/**
+ * Inline Ads Library grid: at most {@link META_ADS_INLINE_PREVIEW} cards per platform.
+ * Use 3 columns from `md` up so three cards span the full row (avoid `xl:grid-cols-4` with only 3 items,
+ * which left an empty fourth column and looked left-clumped).
+ */
+const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 md:grid-cols-3";
 
 /** Matches Google Transparency + YouTube cards so mixed-format rows align in {@link ADS_GRID_CLASS}. */
 const GOOGLE_MEDIA_FRAME_CLASS =
@@ -315,7 +316,6 @@ function GoogleTransparencyCard({
   );
   const hasCreativeImageAsset = Boolean(imageSrc && !isFaviconOnly);
   const previewHref = ad.previewUrl?.trim() || "";
-  const imageOpenHref = previewHref || href;
   const showCreativePreviewLinkRow = Boolean(previewHref && !hasCreativeImageAsset);
   const detailTitle = ad.advertiserName?.trim() || sn.headline.split(" — ")[0]?.trim() || sn.headline;
   const lastShown =
@@ -349,13 +349,9 @@ function GoogleTransparencyCard({
       <div className="flex min-h-0 flex-1 flex-col bg-[#f1f3f4] px-4 py-4">
         <div className="mx-auto flex h-full min-h-0 w-full max-w-[360px] flex-1 flex-col overflow-hidden rounded-2xl border border-[#e8eaed] bg-white shadow-sm">
           {hasCreativeImageAsset ? (
-            <a
-              href={imageOpenHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title={previewHref ? "Open creative preview" : ad.adUrl ?? undefined}
+            <div
               className={`block shrink-0 border-b border-[#e8eaed] bg-[#f8f9fa] ${GOOGLE_MEDIA_FRAME_CLASS}`}
+              title="View ad details"
             >
               {!creativeImgFailed ? (
                 <img
@@ -369,22 +365,14 @@ function GoogleTransparencyCard({
                   No preview
                 </div>
               )}
-            </a>
+            </div>
           ) : null}
           {showCreativePreviewLinkRow ? (
             <div className={`shrink-0 border-b border-[#e8eaed] bg-[#fafafa] ${GOOGLE_MEDIA_FRAME_CLASS}`}>
-              <a
-                href={previewHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="inline-flex flex-col items-center gap-2 px-4 text-center"
-              >
-                <ExternalLink className="h-6 w-6 shrink-0 text-[#1a73e8] opacity-90" aria-hidden />
-                <span className="text-[12px] font-medium leading-snug text-[#1a73e8] underline">
-                  Open creative preview
-                </span>
-              </a>
+              <div className="inline-flex flex-col items-center gap-2 px-4 py-3 text-center">
+                <ExternalLink className="h-6 w-6 shrink-0 text-[#64748b] opacity-90" aria-hidden />
+                <span className="text-[12px] font-medium leading-snug text-[#5f6368]">View ad details</span>
+              </div>
             </div>
           ) : null}
           {!hasCreativeImageAsset && !showCreativePreviewLinkRow ? (
@@ -398,7 +386,7 @@ function GoogleTransparencyCard({
                 <img src={imageSrc} alt="" className="h-8 w-8 object-contain" />
               </div>
             ) : null}
-            <a href={href} target="_blank" rel="noopener noreferrer" title={ad.adUrl ?? undefined} onClick={(e) => e.stopPropagation()} className="block">
+            <div className="block text-left">
               <p className="flex items-center gap-1.5 text-[12px] leading-tight text-[#188038]">
                 <Globe className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                 <span className="truncate font-medium">{sn.displayUrl}</span>
@@ -406,7 +394,7 @@ function GoogleTransparencyCard({
               <p className="mt-2 text-[15px] font-normal leading-snug text-[#1a0dab] [overflow-wrap:anywhere] break-words">
                 {sn.headline}
               </p>
-            </a>
+            </div>
             {sn.body ? (
               <ExpandableAdText
                 text={sn.body}
@@ -517,7 +505,7 @@ function GoogleYoutubeAdCard({
         onOpenDetail ? " cursor-pointer hover:ring-2 hover:ring-slate-200" : ""
       }`}
     >
-      <a href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className={YOUTUBE_MEDIA_FRAME_CLASS}>
+      <div className={YOUTUBE_MEDIA_FRAME_CLASS}>
         {showVideoEl ? (
           <video
             key={`${ad.id}-v-${posterIdx}`}
@@ -576,7 +564,7 @@ function GoogleYoutubeAdCard({
           <Video className="h-4 w-4" aria-hidden />
           <span className="sr-only">Video</span>
         </span>
-      </a>
+      </div>
       <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex gap-3 p-3">
           <CompetitorLogo
@@ -659,6 +647,137 @@ function GoogleAdRowCard({
   );
 }
 
+/** Public LinkedIn Ad Library detail URL for this card (stable id or parsed from ad URL). */
+function linkedInAdLibraryDetailHref(ad: LinkedInAdCard): string {
+  const raw = ad.adUrl?.trim() || "";
+  if (/linkedin\.com\/ad-library\/detail/i.test(raw)) {
+    const idMatch = /ad-library\/detail\/([^/?#]+)/i.exec(raw);
+    if (idMatch?.[1]) {
+      return `https://www.linkedin.com/ad-library/detail/${encodeURIComponent(idMatch[1])}`;
+    }
+  }
+  const id = ad.id?.trim() || "";
+  if (id && !/^li-\d+$/i.test(id)) {
+    return `https://www.linkedin.com/ad-library/detail/${encodeURIComponent(id)}`;
+  }
+  const fromAdUrl = /ad-library\/detail\/([^/?#]+)/i.exec(raw);
+  if (fromAdUrl?.[1]) {
+    return `https://www.linkedin.com/ad-library/detail/${encodeURIComponent(fromAdUrl[1])}`;
+  }
+  return "https://www.linkedin.com/ad-library/home";
+}
+
+/** Sponsored landing URL when `adUrl` is not already an Ad Library page. */
+function linkedInNonLibraryDestinationHref(ad: LinkedInAdCard): string | null {
+  const raw = ad.adUrl?.trim() || "";
+  if (!raw || /linkedin\.com\/ad-library/i.test(raw)) return null;
+  return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+}
+
+/** Legacy cards: infer `https://…` from truncated `url` display (no protocol). */
+function linkedInGuessLandingFromDisplayUrl(display: string | null | undefined): string | null {
+  const t = display?.trim() ?? "";
+  if (!t || t === "—" || /linkedin\.com/i.test(t)) return null;
+  if (!t.includes(".")) return null;
+  const withProto = /^https?:\/\//i.test(t) ? t : `https://${t.replace(/^\/+/, "")}`;
+  try {
+    const u = new URL(withProto);
+    if (/linkedin\.com$/i.test(u.hostname)) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** URL for the sponsor-site button — never Ad Library. */
+function linkedInSponsoredSiteHref(ad: LinkedInAdCard): string | null {
+  const fromCard = ad.landingPageUrl?.trim();
+  if (fromCard && /^https?:\/\//i.test(fromCard)) return fromCard;
+
+  const fromAdUrl = linkedInNonLibraryDestinationHref(ad);
+  if (fromAdUrl) return fromAdUrl;
+
+  return linkedInGuessLandingFromDisplayUrl(ad.url ?? "");
+}
+
+/** Short label: host + path, no query/hash (drops UTM noise). */
+function shortenLinkedInLandingLinkLabel(fullHref: string, maxChars = 52): string {
+  try {
+    const u = new URL(fullHref.startsWith("http") ? fullHref : `https://${fullHref}`);
+    u.search = "";
+    u.hash = "";
+    const host = u.hostname.replace(/^www\./i, "");
+    const path = u.pathname.replace(/\/$/, "") || "";
+    let out = path && path !== "/" ? `${host}${path}` : host;
+    if (out.length > maxChars) return `${out.slice(0, Math.max(1, maxChars - 1))}…`;
+    return out;
+  } catch {
+    const stripped = fullHref.replace(/^https?:\/\//, "").split(/[?#]/)[0]?.trim() ?? "";
+    if (!stripped) return fullHref.slice(0, maxChars);
+    return stripped.length > maxChars ? `${stripped.slice(0, maxChars - 1)}…` : stripped;
+  }
+}
+
+function linkedInFeedSiteLabelFromLanding(
+  sponsoredHref: string | null,
+  brandDomain: string
+): { site: string; detail?: string } {
+  const fallbackHost = (brandDomain || "linkedin.com").replace(/^www\./i, "").split("/")[0] || "linkedin.com";
+  if (!sponsoredHref) {
+    return { site: fallbackHost };
+  }
+  try {
+    const u = new URL(sponsoredHref);
+    const site = u.hostname.replace(/^www\./i, "");
+    const short = shortenLinkedInLandingLinkLabel(sponsoredHref);
+    const detail = short.toLowerCase() !== site.toLowerCase() ? short : undefined;
+    return { site, detail };
+  } catch {
+    return { site: fallbackHost };
+  }
+}
+
+/** LinkedIn cards use `desc` up top and `headline` under the creative — often the same primary text. */
+function linkedInHeadlineRedundantWithDescription(
+  headline: string | undefined,
+  desc: string | undefined
+): boolean {
+  const h = (headline ?? "").replace(/\s+/g, " ").trim();
+  const rawBody = desc ?? "";
+  if (!h || !rawBody.trim()) return false;
+  const bodyCollapsed = rawBody.replace(/\s+/g, " ").trim();
+  if (h === bodyCollapsed) return true;
+  const firstLine =
+    rawBody
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find(Boolean) ?? "";
+  return h === firstLine.replace(/\s+/g, " ").trim();
+}
+
+function linkedInDisplayDescription(desc: string | undefined): string {
+  const raw = desc?.trim() ?? "";
+  if (!raw) return "";
+
+  const paragraphs = raw
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  if (paragraphs.length < 2) return raw;
+
+  const first = paragraphs[0];
+  const rest = paragraphs.slice(1).join("\n\n");
+  const restCollapsed = rest.replace(/\s+/g, " ").trim();
+
+  // LinkedIn sometimes emits a truncated teaser, then repeats the full ad copy.
+  if (restCollapsed.startsWith(first)) {
+    return rest;
+  }
+
+  return raw;
+}
+
 function LinkedInFeedAdCard({
   ad,
   brand,
@@ -676,6 +795,15 @@ function LinkedInFeedAdCard({
   onToggleSave?: () => void;
   saveDisabled?: boolean;
 }) {
+  const libraryDetailHref = linkedInAdLibraryDetailHref(ad);
+  const sponsoredHref = linkedInSponsoredSiteHref(ad);
+  const { site: siteLabel, detail: siteDetail } = linkedInFeedSiteLabelFromLanding(sponsoredHref, brand.domain);
+
+  const displayDesc = linkedInDisplayDescription(ad.desc);
+  const showHeadlineUnderCreative =
+    Boolean(ad.headline?.trim()) &&
+    !linkedInHeadlineRedundantWithDescription(ad.headline, displayDesc);
+
   return (
     <article
       onClick={() => onOpenDetail?.()}
@@ -726,58 +854,75 @@ function LinkedInFeedAdCard({
             </a>
           </div>
         </div>
-        {ad.desc?.trim() ? (
+        {displayDesc ? (
           <div className="mt-3">
             <ExpandableAdText
-              text={ad.desc}
+              text={displayDesc}
               className="text-[14px] text-[#374151] leading-relaxed break-words [overflow-wrap:anywhere] text-pretty whitespace-pre-wrap"
             />
           </div>
         ) : null}
       </div>
-      <div className="flex flex-1 flex-col min-h-0 border-y border-[#e5e7eb] bg-[#f9fafb] p-3">
+      <div className="flex flex-1 flex-col min-h-0 border-y border-[#e5e7eb] bg-[#f3f4f6] p-3">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white">
           <AdCreativeVideoOrImage
             img={ad.img ?? ""}
             videoUrl={ad.videoUrl}
             openHref={ad.adUrl}
+            onMediaClick={onOpenDetail ? () => onOpenDetail() : undefined}
             className="min-h-0 w-full flex-1"
             minHeightClass="min-h-[200px]"
             fillAvailableHeight
           />
         </div>
-        <a
-          href={ad.adUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="block shrink-0 p-4 bg-white border-t border-[#e5e7eb] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#0a66c2]"
-        >
-          <p className="font-semibold text-[15px] text-[#374151] break-words [overflow-wrap:anywhere] text-pretty leading-snug">{ad.headline}</p>
-          <p className="text-[13px] text-[#6b7280] mt-0.5 break-all [overflow-wrap:anywhere]">{ad.url}</p>
-        </a>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-1 border-t border-[#e5e7eb] px-4 py-3 min-h-[48px] text-[#6b7280]">
-        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
-          <ThumbsUp className="w-4 h-4" /> Like
-        </span>
-        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
-          <MessageCircle className="w-4 h-4" /> Comment
-        </span>
-        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
-          <Repeat2 className="w-4 h-4" /> Repost
-        </span>
-        <span className="flex items-center gap-2 py-1.5 text-[13px] font-medium">
-          <Send className="w-4 h-4" /> Share
-        </span>
-      </div>
-      <div className="shrink-0 border-t border-[#e5e7eb] bg-white px-4 pb-4 pt-1" onClick={(e) => e.stopPropagation()}>
-        <AdSaveRow
-          scrapedAdId={scrapedAdId}
-          isSaved={Boolean(isSaved)}
-          onToggleSave={onToggleSave}
-          saveDisabled={saveDisabled}
-        />
+      <div className="flex shrink-0 flex-col gap-3 border-t border-[#e5e7eb] bg-[#f3f4f6] px-4 py-3.5">
+        {showHeadlineUnderCreative ? (
+          <p className="text-[14px] font-semibold leading-snug text-[#1c1e21] [overflow-wrap:anywhere] text-pretty">
+            {ad.headline}
+          </p>
+        ) : null}
+        <div className="flex min-w-0 flex-col rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-sm">
+          <p className="truncate text-[12px] font-medium uppercase tracking-wide text-[#65676b]">{siteLabel}</p>
+          {siteDetail ? (
+            <p className="mt-1.5 text-[13px] leading-snug break-words text-[#65676b] [overflow-wrap:anywhere]">
+              {siteDetail}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={sponsoredHref ?? libraryDetailHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className={`inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-md border px-5 py-2 text-[14px] font-semibold transition-colors ${
+              sponsoredHref
+                ? "border-[#cce4ff] bg-[#e7f3ff] text-[#0d6efd] hover:bg-[#d8ebfc]"
+                : "border-[#e4e6eb] bg-[#f0f2f5] text-[#65676b] hover:bg-[#e7e9ed]"
+            }`}
+            title={sponsoredHref ?? libraryDetailHref}
+          >
+            {sponsoredHref ? (ad.ctaLabel?.trim() || "Visit site") : "View on LinkedIn"}
+          </a>
+          <a
+            href={libraryDetailHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="whitespace-nowrap rounded-full border border-[#bfdbfe] bg-white px-3.5 py-2 text-[12px] font-semibold text-[#2563eb] transition-colors hover:bg-[#eff6ff]"
+          >
+            View in LinkedIn Ad Library
+          </a>
+        </div>
+        <div onClick={(e) => e.stopPropagation()}>
+          <AdSaveRow
+            scrapedAdId={scrapedAdId}
+            isSaved={Boolean(isSaved)}
+            onToggleSave={onToggleSave}
+            saveDisabled={saveDisabled}
+          />
+        </div>
       </div>
     </article>
   );
@@ -2450,9 +2595,7 @@ function CompetitorDashboardBody({
                   >
                     {forceRescrapeBusy ? (
                       <>
-                        <span className="inline-flex shrink-0 items-center justify-center rounded-md bg-white/[0.12] p-0.5 ring-1 ring-white/10">
-                          <RivalLogoVideo size="inline" />
-                        </span>
+                        <RivalLogoVideo size="inline" className="shrink-0" />
                         <span>Re-scraping…</span>
                       </>
                     ) : (
@@ -2587,9 +2730,7 @@ function CompetitorDashboardBody({
                 className="inline-flex items-center gap-2 rounded-full border border-sky-200/90 bg-white px-3 py-1.5 text-[12px] font-medium text-sky-950 shadow-sm hover:bg-sky-50 disabled:opacity-50"
               >
                 {marketingCoachLoading ? (
-                  <span className="inline-flex items-center justify-center rounded-md border border-sky-200/70 bg-white/85 p-[3px] shadow-sm">
-                    <RivalLogoVideo size="inline" />
-                  </span>
+                  <RivalLogoVideo size="inline" className="shrink-0" />
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
@@ -2598,7 +2739,7 @@ function CompetitorDashboardBody({
             </div>
 
             {marketingCoachLoading ? (
-              <RivalLoadingBlock tone="sky" size="xl" title="Synthesizing across your watched brands…" className="py-12 sm:py-16" />
+              <RivalLoadingBlock size="2xl" className="py-12 sm:py-16" />
             ) : marketingCoachError ? (
               <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
                 {marketingCoachError}
@@ -3531,7 +3672,7 @@ function CompetitorDashboardBody({
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <Suspense
             fallback={
-              <RivalLoadingBlock title="Loading insights" description="Fetching strategy overview and enrichment…" padded className="py-14" />
+              <RivalLoadingBlock padded className="py-14" />
             }
           >
             <KeepMountedTab active={activeSubTab === "strategy-map"} className="min-h-0">

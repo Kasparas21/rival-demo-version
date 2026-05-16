@@ -222,7 +222,7 @@ export function AdWallPanel({
         className="relative mb-12 scroll-mt-36 pt-8 pb-2"
       >
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Ad wall</p>
-        <RivalLoadingBlock title="Loading ads…" description="Fetching funnel buckets." padded className="mt-4 py-10" />
+        <RivalLoadingBlock padded className="mt-4 py-10" />
       </div>
     );
   }

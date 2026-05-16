@@ -320,16 +320,14 @@ export function StrategyOverviewApp({
 
       {backgroundRecompute && !emptyStrategy ? (
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-indigo-200/90 bg-indigo-50/90 px-4 py-2.5 text-[13px] text-indigo-950">
-          <span className="mt-0.5 inline-flex shrink-0 rounded-lg border border-indigo-200/80 bg-white/90 p-[3px] shadow-sm ring-1 ring-indigo-900/[0.05]">
-            <RivalLogoVideo size="inline" />
-          </span>
+          <RivalLogoVideo size="inline" className="mt-0.5 shrink-0" />
           <span className="pt-px leading-snug">
             Building strategy overview in the background… this page will update when recomputation finishes.
           </span>
         </div>
       ) : null}
 
-      {showInitialSpinner ? <RivalLoadingBlock title="Loading strategy data…" padded className="py-20" /> : null}
+      {showInitialSpinner ? <RivalLoadingBlock padded className="py-20" /> : null}
 
       {!showInitialSpinner && displayError ? (
         <div className="mb-4 rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
@@ -348,13 +346,7 @@ export function StrategyOverviewApp({
       ) : null}
 
       {!showInitialSpinner && !displayError && backgroundRecompute && emptyStrategy ? (
-        <RivalLoadingBlock
-          title="Building strategy overview…"
-          description="Analyzing scraped ads and generating your funnel map. This usually takes under two minutes."
-          size="xl"
-          padded
-          className="py-14"
-        />
+        <RivalLoadingBlock size="xl" padded className="py-14" />
       ) : null}
 
       {!showInitialSpinner && !displayError && !backgroundRecompute && emptyStrategy ? (
@@ -479,9 +471,7 @@ export function StrategyOverviewApp({
               className="flex items-center gap-2 rounded-full border border-[#e4e4e7] px-4 py-2 text-[13px] text-[#71717a] hover:text-[#3f3f46]"
             >
               {recomputeBusy ? (
-                <span className="inline-flex rounded-md border border-neutral-200/80 bg-white/90 p-[3px]">
-                  <RivalLogoVideo size="inline" />
-                </span>
+                <RivalLogoVideo size="inline" className="shrink-0" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
               )}

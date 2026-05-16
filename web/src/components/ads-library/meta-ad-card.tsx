@@ -163,6 +163,9 @@ export function MetaAdCard({
 }) {
   const { destHttps, siteLabel } = metaSiteLabel(ad, brand.domain);
   const ctaHref = destHttps || ad.adLibraryUrl;
+  const metaTitle = ad.headline?.trim() || "";
+  const metaPrimary = ad.desc?.trim() || "";
+  const metaLinkDesc = ad.linkDescription?.trim() || "";
 
   return (
     <article
@@ -171,14 +174,6 @@ export function MetaAdCard({
         onClick ? "cursor-pointer hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-2 hover:ring-slate-200" : "hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
       }`}
     >
-      {viewMode === "list" && ad.desc?.trim() ? (
-        <div className="px-4 py-3 border-b border-[#e5e7eb] shrink-0">
-          <ExpandableAdText
-            text={ad.desc}
-            className="text-[14px] text-[#374151] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-          />
-        </div>
-      ) : null}
       <div className={`flex min-h-0 flex-1 ${viewMode === "list" ? "flex-row" : "flex-col"}`}>
         {viewMode === "list" ? (
           <div className="relative w-56 shrink-0 min-h-[220px] border-r border-[#e5e7eb] bg-[#f3f4f6] p-2">
@@ -237,12 +232,23 @@ export function MetaAdCard({
               ) : null}
             </div>
           </div>
-          {viewMode === "grid" && ad.desc?.trim() ? (
-            <div className="px-4 py-3">
-              <ExpandableAdText
-                text={ad.desc}
-                className="text-[14px] text-[#374151] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-              />
+          {metaTitle || metaPrimary ? (
+            <div className="px-4 py-3 shrink-0">
+              {metaTitle ? (
+                <ExpandableAdText
+                  text={metaTitle}
+                  className="font-semibold text-[15px] text-[#1c1e21] leading-snug break-words [overflow-wrap:anywhere]"
+                />
+              ) : null}
+              {metaTitle && metaPrimary ? (
+                <div className="h-[1lh] min-h-[1.125rem] shrink-0" aria-hidden />
+              ) : null}
+              {metaPrimary ? (
+                <ExpandableAdText
+                  text={metaPrimary}
+                  className="text-[14px] text-[#374151] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                />
+              ) : null}
             </div>
           ) : null}
           {viewMode === "grid" && (
@@ -253,18 +259,12 @@ export function MetaAdCard({
             </div>
           )}
           <div className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]">
-            <div className="min-w-0 space-y-1.5 rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-sm">
+            <div className="min-w-0 flex flex-col rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-sm">
               <p className="text-[12px] font-medium text-[#65676b] uppercase tracking-wide truncate">{siteLabel}</p>
-              {ad.headline?.trim() ? (
+              {metaLinkDesc ? (
                 <ExpandableAdText
-                  text={ad.headline.trim()}
-                  className="font-semibold text-[15px] text-[#1c1e21] leading-snug break-words [overflow-wrap:anywhere]"
-                />
-              ) : null}
-              {ad.linkDescription?.trim() ? (
-                <ExpandableAdText
-                  text={ad.linkDescription.trim()}
-                  className="text-[13px] text-[#65676b] leading-snug whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                  text={metaLinkDesc}
+                  className="mt-1.5 text-[13px] text-[#65676b] leading-snug whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
                 />
               ) : null}
             </div>

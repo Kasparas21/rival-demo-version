@@ -11,7 +11,6 @@ import React, {
 } from "react";
 import { ExternalLink, HelpCircle, Info } from "lucide-react";
 import { CHANNELS, type ChannelId } from "./channel-picker-modal";
-import { brandSlugFromDomain } from "@/lib/discovery";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { AdLibraryRegionPrefs } from "@/lib/ad-library/ad-library-region-prefs";
 import { buildGoogleAdsRegionOptions } from "@/lib/ad-library/google-ads-regions";
@@ -126,7 +125,6 @@ function keywordDisplayFromDiscovered(
 
 function buildManualIdentifierSeed(
   discoveredIds: Partial<PlatformIdentifier>,
-  recommendedKeywords: string[] | undefined,
   selectedChannels: ChannelId[]
 ): PlatformIdentifier {
   const next: PlatformIdentifier = { ...discoveredIds };
@@ -136,13 +134,13 @@ function buildManualIdentifierSeed(
   delete next.linkedin;
   delete next.pinterestAdvertiserName;
 
-  const kwFirst = recommendedKeywords?.[0]?.trim() ?? "";
   for (const ch of KEYWORD_CHANNEL_IDS) {
     if (!selectedChannels.includes(ch)) {
       delete next[ch];
       continue;
     }
-    next[ch] = kwFirst ? kwFirst : undefined;
+    const v = keywordDisplayFromDiscovered(discoveredIds, ch);
+    next[ch] = v || undefined;
   }
   return next;
 }
@@ -369,11 +367,10 @@ const CHANNEL_FIELDS: {
     id: "tiktok",
     label: "",
     labelSub: "Advertiser name",
-    labelTitle:
-      "TikTok Ads Library advertiser as plain text (no surrounding quotation marks)",
-    placeholder: "e.g. Nike or Apple Germany",
+    labelTitle: "Exact advertiser name as shown in TikTok Ads Library",
+    placeholder: "e.g. Adidas AG (exact library spelling)",
     helperText:
-      "Uses advertiser search (`query_type=2`). TikTok often returns zero ads when extra quotes wrap the advertiser (literal quote characters). Use the plain advertiser name from the Ads Library UI. Matches your competitor brand field when blank.",
+      "Use the exact account / advertiser name from TikTok Ads Library—not a short nickname. Wrong or vague names often return no ads. Plain text only (no quotation marks).",
   },
   {
     id: "linkedin",
@@ -387,20 +384,20 @@ const CHANNEL_FIELDS: {
   {
     id: "pinterest",
     label: "",
-    labelSub: "Search keyword",
-    labelTitle: "Keyword used for Pinterest Ads Library search",
-    placeholder: "e.g. NOCCO",
+    labelSub: "Advertiser name",
+    labelTitle: "Exact advertiser or business name in Pinterest Ads Library",
+    placeholder: "e.g. Adidas AG (exact library spelling)",
     helperText:
-      "Results are keyword-based and may include ads from similar brands. Use the most specific keyword for this brand.",
+      "Pinterest search is broad—enter the exact advertiser / business name from the Ads Library. Generic keywords pull in other brands and hurt match quality.",
   },
   {
     id: "snapchat",
     label: "",
-    labelSub: "Search keyword",
-    labelTitle: "Keyword used with brand context for Snapchat disclosure search",
-    placeholder: "e.g. NOCCO",
+    labelSub: "Advertiser name",
+    labelTitle: "Exact advertiser name in Snapchat’s EU Ads Gallery",
+    placeholder: "e.g. Adidas AG (exact gallery spelling)",
     helperText:
-      "Results are keyword-based and may include ads from similar brands. Use the most specific keyword for this brand.",
+      "Use the exact advertiser name shown in Snapchat’s EU disclosure gallery (often a legal entity), not just the consumer brand shorthand—otherwise results miss or mix brands.",
   },
 ];
 
@@ -432,7 +429,7 @@ interface ManualIdentifiersFormProps {
   /** Resolved competitor name (not the raw search box string) */
   competitorLabel: string;
   competitorDomain?: string;
-  /** How we interpreted URL vs brand vs keyword chips */
+  /** How we interpreted URL vs brand vs keywords from search */
   interpretationSummary?: string;
   fieldConfidence?: Partial<Record<ChannelId, FieldConfidence>>;
   /** Open in new tab to verify a discovered profile */
@@ -441,8 +438,8 @@ interface ManualIdentifiersFormProps {
   /** Region / market picks for ad scrapes (Meta, Google, TikTok, Pinterest, LinkedIn, Snapchat). */
   adLibraryRegions: AdLibraryRegionPrefs;
   onAdLibraryRegionsChange: (next: AdLibraryRegionPrefs) => void;
-  /** From discover API — keyword suggestions for TikTok / Snapchat / Pinterest. */
-  recommendedKeywords?: string[];
+  /** Remove a platform from the selection (parent updates URL / channel list). */
+  onRemoveChannel?: (channelId: ChannelId) => void;
 }
 
 function isNonEmptyDiscovered(v: unknown): v is string {
@@ -582,20 +579,42 @@ export function ManualIdentifiersForm({
   brandLogoUrl,
   adLibraryRegions,
   onAdLibraryRegionsChange,
-  recommendedKeywords,
+  onRemoveChannel,
 }: ManualIdentifiersFormProps) {
   const [identifiers, setIdentifiers] = useState<PlatformIdentifier>(() =>
-    buildManualIdentifierSeed(discoveredIds, recommendedKeywords, selectedChannels)
+    buildManualIdentifierSeed(discoveredIds, selectedChannels)
   );
   const [metaDisplay, setMetaDisplay] = useState(() => "");
   const [focusedField, setFocusedField] = useState<ChannelId | null>(null);
   const [errors, setErrors] = useState<Partial<Record<ChannelId, string>>>({});
   const [warnings, setWarnings] = useState<Partial<Record<ChannelId, string>>>({});
 
-  /** Keeps TikTok / Pinterest / Google / etc. in sync when discovery updates; never overwrites `metaDisplay` (user may have pasted a different Ad Library URL). */
+  /** Keeps platform fields in sync when discovery updates; preserves user input when only `selectedChannels` changes. */
   useEffect(() => {
-    setIdentifiers(buildManualIdentifierSeed(discoveredIds, recommendedKeywords, selectedChannels));
-  }, [discoveredIds, recommendedKeywords, selectedChannels]);
+    if (!selectedChannels.includes("meta")) {
+      setMetaDisplay("");
+    }
+    setIdentifiers((prev) => {
+      const seed = buildManualIdentifierSeed(discoveredIds, selectedChannels);
+      const out: PlatformIdentifier = { ...seed };
+      for (const id of selectedChannels) {
+        if (id === "meta") continue;
+        const k = id as keyof PlatformIdentifier;
+        if (k === "metaPageUrl") continue;
+        const prevVal = prev[k];
+        if (typeof prevVal === "string" && prevVal.trim() !== "") {
+          out[k] = prevVal;
+        }
+      }
+      if (selectedChannels.includes("pinterest")) {
+        const adv = prev.pinterestAdvertiserName;
+        if (typeof adv === "string" && adv.trim() !== "") {
+          out.pinterestAdvertiserName = adv;
+        }
+      }
+      return out;
+    });
+  }, [discoveredIds, selectedChannels]);
 
   const autoFoundDisplaySnap = useMemo(
     () => autoFoundDisplaySnapshot(discoveredIds),
@@ -604,29 +623,35 @@ export function ManualIdentifiersForm({
 
   const fieldsToShow = CHANNEL_FIELDS.filter((f) => selectedChannels.includes(f.id));
 
-  const keywordRecommendationChips = useMemo(() => {
-    const base: string[] = [...(recommendedKeywords ?? [])];
-    const bl = competitorLabel.split("/")[0]?.trim();
-    if (bl) base.push(bl);
-    const dom = competitorDomain?.trim();
-    if (dom) {
-      base.push(brandSlugFromDomain(dom));
-      const stem = dom.replace(/^www\./i, "").replace(/\.[^.]+$/, "");
-      if (stem) base.push(stem);
-    }
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const r of base) {
-      const t = r.trim();
-      if (!t) continue;
-      const k = t.toLowerCase();
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(t);
-      if (out.length >= 3) break;
-    }
-    return out;
-  }, [recommendedKeywords, competitorLabel, competitorDomain]);
+  const handleRemoveChannelRow = useCallback(
+    (channelId: ChannelId) => {
+      if (!onRemoveChannel) return;
+      if (selectedChannels.length <= 1) return;
+      if (focusedField === channelId) setFocusedField(null);
+      setErrors((prev) => {
+        const n = { ...prev };
+        delete n[channelId];
+        return n;
+      });
+      setWarnings((prev) => {
+        const n = { ...prev };
+        delete n[channelId];
+        return n;
+      });
+      if (channelId === "meta") {
+        setMetaDisplay("");
+      } else {
+        setIdentifiers((prev) => {
+          const next: PlatformIdentifier = { ...prev };
+          delete next[channelId as keyof PlatformIdentifier];
+          if (channelId === "pinterest") delete next.pinterestAdvertiserName;
+          return next;
+        });
+      }
+      onRemoveChannel(channelId);
+    },
+    [onRemoveChannel, selectedChannels.length, focusedField]
+  );
 
   const blockingErrorForChannel = useCallback((channelId: ChannelId, value: string): string | null => {
     const v = value.trim();
@@ -935,7 +960,7 @@ export function ManualIdentifiersForm({
               const error = errors[field.id];
               const warning = warnings[field.id];
 
-              const inputClass = `w-full h-[44px] min-h-[44px] box-border px-3.5 rounded-lg border text-[14px] font-medium placeholder:text-gray-400 transition-all
+              const inputClass = `w-full h-[44px] min-h-[44px] box-border px-3.5 rounded-lg border text-[14px] font-medium text-[#0f172a] placeholder:text-slate-500 transition-all
                         ${error ? "border-red-300 bg-red-50/50" : warning ? "border-amber-300 bg-amber-50/35" : "border-gray-200"}
                         ${isFocused && !error && !warning ? "border-[#343434] ring-2 ring-[#DDF1FD]/50" : ""}
                         ${!isFocused && !error && !warning ? "hover:border-gray-300" : ""}
@@ -1029,21 +1054,6 @@ export function ManualIdentifiersForm({
                         to find your link.
                       </p>
                     ) : null}
-                    {(field.id === "tiktok" || field.id === "pinterest" || field.id === "snapchat") &&
-                    keywordRecommendationChips.length > 1 ? (
-                      <div className="flex flex-wrap gap-1.5 mt-2 shrink-0">
-                        {keywordRecommendationChips.map((kw) => (
-                          <button
-                            key={`${field.id}-${kw}`}
-                            type="button"
-                            onClick={() => handleChange(field.id, kw)}
-                            className="rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-[#4b5563] hover:bg-gray-100 hover:border-gray-300 transition-colors"
-                          >
-                            {kw}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
                     {field.id === "meta" ? (
                       <CollapsibleSingleSelectFlagChipRow
                         ariaLabel="Meta — ad library country"
@@ -1097,6 +1107,17 @@ export function ManualIdentifiersForm({
                           </p>
                         }
                       />
+                    ) : null}
+                    {onRemoveChannel && selectedChannels.length > 1 ? (
+                      <div className="mt-3 flex shrink-0 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveChannelRow(field.id)}
+                          className="text-[12px] font-semibold text-slate-500 underline decoration-slate-300/80 underline-offset-2 transition-colors hover:text-slate-800 hover:decoration-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6fa8]/30 focus-visible:ring-offset-1 rounded-sm"
+                        >
+                          Remove platform
+                        </button>
+                      </div>
                     ) : null}
                     {error ? (
                       <p className="text-[12px] leading-snug shrink-0 mt-2 text-red-500">{error}</p>

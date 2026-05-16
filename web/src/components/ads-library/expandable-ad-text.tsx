@@ -83,7 +83,10 @@ export function ExpandableAdText({
       {needsToggle ? (
         <button
           type="button"
-          onClick={() => setExpanded((e) => !e)}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            setExpanded((x) => !x);
+          }}
           className="mt-1 text-[13px] font-semibold text-[#2563eb] hover:underline"
         >
           {expanded ? "Show less" : "Show more"}

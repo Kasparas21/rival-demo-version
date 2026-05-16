@@ -24,7 +24,6 @@ import {
   buildFieldPreviewUrls,
   applyDiscoveredMetaPresentation,
   finalizeLinkedInDiscovery,
-  buildRecommendedKeywords,
   stripPublicDiscoverSuggestions,
   stripDiscoverFieldUiMetadata,
 } from "@/lib/competitor-discover-firecrawl";
@@ -48,6 +47,7 @@ export type DiscoverResponse = {
   fieldPreviewUrls?: Partial<Record<ChannelId, string>>;
   error?: string;
   warning?: string;
+  /** Legacy field; always []. TikTok / Pinterest / Snapchat need user-entered advertiser names. */
   recommendedKeywords?: string[];
 };
 
@@ -140,11 +140,6 @@ export async function POST(req: Request) {
       const domain = guessDomainForLimitedDiscovery(interpretation, query);
       const brandName = interpretation.primaryBrandName;
       const logoUrl = googleFaviconUrlForDomain(domain);
-      const rk = buildRecommendedKeywords({
-        brandName,
-        domain,
-        discoveredIds: {},
-      });
       return NextResponse.json({
         success: true,
         brand: {
@@ -153,7 +148,7 @@ export async function POST(req: Request) {
           logoUrl,
         },
         discoveredIds: {},
-        recommendedKeywords: rk,
+        recommendedKeywords: [],
         interpretation: {
           summary: interpretation.interpretationSummary,
           primaryBrandName: interpretation.primaryBrandName,
@@ -280,12 +275,6 @@ export async function POST(req: Request) {
 
     discoveredIds = normalizeDiscoveredIds(discoveredIds);
 
-    const recommendedKeywords = buildRecommendedKeywords({
-      brandName,
-      domain: scrapedDomain,
-      discoveredIds,
-    });
-
     const scrapeSucceeded = Boolean(scraped);
     const fieldConfidence = buildFieldConfidence(fromScrape, discoveredIds, scrapeSucceeded);
     const fieldPreviewUrls = buildFieldPreviewUrls(
@@ -302,7 +291,7 @@ export async function POST(req: Request) {
         logoUrl,
       },
       discoveredIds: stripPublicDiscoverSuggestions(discoveredIds),
-      recommendedKeywords,
+      recommendedKeywords: [],
       interpretation: {
         summary: interpretation.interpretationSummary,
         primaryBrandName: interpretation.primaryBrandName,

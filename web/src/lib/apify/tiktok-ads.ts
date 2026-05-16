@@ -2,7 +2,7 @@ import { runApifyActor } from "@/lib/apify/client";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
-import { tiktokApifyItemToCard } from "@/lib/ad-library/normalize";
+import { tiktokApifyItemToCard, normalizeUserAdvertiserQueryToken } from "@/lib/ad-library/normalize";
 import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
 
 const DEFAULT_TIKTOK_ACTOR = "data_xplorer/tiktok-ads-library-pay-per-event";
@@ -15,16 +15,6 @@ function formatIsoDate(d: Date): string {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Actor `query`: **2** = advertiser name / biz id · **url** = paste library URL. */
-function normalizeTikTokAdvertiserQueryToken(token: string): string {
-  let t = token.trim().replace(/^@+/, "");
-  /** TikTok Ads Library rejects many searches when `"Brand"` is sent literally (%22…) — bare `Apple` returns rows. Strip one matching pair if the user pasted UI-style quotes. */
-  if (/^".*"$/.test(t)) {
-    t = t.slice(1, -1).replace(/\\"/g, '"').trim();
-  }
-  return t;
-}
-
-/** Actor: queryType **1** = keyword, **2** = advertiser name/id, **url** = library URL. */
 function buildTikTokApifyQuery(params: {
   brandName: string;
   brandDomain?: string;
@@ -44,7 +34,7 @@ function buildTikTokApifyQuery(params: {
   }
 
   /** Always `query_type=2`; **omit** `"` wrappers — TikTok’s `adv_name=%22Brand%22` often matches zero rows vs plain `adv_name=Brand`. */
-  const token = normalizeTikTokAdvertiserQueryToken(raw.length > 0 ? raw : searchBrand);
+  const token = normalizeUserAdvertiserQueryToken(raw.length > 0 ? raw : searchBrand);
   if (!token.length) {
     return { query: "brand", queryType: "2" };
   }
@@ -88,6 +78,18 @@ export async function scrapeTikTokAdsLibrary(params: {
     savedTiktok: params.savedTiktok,
   });
 
+  const hadUserSavedTiktok = Boolean(params.savedTiktok?.trim());
+  let confirmedAdvertiserQuery: string | undefined;
+  if (
+    hadUserSavedTiktok &&
+    queryType === "2" &&
+    query.trim() &&
+    !/^https?:\/\//i.test(query.trim()) &&
+    !/^\d{6,}$/.test(query.trim())
+  ) {
+    confirmedAdvertiserQuery = normalizeUserAdvertiserQueryToken(query);
+  }
+
   const region = normalizeTikTokAdsRegion(params.region) || DEFAULT_TIKTOK_ADS_REGION;
 
   /**Residential exits can trip TLS timeouts; set APIFY_TIKTOK_USE_RESIDENTIAL=false for datacenter (actor default — often more stable). */
@@ -121,7 +123,11 @@ export async function scrapeTikTokAdsLibrary(params: {
 
   return items
     .map((raw, i) =>
-      tiktokApifyItemToCard(raw, i, { brandName: params.brandName, brandDomain: params.brandDomain })
+      tiktokApifyItemToCard(raw, i, {
+        brandName: params.brandName,
+        brandDomain: params.brandDomain,
+        ...(confirmedAdvertiserQuery ? { confirmedAdvertiserQuery } : {}),
+      })
     )
     .filter((c): c is TikTokAdCard => c !== null);
 }

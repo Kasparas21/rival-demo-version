@@ -1,5 +1,6 @@
 "use client";
 
+import type { KeyboardEvent, MouseEvent } from "react";
 import { useEffect, useState } from "react";
 import { Play } from "lucide-react";
 
@@ -8,8 +9,16 @@ type Props = {
   img?: string;
   /** Direct video file URL when available */
   videoUrl?: string | null;
-  /** Opens when user clicks the poster fallback */
-  openHref: string;
+  /**
+   * Opens in a new tab when the user clicks the still image (or video-fallback tile).
+   * Ignored when `onMediaClick` is set.
+   */
+  openHref?: string;
+  /**
+   * When set (e.g. LinkedIn in-app detail), clicking the image / fallback uses this instead of `openHref`.
+   * The component stops propagation so parent card handlers are not double-fired.
+   */
+  onMediaClick?: () => void;
   className?: string;
   minHeightClass?: string;
   /**
@@ -32,6 +41,7 @@ export function AdCreativeVideoOrImage({
   img = "",
   videoUrl,
   openHref,
+  onMediaClick,
   className = "",
   minHeightClass = "min-h-[160px]",
   variant = "default",
@@ -47,6 +57,24 @@ export function AdCreativeVideoOrImage({
   const showImg = Boolean(poster) && !imgFailed && !showVideo;
 
   const mat = variant === "neutralMat";
+  const href = openHref?.trim() ?? "";
+
+  const interactiveImgShellClass = fillAvailableHeight
+    ? "relative flex h-full min-h-0 w-full flex-1 items-center justify-center"
+    : "relative flex max-h-full max-w-full";
+  const interactiveImgShellExtra = onMediaClick ? " cursor-pointer" : "";
+
+  function mediaActivateKeyDown(e: KeyboardEvent<HTMLElement>) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    e.stopPropagation();
+    onMediaClick?.();
+  }
+
+  function mediaActivateClick(e: MouseEvent<HTMLElement>) {
+    e.stopPropagation();
+    onMediaClick?.();
+  }
 
   useEffect(() => {
     setVideoFailed(false);
@@ -83,43 +111,101 @@ export function AdCreativeVideoOrImage({
           {...(nrPoster || nrVideo ? { referrerPolicy: "no-referrer" as const } : {})}
         />
       ) : showImg ? (
-        <a
-          href={openHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={
-            fillAvailableHeight
-              ? "relative flex h-full min-h-0 w-full flex-1 items-center justify-center"
-              : "relative flex max-h-full max-w-full"
-          }
-        >
-          <img
-            src={poster}
-            alt=""
-            referrerPolicy={nrPoster ? "no-referrer" : undefined}
-            className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl`}
-            onError={() => setImgFailed(true)}
-          />
-          {v && videoFailed ? (
-            <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
-                <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+        onMediaClick ? (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={mediaActivateClick}
+            onKeyDown={mediaActivateKeyDown}
+            className={`${interactiveImgShellClass}${interactiveImgShellExtra}`}
+          >
+            <img
+              src={poster}
+              alt=""
+              referrerPolicy={nrPoster ? "no-referrer" : undefined}
+              className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl`}
+              onError={() => setImgFailed(true)}
+            />
+            {v && videoFailed ? (
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
+                  <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+                </span>
               </span>
-            </span>
-          ) : null}
-        </a>
+            ) : null}
+          </div>
+        ) : href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={interactiveImgShellClass}
+          >
+            <img
+              src={poster}
+              alt=""
+              referrerPolicy={nrPoster ? "no-referrer" : undefined}
+              className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl`}
+              onError={() => setImgFailed(true)}
+            />
+            {v && videoFailed ? (
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
+                  <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+                </span>
+              </span>
+            ) : null}
+          </a>
+        ) : (
+          <div className={interactiveImgShellClass}>
+            <img
+              src={poster}
+              alt=""
+              referrerPolicy={nrPoster ? "no-referrer" : undefined}
+              className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl`}
+              onError={() => setImgFailed(true)}
+            />
+            {v && videoFailed ? (
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
+                  <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+                </span>
+              </span>
+            ) : null}
+          </div>
+        )
       ) : v && videoFailed ? (
-        <a
-          href={openHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex flex-col items-center justify-center gap-2 px-6 text-center text-[13px] text-[#64748b]"
-        >
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e2e8f0] text-[#475569]">
-            <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
-          </span>
-          <span>Video preview failed to load — open the ad for the creative.</span>
-        </a>
+        onMediaClick ? (
+          <button
+            type="button"
+            onClick={mediaActivateClick}
+            className="flex flex-col items-center justify-center gap-2 px-6 text-center text-[13px] text-[#64748b]"
+          >
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e2e8f0] text-[#475569]">
+              <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+            </span>
+            <span>Video preview failed to load — open the ad for the creative.</span>
+          </button>
+        ) : href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center justify-center gap-2 px-6 text-center text-[13px] text-[#64748b]"
+          >
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e2e8f0] text-[#475569]">
+              <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+            </span>
+            <span>Video preview failed to load — open the ad for the creative.</span>
+          </a>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-2 px-6 text-center text-[13px] text-[#64748b]">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e2e8f0] text-[#475569]">
+              <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+            </span>
+            <span>Video preview failed to load.</span>
+          </div>
+        )
       ) : (
         <div className="w-full flex items-center justify-center text-[13px] text-[#9ca3af] px-4 text-center">
           No preview image

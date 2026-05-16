@@ -19,6 +19,10 @@ import { toast } from "sonner";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import {
+  classifyLandingPreviewEmbed,
+  LandingPagePreviewFallbackCard,
+} from "@/components/competitor/landing-page-preview-fallback";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
@@ -238,25 +242,40 @@ export function LandingPagesTab({
     clearLoadTimer();
     loadTimerRef.current = setTimeout(() => {
       setPreviewState("blocked");
-    }, 4000);
+    }, 3200);
     return () => clearLoadTimer();
   }, [selectedUrl, previewDevice, clearLoadTimer]);
 
   const onIframeLoad = useCallback(() => {
     clearLoadTimer();
-    setPreviewState((prev) => {
-      if (prev === "blocked") return "blocked";
-      try {
-        const doc = iframeRef.current?.contentDocument;
-        if (doc && doc.body && doc.body.children.length === 0) {
-          return "blocked";
-        }
-        return "ok";
-      } catch {
-        return "ok";
-      }
-    });
+
+    const applyClassify = () => {
+      setPreviewState((prev) => {
+        if (prev === "blocked") return "blocked";
+        return classifyLandingPreviewEmbed(iframeRef.current);
+      });
+    };
+
+    applyClassify();
+    window.setTimeout(applyClassify, 180);
+    window.setTimeout(applyClassify, 650);
+    window.setTimeout(applyClassify, 1400);
   }, [clearLoadTimer]);
+
+  /** Cross-origin frames can flip to Chrome/CSP error UI slightly after first paint — keep checking while “ok”. */
+  useEffect(() => {
+    if (previewState !== "ok" || !selectedUrl) return;
+    const delays = [1200, 2400, 4000, 6200];
+    const ids = delays.map((ms) =>
+      window.setTimeout(() => {
+        setPreviewState((prev) => {
+          if (prev !== "ok") return prev;
+          return classifyLandingPreviewEmbed(iframeRef.current);
+        });
+      }, ms),
+    );
+    return () => ids.forEach((id) => window.clearTimeout(id));
+  }, [previewState, selectedUrl]);
 
   useEffect(() => {
     setPageAds([]);
@@ -390,6 +409,8 @@ export function LandingPagesTab({
               <PreviewPane
                 url={selectedUrl}
                 row={selectedRow}
+                competitorLabel={competitorLabel}
+                competitorDomainNorm={domainKey}
                 previewState={previewState}
                 previewDevice={previewDevice}
                 onPreviewDeviceChange={setPreviewDevice}
@@ -524,6 +545,8 @@ function LandingPageListRow({
 function PreviewPane({
   url,
   row,
+  competitorLabel,
+  competitorDomainNorm,
   previewState,
   previewDevice,
   onPreviewDeviceChange,
@@ -533,6 +556,8 @@ function PreviewPane({
 }: {
   url: string;
   row: LandingPageRow | null;
+  competitorLabel: string;
+  competitorDomainNorm: string;
   previewState: "loading" | "ok" | "blocked";
   previewDevice: "mobile" | "desktop";
   onPreviewDeviceChange: (mode: "mobile" | "desktop") => void;
@@ -576,7 +601,19 @@ function PreviewPane({
   }, [isMobile, previewState, previewDevice, url]);
 
   if (previewState === "blocked") {
-    return <BlockedPreviewCard url={url} displayPath={displayPath} row={row} onCopy={onCopy} />;
+    const cap = row ? captionTopPlatforms(row.platformBreakdown, 3) : "";
+    const metaLine = row ? `Used in ${row.count} ads${cap ? ` · ${cap}` : ""}` : null;
+    return (
+      <LandingPagePreviewFallbackCard
+        url={url}
+        displayPath={displayPath}
+        faviconUrl={row?.faviconUrl ?? null}
+        onCopy={onCopy}
+        metaLine={metaLine}
+        competitorLabel={competitorLabel}
+        competitorDomainNorm={competitorDomainNorm}
+      />
+    );
   }
 
   const iframeStyle = isMobile
@@ -707,67 +744,6 @@ function PreviewPane({
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function BlockedPreviewCard({
-  url,
-  displayPath,
-  row,
-  onCopy,
-}: {
-  url: string;
-  displayPath: string;
-  row: LandingPageRow | null;
-  onCopy: () => void;
-}) {
-  const [faviconFailed, setFaviconFailed] = useState(false);
-  const cap = row ? captionTopPlatforms(row.platformBreakdown, 3) : "";
-  const usedLine = row ? `Used in ${row.count} ads${cap ? ` · ${cap}` : ""}` : null;
-
-  return (
-    <div
-      className="flex w-[380px] max-w-full flex-col items-center rounded-xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm"
-      style={{ width: 380 }}
-    >
-      <div className="mb-3 flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg bg-slate-50">
-        {faviconFailed || !row?.faviconUrl ? (
-          <Globe className="h-7 w-7 text-slate-400" />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={row.faviconUrl}
-            alt=""
-            width={48}
-            height={48}
-            className="h-12 w-12 object-contain"
-            onError={() => setFaviconFailed(true)}
-          />
-        )}
-      </div>
-      <p className="mb-2 break-all font-mono text-[13px] font-semibold text-slate-900">{displayPath}</p>
-      <p className="mb-6 text-[13px] leading-relaxed text-slate-600">
-        This site doesn&apos;t allow preview embedding. Click below to open in a new tab.
-      </p>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--rival-primary)] px-4 py-3 text-[13px] font-semibold text-white hover:opacity-90"
-      >
-        Open in new tab
-        <ExternalLink className="h-4 w-4" />
-      </a>
-      <button
-        type="button"
-        onClick={onCopy}
-        className="mt-3 text-[11px] font-medium text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
-      >
-        Copy URL
-      </button>
-      {usedLine ? <p className="mt-4 text-[11px] text-slate-500">{usedLine}</p> : null}
-      <p className="mt-3 text-[10px] text-slate-400">Preview limited by site&apos;s CSP headers</p>
     </div>
   );
 }

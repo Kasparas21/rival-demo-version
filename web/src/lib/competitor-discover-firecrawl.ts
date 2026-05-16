@@ -21,7 +21,6 @@ import {
   type PlatformIdentifier,
   type SearchHit,
 } from "@/lib/discovery";
-import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { buildMetaAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
@@ -29,8 +28,9 @@ import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-li
 export const DISCOVER_FIRECRAWL_TIMEOUT_MS = 55_000;
 
 /**
- * Omit auto-filled ad-library URLs/IDs from API responses — Meta/Google/LinkedIn library links with
- * IDs are wrong too often; TikTok/Snapchat/Pinterest are filled from {@link buildRecommendedKeywords} only.
+ * Omit auto-filled ad-library URLs/IDs from API responses — Meta/Google/LinkedIn links must be
+ * confirmed by the user. TikTok, Pinterest, and Snapchat advertiser names are not auto-filled
+ * (users enter the exact library/gallery name for reliable matches).
  */
 const PUBLIC_DISCOVER_STRIP_KEYS: (keyof PlatformIdentifier)[] = [
   "meta",
@@ -408,41 +408,6 @@ export async function finalizeLinkedInDiscovery(
 
   const { linkedin: _drop, ...rest } = discoveredIds;
   return rest;
-}
-
-/** Keyword suggestions for TikTok / Snapchat / Pinterest (deduped, priority order). */
-export function buildRecommendedKeywords(ctx: {
-  brandName: string;
-  domain: string;
-  discoveredIds?: Partial<PlatformIdentifier>;
-}): string[] {
-  const out: string[] = [];
-  const seenLower = new Set<string>();
-  const push = (raw: string) => {
-    const t = raw.trim();
-    if (!t) return;
-    const k = t.toLowerCase();
-    if (seenLower.has(k)) return;
-    seenLower.add(k);
-    out.push(t);
-  };
-
-  push(ctx.brandName.split("/")[0]?.trim() ?? "");
-  push(brandSlugFromDomain(ctx.domain));
-
-  const tt = ctx.discoveredIds?.tiktok?.trim();
-  if (tt) push(tt.replace(/^@+/, ""));
-
-  const sc = ctx.discoveredIds?.snapchat?.trim();
-  if (sc) push(sc.replace(/^@+/, ""));
-
-  const pin = ctx.discoveredIds?.pinterest?.trim();
-  if (pin) {
-    const h = extractPinterestHandleFromUrlOrString(pin);
-    if (h) push(h);
-  }
-
-  return out;
 }
 
 async function runSearches(

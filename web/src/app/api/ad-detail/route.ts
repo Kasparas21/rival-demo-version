@@ -127,18 +127,31 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     }
     ad = data as AdRow | null;
   } else if (competitorIdParam && platformParam && libraryItemId) {
-    const { data, error } = await supabase
-      .from("scraped_ads")
-      .select(scrapedAdSelect)
-      .eq("user_id", user.id)
-      .eq("competitor_id", competitorIdParam)
-      .eq("platform", platformParam)
+    const baseQuery = () =>
+      supabase
+        .from("scraped_ads")
+        .select(scrapedAdSelect)
+        .eq("user_id", user.id)
+        .eq("competitor_id", competitorIdParam)
+        .eq("platform", platformParam);
+
+    const { data: byPayloadId, error: errPayload } = await baseQuery()
       .filter("raw_payload->>id", "eq", libraryItemId)
       .maybeSingle();
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    if (errPayload) {
+      return NextResponse.json({ ok: false, error: errPayload.message }, { status: 500 });
     }
-    ad = data as AdRow | null;
+    ad = byPayloadId as AdRow | null;
+
+    if (!ad) {
+      const { data: byStableKey, error: errKey } = await baseQuery()
+        .eq("stable_ad_key", libraryItemId)
+        .maybeSingle();
+      if (errKey) {
+        return NextResponse.json({ ok: false, error: errKey.message }, { status: 500 });
+      }
+      ad = byStableKey as AdRow | null;
+    }
   } else {
     return NextResponse.json(
       { ok: false, error: "missing adId (uuid) or competitorId+platform+libraryItemId" },

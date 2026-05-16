@@ -3,6 +3,8 @@ import type {
   FacebookAdSnapshot,
   GoogleCompanyAdItem,
   LinkedInAdItem,
+  LinkedInAudienceTargetingRow,
+  LinkedInCountryShare,
 } from "@/lib/ad-library/apify-raw-types";
 import {
   cleanDomainHost,
@@ -62,6 +64,10 @@ export type MetaAdCard = {
   pageProfilePic?: string;
   /** True when scraped page_id does not match the user-confirmed Meta page id */
   advertiserMismatch?: boolean;
+  /** From Ad Library row when present (persisted for detail drawer). */
+  publisher_platform?: string[];
+  targets_eu?: boolean;
+  gender_audience?: string;
 };
 
 /** Google / YouTube style row */
@@ -85,6 +91,13 @@ export type GoogleAdRow =
       advertiserName?: string | null;
       /** Human-readable last shown date */
       lastShownLabel?: string | null;
+      /** ISO-like first / last shown from Transparency API (persisted for lifespan). */
+      firstShown?: string | null;
+      lastShown?: string | null;
+      /** Geo / region enrichment from scraper */
+      libraryRegionSummary?: string | null;
+      /** Targeting / locations from scraper */
+      libraryTargetingSummary?: string | null;
       /** Raw Google “Preview URL” from the API (displayads-formats… / googlesyndication…) */
       previewUrl?: string | null;
     }
@@ -101,6 +114,10 @@ export type GoogleAdRow =
       videoUrl?: string | null;
       adUrl: string;
       format?: string;
+      firstShown?: string | null;
+      lastShown?: string | null;
+      libraryRegionSummary?: string | null;
+      libraryTargetingSummary?: string | null;
     };
 
 export type LinkedInAdCard = {
@@ -118,7 +135,16 @@ export type LinkedInAdCard = {
   ctaLabel?: string | null;
   /** Open in LinkedIn / destination */
   adUrl: string;
+  /** Off-LinkedIn landing from transparency (e.g. `adLinkUrl` / `ctaUrl`); never Ad Library detail. */
+  landingPageUrl?: string | null;
   advertiserMismatch?: boolean;
+  /** Transparency “Publication Date” / reporting range */
+  publicationStart?: string | null;
+  publicationEnd?: string | null;
+  /** Band from `adTotalImpressions` when present */
+  linkedinTotalImpressions?: string | null;
+  linkedinCountryBreakdown?: LinkedInCountryShare[];
+  linkedinAudienceTargeting?: LinkedInAudienceTargetingRow[];
 };
 
 export type TikTokAdCard = {
@@ -139,6 +165,13 @@ export type TikTokAdCard = {
   flightEndMs?: number;
   /** e.g. "1K-10K" from Ad Audience / reach */
   uniqueUsersSeen?: string | null;
+  /** Library “Ad Audience” line when distinct from reach band */
+  adAudienceLine?: string | null;
+  targetRegion?: string | null;
+  targetAge?: string | null;
+  targetGender?: string | null;
+  /** “Ad target audience size” / estimated audience when disclosed */
+  targetAudienceSize?: string | null;
   advertiserMismatch?: boolean;
 };
 
@@ -165,7 +198,7 @@ export type PinterestTargetingRow = {
 export type PinterestAdCard = {
   id: string;
   headline: string;
-  /** Compact text summary (strategy / comparisons); mirrors structured targeting when available. */
+  /** Public ad/product description. Targeting stays in `targetingRows`, not in card copy. */
   desc: string;
   url: string;
   img: string;
@@ -208,9 +241,26 @@ export type SnapchatAdCard = {
   suppressCreativeHeadline?: boolean;
   /** Actor row had a non-empty `mediaUrl` / `MediaUrl` (EU gallery hero asset). */
   hasHeroMediaUrl?: boolean;
+  /**
+   * Creative / placement type from the EU Ads Gallery scraper (e.g. `STORY_AD` → `Story Ad`),
+   * distinct from our stored `scraped_ads.format` (image/video from media inference).
+   */
+  creativeTypeLabel?: string | null;
 };
 
 const GENERIC_ADVERTISER_PLACEHOLDER = /^advertiser$/i;
+
+/**
+ * User-entered advertiser / gallery token (TikTok, Pinterest, Snapchat) — strip @ and UI-style
+ * outer quotes so it matches disclosure names fairly.
+ */
+export function normalizeUserAdvertiserQueryToken(token: string): string {
+  let t = token.trim().replace(/^@+/, "");
+  if (/^".*"$/.test(t)) {
+    t = t.slice(1, -1).replace(/\\"/g, '"').trim();
+  }
+  return t;
+}
 
 function normalizeBrandAdvertiserString(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
@@ -241,6 +291,21 @@ function brandAdvertiserNameMismatchForCard(
   for (const c of normalizedKeys) {
     if (a === c || a.includes(c) || c.includes(a)) return false;
   }
+  return true;
+}
+
+/** When the user confirmed an advertiser string for search, flag rows whose disclosure advertiser doesn't match it. */
+function confirmedAdvertiserQueryMismatchForCard(
+  confirmedQuery: string | undefined,
+  advertiserNameFromPayload: string
+): boolean {
+  const raw = confirmedQuery?.trim() ?? "";
+  if (!raw) return false;
+  if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiserNameFromPayload.trim())) return false;
+  const c = normalizeBrandAdvertiserString(normalizeUserAdvertiserQueryToken(raw));
+  const a = normalizeBrandAdvertiserString(advertiserNameFromPayload);
+  if (!a || !c) return false;
+  if (a === c || a.includes(c) || c.includes(a)) return false;
   return true;
 }
 
@@ -342,6 +407,33 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
         ? (baseObj.impressionsWithIndex as FacebookAdLibraryItem["impressions_with_index"])
         : undefined;
 
+  const publisher_platform = (() => {
+    for (const k of ["publisher_platform", "publisherPlatform"] as const) {
+      const v = baseObj[k];
+      if (!Array.isArray(v) || v.length === 0) continue;
+      const parts = v
+        .map((x) => {
+          if (typeof x === "string" && x.trim()) return x.trim();
+          if (typeof x === "number" && Number.isFinite(x)) return String(Math.trunc(x));
+          return "";
+        })
+        .filter(Boolean);
+      if (parts.length) return parts;
+    }
+    return undefined;
+  })();
+
+  const gender_audience = pickStr("gender_audience", "genderAudience");
+  const targets_eu = (() => {
+    for (const k of ["targets_eu", "targetsEu"] as const) {
+      const v = baseObj[k];
+      if (typeof v === "boolean") return v;
+      if (v === 1 || v === "1" || v === "true") return true;
+      if (v === 0 || v === "0" || v === "false") return false;
+    }
+    return undefined;
+  })();
+
   return {
     ad_archive_id: pickStr("ad_archive_id", "adArchiveId", "archive_id", "adId", "id"),
     collation_id: pickStr("collation_id", "collationId"),
@@ -362,6 +454,9 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
     snapshot,
     ad_library_url: pickStr("ad_library_url", "adLibraryUrl", "facebook_ad_library_url"),
     impressions_with_index: impressions,
+    ...(publisher_platform?.length ? { publisher_platform } : {}),
+    ...(gender_audience ? { gender_audience } : {}),
+    ...(typeof targets_eu === "boolean" ? { targets_eu } : {}),
   };
 }
 
@@ -818,6 +913,9 @@ export function facebookItemToMetaCard(
     pageProfilePic: pic,
     ...(videoUrl ? { videoUrl } : {}),
     ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
+    ...(item.publisher_platform?.length ? { publisher_platform: item.publisher_platform } : {}),
+    ...(typeof item.targets_eu === "boolean" ? { targets_eu: item.targets_eu } : {}),
+    ...(item.gender_audience?.trim() ? { gender_audience: item.gender_audience.trim() } : {}),
   };
 }
 
@@ -1020,6 +1118,96 @@ function findFirstGoogleCreativeImageUrl(obj: unknown, depth = 0): string | null
   return null;
 }
 
+function stringifyGoogleEnrichmentValue(val: unknown, max = 520): string | undefined {
+  if (val == null) return undefined;
+  if (typeof val === "string") {
+    const t = val.trim();
+    return t ? t.slice(0, max) : undefined;
+  }
+  if (typeof val === "number" && Number.isFinite(val)) return String(val);
+  if (Array.isArray(val)) {
+    const parts = val
+      .map((x) => {
+        if (typeof x === "string") return x.trim();
+        if (x && typeof x === "object" && !Array.isArray(x)) {
+          return Object.entries(x as Record<string, unknown>)
+            .map(([k, v]) => {
+              if (typeof v === "boolean" || typeof v === "number") return `${k}: ${v}`;
+              if (typeof v === "string") return `${k}: ${v.trim().slice(0, 160)}`;
+              try {
+                return `${k}: ${JSON.stringify(v).slice(0, 160)}`;
+              } catch {
+                return `${k}: …`;
+              }
+            })
+            .join("; ");
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (!parts.length) return undefined;
+    return parts.join(" · ").slice(0, max);
+  }
+  if (typeof val === "object") {
+    try {
+      return JSON.stringify(val).slice(0, max);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Region + targeting blobs when actor enables includeRegionEnrichment / includeTargetingLocations. */
+function extractGoogleLibraryEnrichment(o: Record<string, unknown>): {
+  libraryRegionSummary?: string;
+  libraryTargetingSummary?: string;
+} {
+  const regionBits: string[] = [];
+  const targetBits: string[] = [];
+
+  const regionKeys = [
+    "regionEnrichment",
+    "RegionEnrichment",
+    "targetingRegions",
+    "enrichedRegions",
+    "regions",
+    "geoRegions",
+    "deliveryCountries",
+    "countryTargeting",
+    "geoTargetingSummary",
+  ];
+  for (const k of regionKeys) {
+    if (!(k in o)) continue;
+    const s = stringifyGoogleEnrichmentValue(o[k]);
+    if (s) regionBits.push(s);
+  }
+
+  const targetKeys = [
+    "targetingLocations",
+    "targetingLocation",
+    "TargetingLocations",
+    "locationTargeting",
+    "geoTargeting",
+    "targeting",
+    "Targeting",
+    "targetingDetails",
+    "audienceTargeting",
+    "placementTargeting",
+    "keywordTargeting",
+  ];
+  for (const k of targetKeys) {
+    if (!(k in o)) continue;
+    const s = stringifyGoogleEnrichmentValue(o[k]);
+    if (s) targetBits.push(s);
+  }
+
+  return {
+    ...(regionBits.length ? { libraryRegionSummary: [...new Set(regionBits)].join("\n") } : {}),
+    ...(targetBits.length ? { libraryTargetingSummary: targetBits.join("\n\n") } : {}),
+  };
+}
+
 /**
  * Normalize one ad object: camelCase + snake_case + shallow nested `ad` / `creative` / `advertiser`.
  */
@@ -1149,6 +1337,7 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
       })() ||
       findFirstGoogleVideoFileUrl(o) ||
       null,
+    ...extractGoogleLibraryEnrichment(o),
   };
 }
 
@@ -1316,6 +1505,10 @@ export function googleItemToRow(
       videoUrl: videoFile || null,
       adUrl,
       format: item.format || "video",
+      firstShown: item.firstShown?.trim() || null,
+      lastShown: item.lastShown?.trim() || null,
+      libraryRegionSummary: item.libraryRegionSummary?.trim() || null,
+      libraryTargetingSummary: item.libraryTargetingSummary?.trim() || null,
     };
   }
 
@@ -1380,6 +1573,10 @@ export function googleItemToRow(
     format: item.format,
     advertiserName: item.advertiserName?.trim() || null,
     lastShownLabel,
+    firstShown: item.firstShown?.trim() || null,
+    lastShown: item.lastShown?.trim() || null,
+    libraryRegionSummary: item.libraryRegionSummary?.trim() || null,
+    libraryTargetingSummary: item.libraryTargetingSummary?.trim() || null,
     previewUrl,
   };
 }
@@ -1413,32 +1610,127 @@ export function googleAdRowPreviewLikelihood(row: GoogleAdRow): number {
   return s;
 }
 
+/**
+ * Drop LinkedIn’s Ad Library preview short-link tail (`bit.ly` / `lnkd.in`, `trk=ad_library_ad_preview_content`)
+ * from scraped body copy — it’s metadata, not ad creative.
+ */
+function stripLinkedInAdPreviewTrackingUrls(text: string): string {
+  if (!text.toLowerCase().includes("trk=ad_library_ad_preview_content")) return text;
+
+  const lineIsOnlySnippetUrl = (line: string) => {
+    const s = line.trim();
+    if (!s || !/\btrk=ad_library_ad_preview_content\b/i.test(s)) return false;
+    if (!/(?:bit\.ly|lnkd\.in)\//i.test(s)) return false;
+    if (/\s/.test(s)) return false;
+    const core = s.replace(/^https:\/\//i, "").replace(/^http:\/\//i, "").trim();
+    return /^(?:bit\.ly|lnkd\.in)\/[^\s?]+\?[a-zA-Z0-9_=&%+.,~/?#_-]+$/i.test(core);
+  };
+
+  const lines = text.split(/\r?\n/);
+  while (lines.length > 0 && lineIsOnlySnippetUrl(lines[lines.length - 1])) lines.pop();
+  while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
+
+  let block = lines.join("\n");
+
+  const inlineTail =
+    /\s+(?:https?:\/\/)?(?:bit\.ly|lnkd\.in)\/[^\s?]+\?[^\s]*trk=ad_library_ad_preview_content(?:&[^\s]*)?$/i;
+  block = block.replace(inlineTail, "");
+
+  return block.trim();
+}
+
+/**
+ * LinkedIn transparency scrapers often concatenate disclosure lines onto `adDescription`.
+ * Keeps only the real ad copy (drops "Paid for by…", date ranges, impressions, language, etc.)
+ * and removes an immediate duplicate or truncated prefix of the opening line/paragraph.
+ */
+export function cleanLinkedInScraperAdDescription(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "";
+
+  const isMetadataLine = (line: string) =>
+    /^paid\s+for\s+by\b/i.test(line) ||
+    /^\d{1,2}\/\d{1,2}\/\d{4}\s*→\s*\d{1,2}\/\d{1,2}\/\d{4}/.test(line) ||
+    /^impressions:\s/i.test(line) ||
+    /^reach:\s/i.test(line) ||
+    /^language:\s/i.test(line) ||
+    /^location:\s/i.test(line) ||
+    /^criteria:\s/i.test(line) ||
+    /^critères:\s/i.test(line) ||
+    /^audience:\s/i.test(line) ||
+    /^targeting:\s/i.test(line) ||
+    /^category:\s/i.test(line);
+
+  const rawLines = t.split(/\r?\n/).map((l) => l.trim());
+  const kept: string[] = [];
+  for (const line of rawLines) {
+    if (!line) {
+      if (kept.length && kept[kept.length - 1] !== "") kept.push("");
+      continue;
+    }
+    if (isMetadataLine(line)) break;
+    if (kept.length && kept[kept.length - 1] === line) continue;
+    kept.push(line);
+  }
+  while (kept.length && kept[kept.length - 1] === "") kept.pop();
+  let out = kept.join("\n").trim();
+
+  const paras = out
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (paras.length >= 2) {
+    const first = paras[0];
+    const second = paras[1];
+    if (first === second || second.startsWith(first)) {
+      out = paras.slice(1).join("\n\n");
+    }
+  }
+
+  out = stripLinkedInAdPreviewTrackingUrls(out);
+
+  return out.trim();
+}
+
+/** External sponsor URL only — excludes LinkedIn (library, company pages, profiles). */
+function linkedInExternalSponsoredLanding(candidate: string | null | undefined): string | undefined {
+  const d = candidate?.trim();
+  if (!d || !/^https?:\/\//i.test(d)) return undefined;
+  if (/linkedin\.com\//i.test(d)) return undefined;
+  try {
+    return new URL(d).toString();
+  } catch {
+    return undefined;
+  }
+}
+
 export function linkedInItemToCard(
   item: LinkedInAdItem,
   index: number,
   ctx?: { confirmedCompanyId?: string }
 ): LinkedInAdCard {
   const id = item.id || `li-${index}`;
-  const body = item.description?.trim() || "";
-  const metaBits: string[] = [];
-  if (item.adDuration?.trim()) metaBits.push(item.adDuration.trim());
-  if (item.totalImpressions?.trim()) metaBits.push(`Impressions: ${item.totalImpressions.trim()}`);
-  if (item.targeting && Object.keys(item.targeting).length > 0) {
-    for (const [k, v] of Object.entries(item.targeting).slice(0, 6)) {
-      if (v?.trim()) metaBits.push(`${k}: ${v.trim()}`);
-    }
-  }
+  const body = cleanLinkedInScraperAdDescription(item.description?.trim() || "");
   let desc = body;
-  if (metaBits.length > 0) {
-    desc = [body || null, ...metaBits].filter(Boolean).join("\n\n");
-  }
   if (!desc.trim()) {
     desc = item.headline?.trim() || "—";
   }
-  const headline =
+  let headline =
     item.headline?.trim() ||
     item.adType?.replace(/_/g, " ").trim() ||
     "Sponsored";
+  const descNorm = desc.replace(/\s+/g, " ").trim();
+  const headNorm = headline.replace(/\s+/g, " ").trim();
+  const firstLineOfDesc =
+    desc.split(/\r?\n/)
+      .map((l) => l.trim())
+      .find(Boolean) ?? "";
+  const firstLineNorm = firstLineOfDesc.replace(/\s+/g, " ").trim();
+  if (descNorm && headNorm === descNorm) {
+    headline = "";
+  } else if (desc.includes("\n") && firstLineNorm && headNorm === firstLineNorm) {
+    headline = "";
+  }
   let img = item.image || item.poster || item.carouselImages?.[0] || "";
   const videoUrl = item.video?.trim();
   if (img && isLikelyLinkedInProfileOrAuthorPhoto(img)) {
@@ -1468,6 +1760,8 @@ export function linkedInItemToCard(
   const advertiserMismatch =
     Boolean(confirmedCo) && Boolean(scrapedCo) && scrapedCo !== confirmedCo;
 
+  const landingPageUrl = linkedInExternalSponsoredLanding(item.destinationUrl);
+
   return {
     id: String(id),
     headline,
@@ -1479,6 +1773,12 @@ export function linkedInItemToCard(
     ctaLabel: item.cta?.trim() || undefined,
     advertiser: item.advertiser || item.poster || "Advertiser",
     adUrl,
+    ...(landingPageUrl ? { landingPageUrl } : {}),
+    ...(item.startDate?.trim() ? { publicationStart: item.startDate.trim() } : {}),
+    ...(item.endDate?.trim() ? { publicationEnd: item.endDate.trim() } : {}),
+    ...(item.totalImpressions?.trim() ? { linkedinTotalImpressions: item.totalImpressions.trim() } : {}),
+    ...(item.countryDistribution?.length ? { linkedinCountryBreakdown: item.countryDistribution } : {}),
+    ...(item.targetingAudience?.length ? { linkedinAudienceTargeting: item.targetingAudience } : {}),
     ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }
@@ -1721,17 +2021,32 @@ function linkedInIvanVsApifyItemToLegacyItem(raw: Record<string, unknown>, index
         : String(raw.buttons[0])
       : undefined;
 
+  const scrapedExternalDest =
+    firstString(raw, [
+      "destinationUrl",
+      "DestinationUrl",
+      "callToActionUrl",
+      "call_to_action_url",
+      "ctaUrl",
+      "CtaUrl",
+      "landingUrl",
+      "websiteUrl",
+      "adLinkUrl",
+    ]) || undefined;
+
+  const descriptionClean = cleanLinkedInScraperAdDescription(bod);
+
   return {
     id,
     headline: title || headlineFromFormat || undefined,
-    description: bod || undefined,
+    description: descriptionClean || undefined,
     image: image && !looksLikeVideoFileUrl(image) ? image : undefined,
     video,
     advertiser: advName,
     advertiserLogo: advLogo || undefined,
     advertiserLinkedinPage: advUrl,
     adDetailUrl: typeof raw.url === "string" ? raw.url : undefined,
-    destinationUrl: advUrl || undefined,
+    destinationUrl: scrapedExternalDest || undefined,
     cta,
     adType: typeof raw.format === "string" ? raw.format : undefined,
     adDuration,
@@ -1741,6 +2056,44 @@ function linkedInIvanVsApifyItemToLegacyItem(raw: Record<string, unknown>, index
     targeting,
     advertiserCompanyId: linkedInAdvertiserCompanyIdFromDatasetRow(raw),
   };
+}
+
+/** Pull `{ country, percentage }[]` from heterogeneous LinkedIn scraper payloads. */
+function linkedInParseCountryDistribution(raw: Record<string, unknown>): LinkedInCountryShare[] | undefined {
+  const keyCandidates = [
+    "adCountryBreakdown",
+    "countryBreakdown",
+    "adCountries",
+    "countries",
+    "countryDistribution",
+    "adAudienceByCountry",
+    "audienceByCountry",
+    "countryStats",
+  ];
+  for (const key of keyCandidates) {
+    const c = raw[key];
+    if (!Array.isArray(c)) continue;
+    const out: LinkedInCountryShare[] = [];
+    for (const row of c) {
+      if (!row || typeof row !== "object") continue;
+      const o = row as Record<string, unknown>;
+      const country =
+        (typeof o.country === "string" && o.country.trim()) ||
+        (typeof o.name === "string" && o.name.trim()) ||
+        (typeof o.label === "string" && o.label.trim()) ||
+        "";
+      let pct =
+        (typeof o.percentage === "string" && o.percentage.trim()) ||
+        (typeof o.percent === "string" && o.percent.trim()) ||
+        (typeof o.share === "string" && o.share.trim()) ||
+        "";
+      if (!country) continue;
+      if (pct && !pct.includes("%")) pct = `${pct}%`;
+      out.push({ country: country.trim(), percentage: pct || "—" });
+    }
+    if (out.length) return out;
+  }
+  return undefined;
 }
 
 /** Map data_xplorer/linkedin-ad-library-scraper dataset rows → legacy item (`adImage` = creative). */
@@ -1757,8 +2110,10 @@ function linkedInDataXplorerApifyItemToLegacyItem(raw: Record<string, unknown>, 
   }
 
   let targeting: Record<string, string> | undefined;
+  let targetingAudience: LinkedInAudienceTargetingRow[] | undefined;
   if (Array.isArray(raw.adTargetingAudience)) {
     targeting = {};
+    targetingAudience = [];
     for (const row of raw.adTargetingAudience as unknown[]) {
       if (!row || typeof row !== "object") continue;
       const t = row as Record<string, unknown>;
@@ -1767,8 +2122,12 @@ function linkedInDataXplorerApifyItemToLegacyItem(raw: Record<string, unknown>, 
       if (!tv) continue;
       const st = typeof t.status === "string" ? t.status.trim() : "";
       targeting[tk] = st ? `${tv} (${st})` : tv;
+      targetingAudience.push(
+        st ? { type: tk, value: tv, status: st } : { type: tk, value: tv }
+      );
     }
     if (Object.keys(targeting).length === 0) targeting = undefined;
+    if (targetingAudience.length === 0) targetingAudience = undefined;
   }
 
   const pubUnknown = raw["Publication Date"];
@@ -1785,11 +2144,12 @@ function linkedInDataXplorerApifyItemToLegacyItem(raw: Record<string, unknown>, 
   const adDuration =
     startPub && endPub ? `${startPub} → ${endPub}` : startPub ?? (endPub ?? undefined);
 
-  const desc = typeof raw.adDescription === "string" ? raw.adDescription.trim() : "";
+  const countryDistribution = linkedInParseCountryDistribution(raw);
+
+  const descRaw = typeof raw.adDescription === "string" ? raw.adDescription.trim() : "";
+  const desc = cleanLinkedInScraperAdDescription(descRaw);
   const firstLine = desc.split(/\r?\n/).find((l) => l.trim()) ?? "";
   const headlineLine = firstLine.trim().slice(0, 160);
-  const paidBy =
-    typeof raw.adPaidBy === "string" && raw.adPaidBy.trim() ? raw.adPaidBy.trim() : undefined;
 
   const advLogo =
     typeof raw.advertiserLogo === "string" && raw.advertiserLogo.startsWith("http")
@@ -1798,14 +2158,10 @@ function linkedInDataXplorerApifyItemToLegacyItem(raw: Record<string, unknown>, 
 
   if (advLogo && image === advLogo) image = undefined;
 
-  const descriptionParts = [desc, paidBy ? `Paid for by ${paidBy}` : ""].filter(
-    (s): s is string => typeof s === "string" && s.trim().length > 0
-  );
-
   return {
     id,
     headline: headlineLine || (typeof raw.adType === "string" ? raw.adType.trim() : undefined),
-    description: descriptionParts.length ? descriptionParts.join("\n\n") : undefined,
+    description: desc || undefined,
     image,
     video,
     advertiser: typeof raw.advertiserName === "string" ? raw.advertiserName.trim() : undefined,
@@ -1814,13 +2170,16 @@ function linkedInDataXplorerApifyItemToLegacyItem(raw: Record<string, unknown>, 
     destinationUrl: typeof raw.adLinkUrl === "string" ? raw.adLinkUrl.trim() : undefined,
     adType: typeof raw.adType === "string" ? raw.adType.trim() : undefined,
     adDuration,
-    totalImpressions: typeof raw.adTotalImpressions === "string" ? raw.adTotalImpressions : undefined,
+    startDate: startPub,
+    endDate: endPub,
+    totalImpressions: typeof raw.adTotalImpressions === "string" ? raw.adTotalImpressions.trim() : undefined,
     targeting,
+    targetingAudience,
+    countryDistribution,
     advertiserCompanyId: linkedInAdvertiserCompanyIdFromDatasetRow(raw),
   };
 }
 
-/** One more deep pass: ivanvs + other actors bury creatives under odd keys — glean always wins filling gaps. */
 function mergeLinkedInItemWithRawMediaGlean(raw: Record<string, unknown>, item: LinkedInAdItem): LinkedInAdItem {
   const g = gleanIvanVsLinkedInMedia(raw);
   const fromPoster = typeof item.poster === "string" ? item.poster.trim() : "";
@@ -1853,6 +2212,8 @@ function mergeLinkedInItemWithRawMediaGlean(raw: Record<string, unknown>, item: 
     ...item,
     image,
     video,
+    countryDistribution:
+      item.countryDistribution?.length ? item.countryDistribution : linkedInParseCountryDistribution(raw),
     advertiserCompanyId:
       item.advertiserCompanyId ?? linkedInAdvertiserCompanyIdFromDatasetRow(raw),
   };
@@ -1881,7 +2242,10 @@ export function linkedInApifyItemToLegacyItem(raw: Record<string, unknown>, inde
     return mergeLinkedInItemWithRawMediaGlean(raw, {
       id: adId != null ? String(adId) : `li-${index}`,
       headline: typeof raw.headline === "string" ? raw.headline : undefined,
-      description: typeof raw.bodyText === "string" ? raw.bodyText : undefined,
+      description:
+        typeof raw.bodyText === "string"
+          ? cleanLinkedInScraperAdDescription(raw.bodyText) || undefined
+          : undefined,
       image: m.image,
       video: m.video,
       advertiser: typeof raw.advertiserName === "string" ? raw.advertiserName : undefined,
@@ -1904,7 +2268,7 @@ export function linkedInApifyItemToLegacyItem(raw: Record<string, unknown>, inde
 
   return mergeLinkedInItemWithRawMediaGlean(raw, {
     id: adId != null ? String(adId) : `li-${index}`,
-    description: content?.body ?? undefined,
+    description: content?.body ? cleanLinkedInScraperAdDescription(content.body) || undefined : undefined,
     headline: content?.headline ?? undefined,
     image: fromArr.image,
     video: fromArr.video,
@@ -2350,11 +2714,6 @@ function parsePinterestTargeting(targeting: unknown): PinterestTargetingRow[] {
   return mergePinterestTargetingRows(rows);
 }
 
-function summarizePinterestTargetingRows(rows: PinterestTargetingRow[]): string {
-  if (!rows.length) return "—";
-  return rows.map((r) => `${r.label}: ${r.value}`).join(" · ");
-}
-
 function pinterestDisclosureDates(raw: Record<string, unknown>): { start?: string; end?: string } {
   const start =
     firstString(raw, ["startDate", "StartDate", "startedAt", "deliveryStartDate", "campaignStartDate"]) ??
@@ -2401,11 +2760,70 @@ function pinterestReachSummary(reach: unknown): string | null {
   return null;
 }
 
+/** DSA bullets like `Age ranges: 18+ · Countries: DE` appended to scraped Pin copy — strip for preview/card. */
+const PINTEREST_TARGETING_SEGMENT_LABEL =
+  /^(Age ranges|Age groups|Age Groups|Genders|Countries|Regions|Metro areas|Dma|Interests|Audience keywords|Keywords|Languages|Language|Device types|Devices|Placement types|Placements|Pinner list types|Pinner List Types|Partner categories|Topics|Interest categories)\s*:/i;
+
+function stripPinterestTargetingBulletedSuffix(line: string): string {
+  const t = line.trim();
+  if (!t) return "";
+  const parts = t
+    .split(/\s*[·•]\s*/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!parts.length) return "";
+  const firstTargeting = parts.findIndex((p) => PINTEREST_TARGETING_SEGMENT_LABEL.test(p));
+  if (firstTargeting === -1) return t;
+  if (firstTargeting === 0) return "";
+  return parts.slice(0, firstTargeting).join(" · ").trim();
+}
+
+/**
+ * Drops Pinterest targeting disclosure sentences from scraped description text so preview shows Pin copy only.
+ */
+export function cleanPinterestAdPreviewDescription(raw: string): string {
+  return raw
+    .split(/\r?\n/)
+    .map((ln) => {
+      const s = ln.trim();
+      if (!s) return "";
+      if (PINTEREST_TARGETING_SEGMENT_LABEL.test(s)) return "";
+      return stripPinterestTargetingBulletedSuffix(s);
+    })
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+/** Headline/description keys match `pinterestDatasetItemToCard` (camel + Pascal scrape shapes). */
+export function pinterestCaptionFieldsFromPayload(raw: Record<string, unknown>): {
+  headline: string;
+  desc: string;
+} {
+  const headline = firstString(raw, ["title", "Title", "headline", "Headline"])?.trim() ?? "";
+  const desc =
+    firstString(raw, [
+      "description",
+      "Description",
+      "productDescription",
+      "ProductDescription",
+      "adDescription",
+      "AdDescription",
+      "pinDescription",
+      "PinDescription",
+      "body",
+      "Body",
+      "text",
+      "Text",
+    ])?.trim() ?? "";
+  return { headline, desc };
+}
+
 /** Map zadexinho/pinterest-ads-scraper dataset row → card (PascalCase + camelCase). */
 export function pinterestDatasetItemToCard(
   raw: Record<string, unknown>,
   index: number,
-  ctx?: { brandName?: string; brandDomain?: string }
+  ctx?: { brandName?: string; brandDomain?: string; confirmedAdvertiserQuery?: string }
 ): PinterestAdCard {
   const pinId = raw.id ?? raw.Id ?? raw.pinId;
   const id = pinId != null ? String(pinId) : `pin-${index}`;
@@ -2459,7 +2877,21 @@ export function pinterestDatasetItemToCard(
 
   const targeting = raw.targeting ?? raw.Targeting;
   const targetingRows = parsePinterestTargeting(targeting);
-  const desc = summarizePinterestTargetingRows(targetingRows);
+  const desc =
+    firstString(raw, [
+      "description",
+      "Description",
+      "productDescription",
+      "ProductDescription",
+      "adDescription",
+      "AdDescription",
+      "pinDescription",
+      "PinDescription",
+      "body",
+      "Body",
+      "text",
+      "Text",
+    ]) || "";
 
   const reachSummary = pinterestReachSummary(raw.reach ?? raw.Reach);
   const impressionsLabelRaw =
@@ -2481,9 +2913,10 @@ export function pinterestDatasetItemToCard(
     "https://www.pinterest.com/";
 
   const bn = ctx?.brandName?.trim() ?? "";
-  const advertiserMismatch =
-    (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
-    brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
+  const advertiserMismatch = ctx?.confirmedAdvertiserQuery?.trim()
+    ? confirmedAdvertiserQueryMismatchForCard(ctx.confirmedAdvertiserQuery, advertiser)
+    : (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+      brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
 
   return {
     id,
@@ -2586,6 +3019,350 @@ function deepFindTikTokImageUrl(raw: Record<string, unknown>): string | undefine
   return walk(raw, 0);
 }
 
+const TIKTOK_TOP_KEYS_SKIP = new Set([
+  "headline",
+  "description",
+  "body",
+  "copy",
+  "text",
+  "id",
+  "adid",
+  "advertiser",
+  "advertisername",
+  "advertiser name",
+  "ad sponsor",
+  "ad_sponsor",
+  "url",
+  "img",
+  "previewurl",
+  "ad preview",
+  "thumbnail",
+  "imageurl",
+  "videourl",
+  "adurl",
+  "adlibraryurl",
+  "ad media",
+  "ad dates",
+  "desc",
+]);
+
+function collectTikTokTransparencyPairs(raw: Record<string, unknown>): Map<string, string> {
+  const out = new Map<string, string>();
+  const put = (k: string, v: string) => {
+    const kt = k.trim();
+    const vt = v.trim();
+    if (!kt || !vt || vt.length > 600) return;
+    if (!out.has(kt)) out.set(kt, vt);
+  };
+
+  const details = raw["Ad Details"];
+  if (Array.isArray(details)) {
+    for (const block of details) {
+      if (!block || typeof block !== "object") continue;
+      for (const [k, v] of Object.entries(block as Record<string, unknown>)) {
+        if (typeof v === "string") put(k, v);
+      }
+    }
+  }
+
+  for (const nestKey of ["Ad Targeting", "adTargeting", "Targeting", "targeting"]) {
+    const n = raw[nestKey];
+    if (n && typeof n === "object" && !Array.isArray(n)) {
+      for (const [k, v] of Object.entries(n as Record<string, unknown>)) {
+        if (typeof v === "string") put(k, v);
+      }
+    }
+  }
+
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v !== "string") continue;
+    const kl = k.trim().toLowerCase();
+    if (TIKTOK_TOP_KEYS_SKIP.has(kl)) continue;
+    if (/^https?:\/\//i.test(v.trim())) continue;
+    put(k, v);
+  }
+
+  return out;
+}
+
+const TIKTOK_AGE_BAND_KEYS = ["13-17", "18-24", "25-34", "35-44", "45-54", "55+"] as const;
+
+function isTikTokGenderTargetingEntry(item: unknown): item is Record<string, unknown> {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+  const o = item as Record<string, unknown>;
+  return (
+    typeof o.female === "boolean" ||
+    typeof o.male === "boolean" ||
+    typeof o.unknown === "boolean" ||
+    typeof o.other === "boolean"
+  );
+}
+
+function isTikTokAgeTargetingEntry(item: unknown): item is Record<string, unknown> {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+  const o = item as Record<string, unknown>;
+  return TIKTOK_AGE_BAND_KEYS.some((k) => typeof o[k] === "boolean");
+}
+
+/** TikTok library: if `unknown` is true, gender is Unknown regardless of female/male. */
+function formatTikTokGenderFromEntry(o: Record<string, unknown>): string | null {
+  if (o.unknown === true) return "Unknown";
+  if (o.other === true) return "Other";
+  const female = o.female === true;
+  const male = o.male === true;
+  if (!female && !male) return null;
+  if (female && male) return "Female, Male";
+  if (female) return "Female";
+  return "Male";
+}
+
+function formatTikTokAgeBandsFromEntry(o: Record<string, unknown>): string | null {
+  const on = TIKTOK_AGE_BAND_KEYS.filter((b) => o[b] === true);
+  if (!on.length) return null;
+  return on.join(", ");
+}
+
+function expandTikTokRegionCode(code: string): string {
+  const c = code.trim().toUpperCase();
+  if (!/^[A-Z]{2,3}$/.test(c)) return code.trim();
+  try {
+    const dn = new Intl.DisplayNames(["en"], { type: "region" });
+    const name = dn.of(c);
+    if (name && name !== c) return `${name} (${c})`;
+  } catch {
+    /* ignore */
+  }
+  return c;
+}
+
+function firstTikTokGenderEntries(raw: Record<string, unknown>): Record<string, unknown>[] {
+  const tryTake = (a: unknown): Record<string, unknown>[] | null => {
+    const list = Array.isArray(a) ? a : a && typeof a === "object" ? [a] : null;
+    if (!list?.length) return null;
+    const rows = list.filter(isTikTokGenderTargetingEntry);
+    return rows.length ? (rows as Record<string, unknown>[]) : null;
+  };
+
+  for (const v of [raw.gender, raw.Gender, raw.genders]) {
+    const got = tryTake(v);
+    if (got) return got;
+  }
+
+  const nests = [
+    "targeting",
+    "Targeting",
+    "adTargeting",
+    "Ad Targeting",
+    "audience",
+    "Audience",
+    "targetAudience",
+    "TargetAudience",
+  ] as const;
+
+  for (const nestKey of nests) {
+    const n = raw[nestKey];
+    if (n && typeof n === "object" && !Array.isArray(n)) {
+      const o = n as Record<string, unknown>;
+      for (const v of [o.gender, o.Gender, o.genders]) {
+        const got = tryTake(v);
+        if (got) return got;
+      }
+    }
+  }
+
+  const details = raw["Ad Details"];
+  if (Array.isArray(details)) {
+    for (const block of details) {
+      if (!block || typeof block !== "object") continue;
+      for (const v of Object.values(block as Record<string, unknown>)) {
+        const got = tryTake(v);
+        if (got) return got;
+      }
+    }
+  }
+
+  return [];
+}
+
+function firstTikTokAgeEntries(raw: Record<string, unknown>): Record<string, unknown>[] {
+  const tryTake = (a: unknown): Record<string, unknown>[] | null => {
+    const list = Array.isArray(a) ? a : a && typeof a === "object" ? [a] : null;
+    if (!list?.length) return null;
+    const rows = list.filter(isTikTokAgeTargetingEntry);
+    return rows.length ? (rows as Record<string, unknown>[]) : null;
+  };
+
+  for (const v of [raw.age, raw.Age, raw.ages, raw.Ages, raw.ageTargeting, raw.targetAudienceAge]) {
+    const got = tryTake(v);
+    if (got) return got;
+  }
+
+  const nests = [
+    "targeting",
+    "Targeting",
+    "adTargeting",
+    "Ad Targeting",
+    "audience",
+    "Audience",
+    "targetAudience",
+    "TargetAudience",
+  ] as const;
+
+  for (const nestKey of nests) {
+    const n = raw[nestKey];
+    if (n && typeof n === "object" && !Array.isArray(n)) {
+      const o = n as Record<string, unknown>;
+      for (const v of [o.age, o.Age, o.ages, o.Ages]) {
+        const got = tryTake(v);
+        if (got) return got;
+      }
+    }
+  }
+
+  const details = raw["Ad Details"];
+  if (Array.isArray(details)) {
+    for (const block of details) {
+      if (!block || typeof block !== "object") continue;
+      for (const v of Object.values(block as Record<string, unknown>)) {
+        const got = tryTake(v);
+        if (got) return got;
+      }
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Parse TikTok Ads Library structured targeting (arrays of { region, age bands | gender flags }).
+ * Overrides flat string classification when present.
+ */
+export function mergeTikTokStructuredTargeting(raw: Record<string, unknown>): {
+  targetRegion?: string;
+  targetAge?: string;
+  targetGender?: string;
+} {
+  const genderEntries = firstTikTokGenderEntries(raw);
+  const ageEntries = firstTikTokAgeEntries(raw);
+  const out: { targetRegion?: string; targetAge?: string; targetGender?: string } = {};
+
+  const regionCodes = new Set<string>();
+  for (const e of [...genderEntries, ...ageEntries]) {
+    const r = e.region;
+    if (typeof r === "string" && r.trim()) regionCodes.add(r.trim().toUpperCase());
+  }
+  if (regionCodes.size) {
+    out.targetRegion = [...regionCodes].sort().map(expandTikTokRegionCode).join(", ");
+  }
+
+  if (ageEntries.length) {
+    const byRegion: { region: string; label: string }[] = [];
+    for (const o of ageEntries) {
+      const bands = formatTikTokAgeBandsFromEntry(o);
+      if (!bands) continue;
+      const r = typeof o.region === "string" ? o.region.trim().toUpperCase() : "";
+      byRegion.push({ region: r, label: bands });
+    }
+    if (byRegion.length) {
+      const uniqueLabels = new Set(byRegion.map((x) => x.label));
+      if (uniqueLabels.size === 1) {
+        out.targetAge = [...uniqueLabels][0]!;
+      } else {
+        out.targetAge = [...byRegion]
+          .sort((a, b) => a.region.localeCompare(b.region))
+          .map(({ region, label }) => (region ? `${region}: ${label}` : label))
+          .join("; ");
+      }
+    }
+  }
+
+  if (genderEntries.length) {
+    const byRegion: { region: string; label: string }[] = [];
+    for (const o of genderEntries) {
+      const g = formatTikTokGenderFromEntry(o);
+      if (!g) continue;
+      const r = typeof o.region === "string" ? o.region.trim().toUpperCase() : "";
+      byRegion.push({ region: r, label: g });
+    }
+    if (byRegion.length) {
+      const uniqueLabels = new Set(byRegion.map((x) => x.label));
+      if (uniqueLabels.size === 1) {
+        out.targetGender = [...uniqueLabels][0]!;
+      } else {
+        out.targetGender = [...byRegion]
+          .sort((a, b) => a.region.localeCompare(b.region))
+          .map(({ region, label }) => (region ? `${region}: ${label}` : label))
+          .join("; ");
+      }
+    }
+  }
+
+  return out;
+}
+
+function classifyTikTokTransparencyPairs(pairs: Map<string, string>): {
+  adAudienceLine?: string;
+  targetRegion?: string;
+  targetAge?: string;
+  targetGender?: string;
+  targetAudienceSize?: string;
+} {
+  const c: {
+    adAudienceLine?: string;
+    targetRegion?: string;
+    targetAge?: string;
+    targetGender?: string;
+    targetAudienceSize?: string;
+  } = {};
+
+  for (const [rawKey, val] of pairs) {
+    const low = rawKey.toLowerCase().replace(/\s+/g, " ").trim();
+    if (
+      low.includes("target audience size") ||
+      low.includes("ad target audience size") ||
+      low === "estimated audience" ||
+      low.includes("unique user") ||
+      low.includes("users seen")
+    ) {
+      if (!c.targetAudienceSize) c.targetAudienceSize = val;
+      continue;
+    }
+    if (low === "ad audience") {
+      if (!c.adAudienceLine) c.adAudienceLine = val;
+      continue;
+    }
+    if (low === "audience") {
+      if (!c.adAudienceLine) c.adAudienceLine = val;
+      continue;
+    }
+    if (low.includes("region") || low === "country" || low.includes("location") || low.includes("territor")) {
+      if (!c.targetRegion) c.targetRegion = val;
+      continue;
+    }
+    if (low.includes("age") && !low.includes("language") && !low.includes("image") && !low.includes("average")) {
+      if (!c.targetAge) c.targetAge = val;
+      continue;
+    }
+    if (low.includes("gender")) {
+      if (!c.targetGender) c.targetGender = val;
+      continue;
+    }
+  }
+
+  return c;
+}
+
+/** Key/value targeting and disclosure lines from TikTok Ads Library scrape (nested Ad Details, etc.). */
+export function extractTikTokTransparencyFields(raw: Record<string, unknown>): {
+  adAudienceLine?: string;
+  targetRegion?: string;
+  targetAge?: string;
+  targetGender?: string;
+  targetAudienceSize?: string;
+} {
+  return classifyTikTokTransparencyPairs(collectTikTokTransparencyPairs(raw));
+}
+
 function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
   const direct = firstString(raw, [
     "Ad Audience",
@@ -2674,7 +3451,7 @@ export function sortTikTokAdsForResponse(ads: TikTokAdCard[]): TikTokAdCard[] {
 export function tiktokApifyItemToCard(
   raw: Record<string, unknown>,
   index: number,
-  ctx?: { brandName?: string; brandDomain?: string }
+  ctx?: { brandName?: string; brandDomain?: string; confirmedAdvertiserQuery?: string }
 ): TikTokAdCard | null {
   const id =
     firstString(raw, ["adId", "ad_id", "AD ID", "id"]) ?? `tt-${index}`;
@@ -2733,11 +3510,18 @@ export function tiktokApifyItemToCard(
   const flightStartOk = flightStartMs !== undefined && !Number.isNaN(flightStartMs);
   const flightEndOk = flightEndMs !== undefined && !Number.isNaN(flightEndMs);
   const uniqueUsersSeen = pickTikTokAudience(raw) ?? null;
+  const transparency = extractTikTokTransparencyFields(raw);
+  const structured = mergeTikTokStructuredTargeting(raw);
+
+  const targetRegion = structured.targetRegion || transparency.targetRegion;
+  const targetAge = structured.targetAge || transparency.targetAge;
+  const targetGender = structured.targetGender || transparency.targetGender;
 
   const bn = ctx?.brandName?.trim() ?? "";
-  const advertiserMismatch =
-    (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
-    brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
+  const advertiserMismatch = ctx?.confirmedAdvertiserQuery?.trim()
+    ? confirmedAdvertiserQueryMismatchForCard(ctx.confirmedAdvertiserQuery, advertiser)
+    : (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+      brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
 
   return {
     id: String(id),
@@ -2753,6 +3537,11 @@ export function tiktokApifyItemToCard(
     ...(flightStartOk ? { flightStartMs } : {}),
     ...(flightEndOk ? { flightEndMs } : {}),
     uniqueUsersSeen,
+    ...(transparency.adAudienceLine ? { adAudienceLine: transparency.adAudienceLine } : {}),
+    ...(targetRegion ? { targetRegion } : {}),
+    ...(targetAge ? { targetAge } : {}),
+    ...(targetGender ? { targetGender } : {}),
+    ...(transparency.targetAudienceSize ? { targetAudienceSize: transparency.targetAudienceSize } : {}),
     ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }
@@ -2827,6 +3616,55 @@ export function snapchatAdHeroMediaTier(ad: SnapchatAdCard): number {
   const i = ad.img?.toLowerCase() ?? "";
   if (i.includes("/d/") && !i.includes("/aps/bolt/")) return 1;
   return 0;
+}
+
+/** Best raster URL for large Snapchat previews (EU gallery `/d/…` over `/aps/bolt/` logos). */
+export function pickSnapchatHeroStillUrlFromPayload(raw: Record<string, unknown>): string | null {
+  const cands = new Set<string>();
+
+  const add = (u: string | undefined) => {
+    const t = u?.trim();
+    if (!t || looksLikeVideoFileUrl(t)) return;
+    cands.add(t);
+  };
+
+  add(
+    firstString(raw, [
+      "mediaUrl",
+      "MediaUrl",
+      "imageUrl",
+      "ImageUrl",
+      "creativeImageUrl",
+      "creativeUrl",
+      "thumbnailUrl",
+      "ThumbnailUrl",
+      "posterUrl",
+      "PosterUrl",
+      "previewUrl",
+      "PreviewUrl",
+      "previewImageUrl",
+      "screenshotUrl",
+      "snapImageUrl",
+      "img",
+      "thumbnail",
+      "image",
+    ]),
+  );
+
+  add(deepPickSnapHeroImageFromUnknown(raw));
+
+  if (cands.size === 0) return null;
+
+  let best = "";
+  let bestScore = -Infinity;
+  for (const u of cands) {
+    const sc = snapCreativeImageScore(u);
+    if (sc > bestScore) {
+      bestScore = sc;
+      best = u;
+    }
+  }
+  return best || null;
 }
 
 export function sortSnapchatAdsForResponse(ads: SnapchatAdCard[]): SnapchatAdCard[] {
@@ -2928,10 +3766,65 @@ function formatSnapImpressionsLabel(value: unknown): string | null {
   return null;
 }
 
+/** EU gallery disclosure — turn scraper enums like `STORY_AD` into `Story Ad`. */
+function humanizeSnapchatCreativeTypeSlug(raw: string): string {
+  const core = raw
+    .trim()
+    .replace(/[_\-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!core) return raw.trim();
+  return core
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => (/^\d+[KMGk]?$/i.test(w) ? w : `${w.slice(0, 1).toUpperCase()}${w.slice(1).toLowerCase()}`))
+    .join(" ");
+}
+
+function snapchatCreativeTypeRawFromDatasetRow(raw: Record<string, unknown>): string | null {
+  const s =
+    snapPickString(raw, "creativeType", "CreativeType", "creative_type") ||
+    firstString(raw, [
+      "creativeType",
+      "CreativeType",
+      "creative_type",
+      "adType",
+      "AdType",
+      "ad_product_type",
+      "adProductType",
+      "AdProductType",
+      "inventoryFormat",
+      "InventoryFormat",
+      "formatType",
+      "FormatType",
+      "mediaTypeDisplay",
+      "MediaTypeDisplay",
+      "adFormat",
+      "AdFormat",
+      "placementTypes",
+      "placementType",
+      "PlacementType",
+      "placement",
+      "Placement",
+    ]);
+  const t = s?.trim();
+  return t || null;
+}
+
+/** Headline keys align with {@link snapchatDatasetItemToCard}; status/review stays out of preview (Details only). */
+export function snapchatPreviewHeadlineFromPayload(raw: Record<string, unknown>): string {
+  const headline =
+    snapPickString(raw, "headline", "Headline") ||
+    firstString(raw, ["title", "adTitle", "AdTitle", "primaryText", "name"]) ||
+    snapPickString(raw, "brandName", "BrandName") ||
+    "";
+  return headline.trim();
+}
+
 export function snapchatDatasetItemToCard(
   raw: Record<string, unknown>,
   index: number,
-  ctx?: { brandName?: string; brandDomain?: string }
+  ctx?: { brandName?: string; brandDomain?: string; confirmedAdvertiserQuery?: string }
 ): SnapchatAdCard {
   const sid =
     snapPickString(raw, "adId", "AdId") ||
@@ -3140,12 +4033,17 @@ export function snapchatDatasetItemToCard(
     null;
 
   const bn = ctx?.brandName?.trim() ?? "";
-  const advertiserMismatch =
-    (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
-    brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
+  const advertiserMismatch = ctx?.confirmedAdvertiserQuery?.trim()
+    ? confirmedAdvertiserQueryMismatchForCard(ctx.confirmedAdvertiserQuery, advertiser)
+    : (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+      brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
 
   const suppressCreativeHeadline =
     hasHeroMediaUrlField || /\bunreal\s+motion\b/i.test(headline.trim());
+
+  const creativeTypeRaw = snapchatCreativeTypeRawFromDatasetRow(raw);
+  const creativeTypeLabel =
+    creativeTypeRaw && creativeTypeRaw.trim() ? humanizeSnapchatCreativeTypeSlug(creativeTypeRaw) : null;
 
   return {
     id,
@@ -3165,6 +4063,7 @@ export function snapchatDatasetItemToCard(
     ctaLabel: ctaLabel ?? null,
     suppressCreativeHeadline,
     hasHeroMediaUrl: hasHeroMediaUrlField,
+    ...(creativeTypeLabel ? { creativeTypeLabel } : {}),
     ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }

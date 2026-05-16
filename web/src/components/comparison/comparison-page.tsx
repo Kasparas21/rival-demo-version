@@ -253,9 +253,7 @@ export function ComparisonPage({
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
               >
                 {payloadLoading ? (
-                  <span className="inline-flex rounded-md border border-neutral-200/80 bg-white p-[3px]">
-                    <RivalLogoVideo size="inline" />
-                  </span>
+                  <RivalLogoVideo size="inline" className="shrink-0" />
                 ) : (
                   <RefreshCw className="h-3.5 w-3.5" />
                 )}
@@ -292,12 +290,7 @@ export function ComparisonPage({
         {recomputingNote ? <div className="mb-8">{recomputingNote}</div> : null}
 
         {payloadLoading && !wsPayload && !compPayload ? (
-          <RivalLoadingBlock
-            title="Loading strategy snapshots…"
-            description="Pulling the latest scraped ads summary for workspace and competitor."
-            padded
-            className="py-14 sm:py-16"
-          />
+          <RivalLoadingBlock padded className="py-14 sm:py-16" />
         ) : payloadError ? (
           <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
             {payloadError}
