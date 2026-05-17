@@ -14,7 +14,11 @@ import {
   junkUserBrandDisplayName,
 } from "@/lib/ad-library/competitor-brand-display";
 import { stableIdForGoogleItemRow } from "@/lib/ad-library/google-stable-id";
-import { harvestDeepMetaTransparencyFields } from "@/lib/ad-detail/meta-ad-detail-fields";
+import {
+  gatherMetaReachBreakdownEntries,
+  harvestDeepMetaReachImpressionsCandidate,
+  harvestDeepMetaTransparencyFields,
+} from "@/lib/ad-detail/meta-ad-detail-fields";
 
 /** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
 export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
@@ -73,6 +77,12 @@ export type MetaAdCard = {
   gender_audience?: string;
   location_audience?: MetaLocationAudienceEntry[];
   age_audience?: MetaAgeAudienceBounds;
+  /** Raw `age_country_gender_reach_breakdown` blobs when scraped (detail Region panel). */
+  age_country_gender_reach_breakdown?: unknown[];
+  /** From Ad Library / EU scrape when surfaced as a band or count (`total_reach`, `reach.totalEU`, `impressions_text`, …). */
+  impressionsRange?: string | null;
+  /** Raw Meta regional transparency subtree when present on scrape rows (detail drawer DFS). */
+  transparency_by_location?: Record<string, unknown>;
 };
 
 /** Google / YouTube style row */
@@ -504,6 +514,19 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
     parseMetaAgeAudiencePayload(baseObj.age_audience ?? baseObj.ageAudience) ??
     parseMetaAgeAudiencePayload(deepT.age_audience ?? deepT.ageAudience);
 
+  /** Full raw row + nested `json`/`adsLibraryItem` — discover EU reach / impressions the card alone would drop. */
+  const scrapedReachBand = harvestDeepMetaReachImpressionsCandidate(raw)?.trim() || undefined;
+  const scrapedReachBreakdown = gatherMetaReachBreakdownEntries(raw);
+
+  const transparencyBlobRaw =
+    baseObj.transparency_by_location ?? baseObj.transparencyByLocation;
+  const transparency_by_location =
+    transparencyBlobRaw &&
+    typeof transparencyBlobRaw === "object" &&
+    !Array.isArray(transparencyBlobRaw)
+      ? (transparencyBlobRaw as Record<string, unknown>)
+      : undefined;
+
   return {
     ad_archive_id: pickStr("ad_archive_id", "adArchiveId", "archive_id", "adId", "id"),
     collation_id: pickStr("collation_id", "collationId"),
@@ -529,6 +552,11 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
     ...(typeof targets_eu === "boolean" ? { targets_eu } : {}),
     ...(location_audience?.length ? { location_audience } : {}),
     ...(age_audience ? { age_audience } : {}),
+    ...(scrapedReachBand ? { impressionsRange: scrapedReachBand } : {}),
+    ...(scrapedReachBreakdown.length > 0
+      ? { age_country_gender_reach_breakdown: scrapedReachBreakdown }
+      : {}),
+    ...(transparency_by_location ? { transparency_by_location } : {}),
   };
 }
 
@@ -990,6 +1018,17 @@ export function facebookItemToMetaCard(
     ...(item.gender_audience?.trim() ? { gender_audience: item.gender_audience.trim() } : {}),
     ...(item.location_audience?.length ? { location_audience: item.location_audience } : {}),
     ...(item.age_audience ? { age_audience: item.age_audience } : {}),
+    ...(item.impressionsRange?.trim()
+      ? { impressionsRange: item.impressionsRange.trim() }
+      : {}),
+    ...(Array.isArray(item.age_country_gender_reach_breakdown) && item.age_country_gender_reach_breakdown.length > 0
+      ? { age_country_gender_reach_breakdown: item.age_country_gender_reach_breakdown }
+      : {}),
+    ...(item.transparency_by_location &&
+    typeof item.transparency_by_location === "object" &&
+    !Array.isArray(item.transparency_by_location)
+      ? { transparency_by_location: item.transparency_by_location }
+      : {}),
   };
 }
 

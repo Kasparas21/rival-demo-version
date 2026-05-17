@@ -1,11 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bookmark,
   BookmarkCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Code2,
@@ -19,6 +20,10 @@ import {
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { FacebookLogo } from "@/components/icons/facebook-logo";
 import { InstagramMark } from "@/components/icons/instagram-mark";
+import { MessengerMark } from "@/components/icons/messenger-mark";
+import { MetaMark } from "@/components/icons/meta-mark";
+import { ThreadsMark } from "@/components/icons/threads-mark";
+import { WhatsAppMark } from "@/components/icons/whatsapp-mark";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
@@ -49,9 +54,14 @@ import {
 import {
   metaAgeAudienceDetailLabel,
   metaGenderAudienceDetailLabel,
+  metaLocationAudienceRows,
   metaPublisherDetailRows,
+  metaReachBreakdownDrawerGroups,
   metaTargetMarketFooterLine,
+  metaTargetsEuExplicit,
+  type MetaLocationAudienceParsedRow,
   type MetaPublisherDetailRow,
+  type MetaReachBreakdownDrawerGroup,
 } from "@/lib/ad-detail/meta-ad-detail-fields";
 import {
   cleanLinkedInScraperAdDescription,
@@ -83,6 +93,14 @@ function MetaPublisherPlatformGlyph({ slug, index }: { slug: string; index: numb
       return <FacebookLogo idSuffix={`apd-${index}`} className="h-3.5 w-3.5 shrink-0" />;
     case "INSTAGRAM":
       return <InstagramMark className="h-3.5 w-3.5 shrink-0" />;
+    case "THREADS":
+      return <ThreadsMark className="h-3.5 w-3.5 shrink-0 text-slate-900" />;
+    case "MESSENGER":
+      return <MessengerMark className="h-3.5 w-3.5 shrink-0" />;
+    case "AUDIENCE_NETWORK":
+      return <MetaMark className="h-3.5 w-3.5 shrink-0" />;
+    case "WHATSAPP":
+      return <WhatsAppMark className="h-3.5 w-3.5 shrink-0" />;
     default:
       return null;
   }
@@ -852,6 +870,197 @@ function AdCreativePreview({
   );
 }
 
+function metaReachFormattedCountCell(n: number | null): string {
+  return n === null ? "–" : n.toLocaleString("en-US");
+}
+
+function metaRegionCollapsedSummary(regions: MetaLocationAudienceParsedRow[]): string {
+  if (!regions.length) return "";
+  const head = regions[0].excluded ? `Exclude ${regions[0].name}` : regions[0].name;
+  if (regions.length === 1) return head;
+  return `${head} · +${regions.length - 1} more`;
+}
+
+function locationAudienceTypeBadge(type: string | undefined): string | null {
+  const t = type?.trim();
+  if (!t) return null;
+  if (/^countries$/i.test(t)) return null;
+  return t.replace(/_/g, " ");
+}
+
+/**
+ * Meta region row header from `targets_eu` (“EU targeted” / “Not EU targeted”) or geo summary;
+ * expanded panel lists `listed locations` first, then `age_country_gender_reach_breakdown` as readable tables when possible.
+ */
+function MetaRegionTransparencyDisclosure({
+  targetsEu,
+  regions,
+  reachGroups,
+}: {
+  targetsEu: boolean | null;
+  regions: MetaLocationAudienceParsedRow[];
+  reachGroups: MetaReachBreakdownDrawerGroup[];
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerId = useId();
+  const panelId = useId();
+
+  const euLine =
+    targetsEu === true ? "EU targeted"
+    : targetsEu === false ? "Not EU targeted"
+    : null;
+  const geoSummary = regions.length > 0 ? metaRegionCollapsedSummary(regions) : null;
+
+  const reachLineTotal = reachGroups.reduce(
+    (n, g) => n + ((g.countRows?.length ?? 0) || g.lines.length),
+    0
+  );
+
+  const reachSummary =
+    reachLineTotal > 0
+      ? `Demographic reach (${reachLineTotal} row${reachLineTotal === 1 ? "" : "s"})`
+      : null;
+
+  const collapsedPrimary = euLine ?? geoSummary ?? reachSummary;
+
+  if (!collapsedPrimary) return null;
+
+  const panelEmptyExpanded = regions.length === 0 && reachLineTotal === 0;
+
+  const listCn =
+    "space-y-1 text-[11px] font-medium leading-snug text-slate-900 [overflow-wrap:anywhere]";
+  const scrollPanel = "max-h-[min(360px,_50vh)] overflow-y-auto overscroll-contain";
+
+  return (
+    <div className="min-w-0 max-w-[280px]">
+      <button
+        type="button"
+        id={triggerId}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex w-full items-center justify-end gap-1.5 rounded-md py-0.5 pl-1 text-right transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70"
+      >
+        <span className="text-[12px] font-medium leading-snug text-slate-900 [overflow-wrap:anywhere]">
+          {collapsedPrimary}
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 flex-shrink-0 text-slate-500 transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={triggerId}
+          className={`mt-2 border-t border-slate-100 pt-2 text-left text-slate-900 ${scrollPanel}`}
+        >
+          {regions.length > 0 ? (
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Listed locations
+              </p>
+              <ul role="list" className={listCn}>
+                {regions.map((r, idx) => {
+                  const badge = locationAudienceTypeBadge(r.type);
+                  return (
+                    <li
+                      key={`loc-${r.name}-${String(r.excluded)}-${idx}`}
+                      className={
+                        r.excluded ? "text-slate-500 line-through decoration-slate-400/80" : "text-slate-800"
+                      }
+                    >
+                      {r.excluded ? `Exclude ${r.name}` : r.name}
+                      {badge ? (
+                        <span className="ml-1 align-baseline font-normal capitalize text-slate-500">{badge}</span>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+
+          {reachGroups.length > 0 ? (
+            <div className={regions.length > 0 ? "mt-3 border-t border-slate-50 pt-3" : undefined}>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                Age / country / gender reach
+              </p>
+              <div className="space-y-4">
+                {reachGroups.map((g, gi) => (
+                  <div key={`${g.headline}-${gi}`}>
+                    <p className="mb-1 text-[11px] font-semibold text-slate-800">{g.headline}</p>
+                    {g.countRows && g.countRows.length > 0 ? (
+                      <div className="overflow-x-auto rounded-md border border-slate-100 bg-slate-50/60">
+                        <table className="w-full border-collapse text-[11px] tabular-nums">
+                          <thead>
+                            <tr className="border-b border-slate-200 bg-slate-100/90 text-[10px] text-slate-500">
+                              <th scope="col" className="px-2 py-1 text-left font-medium">
+                                Age
+                              </th>
+                              <th scope="col" className="min-w-[3.75rem] px-2 py-1 text-right font-medium">
+                                Female
+                              </th>
+                              <th scope="col" className="min-w-[3.75rem] px-2 py-1 text-right font-medium">
+                                Male
+                              </th>
+                              <th
+                                scope="col"
+                                className="min-w-[3.25rem] px-2 py-1 text-right font-medium"
+                                title="Unknown gender"
+                              >
+                                Unk.
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.countRows.map((row, ri) => (
+                              <tr
+                                key={`${g.headline}-${row.ageRange}-${ri}`}
+                                className={ri % 2 === 1 ? "bg-white/85" : "bg-transparent"}
+                              >
+                                <td className="px-2 py-1 font-medium text-slate-900">{row.ageRange}</td>
+                                <td className="whitespace-nowrap px-2 py-1 text-right text-slate-800">
+                                  {metaReachFormattedCountCell(row.female)}
+                                </td>
+                                <td className="whitespace-nowrap px-2 py-1 text-right text-slate-800">
+                                  {metaReachFormattedCountCell(row.male)}
+                                </td>
+                                <td className="whitespace-nowrap px-2 py-1 text-right text-slate-800">
+                                  {metaReachFormattedCountCell(row.unknown)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : g.lines.length > 0 ? (
+                      <ul role="list" className={listCn}>
+                        {g.lines.map((line, idx) => (
+                          <li key={`reach-${g.headline}-${idx}`} className="text-slate-800">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {panelEmptyExpanded ? (
+            <p className="text-[11px] italic text-slate-500">
+              No geographic or demographic breakdown rows in scrape data.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DetailsTab({ data }: { data: AdDetailData }) {
   const { ad, competitor, context } = data;
 
@@ -954,7 +1163,27 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     },
   ];
 
-  if (canonical.regionDisplay) {
+  const metaTargetsEu = pl === "meta" ? metaTargetsEuExplicit(ad.raw_payload) : null;
+  const metaGeoRows = pl === "meta" ? metaLocationAudienceRows(ad.raw_payload) : [];
+  const metaReachGroups = pl === "meta" ? metaReachBreakdownDrawerGroups(ad.raw_payload) : [];
+  const metaReachLineTotal = metaReachGroups.reduce((n, g) => n + g.lines.length, 0);
+
+  const showMetaRegionRow =
+    pl === "meta" &&
+    (metaTargetsEu !== null || metaGeoRows.length > 0 || metaReachLineTotal > 0);
+
+  if (showMetaRegionRow) {
+    rows.push({
+      label: "Region",
+      value: (
+        <MetaRegionTransparencyDisclosure
+          targetsEu={metaTargetsEu}
+          regions={metaGeoRows}
+          reachGroups={metaReachGroups}
+        />
+      ),
+    });
+  } else if (canonical.regionDisplay) {
     rows.push({
       label: "Region",
       value: (

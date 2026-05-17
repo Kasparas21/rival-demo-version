@@ -380,6 +380,9 @@ export function upsertSidebarCompetitor(
         brand: partial.brand,
         pending: partial.pending ?? false,
         ...(partial.lastScrapedAt !== undefined ? { lastScrapedAt: partial.lastScrapedAt } : {}),
+        ...(partial.savedCompetitorDbId?.trim()
+          ? { savedCompetitorDbId: partial.savedCompetitorDbId.trim() }
+          : {}),
       };
   if (isNew) {
     const nextNew = [...list];

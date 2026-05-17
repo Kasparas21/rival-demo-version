@@ -5,6 +5,7 @@ import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
+import { collectAdsCacheDomainVariantsForSavedCompetitorRow } from "@/lib/ad-library/competitor-cache-domain";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -310,6 +311,28 @@ function buildUpsertRows(params: {
   });
 }
 
+/** After POST upserts, return DB ids immediately so clients can unlock Ad Library clicks without waiting for GET sync. */
+async function selectSavedCompetitorIdsBySlug(
+  supabase: ServerSupabase,
+  userId: string,
+  normalizedSlugs: string[]
+): Promise<{ slug: string; savedCompetitorDbId: string }[]> {
+  if (normalizedSlugs.length === 0) return [];
+  const unique = [...new Set(normalizedSlugs)].filter(Boolean);
+  const { data, error } = await supabase
+    .from("saved_competitors")
+    .select("id, slug")
+    .eq("user_id", userId)
+    .in("slug", unique);
+  if (error || !data) return [];
+  return data
+    .map((row) => ({
+      slug: normalizeCompetitorSlug(String(row.slug ?? "")),
+      savedCompetitorDbId: String(row.id ?? "").trim(),
+    }))
+    .filter((r) => r.slug.length > 0 && r.savedCompetitorDbId.length > 0);
+}
+
 export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) {
@@ -390,6 +413,7 @@ export async function POST(request: Request) {
   }
 
   let mergeRowsAgainst: ExistingRowMeta[] = existingList;
+  const slugIdsToReturn = new Set<string>();
 
   if (workspaceItems.length === 1) {
     const wsSlug = normalizeCompetitorSlug(workspaceItems[0]!.slug);
@@ -424,6 +448,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: refetch.error }, { status: 500 });
     }
     mergeRowsAgainst = refetch.rows;
+    slugIdsToReturn.add(wsSlug);
   }
 
   if (competitorItemsRaw.length > 0) {
@@ -440,9 +465,18 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+    for (const item of competitorItemsRaw) {
+      slugIdsToReturn.add(normalizeCompetitorSlug(item.slug));
+    }
   }
 
-  return NextResponse.json({ ok: true });
+  const competitors = await selectSavedCompetitorIdsBySlug(
+    supabase,
+    user.id,
+    [...slugIdsToReturn],
+  );
+
+  return NextResponse.json({ ok: true, competitors });
 }
 
 export async function DELETE(request: Request) {
@@ -463,7 +497,6 @@ export async function DELETE(request: Request) {
   }
 
   const slug = normalizeCompetitorSlug(body.slug);
-  let cacheDomain = slug;
 
   const selWs = await supabase
     .from("saved_competitors")
@@ -502,12 +535,19 @@ export async function DELETE(request: Request) {
     );
   }
 
-  if (existing?.brand_domain?.trim()) {
-    cacheDomain = normalizeCompetitorSlug(existing.brand_domain);
-  } else if (existing?.slug?.trim()) {
-    cacheDomain = normalizeCompetitorSlug(existing.slug);
-  } else if (typeof body.cacheDomain === "string" && body.cacheDomain.trim()) {
-    cacheDomain = normalizeCompetitorSlug(body.cacheDomain);
+  const bodyCacheDomain = typeof body.cacheDomain === "string" && body.cacheDomain.trim() ? body.cacheDomain : undefined;
+  let purgeDomains: string[] =
+    existing?.slug || existing?.brand_domain
+      ? collectAdsCacheDomainVariantsForSavedCompetitorRow(
+          { slug: existing?.slug, brand_domain: existing?.brand_domain ?? null },
+          bodyCacheDomain ?? null
+        )
+      : [];
+  if (purgeDomains.length === 0) {
+    purgeDomains = [
+      slug,
+      ...(bodyCacheDomain ? [normalizeCompetitorSlug(bodyCacheDomain)] : []),
+    ].filter((x, i, a) => Boolean(x?.length) && a.indexOf(x) === i);
   }
 
   const { error: delSavedError } = await supabase
@@ -520,14 +560,20 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: delSavedError.message }, { status: 500 });
   }
 
-  const [adsRes, stratRes] = await Promise.all([
-    supabase.from("ads_cache").delete().eq("user_id", user.id).eq("competitor_domain", cacheDomain),
-    supabase
-      .from("strategy_overview_cache")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("competitor_domain", cacheDomain),
-  ]);
+  let adsRes: { error: { message: string } | null } = { error: null };
+  let stratRes: { error: { message: string } | null } = { error: null };
+  if (purgeDomains.length > 0) {
+    const results = await Promise.all([
+      supabase.from("ads_cache").delete().eq("user_id", user.id).in("competitor_domain", purgeDomains),
+      supabase
+        .from("strategy_overview_cache")
+        .delete()
+        .eq("user_id", user.id)
+        .in("competitor_domain", purgeDomains),
+    ]);
+    adsRes = results[0];
+    stratRes = results[1];
+  }
 
   const warnings: string[] = [];
   if (adsRes.error) warnings.push(adsRes.error.message);
@@ -536,7 +582,7 @@ export async function DELETE(request: Request) {
   return NextResponse.json({
     ok: true,
     hadSavedRow: Boolean(existing),
-    cacheDomainPurged: cacheDomain,
+    cacheDomainsPurged: purgeDomains,
     ...(warnings.length > 0 ? { warnings } : {}),
   });
 }

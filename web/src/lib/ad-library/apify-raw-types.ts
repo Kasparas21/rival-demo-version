@@ -63,6 +63,12 @@ export type FacebookAdLibraryItem = {
   location_audience?: MetaLocationAudienceEntry[];
   age_audience?: MetaAgeAudienceBounds;
   ad_library_url?: string;
+  /** Band or label from EU / WW disclosures when the actor exposes it (persisted for detail drawer). */
+  impressionsRange?: string | null;
+  /** Demographic reach blobs when scraped (persisted for detail drawer). */
+  age_country_gender_reach_breakdown?: unknown[];
+  /** Nested regional disclosures (`uk_transparency`, `eu_transparency`, …) — persist so detail drawer can harvest after flattening. */
+  transparency_by_location?: Record<string, unknown> | null;
   impressions_with_index?: {
     impressions_text?: string | null;
     impressions_index?: number;

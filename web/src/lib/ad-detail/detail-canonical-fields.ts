@@ -1,6 +1,9 @@
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import type { GoogleFamilyAdDetailFields } from "@/lib/ad-detail/google-family-ad-detail-fields";
-import { metaTargetingRegionDisplayLine } from "@/lib/ad-detail/meta-ad-detail-fields";
+import {
+  metaTargetingRegionDisplayLine,
+  metaTotalReachImpressionsLabel,
+} from "@/lib/ad-detail/meta-ad-detail-fields";
 import {
   formatImpressionsDetailLabel,
   mergeReachAndImpressionsLine,
@@ -71,8 +74,13 @@ export function buildCanonicalDetailSlices(
       const ms = s > 1e12 ? s : s * 1000;
       runStartUtcMs = utcCalendarMsFromEpoch(ms);
     }
-    const ir = typeof p.impressionsRange === "string" ? p.impressionsRange.trim() : "";
-    if (ir) impressionsFormatted = formatImpressionsDetailLabel(ir);
+    const reachFromPayload = metaTotalReachImpressionsLabel(rawPayload);
+    const irRaw =
+      typeof p.impressionsRange === "string" ? p.impressionsRange.trim()
+      : typeof p.impressions_range === "string" ? p.impressions_range.trim()
+      : "";
+    impressionsFormatted =
+      reachFromPayload ?? (irRaw ? formatImpressionsDetailLabel(irRaw) : null);
     const rf = metaTargetingRegionDisplayLine(rawPayload);
     if (rf) regionDisplay = rf;
   }

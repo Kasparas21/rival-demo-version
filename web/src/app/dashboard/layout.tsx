@@ -40,6 +40,8 @@ import {
   fetchSavedCompetitorsFromAccount,
   syncCompetitorsToAccount,
 } from "@/lib/account/client";
+import { collectAdsCacheDomainVariantsForSavedCompetitorRow } from "@/lib/ad-library/competitor-cache-domain";
+import { clearAdsLibraryClientCachesForBrandDomains } from "@/lib/ad-library/deduped-fetch";
 import { RIVAL_BRANDS_UPDATED_EVENT, RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { PostOnboardingPricingOverlay } from "@/components/billing/post-onboarding-pricing-overlay";
 import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dashboard-mock";
@@ -81,8 +83,9 @@ function RemoveWatchedCompetitorDialog({
           Remove &ldquo;{label}&rdquo;?
         </p>
         <p className="mt-3 text-[14px] leading-relaxed text-[#52525b]">
-          They will be removed from your watched competitors. Cached scraped ads and strategy summaries for{" "}
-          <span className="font-medium text-[#3f3f46]">{domainLabel}</span> will be cleared from your account.
+          This permanently removes scraped ads, saved snapshots, and strategy summaries for{" "}
+          <span className="font-medium text-[#3f3f46]">{domainLabel}</span> from your account. If you add
+          this competitor again, you will need to run a fresh scrape; previous results will not return.
         </p>
         <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
           <button
@@ -480,6 +483,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         setCompetitorRemoveError(result.error);
         return;
       }
+
+      const clientPurgeDomains = collectAdsCacheDomainVariantsForSavedCompetitorRow(
+        { slug: competitor.slug, brand_domain: competitor.brand?.domain ?? null },
+        cacheDomain.trim() ? cacheDomain : null
+      );
+      clearAdsLibraryClientCachesForBrandDomains(clientPurgeDomains);
 
       suppressSidebarUpsertAfterRemoval(competitor);
 

@@ -272,6 +272,87 @@ export function fetchAdsLibraryDeduplicated(
   return promise;
 }
 
+function storageKeysMatchingBrandDomains(
+  store: Storage,
+  prefix: string,
+  targets: Set<string>
+): string[] {
+  const toRemove: string[] = [];
+  for (let i = 0; i < store.length; i += 1) {
+    const k = store.key(i);
+    if (!k || !k.startsWith(prefix)) continue;
+    const suffix = k.slice(prefix.length);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(suffix);
+    } catch {
+      continue;
+    }
+    const p = payload as { brand?: { domain?: string } };
+    const dom = p.brand?.domain;
+    if (!dom || !targets.has(cleanDomainForCacheKey(dom))) continue;
+    toRemove.push(k);
+  }
+  return toRemove;
+}
+
+function memoryKeysMatchingBrandDomains(targets: Set<string>): string[] {
+  const keys: string[] = [];
+  for (const k of cache.keys()) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(k);
+    } catch {
+      continue;
+    }
+    const p = payload as { brand?: { domain?: string } };
+    const dom = p.brand?.domain;
+    if (dom && targets.has(cleanDomainForCacheKey(dom))) keys.push(k);
+  }
+  for (const k of inflight.keys()) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(k);
+    } catch {
+      continue;
+    }
+    const p = payload as { brand?: { domain?: string } };
+    const dom = p.brand?.domain;
+    if (dom && targets.has(cleanDomainForCacheKey(dom))) keys.push(k);
+  }
+  return [...new Set(keys)];
+}
+
+/**
+ * Drops client-side ads library responses for the given domains (session, local, and in-memory).
+ * Call after removing a competitor so re-adding does not hydrate stale creatives.
+ */
+export function clearAdsLibraryClientCachesForBrandDomains(domains: string[]): void {
+  const targets = new Set(
+    domains.map((d) => cleanDomainForCacheKey(d)).filter((d) => d.length > 0)
+  );
+  if (targets.size === 0) return;
+
+  if (typeof window !== "undefined") {
+    try {
+      for (const prefix of [SESSION_CACHE_PREFIX, LOCAL_CACHE_PREFIX]) {
+        for (const store of [window.sessionStorage, window.localStorage]) {
+          for (const k of storageKeysMatchingBrandDomains(store, prefix, targets)) {
+            store.removeItem(k);
+          }
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  for (const k of memoryKeysMatchingBrandDomains(targets)) {
+    cache.delete(k);
+    inflight.delete(k);
+  }
+}
+
 /** Clear cached entries (e.g. after logout). */
 export function clearAdsLibraryClientCache(): void {
   cache.clear();

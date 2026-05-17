@@ -93,3 +93,50 @@ export async function resolveAdsCacheDomainForUser(
 
   return { competitorId: row.id, cacheDomain, readDomains };
 }
+
+/**
+ * Every `competitor_domain` value that may exist in `ads_cache` / `strategy_overview_cache` for this
+ * saved competitor — mirrors {@link resolveAdsCacheDomainForUser} `readDomains` for all relevant lookup hints
+ * (slug vs FQDN, request body cache domain, first-label variants like `apple` for `apple.com`).
+ */
+export function collectAdsCacheDomainVariantsForSavedCompetitorRow(
+  row: { slug?: string | null; brand_domain?: string | null },
+  bodyCacheDomain?: string | null
+): string[] {
+  const slugNorm = normalizeCompetitorSlug(String(row.slug ?? "")).toLowerCase();
+  const brandNorm = row.brand_domain?.trim()
+    ? normalizeCompetitorSlug(String(row.brand_domain)).toLowerCase()
+    : "";
+
+  const hintStrings = new Set<string>();
+  if (row.slug?.trim()) hintStrings.add(row.slug.trim());
+  if (row.brand_domain?.trim()) hintStrings.add(row.brand_domain.trim());
+  if (bodyCacheDomain?.trim()) hintStrings.add(bodyCacheDomain.trim());
+
+  for (const s of [...hintStrings]) {
+    const h = normalizeCompetitorSlug(s).toLowerCase();
+    if (h.includes(".")) {
+      const first = h.split(".")[0] ?? "";
+      if (first && first !== h) hintStrings.add(first);
+    }
+  }
+
+  const domainSet = new Set<string>();
+  if (slugNorm) domainSet.add(slugNorm);
+  if (brandNorm) domainSet.add(brandNorm);
+
+  for (const raw of hintStrings) {
+    const cleaned = normalizeCompetitorSlug(raw).toLowerCase();
+    const fallbackCache = cleaned || raw.trim().toLowerCase();
+    const cacheDomain =
+      preferCanonicalSlug(row.brand_domain ?? undefined, row.slug ?? undefined, cleaned)?.toLowerCase() ||
+      slugNorm ||
+      fallbackCache;
+
+    for (const x of [cacheDomain, fallbackCache, cleaned, slugNorm, brandNorm]) {
+      if (x && x.length) domainSet.add(x);
+    }
+  }
+
+  return [...domainSet];
+}

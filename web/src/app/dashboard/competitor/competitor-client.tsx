@@ -2194,6 +2194,35 @@ function CompetitorDashboardBody({
 
   const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
 
+  const adsLibraryShowsCreativesOnScreen = useMemo(
+    () =>
+      !adLibLoading &&
+      !adLibFetchError &&
+      filteredMetaAds.length +
+        filteredGoogleRows.length +
+        filteredLinkedInAds.length +
+        filteredTikTokAds.length +
+        filteredPinterestAds.length +
+        filteredSnapchatAds.length >
+        0,
+    [
+      adLibLoading,
+      adLibFetchError,
+      filteredMetaAds.length,
+      filteredGoogleRows.length,
+      filteredLinkedInAds.length,
+      filteredTikTokAds.length,
+      filteredPinterestAds.length,
+      filteredSnapchatAds.length,
+    ],
+  );
+
+  const showAdLibraryLinkingAnalyticsShell =
+    !isOwnWorkspace &&
+    isConfirmed &&
+    sidebarSnapshot !== undefined &&
+    !competitorDbIdForSaved;
+
   const comparisonPayloadScrapeStamp = accountLastScrapedAt ?? "none";
   const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
@@ -2556,7 +2585,9 @@ function CompetitorDashboardBody({
                           : "Scrape your ads from the Ads Library tab"
                         : accountLastScrapedAt
                           ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
-                          : "Not yet scraped"}
+                          : adsLibraryShowsCreativesOnScreen
+                            ? "First sync in progress · creatives loading"
+                            : "Not yet scraped"}
                     </span>
                   </div>
                   {!isOwnWorkspace && competitorSidebarMatch?.lastWeeklyWeekStart ? (
@@ -2892,6 +2923,17 @@ function CompetitorDashboardBody({
                 onFreshnessRescrape={handleForceRescrape}
                 landingPagesListCache={landingPagesListCacheForChildren}
               />
+            ) : showAdLibraryLinkingAnalyticsShell ? (
+              <div className="mb-6 rounded-2xl border border-[#e5e7eb]/80 bg-gradient-to-br from-[#f8fafc] to-[#eff6ff]/60 px-4 py-14 sm:px-8 flex flex-col items-center justify-center gap-3 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+                <RivalLogoVideo size="md" className="opacity-90 shrink-0" aria-hidden />
+                <div className="space-y-1">
+                  <p className="text-[15px] font-semibold text-[#374151]">Connecting competitor to your workspace…</p>
+                  <p className="text-[13px] leading-snug text-[#64748b] max-w-[28rem] mx-auto">
+                    Analytics unlock as soon as the account link completes. Saved ads and ad detail use the same
+                    step—you can keep browsing creatives below while this finishes.
+                  </p>
+                </div>
+              </div>
             ) : null}
             {adsPlatforms.length > 0 ? (
               <div className="mb-5 rounded-2xl border border-[#e5e7eb]/70 bg-[#DDF1FD]/25 px-3 py-2 shadow-[0_1px_3px_rgba(15,23,42,0.05)] sm:px-4 sm:py-2">

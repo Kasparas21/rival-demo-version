@@ -1,7 +1,23 @@
 "use client";
 
 import type { SavedCompetitorPayload, SavedSearchPayload } from "./types";
-import { hoistLogoOntoRow, type SidebarCompetitor } from "@/lib/sidebar-competitors";
+import { hoistLogoOntoRow, upsertSidebarCompetitor, type SidebarCompetitor } from "@/lib/sidebar-competitors";
+
+/** Persist DB UUIDs locally after POST so Ad Library clicks/saves/analytics unblock before layout GET merges. */
+function patchSidebarSavedCompetitorDbIds(payload: unknown) {
+  if (payload === null || typeof payload !== "object") return;
+  const list = (payload as { competitors?: unknown }).competitors;
+  if (!Array.isArray(list)) return;
+  for (const row of list) {
+    if (row === null || typeof row !== "object") continue;
+    const o = row as { slug?: unknown; savedCompetitorDbId?: unknown };
+    const slug = typeof o.slug === "string" ? o.slug.trim() : "";
+    const savedCompetitorDbId =
+      typeof o.savedCompetitorDbId === "string" ? o.savedCompetitorDbId.trim() : "";
+    if (!slug || !savedCompetitorDbId) continue;
+    upsertSidebarCompetitor({ slug, savedCompetitorDbId });
+  }
+}
 
 async function safeJson(response: Response) {
   try {
@@ -53,6 +69,7 @@ export async function saveCompetitorToAccount(
         error: typeof payload?.error === "string" ? payload.error : "Could not save competitor.",
       };
     }
+    patchSidebarSavedCompetitorDbIds(payload);
     return { ok: true };
   } catch {
     return { ok: false, error: "Network error while saving competitor." };
@@ -64,11 +81,13 @@ export async function syncCompetitorsToAccount(competitors: SavedCompetitorPaylo
     const hoisted = competitors.map((c) =>
       normalizeForAccountApi(hoistLogoOntoRow(c as SidebarCompetitor)),
     );
-    await fetch("/api/account/saved-competitors", {
+    const response = await fetch("/api/account/saved-competitors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ competitors: hoisted }),
     });
+    const payload = await safeJson(response);
+    if (response.ok) patchSidebarSavedCompetitorDbIds(payload);
   } catch {
     // Local storage remains the fallback source.
   }
