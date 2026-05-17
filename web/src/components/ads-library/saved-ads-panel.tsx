@@ -7,26 +7,10 @@ import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import type { Json } from "@/lib/supabase/types";
-import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import { drawerComparisonPlatformIconId } from "@/lib/ad-detail/google-drawer-surface";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
-
-function platformForIcon(p: string): StrategyPlatform {
-  const x = p.toLowerCase();
-  if (x === "youtube") return "google";
-  if (
-    x === "meta" ||
-    x === "google" ||
-    x === "tiktok" ||
-    x === "linkedin" ||
-    x === "pinterest" ||
-    x === "snapchat"
-  ) {
-    return x;
-  }
-  return "meta";
-}
 
 export type SavedAdRow = {
   id: string;
@@ -242,7 +226,7 @@ function SavedAdCard({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <ComparisonPlatformIcon platform={platformForIcon(savedAd.platform)} className="h-12 w-12 opacity-30" />
+            <ComparisonPlatformIcon platform={drawerComparisonPlatformIconId(savedAd.platform, savedAd.raw_payload)} className="h-12 w-12 opacity-30" />
           </div>
         )}
 
@@ -253,7 +237,7 @@ function SavedAdCard({
         ) : null}
 
         <div className="absolute right-2 top-2 flex items-center rounded-full bg-black/50 px-1.5 py-1">
-          <ComparisonPlatformIcon platform={platformForIcon(savedAd.platform)} className="h-3.5 w-3.5 text-white" />
+          <ComparisonPlatformIcon platform={drawerComparisonPlatformIconId(savedAd.platform, savedAd.raw_payload)} className="h-3.5 w-3.5 text-white" />
         </div>
       </div>
 

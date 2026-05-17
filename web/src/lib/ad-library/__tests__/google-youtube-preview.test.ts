@@ -56,6 +56,30 @@ describe("Google YouTube / video ad previews", () => {
     expect(row.youtubeVideoId).toBeNull();
   });
 
+  it("preserves Transparency creativeUrl and regionStats onto youtube/Gallery rows", () => {
+    const raw = {
+      format: "YouTube",
+      advertiserId: "AR1",
+      creativeId: "CR1",
+      adUrl: "https://adstransparency.google.com/advertiser/AR1/creative/CR1",
+      youtubeVideoId: "UmTS9m9Voi4",
+      creativeUrl:
+        "https://adstransparency.google.com/advertiser/AR1/creative/CR1?utm_yt=UmTS9m9Voi4",
+      regionStats: [
+        { region: "NL", criteriaId: 2528, lastShown: "2026-05-08", impressionsMax: 1000 },
+        { region: "ES", criteriaId: 2724, lastShown: "2026-05-13", impressionsMax: 1000 },
+      ],
+    };
+    const item = normalizeGoogleApiItem(raw);
+    expect(item.regionStats).toHaveLength(2);
+    expect(item.creativeUrl).toContain("adstransparency");
+    const row = googleItemToRow(item, 0, { queryDomain: "bmw.com" });
+    if (row.type !== "youtube") throw new Error("expected youtube row");
+    expect(row.creativeUrl).toContain("adstransparency");
+    expect(row.regionStats).toHaveLength(2);
+    expect(row.regionStats![0]?.region).toBe("NL");
+  });
+
   it("googleAdRowPreviewLikelihood ranks video+thumbnail above empty video creative", () => {
     const rich: Extract<GoogleAdRow, { type: "youtube" }> = {
       type: "youtube",

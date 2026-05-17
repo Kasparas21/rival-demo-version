@@ -27,7 +27,6 @@ import { WhatsAppMark } from "@/components/icons/whatsapp-mark";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
-import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import type { Json } from "@/lib/supabase/types";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 import {
@@ -45,6 +44,10 @@ import {
 } from "@/lib/ad-detail/linkedin-pinterest-snapchat-detail-rows";
 import { buildGoogleFamilyAdDetailFields } from "@/lib/ad-detail/google-family-ad-detail-fields";
 import { buildTikTokAdLibraryDetailRows } from "@/lib/ad-detail/tiktok-ad-detail-rows";
+import {
+  drawerComparisonPlatformIconId,
+  drawerPlatformChipSlug,
+} from "@/lib/ad-detail/google-drawer-surface";
 import { resolveDetailRunningDays } from "@/lib/ad-detail/detail-time-running";
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import {
@@ -66,26 +69,16 @@ import {
 import {
   cleanLinkedInScraperAdDescription,
   cleanPinterestAdPreviewDescription,
+  googleCreativeFormatKind,
   pinterestCaptionFieldsFromPayload,
   snapchatPreviewHeadlineFromPayload,
 } from "@/lib/ad-library/normalize";
 import { hostFromLandingPageUrl } from "@/lib/landing-pages/normalize-url";
-
-function platformForIcon(p: string): StrategyPlatform {
-  const x = p.toLowerCase();
-  if (x === "youtube") return "google";
-  if (
-    x === "meta" ||
-    x === "google" ||
-    x === "tiktok" ||
-    x === "linkedin" ||
-    x === "pinterest" ||
-    x === "snapchat"
-  ) {
-    return x;
-  }
-  return "meta";
-}
+import {
+  googleTransparencyImpressionsCollapsedHeadline,
+  googleTransparencyTerritoryDisclosureRows,
+  parseGoogleRegionStatsFromRecord,
+} from "@/lib/ad-library/google-region-stats";
 
 function MetaPublisherPlatformGlyph({ slug, index }: { slug: string; index: number }) {
   switch (slug) {
@@ -529,11 +522,13 @@ function DetailCreativeVideo({
   poster,
   vertical,
   platformKey,
+  rawPayload,
 }: {
   src: string;
   poster?: string;
   vertical: boolean;
   platformKey: string;
+  rawPayload?: unknown;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -558,7 +553,7 @@ function DetailCreativeVideo({
     }
     return (
       <div className="flex aspect-square w-full items-center justify-center">
-        <ComparisonPlatformIcon platform={platformForIcon(platformKey)} className="h-12 w-12 opacity-30" />
+        <ComparisonPlatformIcon platform={drawerComparisonPlatformIconId(platformKey, rawPayload)} className="h-12 w-12 opacity-30" />
       </div>
     );
   }
@@ -593,7 +588,7 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
   if (resolved.kind === "empty") {
     return (
       <div className="flex aspect-square w-full items-center justify-center">
-        <ComparisonPlatformIcon platform={platformForIcon(ad.platform)} className="h-12 w-12 opacity-30" />
+        <ComparisonPlatformIcon platform={drawerComparisonPlatformIconId(ad.platform, ad.raw_payload)} className="h-12 w-12 opacity-30" />
       </div>
     );
   }
@@ -619,7 +614,73 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
       poster={resolved.poster}
       vertical={vertical}
       platformKey={ad.platform}
+      rawPayload={ad.raw_payload}
     />
+  );
+}
+
+/** Transparency text-heavy rows — hide synthetic link slab + favicon strip when we'd only decorate with favicon-tier art. */
+function googleUsesHeadlineOnlyDrawerPreview(payload: Record<string, unknown>): boolean {
+  const fmt = typeof payload.format === "string" ? payload.format : undefined;
+  const kind = googleCreativeFormatKind(fmt);
+  const imgCandidate =
+    (typeof payload.previewUrl === "string" && payload.previewUrl.trim()) ||
+    (typeof payload.img === "string" && payload.img.trim()) ||
+    "";
+  const nonFaviconImage = Boolean(imgCandidate && !/\/s2\/favicons\?/i.test(imgCandidate));
+  if (kind === "text") return !nonFaviconImage;
+  if (
+    kind === "video" ||
+    kind === "image" ||
+    kind === "shopping" ||
+    kind === "app" ||
+    kind === "discovery" ||
+    kind === "performance_max" ||
+    kind === "display"
+  )
+    return false;
+  return !nonFaviconImage;
+}
+
+/** Google / YouTube Transparency cards: scrape headline/description when present (`null`s → omit strip). Fallback to title/creativeCopy only if scrape keys omitted (legacy payloads). */
+function googleFamilyTransparencyDrawerCopy(payload: Record<string, unknown>): { headline: string; description: string } | null {
+  const ty = typeof payload.type === "string" ? payload.type.trim().toLowerCase() : "";
+  if (ty !== "google" && ty !== "youtube") return null;
+
+  const hasHeadlineProp = Object.prototype.hasOwnProperty.call(payload, "headline");
+  const hasDescriptionProp = Object.prototype.hasOwnProperty.call(payload, "description");
+
+  let headline = "";
+  if (hasHeadlineProp) headline = typeof payload.headline === "string" ? payload.headline.trim() : "";
+  else if (typeof payload.title === "string") headline = payload.title.trim();
+
+  let description = "";
+  if (hasDescriptionProp) description = typeof payload.description === "string" ? payload.description.trim() : "";
+  else if (typeof payload.creativeCopy === "string") description = payload.creativeCopy.trim();
+
+  if (!headline && !description) return null;
+  return { headline, description };
+}
+
+function DrawerTransparencyHeadlineDescriptionStrip({
+  headline,
+  description,
+}: {
+  headline: string;
+  description: string;
+}) {
+  const hasHeadline = Boolean(headline.trim());
+  const hasDesc = Boolean(description.trim());
+  return (
+    <div className="px-4 pb-4">
+      {hasHeadline ? <p className="text-[15px] font-semibold leading-snug text-slate-900">{headline}</p> : null}
+      {hasHeadline && hasDesc ? (
+        <div className="h-[1lh] min-h-[1.125rem] shrink-0" aria-hidden />
+      ) : null}
+      {hasDesc ? (
+        <p className="whitespace-pre-line text-[14px] leading-relaxed text-slate-600">{description}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -639,6 +700,29 @@ function AdCreativePreview({
     is_killed: ad.is_killed,
   });
   const lifespanLabel = `${previewLifespanDays}D`;
+
+  const googleMinimalEligible =
+    normalizeAdDetailPlatformKey(ad.platform) === "google" &&
+    ad.raw_payload &&
+    typeof ad.raw_payload === "object" &&
+    !Array.isArray(ad.raw_payload) &&
+    googleUsesHeadlineOnlyDrawerPreview(ad.raw_payload as Record<string, unknown>);
+  const googleMinimalStrip =
+    googleMinimalEligible
+      ? googleFamilyTransparencyDrawerCopy(ad.raw_payload as Record<string, unknown>)
+      : null;
+
+  const transparencyYoutubePl = ad.platform.trim().toLowerCase() === "youtube";
+  const youtubeTransparencyPayload =
+    transparencyYoutubePl &&
+    ad.raw_payload &&
+    typeof ad.raw_payload === "object" &&
+    !Array.isArray(ad.raw_payload)
+      ? (ad.raw_payload as Record<string, unknown>)
+      : null;
+  const youtubeTransparencyCopyStrip = youtubeTransparencyPayload
+    ? googleFamilyTransparencyDrawerCopy(youtubeTransparencyPayload)
+    : null;
 
   const metaPl = normalizeAdDetailPlatformKey(ad.platform) === "meta";
   const linkedinPl = ad.platform.toLowerCase() === "linkedin";
@@ -780,6 +864,14 @@ function AdCreativePreview({
     }
     storyTitle = snapHead && !/^snapchat ad$/i.test(snapHead) ? snapHead : null;
     storyBody = null;
+  } else if (transparencyYoutubePl) {
+    /** Google Ads Transparency YouTube row — omit assembled title/channel/views `ad_text`; headline/description chip only when payload has strings. */
+    storyTitle = null;
+    storyBody = null;
+  } else if (googleMinimalEligible) {
+    /** Google Transparency minimal preview uses payload headline/description strip only — omit joined `ad_text`. */
+    storyTitle = null;
+    storyBody = null;
   } else {
     storyBody = ad.ad_text?.trim() || null;
   }
@@ -787,7 +879,8 @@ function AdCreativePreview({
   const structuredPl = metaPl || linkedinPl || pinterestPl || snapchatPl;
   const structuredTitleTrimmed = structuredPl ? (storyTitle?.trim() ?? "") : "";
   const structuredBodyTrimmed = structuredPl ? (storyBody?.trim() ?? "") : "";
-  const plainBodyTrimmed = !structuredPl ? (storyBody?.trim() ?? "") : "";
+  const plainBodyTrimmed =
+    !structuredPl && !googleMinimalEligible && !transparencyYoutubePl ? (storyBody?.trim() ?? "") : "";
   const spacerBetweenTitleAndBody =
     structuredPl && Boolean(structuredTitleTrimmed) && Boolean(structuredBodyTrimmed);
   /** Meta headline is shown above the creative; omit from the grey footer strip. */
@@ -819,7 +912,11 @@ function AdCreativePreview({
           </div>
         </div>
 
-        {structuredPl ? (
+        {googleMinimalEligible && googleMinimalStrip ? (
+          <DrawerTransparencyHeadlineDescriptionStrip {...googleMinimalStrip} />
+        ) : transparencyYoutubePl && youtubeTransparencyCopyStrip ? (
+          <DrawerTransparencyHeadlineDescriptionStrip {...youtubeTransparencyCopyStrip} />
+        ) : structuredPl ? (
           structuredTitleTrimmed || structuredBodyTrimmed ? (
             <div className="px-4 pb-3">
               {structuredTitleTrimmed ? (
@@ -841,11 +938,14 @@ function AdCreativePreview({
           </div>
         ) : null}
 
-        <div className="relative flex justify-center bg-slate-100">
-          <CreativeMediaBlock ad={ad} />
-        </div>
+        {!googleMinimalEligible || transparencyYoutubePl ? (
+          <div className="relative flex justify-center bg-slate-100">
+            <CreativeMediaBlock ad={ad} />
+          </div>
+        ) : null}
 
-        {(landingHost || metaFooterHeadline || linkDescription || ad.cta) && (
+        {!googleMinimalEligible &&
+        (landingHost || metaFooterHeadline || linkDescription || ad.cta) ? (
           <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3">
             <div className="min-w-0 flex-1">
               {landingHost ? (
@@ -864,7 +964,7 @@ function AdCreativePreview({
               </span>
             ) : null}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -1061,6 +1161,66 @@ function MetaRegionTransparencyDisclosure({
   );
 }
 
+/** Google Transparency `regionStats`: compact “about …” headline with expandable per-country caps. */
+function GoogleTransparencyImpressionsDisclosure({
+  headline,
+  detailRows,
+}: {
+  headline: string;
+  detailRows: { territory: string; valueLabel: string }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerId = useId();
+  const panelId = useId();
+
+  return (
+    <div className="min-w-0 max-w-[280px]">
+      <button
+        type="button"
+        id={triggerId}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex w-full items-center justify-end gap-1.5 rounded-md py-0.5 pl-1 text-right transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70"
+      >
+        <span className="text-[12px] font-medium leading-snug text-slate-900 [overflow-wrap:anywhere]">
+          {headline}
+        </span>
+        <ChevronDown
+          className={`h-3.5 w-3.5 flex-shrink-0 text-slate-500 transition-transform duration-200 ease-out ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div
+          id={panelId}
+          role="region"
+          aria-labelledby={triggerId}
+          className="mt-2 flex justify-end border-t border-slate-100 pt-2 text-right text-slate-900"
+        >
+          <div className="min-w-0 max-w-full">
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">By country</p>
+            <ul
+              role="list"
+              className="inline-grid gap-x-2 gap-y-1 text-[11px] font-medium leading-snug [grid-template-columns:max-content_auto_max-content]"
+            >
+              {detailRows.map((r, idx) => (
+                <li key={`gtr-${r.territory}-${idx}`} className="contents">
+                  <span className="min-w-0 text-end [overflow-wrap:anywhere]">{r.territory}</span>
+                  <span className="select-none text-slate-400" aria-hidden>
+                    ·
+                  </span>
+                  <span className="min-w-0 text-start tabular-nums [overflow-wrap:anywhere]">{r.valueLabel}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DetailsTab({ data }: { data: AdDetailData }) {
   const { ad, competitor, context } = data;
 
@@ -1097,6 +1257,14 @@ function DetailsTab({ data }: { data: AdDetailData }) {
   const runStartLabel = formatCanonicalRunStartLabel(canonical);
   const metaPublisherRows = pl === "meta" ? metaPublisherDetailRows(ad.raw_payload) : null;
 
+  const googleTransparencyStats =
+    isGoogleFamily &&
+    ad.raw_payload &&
+    typeof ad.raw_payload === "object" &&
+    !Array.isArray(ad.raw_payload)
+      ? parseGoogleRegionStatsFromRecord(ad.raw_payload as Record<string, unknown>)
+      : [];
+
   const extraTargetingRows =
     pl === "tiktok"
       ? buildTikTokAdLibraryDetailRows(ad.raw_payload)
@@ -1115,17 +1283,6 @@ function DetailsTab({ data }: { data: AdDetailData }) {
   const tailBeforeActions: { label: string; value: ReactNode }[] = [];
 
   const textVal = (s: string) => <span className="font-medium text-slate-900">{s}</span>;
-
-  if ((pl === "google" || pl === "youtube") && gDetail?.targeting?.trim()) {
-    tailBeforeActions.push({
-      label: "Targeting",
-      value: (
-        <span className="max-w-[240px] whitespace-pre-wrap text-right font-medium text-slate-900">
-          {gDetail.targeting!.trim()}
-        </span>
-      ),
-    });
-  }
 
   for (const r of extraTargetingRows) {
     tailBeforeActions.push({ label: r.label, value: textVal(r.value) });
@@ -1203,9 +1360,23 @@ function DetailsTab({ data }: { data: AdDetailData }) {
   }
 
   if (canonical.impressionsFormatted) {
+    const googleTerritoryRows =
+      isGoogleFamily && googleTransparencyStats.length > 0
+        ? googleTransparencyTerritoryDisclosureRows(googleTransparencyStats)
+        : [];
     rows.push({
       label: "Impressions",
-      value: textVal(canonical.impressionsFormatted),
+      value:
+        googleTerritoryRows.length > 0 ? (
+          <GoogleTransparencyImpressionsDisclosure
+            headline={googleTransparencyImpressionsCollapsedHeadline(googleTransparencyStats)}
+            detailRows={googleTerritoryRows}
+          />
+        ) : (
+          <span className="max-w-[260px] whitespace-pre-wrap text-right font-medium leading-snug text-slate-900">
+            {canonical.impressionsFormatted}
+          </span>
+        ),
     });
   }
 
@@ -1240,8 +1411,8 @@ function DetailsTab({ data }: { data: AdDetailData }) {
         <MetaPublisherPlatformsDetailValue rows={metaPublisherRows} />
       ) : (
         <div className="flex items-center justify-end gap-1.5">
-          <ComparisonPlatformIcon platform={platformForIcon(ad.platform)} className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="capitalize text-slate-900">{ad.platform}</span>
+          <ComparisonPlatformIcon platform={drawerComparisonPlatformIconId(ad.platform, ad.raw_payload)} className="h-3.5 w-3.5 flex-shrink-0" />
+          <span className="capitalize text-slate-900">{drawerPlatformChipSlug(ad.platform, ad.raw_payload)}</span>
         </div>
       ),
   });

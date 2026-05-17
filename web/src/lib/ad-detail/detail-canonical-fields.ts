@@ -11,6 +11,11 @@ import {
   parseLooseDateStringToUtcMs,
 } from "@/lib/ad-detail/detail-field-format";
 import { pinterestRunStartFromPayload } from "@/lib/ad-detail/linkedin-pinterest-snapchat-detail-rows";
+import {
+  formatGoogleTransparencyRegionImpressionsPerLine,
+  parseGoogleRegionStatsFromRecord,
+  summarizeGoogleTransparencyRegionLocations,
+} from "@/lib/ad-library/google-region-stats";
 import type { PinterestTargetingRow } from "@/lib/ad-library/normalize";
 
 export type CanonicalDetailSlices = {
@@ -95,7 +100,16 @@ export function buildCanonicalDetailSlices(
       const fs = typeof p.firstShown === "string" && p.firstShown.trim() ? p.firstShown.trim() : null;
       runStartUtcMs = fs ? parseLooseDateStringToUtcMs(fs) : null;
     }
-    if (googleDetail?.region?.trim()) regionDisplay = googleDetail.region.trim();
+    const gs = parseGoogleRegionStatsFromRecord(p);
+    if (gs.length > 0) {
+      const rd = summarizeGoogleTransparencyRegionLocations(gs);
+      const im = formatGoogleTransparencyRegionImpressionsPerLine(gs);
+      if (rd) regionDisplay = rd;
+      if (im) impressionsFormatted = im;
+    }
+    if (!(regionDisplay && regionDisplay.trim()) && googleDetail?.region?.trim()) {
+      regionDisplay = googleDetail.region.trim();
+    }
   }
 
   if (pl === "linkedin") {

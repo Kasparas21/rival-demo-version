@@ -41,9 +41,10 @@ describe("Meta transparency persistence", () => {
     expect(item.age_audience?.min).toBe(18);
     expect(item.age_audience?.max).toBe(65);
 
-    const card = facebookItemToMetaCard(item);
-    expect(card.transparency_by_location?.uk_transparency).toEqual(ukTransparency);
-    expect(card.location_audience?.some((x) => x.name === "United Kingdom")).toBe(true);
+    const card = facebookItemToMetaCard(item, 0);
+    expect(card).not.toBeNull();
+    expect(card!.transparency_by_location?.uk_transparency).toEqual(ukTransparency);
+    expect(card!.location_audience?.some((x) => x.name === "United Kingdom")).toBe(true);
   });
 
   it("does not invent transparency when Meta returns null regional blobs", () => {

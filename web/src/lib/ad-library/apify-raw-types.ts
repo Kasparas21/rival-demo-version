@@ -75,8 +75,20 @@ export type FacebookAdLibraryItem = {
   };
 };
 
+/** Per-region Transparency disclosure rows (scraped JSON). */
+export type GoogleTransparencyRegionStat = {
+  region: string;
+  criteriaId?: number;
+  lastShown?: string;
+  impressionsMax?: number;
+};
+
 /** Google Ads Transparency — Apify actor output (aligned with normalizeGoogleApiItem). */
 export type GoogleCompanyAdItem = {
+  /** Transparency creative-detail URL — prefer Ad library link when this is YouTube-heavy (see resolver). */
+  creativeUrl?: string | null;
+  /** Regional impression caps from Transparency */
+  regionStats?: GoogleTransparencyRegionStat[];
   advertiserId?: string;
   creativeId?: string;
   format?: string;

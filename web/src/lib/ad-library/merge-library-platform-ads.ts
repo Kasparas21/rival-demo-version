@@ -107,6 +107,19 @@ function mergeGoogleRows(a: GoogleAdRow, b: GoogleAdRow): GoogleAdRow {
         a.libraryTargetingSummary,
         b.libraryTargetingSummary
       ),
+      creativeUrl: (b.creativeUrl?.trim() || a.creativeUrl?.trim() || "").trim()
+        ? b.creativeUrl?.trim() || a.creativeUrl?.trim()
+        : undefined,
+      headline:
+        typeof b.headline !== "undefined" ? b.headline : typeof a.headline !== "undefined" ? a.headline : undefined,
+      description:
+        typeof b.description !== "undefined"
+          ? b.description
+          : typeof a.description !== "undefined"
+            ? a.description
+            : undefined,
+      regionStats:
+        (b.regionStats?.length ?? 0) > 0 ? b.regionStats : a.regionStats,
     };
   }
   if (a.type === "google" && b.type === "google") {
@@ -123,6 +136,19 @@ function mergeGoogleRows(a: GoogleAdRow, b: GoogleAdRow): GoogleAdRow {
         a.libraryTargetingSummary,
         b.libraryTargetingSummary
       ),
+      creativeUrl: (b.creativeUrl?.trim() || a.creativeUrl?.trim() || "").trim()
+        ? b.creativeUrl?.trim() || a.creativeUrl?.trim()
+        : undefined,
+      headline:
+        typeof b.headline !== "undefined" ? b.headline : typeof a.headline !== "undefined" ? a.headline : undefined,
+      description:
+        typeof b.description !== "undefined"
+          ? b.description
+          : typeof a.description !== "undefined"
+            ? a.description
+            : undefined,
+      regionStats:
+        (b.regionStats?.length ?? 0) > 0 ? b.regionStats : a.regionStats,
     };
   }
   return b;

@@ -84,6 +84,13 @@ export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown)
 
     case "google":
     case "youtube": {
+      const youtubeish =
+        pl === "youtube" ||
+        (typeof p.youtubeVideoId === "string" && p.youtubeVideoId.trim().length > 0);
+
+      const creative = stringField(p, ["creativeUrl", "creative_url", "creativeURL"]);
+      if (youtubeish && creative && isHttpUrl(creative)) return creative;
+
       const u = stringField(p, ["adUrl"]);
       return u && isHttpUrl(u) ? u : null;
     }

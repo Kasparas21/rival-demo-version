@@ -2,6 +2,7 @@ import type {
   FacebookAdLibraryItem,
   FacebookAdSnapshot,
   GoogleCompanyAdItem,
+  GoogleTransparencyRegionStat,
   LinkedInAdItem,
   LinkedInAudienceTargetingRow,
   LinkedInCountryShare,
@@ -14,6 +15,7 @@ import {
   junkUserBrandDisplayName,
 } from "@/lib/ad-library/competitor-brand-display";
 import { stableIdForGoogleItemRow } from "@/lib/ad-library/google-stable-id";
+import { parseGoogleRegionStatsFromRecord } from "@/lib/ad-library/google-region-stats";
 import {
   gatherMetaReachBreakdownEntries,
   harvestDeepMetaReachImpressionsCandidate,
@@ -115,6 +117,12 @@ export type GoogleAdRow =
       libraryTargetingSummary?: string | null;
       /** Raw Google “Preview URL” from the API (displayads-formats… / googlesyndication…) */
       previewUrl?: string | null;
+      /** Transparency creative-detail URL (YouTube creatives) */
+      creativeUrl?: string | null;
+      regionStats?: GoogleTransparencyRegionStat[];
+      /** Transparency API headline/description when scraped (`null` = no disclosed copy). */
+      headline?: string | null;
+      description?: string | null;
     }
   | {
       type: "youtube";
@@ -133,6 +141,11 @@ export type GoogleAdRow =
       lastShown?: string | null;
       libraryRegionSummary?: string | null;
       libraryTargetingSummary?: string | null;
+      creativeUrl?: string | null;
+      regionStats?: GoogleTransparencyRegionStat[];
+      /** Transparency headline/description when scraped (`null` = none). */
+      headline?: string | null;
+      description?: string | null;
     };
 
 export type LinkedInAdCard = {
@@ -1410,6 +1423,8 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
   const idStr = typeof rawId === "string" && rawId.trim() ? rawId.trim() : undefined;
   const creativeFromId = idStr && /^CR\d+/i.test(idStr) ? idStr : undefined;
 
+  const parsedRegionStats = parseGoogleRegionStatsFromRecord(o);
+
   return {
     advertiserId: pick(["advertiserId", "advertiser_id", "advertiserID"]),
     creativeId: pick(["creativeId", "creative_id", "creativeID"]) || creativeFromId,
@@ -1450,7 +1465,9 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
       })() ||
       findFirstGoogleVideoFileUrl(o) ||
       null,
+    creativeUrl: pick(["creativeUrl", "creative_url", "creativeURL"]) ?? null,
     ...extractGoogleLibraryEnrichment(o),
+    ...(parsedRegionStats.length > 0 ? { regionStats: parsedRegionStats } : {}),
   };
 }
 
@@ -1622,6 +1639,28 @@ export function googleItemToRow(
       lastShown: item.lastShown?.trim() || null,
       libraryRegionSummary: item.libraryRegionSummary?.trim() || null,
       libraryTargetingSummary: item.libraryTargetingSummary?.trim() || null,
+      ...(item.creativeUrl?.trim() ? { creativeUrl: item.creativeUrl.trim() } : {}),
+      ...(item.regionStats?.length ? { regionStats: item.regionStats } : {}),
+      ...("headline" in item
+        ? {
+            headline:
+              item.headline == null
+                ? null
+                : typeof item.headline === "string"
+                  ? item.headline.trim() || null
+                  : null,
+          }
+        : {}),
+      ...("description" in item
+        ? {
+            description:
+              item.description == null
+                ? null
+                : typeof item.description === "string"
+                  ? item.description.trim() || null
+                  : null,
+          }
+        : {}),
     };
   }
 
@@ -1691,6 +1730,28 @@ export function googleItemToRow(
     libraryRegionSummary: item.libraryRegionSummary?.trim() || null,
     libraryTargetingSummary: item.libraryTargetingSummary?.trim() || null,
     previewUrl,
+    ...("headline" in item
+      ? {
+          headline:
+            item.headline == null
+              ? null
+              : typeof item.headline === "string"
+                ? item.headline.trim() || null
+                : null,
+        }
+      : {}),
+    ...("description" in item
+      ? {
+          description:
+            item.description == null
+              ? null
+              : typeof item.description === "string"
+                ? item.description.trim() || null
+                : null,
+        }
+      : {}),
+    ...(item.creativeUrl?.trim() ? { creativeUrl: item.creativeUrl.trim() } : {}),
+    ...(item.regionStats?.length ? { regionStats: item.regionStats } : {}),
   };
 }
 
