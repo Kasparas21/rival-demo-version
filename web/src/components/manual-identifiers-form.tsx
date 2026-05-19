@@ -482,6 +482,12 @@ function effectiveChannelValue(
   if (channelId === "meta") {
     return (metaDisplay.trim() || identifiers.meta || identifiers.metaPageUrl || "").trim();
   }
+  if (channelId === "pinterest") {
+    return (
+      String(identifiers.pinterest ?? "").trim() ||
+      String(identifiers.pinterestAdvertiserName ?? "").trim()
+    );
+  }
   return String(identifiers[channelId] ?? "").trim();
 }
 
@@ -839,6 +845,13 @@ export function ManualIdentifiersForm({
     const newErrors: Partial<Record<ChannelId, string>> = {};
     const newWarnings: Partial<Record<ChannelId, string>> = {};
     fieldsToShow.forEach((field) => {
+      if (!effectiveChannelValue(field.id, metaDisplay, identifiers)) {
+        newErrors[field.id] =
+          onRemoveChannel && selectedChannels.length > 1
+            ? "Enter this platform’s ad URL or advertiser name, or tap Remove platform if you don’t want to track it here."
+            : "Enter this platform’s ad URL or advertiser name above to continue.";
+        return;
+      }
       const value =
         field.id === "meta" ? metaDisplay : (identifiers[field.id] ?? "");
       const err = blockingErrorForChannel(field.id, value);
@@ -857,6 +870,16 @@ export function ManualIdentifiersForm({
     const metaPart = selectedChannels.includes("meta") ? mergeMetaFromInput(metaDisplay) : {};
     onSubmit({ ...identifiers, ...metaPart });
   };
+
+  /** Block submit when inputs are incomplete or blur/submit surfaced a blocking validation error */
+  const continueDisabled =
+    !allSelectedChannelsFilled ||
+    selectedChannels.some((ch) => typeof errors[ch] === "string" && errors[ch]!.trim() !== "");
+
+  const incompleteIdentifiersHint =
+    onRemoveChannel && selectedChannels.length > 1
+      ? "Each selected channel needs its own URL or advertiser name. Fill them in below, or remove a platform you’re not verifying."
+      : "Each selected channel needs its own URL or advertiser name below before you can continue.";
 
   const fieldCount = fieldsToShow.length;
   const formMaxWidth =
@@ -1134,12 +1157,23 @@ export function ManualIdentifiersForm({
           <div className="mt-7 pt-5 border-t border-gray-100">
             <button
               type="submit"
-              className="w-full min-h-[48px] rounded-xl bg-[#343434] text-white font-semibold text-[14px] hover:bg-[#2a2a2a] transition-colors shadow-sm px-4"
+              disabled={continueDisabled}
+              aria-disabled={continueDisabled}
+              className={`w-full min-h-[48px] rounded-xl font-semibold text-[14px] transition-colors shadow-sm px-4 ${
+                continueDisabled
+                  ? "cursor-not-allowed bg-[#6b7280] text-white/90"
+                  : "bg-[#343434] text-white hover:bg-[#2a2a2a]"
+              }`}
             >
               {allSelectedChannelsFilled
                 ? "Looks good — continue"
                 : "Continue"}
             </button>
+            {!allSelectedChannelsFilled ? (
+              <p className="mt-3 text-center text-[13px] leading-snug text-[#57534e]" role="status">
+                {incompleteIdentifiersHint}
+              </p>
+            ) : null}
           </div>
         </form>
       </div>

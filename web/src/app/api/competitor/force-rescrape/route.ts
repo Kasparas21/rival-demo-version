@@ -3,9 +3,8 @@ import { NextResponse } from "next/server";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
-  ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
-  GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT,
+  REFRESH_ADS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
 import {
   normalizeGoogleAdsRegion,
@@ -24,7 +23,7 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
-const DEFAULT_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
+const REFRESH_ADS = REFRESH_ADS_PER_PLATFORM;
 
 function cleanDomain(d: string): string {
   return d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || d;
@@ -52,21 +51,21 @@ function buildAdsLibraryForceBody(params: {
     skipCache: true,
     platforms,
     metaStatus: "ACTIVE" as const,
-    metaMaxAds: Math.max(1, Math.min(DEFAULT_ADS, MAX_ADS)),
+    metaMaxAds: Math.max(1, Math.min(REFRESH_ADS, MAX_ADS)),
     metaCountry: "US",
     metaSortBy: "impressions_desc",
-    linkedinMaxAds: Math.max(1, Math.min(DEFAULT_ADS, MAX_ADS)),
+    linkedinMaxAds: Math.max(1, Math.min(REFRESH_ADS, MAX_ADS)),
     linkedinDateRange: "past-year",
     linkedinCountryCode: "",
-    tiktokMaxAds: Math.max(1, Math.min(DEFAULT_ADS, MAX_ADS)),
-    microsoftMaxSearchResults: Math.max(24, Math.min(DEFAULT_ADS, MAX_ADS, 1000)),
+    tiktokMaxAds: Math.max(1, Math.min(REFRESH_ADS, MAX_ADS)),
+    microsoftMaxSearchResults: Math.max(24, Math.min(REFRESH_ADS, MAX_ADS, 1000)),
     microsoftCountryCode: "66",
-    pinterestMaxResults: Math.max(1, Math.min(DEFAULT_ADS, MAX_ADS, 1000)),
-    snapchatMaxItems: Math.max(10, Math.min(Math.min(DEFAULT_ADS, 300), MAX_ADS, 10000)),
+    pinterestMaxResults: Math.max(1, Math.min(REFRESH_ADS, MAX_ADS, 1000)),
+    snapchatMaxItems: Math.max(10, Math.min(Math.min(REFRESH_ADS, 300), MAX_ADS, 10000)),
     snapchatCountry: "",
     tiktokRegion: normalizeTikTokAdsRegion(undefined),
     googleRegion: normalizeGoogleAdsRegion(undefined),
-    googleResultsLimit: normalizeGoogleAdsResultsLimit(GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT),
+    googleResultsLimit: normalizeGoogleAdsResultsLimit(REFRESH_ADS),
     pinterestCountry: normalizePinterestAdsCountry(undefined),
     googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
   };

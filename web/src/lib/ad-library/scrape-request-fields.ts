@@ -1,6 +1,7 @@
 import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+  getInitialAdsCount,
 } from "./constants";
 /**
  * Extra POST `/api/ads/library` fields for per-platform Apify actors.
@@ -65,6 +66,18 @@ function yMinusOneYearIso(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
   return d.toISOString().slice(0, 10);
+}
+
+/** Override max-ad fields for the first discovery scrape; keeps region/date/sort settings. */
+export function applyInitialScrapeLimits(fields: ScrapeRequestFields): ScrapeRequestFields {
+  return {
+    ...fields,
+    metaMaxAds: getInitialAdsCount("meta"),
+    linkedinMaxAds: getInitialAdsCount("linkedin"),
+    tiktokMaxAds: getInitialAdsCount("tiktok"),
+    pinterestMaxResults: getInitialAdsCount("pinterest"),
+    snapchatMaxItems: getInitialAdsCount("snapchat"),
+  };
 }
 
 export function defaultScrapeRequestFields(): ScrapeRequestFields {

@@ -1,0 +1,162 @@
+import type { InitialScrapePlatform } from "./constants";
+import {
+  CLASSIFICATION_REVIEW_INTERVAL_DAYS,
+  HIGH_COVERAGE_ACTIVE_THRESHOLD,
+  HIGH_COVERAGE_MIN_PLATFORMS,
+  INACTIVE_PROBE_ADS_PER_PLATFORM,
+  INACTIVE_PROBE_INTERVAL_DAYS,
+  MINIMAL_REFRESH_INTERVAL_DAYS,
+  PRIMARY_SECONDARY_REFRESH_INTERVAL_DAYS,
+  REFRESH_ADS_PER_PLATFORM,
+} from "./constants";
+import type { ActiveAdCounts } from "./count-active-ads";
+import { ALL_ADS_API_PLATFORMS } from "./channels-to-platforms";
+
+export type PlatformClassification = "PRIMARY" | "SECONDARY" | "MINIMAL" | "INACTIVE";
+
+export type PlatformTrackingResult = {
+  platform: InitialScrapePlatform;
+  activeAdCount: number;
+  classification: PlatformClassification;
+  highCoverageDemoted: boolean;
+};
+
+export type ComputePlatformTrackingResult = {
+  platforms: PlatformTrackingResult[];
+  highCoverageApplied: boolean;
+};
+
+export function classifyByActiveCount(activeCount: number): PlatformClassification {
+  if (activeCount === 0) return "INACTIVE";
+  if (activeCount <= 9) return "MINIMAL";
+  if (activeCount <= 49) return "SECONDARY";
+  return "PRIMARY";
+}
+
+export function refreshIntervalDaysForClassification(
+  platform: InitialScrapePlatform,
+  classification: PlatformClassification
+): number {
+  if (classification === "INACTIVE") return INACTIVE_PROBE_INTERVAL_DAYS;
+  const table =
+    classification === "MINIMAL"
+      ? MINIMAL_REFRESH_INTERVAL_DAYS
+      : PRIMARY_SECONDARY_REFRESH_INTERVAL_DAYS;
+  return table[platform];
+}
+
+export function computeNextScrapeAt(
+  platform: InitialScrapePlatform,
+  classification: PlatformClassification,
+  fromMs = Date.now()
+): string {
+  const days = refreshIntervalDaysForClassification(platform, classification);
+  return new Date(fromMs + days * 86_400_000).toISOString();
+}
+
+function normalizeActiveCounts(counts: ActiveAdCounts): Record<InitialScrapePlatform, number> {
+  const out = {} as Record<InitialScrapePlatform, number>;
+  for (const p of ALL_ADS_API_PLATFORMS) {
+    if (p === "microsoft") continue;
+    out[p] = counts[p] ?? 0;
+  }
+  return out;
+}
+
+/**
+ * Classify each platform and apply high-coverage top-3 override when ≥5 platforms have 30+ active ads.
+ */
+export function computePlatformTracking(
+  activeCounts: ActiveAdCounts,
+  opts?: { highCoverageOverride?: boolean }
+): ComputePlatformTrackingResult {
+  const applyOverride = opts?.highCoverageOverride !== false;
+  const normalized = normalizeActiveCounts(activeCounts);
+
+  const preliminary: PlatformTrackingResult[] = (Object.keys(normalized) as InitialScrapePlatform[]).map(
+    (platform) => {
+      const activeAdCount = normalized[platform];
+      return {
+        platform,
+        activeAdCount,
+        classification: classifyByActiveCount(activeAdCount),
+        highCoverageDemoted: false,
+      };
+    }
+  );
+
+  const highCoveragePlatforms = preliminary.filter(
+    (p) => p.activeAdCount >= HIGH_COVERAGE_ACTIVE_THRESHOLD
+  );
+
+  if (!applyOverride || highCoveragePlatforms.length < HIGH_COVERAGE_MIN_PLATFORMS) {
+    return { platforms: preliminary, highCoverageApplied: false };
+  }
+
+  const top3 = new Set(
+    [...highCoveragePlatforms]
+      .sort((a, b) => b.activeAdCount - a.activeAdCount)
+      .slice(0, 3)
+      .map((p) => p.platform)
+  );
+
+  const platforms = preliminary.map((p) => {
+    if (top3.has(p.platform)) return p;
+    return {
+      ...p,
+      classification: "INACTIVE" as const,
+      highCoverageDemoted: true,
+    };
+  });
+
+  return { platforms, highCoverageApplied: true };
+}
+
+export function isClassificationReviewDue(
+  lastReviewAt: string | null | undefined,
+  nowMs = Date.now()
+): boolean {
+  if (!lastReviewAt?.trim()) return true;
+  const t = Date.parse(lastReviewAt);
+  if (Number.isNaN(t)) return true;
+  return nowMs - t >= CLASSIFICATION_REVIEW_INTERVAL_DAYS * 86_400_000;
+}
+
+/** Re-evaluate classification from fresh active counts (30-day review rules use same thresholds). */
+export function reclassifyPlatform(
+  _previous: PlatformClassification,
+  activeAdCount: number
+): PlatformClassification {
+  return classifyByActiveCount(activeAdCount);
+}
+
+export function scrapeLimitForClassification(
+  classification: PlatformClassification,
+  opts?: { isInactiveProbe?: boolean }
+): number {
+  if (classification === "INACTIVE" || opts?.isInactiveProbe) {
+    return INACTIVE_PROBE_ADS_PER_PLATFORM;
+  }
+  return REFRESH_ADS_PER_PLATFORM;
+}
+
+export function platformsDueForScrape(
+  rows: {
+    platform: string;
+    classification: PlatformClassification;
+    next_scrape_at: string | null;
+  }[],
+  nowMs = Date.now()
+): InitialScrapePlatform[] {
+  const due: InitialScrapePlatform[] = [];
+  for (const row of rows) {
+    const pl = row.platform as InitialScrapePlatform;
+    if (!row.next_scrape_at) {
+      due.push(pl);
+      continue;
+    }
+    const t = Date.parse(row.next_scrape_at);
+    if (Number.isNaN(t) || t <= nowMs) due.push(pl);
+  }
+  return due;
+}

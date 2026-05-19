@@ -32,7 +32,7 @@ import {
   type AdsLibraryPlatform,
   type AdsLibraryResponse,
 } from "@/lib/ad-library/api-types";
-import { GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT } from "@/lib/ad-library/constants";
+import { getInitialAdsCount } from "@/lib/ad-library/constants";
 import {
   collectAdsLibraryWarmupUrls,
   preloadAdsLibraryWarmupUrls,
@@ -48,7 +48,10 @@ import {
   type AdLibraryRegionPrefs,
 } from "@/lib/ad-library/ad-library-region-prefs";
 import { inferAdLibraryRegionDefaults } from "@/lib/ad-library/infer-ad-library-regions-from-domain";
-import { readScrapeRequestFieldsFromStorage } from "@/lib/ad-library/scrape-request-fields";
+import {
+  applyInitialScrapeLimits,
+  readScrapeRequestFieldsFromStorage,
+} from "@/lib/ad-library/scrape-request-fields";
 import { markPendingStrategyRefresh } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import {
   searchingFlowStorageKey,
@@ -461,10 +464,10 @@ function SearchingContent() {
       mergedAdsScanRef.current = null;
 
       writeAdLibraryRegionPrefsToSession(adLibraryRegions);
-      const scrape = readScrapeRequestFieldsFromStorage();
+      const scrape = applyInitialScrapeLimits(readScrapeRequestFieldsFromStorage());
       const tiktokRegion = normalizeTikTokAdsRegion(adLibraryRegions.tiktokRegion);
       const googleRegion = normalizeGoogleAdsRegion(adLibraryRegions.googleRegion);
-      const googleResultsLimit = GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT;
+      const googleResultsLimit = getInitialAdsCount("google");
       const pinterestCountry = normalizePinterestAdsCountry(adLibraryRegions.pinterestCountry);
 
       const payload = {
@@ -555,6 +558,15 @@ function SearchingContent() {
 
         if (allHttpOk) {
           markPendingStrategyRefresh(payload.brand.domain);
+          try {
+            await fetch("/api/competitor/platform-tracking/classify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ domain: payload.brand.domain }),
+            });
+          } catch {
+            /* Classification must not block navigation */
+          }
         }
 
         try {

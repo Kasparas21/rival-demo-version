@@ -2194,6 +2194,45 @@ function CompetitorDashboardBody({
 
   const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
 
+  const showPlatformClassificationDebug =
+    process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
+
+  const [platformTrackingByPlatform, setPlatformTrackingByPlatform] = useState<
+    Record<string, { classification: string; activeAdCount: number }>
+  >({});
+
+  useEffect(() => {
+    if (!showPlatformClassificationDebug || !competitorDbIdForSaved) {
+      setPlatformTrackingByPlatform({});
+      return;
+    }
+    let cancelled = false;
+    void fetch(
+      `/api/competitor/platform-tracking?competitorId=${encodeURIComponent(competitorDbIdForSaved)}`
+    )
+      .then((r) => r.json())
+      .then((j: {
+        ok?: boolean;
+        platforms?: { platform: string; classification: string; activeAdCount: number }[];
+      }) => {
+        if (cancelled || !j?.ok || !Array.isArray(j.platforms)) return;
+        const map: Record<string, { classification: string; activeAdCount: number }> = {};
+        for (const p of j.platforms) {
+          map[p.platform] = {
+            classification: p.classification,
+            activeAdCount: p.activeAdCount,
+          };
+        }
+        setPlatformTrackingByPlatform(map);
+      })
+      .catch(() => {
+        /* debug-only */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showPlatformClassificationDebug, competitorDbIdForSaved]);
+
   const adsLibraryShowsCreativesOnScreen = useMemo(
     () =>
       !adLibLoading &&
@@ -2954,6 +2993,9 @@ function CompetitorDashboardBody({
                     >
                       {ADS_LIBRARY_PLATFORM_FILTER_CONFIG.filter((c) => adsPlatforms.includes(c.id)).map(({ id, label, title, Icon }) => {
                         const on = effectiveVisibleAdPlatforms.includes(id);
+                        const trackingChip = showPlatformClassificationDebug
+                          ? platformTrackingByPlatform[id]
+                          : undefined;
                         return (
                           <button
                             key={id}
@@ -2996,6 +3038,18 @@ function CompetitorDashboardBody({
                               >
                                 {label}
                               </span>
+                              {trackingChip ? (
+                                <span
+                                  className="mt-0.5 block max-w-full truncate text-center font-mono text-[9px] font-medium leading-tight text-amber-800"
+                                  title={`${trackingChip.classification} · ${trackingChip.activeAdCount} active`}
+                                >
+                                  {trackingChip.classification} · {trackingChip.activeAdCount}
+                                </span>
+                              ) : showPlatformClassificationDebug ? (
+                                <span className="mt-0.5 block text-center font-mono text-[9px] text-amber-800/50">
+                                  —
+                                </span>
+                              ) : null}
                             </span>
                           </button>
                         );

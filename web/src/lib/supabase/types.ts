@@ -146,6 +146,7 @@ export type Database = {
           ads_library_context?: Json | null;
           is_followed: boolean;
           followed_at: string | null;
+          platform_high_coverage_applied: boolean;
         };
         Insert: {
           id?: string;
@@ -165,6 +166,7 @@ export type Database = {
           ads_library_context?: Json | null;
           is_followed?: boolean;
           followed_at?: string | null;
+          platform_high_coverage_applied?: boolean;
         };
         Update: {
           id?: string;
@@ -184,6 +186,52 @@ export type Database = {
           ads_library_context?: Json | null;
           is_followed?: boolean;
           followed_at?: string | null;
+          platform_high_coverage_applied?: boolean;
+        };
+        Relationships: [];
+      };
+      competitor_platform_tracking: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          platform: string;
+          classification: string;
+          active_ad_count: number;
+          high_coverage_demoted: boolean;
+          classified_at: string;
+          last_classification_review_at: string;
+          next_scrape_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          platform: string;
+          classification: string;
+          active_ad_count?: number;
+          high_coverage_demoted?: boolean;
+          classified_at?: string;
+          last_classification_review_at?: string;
+          next_scrape_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          platform?: string;
+          classification?: string;
+          active_ad_count?: number;
+          high_coverage_demoted?: boolean;
+          classified_at?: string;
+          last_classification_review_at?: string;
+          next_scrape_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
