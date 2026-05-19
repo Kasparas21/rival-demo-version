@@ -25,6 +25,36 @@ const PRICING: Record<string, { input: number; output: number }> = {
 
 let cachedClient: Anthropic | null = null;
 
+function anthropicErrorStatus(err: unknown): number | null {
+  if (typeof err !== "object" || err === null || !("status" in err)) return null;
+  const status = (err as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
+}
+
+function logAnthropicAuthFailure(err: unknown): void {
+  const status = anthropicErrorStatus(err);
+  const message = err instanceof Error ? err.message : String(err);
+  const isAuthFailure =
+    status === 401 ||
+    status === 403 ||
+    /authentication_error|invalid x-api-key/i.test(message);
+
+  if (!isAuthFailure) return;
+
+  const key = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
+  console.error(
+    "[anthropic-auth-failure]",
+    JSON.stringify({
+      type: "auth_error",
+      status: status ?? null,
+      message,
+      timestamp: new Date().toISOString(),
+      key_length: key.length,
+      key_prefix: key.slice(0, 12) || "missing",
+    })
+  );
+}
+
 function getClient(): Anthropic | null {
   if (cachedClient) return cachedClient;
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
@@ -93,12 +123,14 @@ async function callAnthropic(params: {
         const response = await client.messages.create(createParams);
         return messageFromResponse(params.model, response);
       } catch (retryErr) {
+        logAnthropicAuthFailure(retryErr);
         return {
           ok: false,
           error: retryErr instanceof Error ? retryErr.message : "Retry failed",
         };
       }
     }
+    logAnthropicAuthFailure(err);
     const msg = err instanceof Error ? err.message : "Anthropic request failed";
     return { ok: false, error: msg };
   }
