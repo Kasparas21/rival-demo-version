@@ -63,7 +63,7 @@ import {
   canonicalMetaAdsLibraryUrl,
 } from "@/lib/ad-library/canonical-library-url";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
-import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
+import { resolveAdsPlatformsForCompetitorView } from "@/lib/ad-library/channels-to-platforms";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import {
   extractYouTubeVideoId,
@@ -1864,13 +1864,11 @@ function CompetitorDashboardBody({
     return setupGlobalCacheInvalidator();
   }, []);
 
-  /** Apify-backed platforms to fetch — from resolver `channels` (discovery / sidebar); omit = all API-backed platforms */
-  const adsPlatforms: AdsLibraryPlatform[] = useMemo(() => {
-    if (!channelsFromResolver.trim()) {
-      return ALL_ADS_API_PLATFORMS;
-    }
-    return channelsQueryToAdsPlatforms(channelsFromResolver.split(","));
-  }, [channelsFromResolver]);
+  /** Platforms to hydrate from `ads_cache` — from saved channels, else identifiers, never blind “all six” scrape. */
+  const adsPlatforms: AdsLibraryPlatform[] = useMemo(
+    () => resolveAdsPlatformsForCompetitorView(channelsFromResolver, platformIds),
+    [channelsFromResolver, platformIds]
+  );
 
   /** Page/API “brand name” can be the logged-in display name (e.g. Admin); prefer domain-derived label for UI + ad matching copy. */
   const competitorDisplayLabel = useMemo(

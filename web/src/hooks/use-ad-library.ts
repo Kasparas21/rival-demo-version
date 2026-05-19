@@ -27,10 +27,7 @@ import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions
 import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
 import { readGoogleAdDetailsPublicFlag } from "@/lib/ad-library/public-env-flags";
-import {
-  clearFreshDiscoveryScan,
-  shouldUseAdsLibraryCacheOnly,
-} from "@/lib/ad-library/discovery-scan-guard";
+import { clearFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   markPendingStrategyRefresh,
@@ -218,8 +215,8 @@ export function useAdLibrary(
           body.platforms = [...platforms].sort();
         }
         const forceFresh = opts?.skipCache === true;
-        const cacheOnly =
-          !forceFresh && shouldUseAdsLibraryCacheOnly(brand.domain);
+        /** Opening a competitor page must never trigger Apify — only `skipCache: true` (manual refresh / discovery). */
+        const cacheOnly = !forceFresh;
         let { response: json, httpOk } = await fetchAdsLibraryDeduplicated(body, {
           skipCache: forceFresh,
           cacheOnly,

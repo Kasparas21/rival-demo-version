@@ -368,7 +368,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
-  if (cacheOnly) {
+  if (cacheOnly || !skipCache) {
+    /** Hydration reads `ads_cache` only; Apify runs require explicit `skipCache: true`. */
     platformsNeedingScrape = new Set();
   }
 

@@ -37,3 +37,45 @@ export function channelsQueryToAdsPlatforms(channelIds: string[]): AdsLibraryPla
   }
   return ALL_ADS_API_PLATFORMS.filter((p) => set.has(p));
 }
+
+function platformHasFilledId(platform: AdsLibraryPlatform, ids: Record<string, string>): boolean {
+  const pick = (key: string) => {
+    const v = ids[key];
+    return typeof v === "string" && v.trim().length > 0;
+  };
+  switch (platform) {
+    case "meta":
+      return pick("meta") || pick("metaPageUrl");
+    case "google":
+      return pick("google");
+    case "linkedin":
+      return pick("linkedin");
+    case "tiktok":
+      return pick("tiktok");
+    case "pinterest":
+      return pick("pinterest") || pick("pinterestAdvertiserName");
+    case "snapchat":
+      return pick("snapchat");
+    default:
+      return false;
+  }
+}
+
+/**
+ * Platforms to load on the competitor dashboard — never defaults to “all six” when selection is unknown
+ * (that caused cache-miss Apify runs for LinkedIn, Pinterest, etc. after revisiting on another device).
+ */
+export function resolveAdsPlatformsForCompetitorView(
+  channelsCsv: string,
+  ids: Record<string, string> | null | undefined
+): AdsLibraryPlatform[] {
+  const trimmed = channelsCsv.trim();
+  if (trimmed) {
+    return channelsQueryToAdsPlatforms(trimmed.split(","));
+  }
+  if (ids && Object.keys(ids).length > 0) {
+    const fromIds = ALL_ADS_API_PLATFORMS.filter((p) => platformHasFilledId(p, ids));
+    if (fromIds.length > 0) return fromIds;
+  }
+  return ALL_ADS_API_PLATFORMS;
+}
