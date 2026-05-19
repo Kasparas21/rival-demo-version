@@ -32,7 +32,14 @@ function SetupError({ message }: { message: string }) {
   );
 }
 
-export default async function CheckoutPage() {
+type CheckoutPageProps = {
+  searchParams: Promise<{ plan?: string }>;
+};
+
+export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
+  const { plan } = await searchParams;
+  const planQuery =
+    plan === "starter" || plan === "pro" ? `?plan=${plan}` : "";
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {
     supabase = await createSupabaseServerClient();
@@ -45,7 +52,7 @@ export default async function CheckoutPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login?next=/api/billing/checkout");
+    redirect(`/login?next=${encodeURIComponent(`/api/billing/checkout${planQuery}`)}`);
   }
 
   const billing = await getBillingEntitlement(supabase, user.id);
@@ -53,5 +60,5 @@ export default async function CheckoutPage() {
     redirect("/dashboard/spy");
   }
 
-  redirect("/api/billing/checkout");
+  redirect(`/api/billing/checkout${planQuery}`);
 }

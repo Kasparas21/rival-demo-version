@@ -14,11 +14,17 @@ import { runAdsLibraryParallelScrape } from "@/lib/ad-library/run-ads-library-pa
 import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import {
-  platformsDueForScrape,
+  platformsEligibleForScheduledScrape,
   type PlatformClassification,
 } from "@/lib/ad-library/platform-prioritization";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { refreshPlatformTrackingAfterScrape } from "@/lib/ad-library/persist-platform-tracking";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
+import {
+  computeScheduledScrapeDateWindow,
+  linkedinDateRangeForWindow,
+  msToUtcYmd,
+} from "@/lib/ad-library/scheduled-scrape-date-window";
 import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-options";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
@@ -32,21 +38,6 @@ export const maxDuration = 300;
 
 function cleanDomain(d: string): string {
   return d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || d;
-}
-
-/** Previous ISO week Monday–Sunday in UTC (`YYYY-MM-DD`). */
-function previousWeekMondaySundayUtc(reference = new Date()): { weekStart: string; weekEnd: string } {
-  const d = new Date(Date.UTC(reference.getUTCFullYear(), reference.getUTCMonth(), reference.getUTCDate()));
-  const dow = d.getUTCDay();
-  const mondayOffset = dow === 0 ? -6 : 1 - dow;
-  const thisMonday = new Date(d);
-  thisMonday.setUTCDate(d.getUTCDate() + mondayOffset);
-  const prevMonday = new Date(thisMonday);
-  prevMonday.setUTCDate(thisMonday.getUTCDate() - 7);
-  const prevSunday = new Date(prevMonday);
-  prevSunday.setUTCDate(prevMonday.getUTCDate() + 6);
-  const iso = (x: Date) => x.toISOString().slice(0, 10);
-  return { weekStart: iso(prevMonday), weekEnd: iso(prevSunday) };
 }
 
 function platformsFromSavedContext(
@@ -81,50 +72,39 @@ function idsFromAdsContext(
 
 type FollowedSavedRow = Database["public"]["Tables"]["saved_competitors"]["Row"];
 
-function mergeScheduledLimits(
-  platforms: InitialScrapePlatform[],
-  classificationByPlatform: Map<string, PlatformClassification>
-) {
-  let metaMaxAds = 0;
-  let googleResultsLimit = 0;
-  let linkedinMaxAds = 0;
-  let tiktokMaxAds = 0;
-  let pinterestMaxResults = 0;
-  let snapchatMaxItems = 10;
-  let anyInactiveProbe = false;
+function isWithinRefreshWindowUtc(now = new Date()): boolean {
+  const hour = now.getUTCHours();
+  return hour >= 4 && hour < 7;
+}
 
-  for (const p of platforms) {
-    const classification = classificationByPlatform.get(p) ?? "SECONDARY";
-    const lim = buildScheduledScrapeLimits(classification, {
-      isInactiveProbe: classification === "INACTIVE",
-    });
-    metaMaxAds = Math.max(metaMaxAds, lim.metaMaxAds);
-    googleResultsLimit = Math.max(googleResultsLimit, lim.googleResultsLimit);
-    linkedinMaxAds = Math.max(linkedinMaxAds, lim.linkedinMaxAds);
-    tiktokMaxAds = Math.max(tiktokMaxAds, lim.tiktokMaxAds);
-    pinterestMaxResults = Math.max(pinterestMaxResults, lim.pinterestMaxResults);
-    snapchatMaxItems = Math.max(snapchatMaxItems, lim.snapchatMaxItems);
-    if (lim.isInactiveProbe) anyInactiveProbe = true;
-  }
+function isMondayUtc(now = new Date()): boolean {
+  return now.getUTCDay() === 1;
+}
 
-  return {
-    metaMaxAds: metaMaxAds || 100,
-    googleResultsLimit: googleResultsLimit || 100,
-    linkedinMaxAds: linkedinMaxAds || 100,
-    tiktokMaxAds: tiktokMaxAds || 100,
-    pinterestMaxResults: pinterestMaxResults || 100,
-    snapchatMaxItems,
-    anyInactiveProbe,
-  };
+async function userAllowsAutoRefresh(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+): Promise<boolean> {
+  const billing = await getBillingEntitlement(admin, userId);
+  if (billing.planTier === "free_trial") return false;
+  return billing.limits.allowAutoRefresh || billing.isUnlimited;
 }
 
 async function runWeeklyJobForRow(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   row: FollowedSavedRow,
-  weekStart: string,
-  weekEnd: string
+  runDayYmd: string
 ): Promise<{ skipped: boolean }> {
+  if (row.is_workspace_brand && !isMondayUtc()) {
+    return { skipped: true };
+  }
+
+  if (!(await userAllowsAutoRefresh(admin, row.user_id))) {
+    return { skipped: true };
+  }
+
   const nowStamp = new Date().toISOString();
+  const nowMs = Date.parse(nowStamp);
   let jobRowId: string | null = null;
 
   try {
@@ -133,7 +113,7 @@ async function runWeeklyJobForRow(
       .insert({
         user_id: row.user_id,
         competitor_id: row.id,
-        week_start: weekStart,
+        week_start: runDayYmd,
         status: "running",
         updated_at: nowStamp,
       })
@@ -151,9 +131,17 @@ async function runWeeklyJobForRow(
       (p): p is InitialScrapePlatform => p !== "microsoft"
     );
 
+    const { data: competitorAnchor } = await admin
+      .from("saved_competitors")
+      .select("first_scrape_completed_at")
+      .eq("id", row.id)
+      .maybeSingle();
+
+    const firstScrapeAt = competitorAnchor?.first_scrape_completed_at ?? null;
+
     let { data: trackingRows } = await admin
       .from("competitor_platform_tracking")
-      .select("platform, classification, next_scrape_at")
+      .select("platform, classification, next_scrape_at, last_scrape_at, high_coverage_demoted")
       .eq("competitor_id", row.id);
 
     if (!trackingRows?.length) {
@@ -167,7 +155,7 @@ async function runWeeklyJobForRow(
       }
       const reload = await admin
         .from("competitor_platform_tracking")
-        .select("platform, classification, next_scrape_at")
+        .select("platform, classification, next_scrape_at, last_scrape_at, high_coverage_demoted")
         .eq("competitor_id", row.id);
       trackingRows = reload.data ?? [];
     }
@@ -176,12 +164,16 @@ async function runWeeklyJobForRow(
       configuredInitial.includes(r.platform as InitialScrapePlatform)
     );
 
-    const duePlatforms = platformsDueForScrape(
+    const spDisabled = row.smart_prioritization_disabled === true;
+    const duePlatforms = platformsEligibleForScheduledScrape(
       trackingForConfigured.map((r) => ({
         platform: r.platform,
         classification: r.classification as PlatformClassification,
         next_scrape_at: r.next_scrape_at,
-      }))
+        high_coverage_demoted: r.high_coverage_demoted,
+      })),
+      spDisabled,
+      nowMs,
     );
     const platformsToScrape =
       duePlatforms.length > 0
@@ -204,15 +196,16 @@ async function runWeeklyJobForRow(
       trackingForConfigured.map((r) => [r.platform, r.classification as PlatformClassification])
     );
 
-    const limits = mergeScheduledLimits(platformsToScrape, classificationByPlatform);
-    const linkedinDateRange = limits.anyInactiveProbe ? "past-month" : "past-week";
+    const lastScrapeByPlatform = new Map(
+      trackingForConfigured.map((r) => [r.platform as InitialScrapePlatform, r.last_scrape_at])
+    );
 
     const { data: batchRow, error: batchErr } = await admin
       .from("scrape_batches")
       .insert({
         user_id: row.user_id,
         competitor_id: row.id,
-        label: `Scheduled ${weekStart}`,
+        label: `Scheduled ${runDayYmd}`,
       })
       .select("id")
       .single();
@@ -237,23 +230,18 @@ async function runWeeklyJobForRow(
     const linkedinKeywordFallback = domainNorm ? hostToBrandLabel(domainNorm) : undefined;
     const ids = idsFromAdsContext(row.ads_library_context);
     const platformsRequested = new Set(configuredPlatforms);
-    const platformsNeedingScrape = new Set<AdsLibraryPlatform>(platformsToScrape);
 
-    let pinterestAdvertiserNameForApify = "";
-    let pinterestConfirmedAdvertiserQuery: string | undefined;
-    if (platformsNeedingScrape.has("pinterest")) {
-      const fromPinterestIds =
-        extractPinterestHandleFromUrlOrString(ids.pinterest ?? "") ||
-        extractPinterestHandleFromUrlOrString(ids.pinterestAdvertiserName ?? "") ||
-        "";
-      if (fromPinterestIds.trim()) {
-        pinterestConfirmedAdvertiserQuery = fromPinterestIds.trim();
-      }
-      pinterestAdvertiserNameForApify =
-        fromPinterestIds.trim() || extractPinterestHandleFromUrlOrString(brandName);
-      if (!pinterestAdvertiserNameForApify.trim()) {
-        pinterestAdvertiserNameForApify = brandName;
-      }
+    const fromPinterestIds =
+      extractPinterestHandleFromUrlOrString(ids.pinterest ?? "") ||
+      extractPinterestHandleFromUrlOrString(ids.pinterestAdvertiserName ?? "") ||
+      "";
+    const pinterestConfirmedAdvertiserQuery = fromPinterestIds.trim()
+      ? fromPinterestIds.trim()
+      : undefined;
+    let pinterestAdvertiserNameForApify =
+      fromPinterestIds.trim() || extractPinterestHandleFromUrlOrString(brandName);
+    if (!pinterestAdvertiserNameForApify.trim()) {
+      pinterestAdvertiserNameForApify = brandName;
     }
 
     const snapchatConfirmedAdvertiserQuery =
@@ -280,53 +268,67 @@ async function runWeeklyJobForRow(
     const metaCountry = "US";
     const metaSortBy = "impressions_desc";
     const linkedinCountryCode = "";
-    const microsoftMaxSearchResults = Math.max(24, limits.metaMaxAds, 1000);
     const microsoftCountryCodes = microsoftMarketCodeToArray("66");
     const snapchatCountryIso = "";
     const tiktokRegion = normalizeTikTokAdsRegion(undefined);
     const googleRegion = normalizeGoogleAdsRegion(undefined);
-    const googleResultsLimit = normalizeGoogleAdsResultsLimit(limits.googleResultsLimit);
     const pinterestCountry = normalizePinterestAdsCountry(undefined);
 
-    await runAdsLibraryParallelScrape({
-      ids,
-      brandName,
-      domain: domainNormLower,
-      linkedinKeywordFallback,
-      pinterestAdvertiserNameForApify,
-      platformsRequested,
-      platformsNeedingScrape,
-      out,
-      metaStatus,
-      metaMaxAds: limits.metaMaxAds,
-      metaCountry,
-      metaStartDate: weekStart,
-      metaEndDate: weekEnd,
-      metaSortBy,
-      linkedinMaxAds: limits.linkedinMaxAds,
-      linkedinDateRange,
-      linkedinCountryCode,
-      tiktokMaxAds: limits.tiktokMaxAds,
-      tiktokStartDate: weekStart,
-      tiktokEndDate: weekEnd,
-      microsoftMaxSearchResults,
-      microsoftCountryCodes,
-      microsoftStartDate: weekStart,
-      microsoftEndDate: weekEnd,
-      pinterestMaxResults: limits.pinterestMaxResults,
-      pinterestStartDate: weekStart,
-      pinterestEndDate: weekEnd,
-      snapchatMaxItems: limits.snapchatMaxItems,
-      snapchatCountryIso,
-      snapchatStartDate: weekStart,
-      snapchatEndDate: weekEnd,
-      tiktokRegion,
-      googleRegion,
-      googleResultsLimit,
-      pinterestCountry,
-      pinterestConfirmedAdvertiserQuery,
-      snapchatConfirmedAdvertiserQuery,
-    });
+    for (const platform of platformsToScrape) {
+      const classification = classificationByPlatform.get(platform) ?? "SECONDARY";
+      const isInactiveProbe = classification === "INACTIVE";
+      const lim = buildScheduledScrapeLimits(classification, { isInactiveProbe });
+      const lastScrapeAt =
+        lastScrapeByPlatform.get(platform) ?? firstScrapeAt ?? nowStamp;
+      const dateWindow = computeScheduledScrapeDateWindow(lastScrapeAt, nowMs);
+      const linkedinDateRange = linkedinDateRangeForWindow(dateWindow, {
+        inactiveProbe: isInactiveProbe,
+      });
+
+      const platformsNeedingScrape = new Set<AdsLibraryPlatform>([platform]);
+
+      await runAdsLibraryParallelScrape({
+        ids,
+        brandName,
+        domain: domainNormLower,
+        linkedinKeywordFallback,
+        pinterestAdvertiserNameForApify,
+        platformsRequested,
+        platformsNeedingScrape,
+        out,
+        metaStatus,
+        metaMaxAds: lim.metaMaxAds,
+        metaCountry,
+        metaStartDate: dateWindow.startYmd,
+        metaEndDate: dateWindow.endYmd,
+        metaSortBy,
+        linkedinMaxAds: lim.linkedinMaxAds,
+        linkedinDateRange,
+        linkedinCountryCode,
+        tiktokMaxAds: lim.tiktokMaxAds,
+        tiktokStartDate: dateWindow.startYmd,
+        tiktokEndDate: dateWindow.endYmd,
+        microsoftMaxSearchResults: Math.max(24, lim.metaMaxAds, 1000),
+        microsoftCountryCodes,
+        microsoftStartDate: dateWindow.startYmd,
+        microsoftEndDate: dateWindow.endYmd,
+        pinterestMaxResults: lim.pinterestMaxResults,
+        pinterestStartDate: dateWindow.startYmd,
+        pinterestEndDate: dateWindow.endYmd,
+        snapchatMaxItems: lim.snapchatMaxItems,
+        snapchatCountryIso,
+        snapchatStartDate: dateWindow.startYmd,
+        snapchatEndDate: dateWindow.endYmd,
+        tiktokRegion,
+        googleRegion,
+        googleResultsLimit: normalizeGoogleAdsResultsLimit(lim.googleResultsLimit),
+        pinterestCountry,
+        pinterestConfirmedAdvertiserQuery,
+        snapchatConfirmedAdvertiserQuery,
+      });
+    }
+
+    const platformsNeedingScrape = new Set<AdsLibraryPlatform>(platformsToScrape);
 
     await finalizeAdsLibraryAfterFreshScrape(admin, {
       userId: row.user_id,
@@ -397,6 +399,18 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
+  if (!isWithinRefreshWindowUtc()) {
+    return Response.json({
+      ok: true,
+      skipped: true,
+      reason: "outside_refresh_window",
+      message: "Scheduled refresh only runs 04:00–07:00 UTC",
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+    });
+  }
+
   if (!process.env.APIFY_TOKEN?.trim()) {
     return Response.json(
       { error: "APIFY_TOKEN is not configured", processed: 0, succeeded: 0, failed: 0, skipped: 0 },
@@ -405,7 +419,7 @@ export async function POST(req: Request) {
   }
 
   const admin = createSupabaseAdminClient();
-  const { weekStart, weekEnd } = previousWeekMondaySundayUtc(new Date());
+  const runDayYmd = msToUtcYmd(Date.now());
 
   const { data: followedRows, error: listErr } = await admin
     .from("saved_competitors")
@@ -432,7 +446,7 @@ export async function POST(req: Request) {
       chunk.map(async (row) => {
         processed += 1;
         try {
-          const result = await runWeeklyJobForRow(admin, row, weekStart, weekEnd);
+          const result = await runWeeklyJobForRow(admin, row, runDayYmd);
           if (result.skipped) skipped += 1;
           else succeeded += 1;
         } catch {

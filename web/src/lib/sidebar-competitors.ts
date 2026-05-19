@@ -315,7 +315,8 @@ function migrateV1IfNeeded(): SidebarCompetitor[] {
 }
 
 /** Max active watched competitors per user (server + local storage). */
-export const MAX_WATCHED_COMPETITORS = 10;
+/** UI fallback when plan limits are not loaded yet (Pro max per PDF). */
+export const MAX_WATCHED_COMPETITORS = 15;
 
 const MAX_STORED = MAX_WATCHED_COMPETITORS;
 

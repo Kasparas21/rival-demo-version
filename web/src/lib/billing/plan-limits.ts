@@ -1,0 +1,146 @@
+/** Subscription tier: free trial (one scrape) + paid Starter/Pro + admin. */
+export type PlanTier = "free_trial" | "starter" | "pro" | "admin";
+
+export type DevPlanOverride = PlanTier;
+
+export type PlanLimits = {
+  maxWatchedCompetitors: number;
+  /** Monthly ads processed via Apify (incremented in monthly_scrape_usage.ads_scraped). */
+  maxAdsProcessedPerMonth: number;
+  /** Lifetime cap on fresh Apify scrape runs (null = no lifetime cap). */
+  maxTotalScrapeOperations: number | null;
+  maxSwapsPerMonth: number;
+  csvExportsPerMonth: number;
+  csvMaxAdsPerExport: number;
+  /** Workspace-wide manual refresh cap per UTC month (Pro). */
+  manualRefreshPerMonth: number;
+  manualRefreshMinIntervalMs: number;
+  /** Ads per platform on manual force-rescrape (0 = not available). */
+  manualRefreshAdsPerPlatform: number;
+  canDisableSmartPrioritization: boolean;
+  allowCsvExport: boolean;
+  allowManualRefresh: boolean;
+  allowAutoRefresh: boolean;
+  /** null = unlimited */
+  maxAiStrategyOverviews: number | null;
+  initialScrapeAdsPerPlatform: number | null;
+};
+
+/** One competitor, one initial discovery scrape, then upgrade. */
+const FREE_TRIAL_LIMITS: PlanLimits = {
+  maxWatchedCompetitors: 1,
+  maxAdsProcessedPerMonth: 15_000,
+  maxTotalScrapeOperations: 1,
+  maxSwapsPerMonth: 0,
+  csvExportsPerMonth: 0,
+  csvMaxAdsPerExport: 0,
+  manualRefreshPerMonth: 0,
+  manualRefreshMinIntervalMs: 86_400_000,
+  manualRefreshAdsPerPlatform: 0,
+  canDisableSmartPrioritization: false,
+  allowCsvExport: false,
+  allowManualRefresh: false,
+  allowAutoRefresh: false,
+  maxAiStrategyOverviews: 1,
+  initialScrapeAdsPerPlatform: 200,
+};
+
+const STARTER_LIMITS: PlanLimits = {
+  maxWatchedCompetitors: 5,
+  maxAdsProcessedPerMonth: 50_000,
+  maxTotalScrapeOperations: null,
+  maxSwapsPerMonth: 15,
+  csvExportsPerMonth: 0,
+  csvMaxAdsPerExport: 0,
+  manualRefreshPerMonth: 0,
+  manualRefreshMinIntervalMs: 86_400_000,
+  manualRefreshAdsPerPlatform: 0,
+  canDisableSmartPrioritization: false,
+  allowCsvExport: false,
+  allowManualRefresh: false,
+  allowAutoRefresh: true,
+  maxAiStrategyOverviews: null,
+  initialScrapeAdsPerPlatform: null,
+};
+
+const PRO_LIMITS: PlanLimits = {
+  maxWatchedCompetitors: 15,
+  maxAdsProcessedPerMonth: 150_000,
+  maxTotalScrapeOperations: null,
+  maxSwapsPerMonth: 50,
+  csvExportsPerMonth: 20,
+  csvMaxAdsPerExport: 10_000,
+  manualRefreshPerMonth: 5,
+  manualRefreshMinIntervalMs: 86_400_000,
+  manualRefreshAdsPerPlatform: 300,
+  canDisableSmartPrioritization: true,
+  allowCsvExport: true,
+  allowManualRefresh: true,
+  allowAutoRefresh: true,
+  maxAiStrategyOverviews: null,
+  initialScrapeAdsPerPlatform: null,
+};
+
+const ADMIN_LIMITS: PlanLimits = {
+  maxWatchedCompetitors: 1_000_000,
+  maxAdsProcessedPerMonth: 1_000_000,
+  maxTotalScrapeOperations: null,
+  maxSwapsPerMonth: 1_000_000,
+  csvExportsPerMonth: 1_000_000,
+  csvMaxAdsPerExport: 1_000_000,
+  manualRefreshPerMonth: 1_000_000,
+  manualRefreshMinIntervalMs: 0,
+  manualRefreshAdsPerPlatform: 300,
+  canDisableSmartPrioritization: true,
+  allowCsvExport: true,
+  allowManualRefresh: true,
+  allowAutoRefresh: true,
+  maxAiStrategyOverviews: null,
+  initialScrapeAdsPerPlatform: null,
+};
+
+export const PLAN_LIMITS_BY_TIER: Record<PlanTier, PlanLimits> = {
+  free_trial: FREE_TRIAL_LIMITS,
+  starter: STARTER_LIMITS,
+  pro: PRO_LIMITS,
+  admin: ADMIN_LIMITS,
+};
+
+export const PLAN_DISPLAY_NAMES: Record<PlanTier, string> = {
+  free_trial: "Free trial",
+  starter: "Starter",
+  pro: "Pro",
+  admin: "Admin",
+};
+
+export function limitsForTier(tier: PlanTier): PlanLimits {
+  return PLAN_LIMITS_BY_TIER[tier];
+}
+
+export function isPaidTier(tier: PlanTier): boolean {
+  return tier === "starter" || tier === "pro";
+}
+
+export function tierHasProductAccess(tier: PlanTier): boolean {
+  return tier === "free_trial" || tier === "starter" || tier === "pro" || tier === "admin";
+}
+
+/** Map legacy dev overrides and DB values to current tiers. */
+export function normalizePlanTier(value: string | null | undefined): PlanTier | null {
+  if (!value?.trim()) return null;
+  const v = value.trim();
+  if (v === "free" || v === "trial") return "free_trial";
+  if (v === "free_trial" || v === "starter" || v === "pro" || v === "admin") return v;
+  return null;
+}
+
+/** @deprecated Use limitsForTier */
+export const BILLING_LIMITS = {
+  maxWatchedCompetitors: STARTER_LIMITS.maxWatchedCompetitors,
+  maxAdLibraryScrapeRunsPerMonth: STARTER_LIMITS.maxAdsProcessedPerMonth,
+} as const;
+
+export const ADMIN_BILLING_LIMITS = {
+  maxWatchedCompetitors: ADMIN_LIMITS.maxWatchedCompetitors,
+  maxAdLibraryScrapeRunsPerMonth: ADMIN_LIMITS.maxAdsProcessedPerMonth,
+} as const;

@@ -6,11 +6,16 @@ import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
+import { estimateAdsForPlatforms } from "@/lib/billing/estimate-scrape-ads";
+import { filterGoogleRowsActiveToday } from "@/lib/ad-library/google-active-today-filter";
 import {
   billingRequiredResponseBody,
+  featureNotAvailableResponseBody,
+  freeTrialScrapeUsedResponseBody,
   getBillingEntitlement,
   quotaExceededResponseBody,
 } from "@/lib/billing/entitlements";
+import { checkFreeTrialScrapeAllowedForUser } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
   normalizeGoogleAdsRegion,
@@ -164,6 +169,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     platforms?: AdsLibraryPlatform[];
     /** When true, skip server-side `ads_cache` and run Apify for all requested platforms. */
     skipCache?: boolean;
+    /** `discovery` (default) = onboarding/search; `manual` = Pro force-rescrape (gated). */
+    intent?: "discovery" | "manual";
+    /** When true with manual refresh, post-filter Google rows to ads active today (UTC). */
+    filterGoogleActiveToday?: boolean;
+    /** When true, only read `ads_cache` — never run Apify (used right after discovery scan). */
+    cacheOnly?: boolean;
     /** Channel picker ids — merged into `saved_competitors.ads_library_context`. */
     libraryChannels?: string[];
   };
@@ -192,18 +203,15 @@ export async function POST(req: Request): Promise<NextResponse> {
   const linkedinKeywordFallback = domain ? hostToBrandLabel(domain) : undefined;
   const ids: AdsLibraryIds = body.ids ?? {};
   const metaStatus = body.metaStatus === "ALL" ? "ALL" : "ACTIVE";
-  const metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_ADS, MAX_ADS));
+  let metaMaxAds = Math.max(1, Math.min(body.metaMaxAds ?? DEFAULT_ADS, MAX_ADS));
   const metaCountry = (body.metaCountry ?? "US").trim().toUpperCase() || "US";
   const metaStartDate = body.metaStartDate?.trim();
   const metaEndDate = body.metaEndDate?.trim();
   const metaSortBy = (body.metaSortBy ?? "impressions_desc").trim() || "impressions_desc";
-  const linkedinMaxAds = Math.max(
-    1,
-    Math.min(body.linkedinMaxAds ?? DEFAULT_ADS, MAX_ADS)
-  );
+  let linkedinMaxAds = Math.max(1, Math.min(body.linkedinMaxAds ?? DEFAULT_ADS, MAX_ADS));
   const linkedinDateRange = body.linkedinDateRange?.trim() || "past-year";
   const linkedinCountryCode = body.linkedinCountryCode?.trim() ?? "";
-  const tiktokMaxAds = Math.max(1, Math.min(body.tiktokMaxAds ?? DEFAULT_ADS, MAX_ADS));
+  let tiktokMaxAds = Math.max(1, Math.min(body.tiktokMaxAds ?? DEFAULT_ADS, MAX_ADS));
   const tiktokStartDate = body.tiktokStartDate?.trim();
   const tiktokEndDate = body.tiktokEndDate?.trim();
   const microsoftMaxSearchResults = Math.max(
@@ -213,24 +221,24 @@ export async function POST(req: Request): Promise<NextResponse> {
   const microsoftCountryCodes = microsoftMarketCodeToArray(body.microsoftCountryCode ?? "66");
   const microsoftStartDate = body.microsoftStartDate?.trim();
   const microsoftEndDate = body.microsoftEndDate?.trim();
-  const pinterestMaxResults = Math.max(
+  let pinterestMaxResults = Math.max(
     1,
-    Math.min(body.pinterestMaxResults ?? DEFAULT_ADS, MAX_ADS, 1000)
+    Math.min(body.pinterestMaxResults ?? DEFAULT_ADS, MAX_ADS, 1000),
   );
   const pinterestStartDate = body.pinterestStartDate?.trim();
   const pinterestEndDate = body.pinterestEndDate?.trim();
   const pinterestGender = body.pinterestGender?.trim();
   const pinterestAge = body.pinterestAge?.trim();
-  const snapchatMaxItems = Math.max(
+  let snapchatMaxItems = Math.max(
     10,
-    Math.min(body.snapchatMaxItems ?? Math.min(DEFAULT_ADS, 300), MAX_ADS, 10000)
+    Math.min(body.snapchatMaxItems ?? Math.min(DEFAULT_ADS, 300), MAX_ADS, 10000),
   );
   const snapchatCountryIso = body.snapchatCountry?.trim().toUpperCase() ?? "";
   const snapchatStartDate = body.snapchatStartDate?.trim();
   const snapchatEndDate = body.snapchatEndDate?.trim();
   const tiktokRegion = normalizeTikTokAdsRegion(body.tiktokRegion);
   const googleRegion = normalizeGoogleAdsRegion(body.googleRegion);
-  const googleResultsLimit = normalizeGoogleAdsResultsLimit(body.googleResultsLimit);
+  let googleResultsLimit = normalizeGoogleAdsResultsLimit(body.googleResultsLimit);
   const pinterestCountry = normalizePinterestAdsCountry(body.pinterestCountry);
   const platformsRequested = new Set<AdsLibraryPlatform>();
   if (Array.isArray(body.platforms)) {
@@ -308,6 +316,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   } = await supabase.auth.getUser();
   const userId = user?.id ?? null;
   const skipCache = body.skipCache === true;
+  const scrapeIntent = body.intent === "manual" ? "manual" : "discovery";
+  const filterGoogleActiveToday = body.filterGoogleActiveToday === true;
+  const cacheOnly = body.cacheOnly === true;
   const domainNorm = domain.toLowerCase();
 
   let adsCacheDomain = domainNorm;
@@ -357,6 +368,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
+  if (cacheOnly) {
+    platformsNeedingScrape = new Set();
+  }
+
   if (platformsNeedingScrape.size > 0) {
     if (!userId) {
       return NextResponse.json(billingRequiredResponseBody("Sign in and start your subscription to run fresh ad-library searches."), {
@@ -367,26 +382,75 @@ export async function POST(req: Request): Promise<NextResponse> {
     const billing = await getBillingEntitlement(supabase, userId);
     if (!billing.hasAccess) {
       return NextResponse.json(
-        billingRequiredResponseBody("Start your subscription to run fresh ad-library searches."),
+        billingRequiredResponseBody("Upgrade to Starter or Pro to run fresh ad-library searches."),
         { status: 402 },
       );
+    }
+
+    if (
+      skipCache &&
+      scrapeIntent === "manual" &&
+      !billing.limits.allowManualRefresh &&
+      !billing.isUnlimited
+    ) {
+      return NextResponse.json(featureNotAvailableResponseBody("Manual refresh"), { status: 403 });
+    }
+
+    const requestedOps = [...platformsNeedingScrape].filter(isCacheablePlatform).length;
+    const freeTrialCheck = await checkFreeTrialScrapeAllowedForUser(
+      supabase,
+      userId,
+      billing,
+      requestedOps,
+    );
+    if (!freeTrialCheck.ok) {
+      return NextResponse.json(freeTrialScrapeUsedResponseBody(), { status: freeTrialCheck.status });
+    }
+
+    const trialCap = billing.limits.initialScrapeAdsPerPlatform;
+    if (billing.planTier === "free_trial" && trialCap != null) {
+      metaMaxAds = Math.min(metaMaxAds, trialCap);
+      linkedinMaxAds = Math.min(linkedinMaxAds, trialCap);
+      tiktokMaxAds = Math.min(tiktokMaxAds, trialCap);
+      pinterestMaxResults = Math.min(pinterestMaxResults, trialCap);
+      snapchatMaxItems = Math.min(snapchatMaxItems, trialCap);
+      googleResultsLimit = Math.min(googleResultsLimit, trialCap);
     }
 
     const yearMonthUtc = new Date().toISOString().slice(0, 7);
     const { data: monthUsage } = await supabase
       .from("monthly_scrape_usage")
-      .select("scrape_operations")
+      .select("ads_scraped, scrape_operations")
       .eq("user_id", userId)
       .eq("year_month", yearMonthUtc)
       .maybeSingle();
-    const currentRuns = monthUsage?.scrape_operations ?? 0;
-    const requestedRuns = [...platformsNeedingScrape].filter(isCacheablePlatform).length;
+    const currentAds = monthUsage?.ads_scraped ?? 0;
+    const perPlatformCaps: Partial<Record<AdsLibraryPlatform, number>> = {
+      meta: metaMaxAds,
+      google: googleResultsLimit,
+      linkedin: linkedinMaxAds,
+      tiktok: tiktokMaxAds,
+      pinterest: pinterestMaxResults,
+      snapchat: snapchatMaxItems,
+      microsoft: microsoftMaxSearchResults,
+    };
+    const requestedAds = estimateAdsForPlatforms(
+      [...platformsNeedingScrape].filter(isCacheablePlatform),
+      perPlatformCaps,
+    );
     if (
       !billing.isUnlimited &&
-      requestedRuns > 0 &&
-      currentRuns + requestedRuns > billing.limits.maxAdLibraryScrapeRunsPerMonth
+      requestedAds > 0 &&
+      currentAds + requestedAds > billing.limits.maxAdsProcessedPerMonth
     ) {
-      return NextResponse.json(quotaExceededResponseBody(currentRuns, requestedRuns), { status: 402 });
+      return NextResponse.json(
+        quotaExceededResponseBody({
+          used: currentAds,
+          requested: requestedAds,
+          limit: billing.limits.maxAdsProcessedPerMonth,
+        }),
+        { status: 402 },
+      );
     }
   }
 
@@ -462,6 +526,13 @@ export async function POST(req: Request): Promise<NextResponse> {
     pinterestConfirmedAdvertiserQuery,
     snapchatConfirmedAdvertiserQuery,
   });
+
+  if (filterGoogleActiveToday && out.google.rows.length > 0) {
+    out.google = {
+      ...out.google,
+      rows: filterGoogleRowsActiveToday(out.google.rows),
+    };
+  }
 
   if (userId) {
     await finalizeAdsLibraryAfterFreshScrape(supabase, {

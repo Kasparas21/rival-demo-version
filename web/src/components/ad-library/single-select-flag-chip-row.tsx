@@ -92,8 +92,8 @@ export function SingleSelectFlagChipRow({
 }
 
 /**
- * Collapsed by default: shows “Auto” until the user opens the picker; after that, the collapsed row
- * shows the selected region as a single chip. Use **Change** / **Edit** to open the scrollable list; **Done** closes it.
+ * Collapsed by default: always shows the currently selected region chip (never “Auto”).
+ * Use **Change** / **Edit** to open the scrollable list; **Done** closes it.
  */
 export function CollapsibleSingleSelectFlagChipRow({
   ariaLabel,
@@ -150,11 +150,9 @@ export function CollapsibleSingleSelectFlagChipRow({
       ) : (
         <div
           className={`${SCROLLER_SHELL_CLASS} items-center`}
-          aria-label={
-            everExpanded && summaryOpt ? `${ariaLabel} — ${summaryOpt.label}` : `${ariaLabel} — Auto`
-          }
+          aria-label={summaryOpt ? `${ariaLabel} — ${summaryOpt.label}` : ariaLabel}
         >
-          {everExpanded && summaryOpt ? (
+          {summaryOpt ? (
             <span
               className={`inline-flex shrink-0 items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${CHIP_BTN_CLASS.on}`}
             >
@@ -163,16 +161,7 @@ export function CollapsibleSingleSelectFlagChipRow({
               </span>
               {summaryOpt.shortTag}
             </span>
-          ) : (
-            <span
-              className={`inline-flex shrink-0 items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${CHIP_BTN_CLASS.on}`}
-            >
-              <span className="text-[0.85rem] leading-none" aria-hidden>
-                {chipLeadingEmoji(null)}
-              </span>
-              Auto
-            </span>
-          )}
+          ) : null}
         </div>
       )}
     </div>

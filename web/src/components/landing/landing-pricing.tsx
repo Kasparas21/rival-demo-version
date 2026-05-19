@@ -17,10 +17,10 @@ export function BrandCheckLi({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function BlackCta({ children }: { children: React.ReactNode }) {
+export function BlackCta({ children, href = "/checkout" }: { children: React.ReactNode; href?: string }) {
   return (
     <Link
-      href="/checkout"
+      href={href}
       className="flex w-full justify-center rounded-xl bg-gradient-to-b from-neutral-700 to-neutral-950 py-3.5 font-semibold text-white shadow-inner hover:brightness-105"
     >
       {children}
@@ -28,10 +28,10 @@ export function BlackCta({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function AccentCta({ children }: { children: React.ReactNode }) {
+export function AccentCta({ children, href = "/checkout" }: { children: React.ReactNode; href?: string }) {
   return (
     <Link
-      href="/checkout"
+      href={href}
       className="flex w-full justify-center rounded-xl bg-gradient-to-r from-[#4a7fa5] to-[#35688a] py-3.5 font-semibold text-white shadow-sm hover:brightness-105"
     >
       {children}
@@ -44,24 +44,23 @@ export type BillingPeriod = "monthly" | "annual";
 export function PricingBlock({
   billing,
   listMonthlyUsd,
+  annualMonthlyUsd,
 }: {
   billing: BillingPeriod;
   listMonthlyUsd: number;
+  annualMonthlyUsd: number;
 }) {
   const annualFull = Math.round(listMonthlyUsd * 12);
-  const annualDeal = Math.round(annualFull * 0.7);
-  const effectiveMoPerMonth = annualDeal / 12;
-  const effectiveMoLabel = Math.round(effectiveMoPerMonth);
+  const annualDeal = Math.round(annualMonthlyUsd * 12);
 
   if (billing === "monthly") {
     return (
       <div className="mt-4 space-y-1">
-        <p className="text-base text-gray-400 line-through">${listMonthlyUsd}/mo</p>
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-4xl font-bold text-[#1a1a1a]">Free</span>
-          <span className="text-sm font-medium text-gray-600">for 1 day</span>
+          <span className="text-4xl font-bold text-[#1a1a1a]">${listMonthlyUsd}</span>
+          <span className="text-sm font-medium text-gray-600">/mo</span>
         </div>
-        <p className="text-sm text-gray-700">then ${listMonthlyUsd}/mo</p>
+        <p className="text-sm text-gray-700">7-day free trial · card required</p>
       </div>
     );
   }
@@ -70,13 +69,10 @@ export function PricingBlock({
     <div className="mt-4 space-y-1">
       <p className="text-base text-gray-400 line-through">${annualFull}/yr</p>
       <div className="flex flex-wrap items-baseline gap-2">
-        <span className="text-4xl font-bold text-[#1a1a1a]">Free</span>
-        <span className="text-sm font-medium text-gray-600">for 1 day</span>
+        <span className="text-4xl font-bold text-[#1a1a1a]">${annualMonthlyUsd}</span>
+        <span className="text-sm font-medium text-gray-600">/mo</span>
       </div>
-      <p className="text-sm text-gray-700">
-        then ~${effectiveMoLabel}/mo · ${annualDeal}/yr billed annually{" "}
-        <span className="font-semibold text-[#4a7fa5]">(-30%)</span>
-      </p>
+      <p className="text-sm text-gray-700">${annualDeal}/yr billed annually · 7-day free trial</p>
     </div>
   );
 }
@@ -94,7 +90,7 @@ export function LandingPricing() {
           <span className="text-[#4a7fa5]">need.</span>
         </h2>
         <p className="mt-4 text-sm text-gray-600">
-          Transparent monthly pricing with credits · Switch plans anytime
+          Starter and Pro · Smart Prioritization included · Switch plans anytime
         </p>
 
         <div
@@ -122,82 +118,53 @@ export function LandingPricing() {
             }`}
             onClick={() => setBilling("annual")}
           >
-            Annual <span className="font-bold text-emerald-700">−30%</span>
+            Annual
           </button>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 items-stretch gap-6 text-left sm:mt-14 lg:grid-cols-3 lg:gap-6">
-          {/* Starter */}
+        <div className="mt-10 grid grid-cols-1 items-stretch gap-6 text-left sm:mt-14 lg:grid-cols-2 lg:gap-8">
           <div className="flex flex-col rounded-3xl bg-white p-6 shadow-lg sm:p-8">
             <p className="text-xl font-bold text-[#1a1a1a]">Starter</p>
-            <PricingBlock billing={billing} listMonthlyUsd={19} />
-            <p className="mt-4 text-sm font-bold text-[#1a1a1a]">5 searches included monthly</p>
-
+            <PricingBlock billing={billing} listMonthlyUsd={79} annualMonthlyUsd={59} />
+            <p className="mt-4 text-sm font-bold text-[#1a1a1a]">5 competitors · 50k ads/mo processed</p>
             <div className="mt-8">
-              <BlackCta>Start now</BlackCta>
+              <BlackCta href="/checkout?plan=starter">Start free trial</BlackCta>
               <p className="mt-3 text-center text-xs text-gray-400">No commitment</p>
             </div>
-
             <div className="mt-8 border-t border-gray-100 pt-8">
-              <p className="text-xs font-bold text-[#1a1a1a]">Features included:</p>
+              <p className="text-xs font-bold text-[#1a1a1a]">Includes:</p>
               <ul className="mt-5 space-y-4">
-                <BrandCheckLi>Ads library</BrandCheckLi>
-                <BrandCheckLi>Strategy map</BrandCheckLi>
-                <BrandCheckLi>Strategy insights</BrandCheckLi>
-                <BrandCheckLi>AI insight tab</BrandCheckLi>
-                <BrandCheckLi>3 monitored competitors</BrandCheckLi>
-                <BrandCheckLi>All 6 platforms</BrandCheckLi>
-                <BrandCheckLi>Email support</BrandCheckLi>
+                <BrandCheckLi>5 monitored competitors</BrandCheckLi>
+                <BrandCheckLi>50,000 ads processed / month</BrandCheckLi>
+                <BrandCheckLi>15 competitor swaps / month</BrandCheckLi>
+                <BrandCheckLi>Smart Prioritization (always on)</BrandCheckLi>
+                <BrandCheckLi>All 6 ad platforms</BrandCheckLi>
+                <BrandCheckLi>Ads library, strategy map & insights</BrandCheckLi>
               </ul>
             </div>
           </div>
 
-          {/* Pro — highlighted */}
-          <div className="relative flex flex-col rounded-3xl border-2 border-[#4a7fa5] bg-white p-6 shadow-[0_4px_28px_-4px_rgba(74,127,165,0.45),0_22px_56px_-12px_rgba(74,127,165,0.32)] sm:p-8 lg:shadow-[0_4px_28px_-4px_rgba(74,127,165,0.55),0_22px_56px_-12px_rgba(74,127,165,0.42),0_42px_90px_-24px_rgba(74,127,165,0.28)]">
+          <div className="relative flex flex-col rounded-3xl border-2 border-[#4a7fa5] bg-white p-6 shadow-[0_4px_28px_-4px_rgba(74,127,165,0.45)] sm:p-8">
             <span className="absolute right-6 top-6 rounded-full bg-[#4a7fa5] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
               Most Popular
             </span>
             <p className="text-xl font-bold text-[#1a1a1a]">Pro</p>
-            <PricingBlock billing={billing} listMonthlyUsd={45} />
-            <p className="mt-4 text-sm font-bold text-[#1a1a1a]">15 searches included monthly</p>
-
+            <PricingBlock billing={billing} listMonthlyUsd={149} annualMonthlyUsd={129} />
+            <p className="mt-4 text-sm font-bold text-[#1a1a1a]">15 competitors · 150k ads/mo processed</p>
             <div className="mt-8">
-              <AccentCta>Start now</AccentCta>
+              <AccentCta href="/checkout?plan=pro">Start free trial</AccentCta>
               <p className="mt-3 text-center text-xs text-gray-400">No commitment</p>
             </div>
-
             <div className="mt-8 border-t border-gray-100 pt-8">
-              <p className="text-xs font-bold text-[#4a7fa5]">All Starter features, plus:</p>
+              <p className="text-xs font-bold text-[#4a7fa5]">Everything in Starter, plus:</p>
               <ul className="mt-5 space-y-4">
-                <BrandCheckLi>Comparison to your brand</BrandCheckLi>
-                <BrandCheckLi>Change alerts (real-time)</BrandCheckLi>
-                <BrandCheckLi>Export reports (PDF, CSV)</BrandCheckLi>
-                <BrandCheckLi>10 monitored competitors</BrandCheckLi>
-                <BrandCheckLi>Priority email support</BrandCheckLi>
-              </ul>
-            </div>
-          </div>
-
-          {/* Agency */}
-          <div className="flex flex-col rounded-3xl bg-white p-6 shadow-lg sm:p-8">
-            <p className="text-xl font-bold text-[#1a1a1a]">Agency</p>
-            <PricingBlock billing={billing} listMonthlyUsd={89} />
-            <p className="mt-4 text-sm font-bold text-[#1a1a1a]">40 searches included monthly</p>
-
-            <div className="mt-8">
-              <BlackCta>Start now</BlackCta>
-              <p className="mt-3 text-center text-xs text-gray-400">No commitment</p>
-            </div>
-
-            <div className="mt-8 border-t border-gray-100 pt-8">
-              <p className="text-xs font-bold text-[#1a1a1a]">Starter + Pro features, plus:</p>
-              <ul className="mt-5 space-y-4">
-                <BrandCheckLi>250 ads per search</BrandCheckLi>
-                <BrandCheckLi>25 monitored competitors</BrandCheckLi>
-                <BrandCheckLi>White-label PDF exports</BrandCheckLi>
-                <BrandCheckLi>Dedicated account manager</BrandCheckLi>
-                <BrandCheckLi>API access (limited)</BrandCheckLi>
-                <BrandCheckLi>Slack support channel</BrandCheckLi>
+                <BrandCheckLi>15 monitored competitors</BrandCheckLi>
+                <BrandCheckLi>150,000 ads processed / month</BrandCheckLi>
+                <BrandCheckLi>50 competitor swaps / month</BrandCheckLi>
+                <BrandCheckLi>CSV export (20/mo, 10k ads each)</BrandCheckLi>
+                <BrandCheckLi>Manual refresh (5/competitor/mo)</BrandCheckLi>
+                <BrandCheckLi>Smart Prioritization — optional per competitor</BrandCheckLi>
+                <BrandCheckLi>Brand comparison & priority support</BrandCheckLi>
               </ul>
             </div>
           </div>
@@ -230,7 +197,7 @@ export function LandingPricing() {
             className="font-semibold text-[#4a7fa5] underline decoration-[#4a7fa5]/35 underline-offset-2 hover:text-[#35688a]"
           >
             BigSpy
-          </a>{" "}
+          </a>
           ? Save up to <span className="font-semibold text-[#4a7fa5]">96%</span>
           . <span className="text-[#4a7fa5]" aria-hidden>&gt;</span>
         </div>

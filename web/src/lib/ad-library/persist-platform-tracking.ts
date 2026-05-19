@@ -18,6 +18,7 @@ export type PlatformTrackingRow = {
   highCoverageDemoted: boolean;
   classifiedAt: string;
   lastClassificationReviewAt: string;
+  lastScrapeAt: string;
   nextScrapeAt: string;
 };
 
@@ -33,14 +34,25 @@ export async function persistPlatformTracking(
 ): Promise<PlatformTrackingRow[]> {
   const nowIso = params.nowIso ?? new Date().toISOString();
   const nowMs = Date.parse(nowIso);
-  const { platforms, highCoverageApplied } = computePlatformTracking(params.activeCounts);
+  const { platforms } = computePlatformTracking(params.activeCounts);
+
+  const { data: competitorRow } = await supabase
+    .from("saved_competitors")
+    .select("first_scrape_completed_at")
+    .eq("id", params.competitorId)
+    .eq("user_id", params.userId)
+    .maybeSingle();
+
+  const competitorUpdate: Database["public"]["Tables"]["saved_competitors"]["Update"] = {
+    updated_at: nowIso,
+  };
+  if (!competitorRow?.first_scrape_completed_at) {
+    competitorUpdate.first_scrape_completed_at = nowIso;
+  }
 
   const { error: competitorErr } = await supabase
     .from("saved_competitors")
-    .update({
-      platform_high_coverage_applied: highCoverageApplied,
-      updated_at: nowIso,
-    })
+    .update(competitorUpdate)
     .eq("id", params.competitorId)
     .eq("user_id", params.userId);
 
@@ -55,6 +67,7 @@ export async function persistPlatformTracking(
     highCoverageDemoted: p.highCoverageDemoted,
     classifiedAt: nowIso,
     lastClassificationReviewAt: nowIso,
+    lastScrapeAt: nowIso,
     nextScrapeAt: computeNextScrapeAt(p.platform, p.classification, nowMs),
   }));
 
@@ -69,6 +82,7 @@ export async function persistPlatformTracking(
         high_coverage_demoted: row.highCoverageDemoted,
         classified_at: row.classifiedAt,
         last_classification_review_at: row.lastClassificationReviewAt,
+        last_scrape_at: row.lastScrapeAt,
         next_scrape_at: row.nextScrapeAt,
         updated_at: nowIso,
       },
@@ -128,24 +142,18 @@ export async function refreshPlatformTrackingAfterScrape(
     isClassificationReviewDue(r.last_classification_review_at, nowMs)
   );
 
-  let tracking: PlatformTrackingResult[];
-  let highCoverageApplied: boolean;
-
   if (!existing?.length || reviewDue) {
-    const computed = computePlatformTracking(activeCounts);
-    tracking = computed.platforms;
-    highCoverageApplied = computed.highCoverageApplied;
     await persistPlatformTracking(supabase, {
       userId: params.userId,
       competitorId: params.competitorId,
       activeCounts,
-      highCoverageApplied,
+      highCoverageApplied: false,
       nowIso,
     });
     return;
   }
 
-  tracking = [];
+  const tracking: PlatformTrackingResult[] = [];
   for (const p of params.platformsScraped) {
     const prev = existingByPlatform.get(p);
     const count = activeCounts[p] ?? prev?.active_ad_count ?? 0;
@@ -156,7 +164,7 @@ export async function refreshPlatformTrackingAfterScrape(
       platform: p,
       activeAdCount: count,
       classification,
-      highCoverageDemoted: prev?.high_coverage_demoted ?? false,
+      highCoverageDemoted: false,
     });
   }
 
@@ -166,6 +174,8 @@ export async function refreshPlatformTrackingAfterScrape(
       .update({
         active_ad_count: p.activeAdCount,
         classification: p.classification,
+        high_coverage_demoted: false,
+        last_scrape_at: nowIso,
         next_scrape_at: computeNextScrapeAt(p.platform, p.classification, nowMs),
         updated_at: nowIso,
       })

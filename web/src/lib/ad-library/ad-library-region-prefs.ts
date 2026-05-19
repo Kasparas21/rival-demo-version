@@ -45,12 +45,13 @@ export function readAdLibraryRegionPrefsFromSession(): AdLibraryRegionPrefs {
       /* ignore */
     }
   }
+  const linkedinRaw = scrape.linkedinCountryCode.trim().toUpperCase();
   return {
-    metaCountry: scrape.metaCountry.trim().toUpperCase() || "US",
+    metaCountry: scrape.metaCountry.trim().toUpperCase() || "ALL",
     googleRegion,
     tiktokRegion,
     pinterestCountry,
-    linkedinCountryCode: scrape.linkedinCountryCode.trim().toUpperCase(),
+    linkedinCountryCode: linkedinRaw === "ALL" ? "" : linkedinRaw,
     snapchatCountry: scrape.snapchatCountry.trim().toUpperCase() || "DE",
   };
 }
@@ -58,7 +59,7 @@ export function readAdLibraryRegionPrefsFromSession(): AdLibraryRegionPrefs {
 export function writeAdLibraryRegionPrefsToSession(p: AdLibraryRegionPrefs): void {
   const scrape: ScrapeRequestFields = {
     ...readScrapeRequestFieldsFromStorage(),
-    metaCountry: p.metaCountry.trim().toUpperCase() || "US",
+    metaCountry: p.metaCountry.trim().toUpperCase() || "ALL",
     linkedinCountryCode: p.linkedinCountryCode.trim().toUpperCase(),
     snapchatCountry: (p.snapchatCountry.trim().toUpperCase() || "DE").slice(0, 2),
   };

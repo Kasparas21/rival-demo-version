@@ -63,53 +63,60 @@ function normalizeActiveCounts(counts: ActiveAdCounts): Record<InitialScrapePlat
   return out;
 }
 
-/**
- * Classify each platform and apply high-coverage top-3 override when ≥5 platforms have 30+ active ads.
- */
-export function computePlatformTracking(
-  activeCounts: ActiveAdCounts,
-  opts?: { highCoverageOverride?: boolean }
-): ComputePlatformTrackingResult {
-  const applyOverride = opts?.highCoverageOverride !== false;
+/** Classify each platform; apply high-coverage top-3 demotion when 5+ platforms have 30+ ads. */
+export function computePlatformTracking(activeCounts: ActiveAdCounts): ComputePlatformTrackingResult {
   const normalized = normalizeActiveCounts(activeCounts);
 
-  const preliminary: PlatformTrackingResult[] = (Object.keys(normalized) as InitialScrapePlatform[]).map(
-    (platform) => {
-      const activeAdCount = normalized[platform];
-      return {
-        platform,
-        activeAdCount,
-        classification: classifyByActiveCount(activeAdCount),
-        highCoverageDemoted: false,
-      };
-    }
-  );
-
-  const highCoveragePlatforms = preliminary.filter(
-    (p) => p.activeAdCount >= HIGH_COVERAGE_ACTIVE_THRESHOLD
-  );
-
-  if (!applyOverride || highCoveragePlatforms.length < HIGH_COVERAGE_MIN_PLATFORMS) {
-    return { platforms: preliminary, highCoverageApplied: false };
-  }
-
-  const top3 = new Set(
-    [...highCoveragePlatforms]
-      .sort((a, b) => b.activeAdCount - a.activeAdCount)
-      .slice(0, 3)
-      .map((p) => p.platform)
-  );
-
-  const platforms = preliminary.map((p) => {
-    if (top3.has(p.platform)) return p;
+  let platforms: PlatformTrackingResult[] = (
+    Object.keys(normalized) as InitialScrapePlatform[]
+  ).map((platform) => {
+    const activeAdCount = normalized[platform];
     return {
-      ...p,
-      classification: "INACTIVE" as const,
-      highCoverageDemoted: true,
+      platform,
+      activeAdCount,
+      classification: classifyByActiveCount(activeAdCount),
+      highCoverageDemoted: false,
     };
   });
 
-  return { platforms, highCoverageApplied: true };
+  const highCoverageCount = platforms.filter(
+    (p) => p.activeAdCount >= HIGH_COVERAGE_ACTIVE_THRESHOLD,
+  ).length;
+  const highCoverageApplied = highCoverageCount >= HIGH_COVERAGE_MIN_PLATFORMS;
+
+  if (highCoverageApplied) {
+    const sorted = [...platforms].sort((a, b) => b.activeAdCount - a.activeAdCount);
+    const top3 = new Set(sorted.slice(0, 3).map((p) => p.platform));
+    platforms = platforms.map((p) => {
+      if (top3.has(p.platform) || p.classification === "INACTIVE") {
+        return p;
+      }
+      return { ...p, highCoverageDemoted: true };
+    });
+  }
+
+  return { platforms, highCoverageApplied };
+}
+
+/** When Smart Prioritization is disabled for a competitor, skip demoted platforms in cron. */
+export function platformsEligibleForScheduledScrape(
+  rows: {
+    platform: string;
+    classification: PlatformClassification;
+    next_scrape_at: string | null;
+    high_coverage_demoted?: boolean;
+  }[],
+  smartPrioritizationDisabled: boolean,
+  nowMs = Date.now(),
+): InitialScrapePlatform[] {
+  const due = platformsDueForScrape(rows, nowMs);
+  if (!smartPrioritizationDisabled) {
+    return due;
+  }
+  const demoted = new Set(
+    rows.filter((r) => r.high_coverage_demoted).map((r) => r.platform as InitialScrapePlatform),
+  );
+  return due.filter((p) => !demoted.has(p));
 }
 
 export function isClassificationReviewDue(

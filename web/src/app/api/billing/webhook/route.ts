@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { validateEvent, WebhookVerificationError } from "@polar-sh/sdk/webhooks";
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
-import { getPolarEnv, getPolarWebhookSecret } from "@/lib/billing/config";
+import { getPolarWebhookSecret, isKnownPolarProductId } from "@/lib/billing/config";
+import { resolvePlanTier } from "@/lib/billing/entitlements";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 
@@ -93,8 +94,7 @@ export async function POST(request: Request) {
   }
 
   const subscription = payload.data;
-  const { productId } = getPolarEnv();
-  if (subscription.productId !== productId) {
+  if (!isKnownPolarProductId(subscription.productId)) {
     return NextResponse.json({ ok: true, ignored: true });
   }
 
@@ -102,6 +102,18 @@ export async function POST(request: Request) {
   if (!userId) {
     return NextResponse.json({ ok: false, error: "Subscription webhook did not include a user id." }, { status: 400 });
   }
+
+  const planTier = resolvePlanTier({
+    status: subscription.status,
+    polarProductId: subscription.productId,
+    rawPayload: subscription,
+    applyDevOverride: false,
+  });
+
+  const mergedPayload = {
+    ...(typeof subscription === "object" && subscription !== null ? subscription : {}),
+    plan_tier: planTier,
+  };
 
   const { error } = await admin.from("billing_subscriptions").upsert(
     {
@@ -122,7 +134,7 @@ export async function POST(request: Request) {
       ended_at: iso(subscription.endedAt),
       checkout_id: subscription.checkoutId,
       last_webhook_event_id: eventId,
-      raw_payload: jsonSafe(subscription),
+      raw_payload: jsonSafe(mergedPayload),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },

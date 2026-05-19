@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getBillingEntitlement, remainingMonthlyScrapeRuns } from "@/lib/billing/entitlements";
+import {
+  getBillingEntitlement,
+  remainingMonthlyAdsProcessed,
+} from "@/lib/billing/entitlements";
+import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 
@@ -19,9 +23,9 @@ export async function GET() {
   }
 
   const userId = user.id;
-  const yearMonthUtc = new Date().toISOString().slice(0, 7);
+  const yearMonthUtc = utcYearMonth();
 
-  const [competitorsRes, cacheRes, overviewRes, monthUsageRes, billing] = await Promise.all([
+  const [competitorsRes, cacheRes, overviewRes, billing, monthlyUsage] = await Promise.all([
     supabase
       .from("saved_competitors")
       .select("id", { count: "exact", head: true })
@@ -29,13 +33,8 @@ export async function GET() {
       .eq("is_workspace_brand", false),
     supabase.from("ads_cache").select("ads_data").eq("user_id", userId),
     supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
-    supabase
-      .from("monthly_scrape_usage")
-      .select("ads_scraped, scrape_operations")
-      .eq("user_id", userId)
-      .eq("year_month", yearMonthUtc)
-      .maybeSingle(),
     getBillingEntitlement(supabase, userId),
+    loadMonthlyUsageSnapshot(supabase, userId, yearMonthUtc),
   ]);
 
   const competitorsWatched = competitorsRes.count ?? 0;
@@ -47,47 +46,58 @@ export async function GET() {
   }
 
   const aiStrategyOverviews = overviewRes.count ?? 0;
-  const monthRow = monthUsageRes.data;
 
   return NextResponse.json({
     ok: true,
     usage: {
       scrapedAdsTotal,
-      /** Ads fetched via Apify this calendar month (UTC), across all competitors. */
-      scrapedAdsThisMonth: monthRow?.ads_scraped ?? 0,
-      /** Distinct platform scrape runs this month (UTC) that were not served from cache. */
-      adLibraryScrapeRunsThisMonth: monthRow?.scrape_operations ?? 0,
+      scrapedAdsThisMonth: monthlyUsage.adsScraped,
+      adLibraryScrapeRunsThisMonth: monthlyUsage.scrapeOperations,
       competitorsWatched,
-      /** AI-generated strategy summaries (token / compute cost); good limit candidate */
       aiStrategyOverviews,
       adLibraryRefreshes: rows.length,
+      swapsThisMonth: monthlyUsage.swapCount,
+      csvExportsThisMonth: monthlyUsage.csvExportCount,
       limits: billing.limits,
       remaining: {
-        adLibraryScrapeRunsThisMonth: remainingMonthlyScrapeRuns(
-          monthRow?.scrape_operations ?? 0,
+        adsProcessedThisMonth: remainingMonthlyAdsProcessed(
+          monthlyUsage.adsScraped,
           0,
-          billing.limits.maxAdLibraryScrapeRunsPerMonth,
+          billing.limits.maxAdsProcessedPerMonth,
         ),
         competitorsWatched: Math.max(0, billing.limits.maxWatchedCompetitors - competitorsWatched),
+        swapsThisMonth: Math.max(0, billing.limits.maxSwapsPerMonth - monthlyUsage.swapCount),
+        csvExportsThisMonth: Math.max(
+          0,
+          billing.limits.csvExportsPerMonth - monthlyUsage.csvExportCount,
+        ),
       },
     },
     billing: {
       hasAccess: billing.hasAccess,
       isUnlimited: billing.isUnlimited,
       status: billing.status,
+      planTier: billing.planTier,
       planName: billing.planName,
       polarProductId: billing.polarProductId,
       trialEnd: billing.trialEnd,
       currentPeriodEnd: billing.currentPeriodEnd,
       cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
+      canUseDevPlanSwitcher: billing.canUseDevPlanSwitcher,
+      devPlanOverride: billing.devPlanOverride,
       limits: billing.limits,
       remaining: {
-        adLibraryScrapeRunsThisMonth: remainingMonthlyScrapeRuns(
-          monthRow?.scrape_operations ?? 0,
+        adsProcessedThisMonth: remainingMonthlyAdsProcessed(
+          monthlyUsage.adsScraped,
           0,
-          billing.limits.maxAdLibraryScrapeRunsPerMonth,
+          billing.limits.maxAdsProcessedPerMonth,
         ),
         competitorsWatched: Math.max(0, billing.limits.maxWatchedCompetitors - competitorsWatched),
+        swapsThisMonth: Math.max(0, billing.limits.maxSwapsPerMonth - monthlyUsage.swapCount),
+        csvExportsThisMonth: Math.max(
+          0,
+          billing.limits.csvExportsPerMonth - monthlyUsage.csvExportCount,
+        ),
       },
     },
   });

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { TrialInterval } from "@polar-sh/sdk/models/components/trialinterval";
 import { ensureUserProfile } from "@/lib/auth/profile";
-import { getAppUrl, getPolarEnv } from "@/lib/billing/config";
+import { getAppUrl, polarProductIdForPlan, type PolarPlanSlug } from "@/lib/billing/config";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createPolarClient } from "@/lib/billing/polar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -25,7 +25,9 @@ async function createCheckoutRedirect(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard/spy", request.nextUrl.origin));
   }
 
-  const { productId } = getPolarEnv();
+  const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
+  const plan: PolarPlanSlug = planParam === "starter" ? "starter" : "pro";
+  const productId = polarProductIdForPlan(plan);
   const appUrl = getAppUrl();
   const polar = createPolarClient();
   const checkout = await polar.checkouts.create({
@@ -38,10 +40,11 @@ async function createCheckoutRedirect(request: NextRequest) {
     metadata: {
       user_id: user.id,
       source: "rival_checkout",
+      plan,
     },
     allowTrial: true,
     trialInterval: TrialInterval.Day,
-    trialIntervalCount: 1,
+    trialIntervalCount: 7,
     successUrl: `${appUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
     returnUrl: `${appUrl}/dashboard/settings`,
   });

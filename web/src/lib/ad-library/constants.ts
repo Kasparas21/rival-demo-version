@@ -35,6 +35,9 @@ export function getInitialAdsCount(platform: InitialScrapePlatform): number {
 /** Per-platform ad count for scheduled refresh scrapes (not initial discovery). */
 export const REFRESH_ADS_PER_PLATFORM = 100;
 
+/** Pro/Admin manual force-rescrape: active-today window, all platforms. */
+export const MANUAL_REFRESH_ADS_PER_PLATFORM = 300;
+
 /** Quick monthly probe for INACTIVE platforms. */
 export const INACTIVE_PROBE_ADS_PER_PLATFORM = 50;
 

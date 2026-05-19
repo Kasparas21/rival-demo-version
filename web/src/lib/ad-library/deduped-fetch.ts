@@ -210,6 +210,8 @@ export function fetchAdsLibraryDeduplicated(
   payload: Record<string, unknown>,
   options: {
     skipCache?: boolean;
+    /** Server: read `ads_cache` only — never Apify (pairs with discovery-scan guard). */
+    cacheOnly?: boolean;
     /** When true, still use server `ads_cache` (`skipCache: false`) but bypass client session/memory short-circuit. */
     clientSkipReadCache?: boolean;
     cacheTtlMs?: number;
@@ -225,6 +227,7 @@ export function fetchAdsLibraryDeduplicated(
   const fetchKey = stableAdsLibraryPayloadKey({
     ...payload,
     ...(options.skipCache ? { skipCache: true } : {}),
+    ...(options.cacheOnly ? { cacheOnly: true } : {}),
   });
 
   if (!options.skipCache && !options.clientSkipReadCache) {
@@ -251,6 +254,7 @@ export function fetchAdsLibraryDeduplicated(
         body: JSON.stringify({
           ...payload,
           ...(options.skipCache ? { skipCache: true } : {}),
+          ...(options.cacheOnly ? { cacheOnly: true } : {}),
         }),
         signal: options.signal,
       });

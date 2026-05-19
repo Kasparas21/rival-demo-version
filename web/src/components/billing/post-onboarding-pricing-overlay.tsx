@@ -44,7 +44,7 @@ function BillingToggle({
         }`}
         onClick={() => onChange("annual")}
       >
-        Annual <span className="font-bold text-emerald-700">−30%</span>
+        Annual
       </button>
     </div>
   );
@@ -81,7 +81,7 @@ export function PostOnboardingPricingOverlay() {
       aria-modal="true"
       aria-labelledby="post-onb-pricing-title"
     >
-      <div className="pointer-events-auto relative z-10 my-auto w-full max-w-6xl rounded-3xl border border-white/80 bg-white/98 p-5 shadow-[0_24px_80px_rgba(31,38,135,0.18)] backdrop-blur-md sm:p-8">
+      <div className="pointer-events-auto relative z-10 my-auto w-full max-w-5xl rounded-3xl border border-white/80 bg-white/98 p-5 shadow-[0_24px_80px_rgba(31,38,135,0.18)] backdrop-blur-md sm:p-8">
         <div className="mb-5 flex flex-col items-center text-center sm:mb-6">
           <RivalLogoImg className="mb-4 h-7 w-auto max-w-[150px] object-contain sm:h-8" />
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#71717a]">Welcome to Rival</p>
@@ -89,30 +89,26 @@ export function PostOnboardingPricingOverlay() {
             Pick a plan to unlock the full ad intelligence stack
           </h2>
           <p className="mt-2 max-w-md text-[13px] leading-relaxed text-gray-600">
-            Transparent pricing with credits. Switch plans anytime. Start with a free trial day on any tier.
+            7-day free trial on Starter or Pro. Card required. Switch plans anytime.
           </p>
           <BillingToggle billing={billing} onChange={setBilling} />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 text-left lg:grid-cols-3 lg:gap-5">
+        <div className="grid grid-cols-1 gap-4 text-left lg:grid-cols-2 lg:gap-6">
           <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-md sm:p-6">
             <p className="text-lg font-bold text-[#1a1a1a]">Starter</p>
-            <PricingBlock billing={billing} listMonthlyUsd={19} />
-            <p className="mt-3 text-sm font-bold text-[#1a1a1a]">5 searches included monthly</p>
+            <PricingBlock billing={billing} listMonthlyUsd={79} annualMonthlyUsd={59} />
+            <p className="mt-3 text-sm font-bold text-[#1a1a1a]">5 competitors · 50k ads/mo</p>
             <div className="mt-6">
-              <BlackCta>Start now</BlackCta>
+              <BlackCta href="/checkout?plan=starter">Start free trial</BlackCta>
               <p className="mt-2 text-center text-[11px] text-gray-400">No commitment</p>
             </div>
             <div className="mt-6 border-t border-gray-100 pt-6">
-              <p className="text-[11px] font-bold text-[#1a1a1a]">Features included</p>
+              <p className="text-[11px] font-bold text-[#1a1a1a]">Includes</p>
               <ul className="mt-3 space-y-2.5">
-                <BrandCheckLi>Ads library</BrandCheckLi>
-                <BrandCheckLi>Strategy map</BrandCheckLi>
-                <BrandCheckLi>Strategy insights</BrandCheckLi>
-                <BrandCheckLi>AI insight tab</BrandCheckLi>
-                <BrandCheckLi>3 monitored competitors</BrandCheckLi>
+                <BrandCheckLi>5 competitors · 15 swaps/mo</BrandCheckLi>
+                <BrandCheckLi>Smart Prioritization (always on)</BrandCheckLi>
                 <BrandCheckLi>All 6 platforms</BrandCheckLi>
-                <BrandCheckLi>Email support</BrandCheckLi>
               </ul>
             </div>
           </div>
@@ -122,41 +118,19 @@ export function PostOnboardingPricingOverlay() {
               Most Popular
             </span>
             <p className="text-lg font-bold text-[#1a1a1a]">Pro</p>
-            <PricingBlock billing={billing} listMonthlyUsd={45} />
-            <p className="mt-3 text-sm font-bold text-[#1a1a1a]">15 searches included monthly</p>
+            <PricingBlock billing={billing} listMonthlyUsd={149} annualMonthlyUsd={129} />
+            <p className="mt-3 text-sm font-bold text-[#1a1a1a]">15 competitors · 150k ads/mo</p>
             <div className="mt-6">
-              <AccentCta>Start now</AccentCta>
+              <AccentCta href="/checkout?plan=pro">Start free trial</AccentCta>
               <p className="mt-2 text-center text-[11px] text-gray-400">No commitment</p>
             </div>
             <div className="mt-6 border-t border-gray-100 pt-6">
-              <p className="text-[11px] font-bold text-[#4a7fa5]">All Starter features, plus</p>
+              <p className="text-[11px] font-bold text-[#4a7fa5]">Everything in Starter, plus</p>
               <ul className="mt-3 space-y-2.5">
-                <BrandCheckLi>Comparison to your brand</BrandCheckLi>
-                <BrandCheckLi>Change alerts (real-time)</BrandCheckLi>
-                <BrandCheckLi>Export reports (PDF, CSV)</BrandCheckLi>
-                <BrandCheckLi>10 monitored competitors</BrandCheckLi>
-                <BrandCheckLi>Priority email support</BrandCheckLi>
-              </ul>
-            </div>
-          </div>
-
-          <div className="flex flex-col rounded-2xl border border-gray-100 bg-white p-5 shadow-md sm:p-6">
-            <p className="text-lg font-bold text-[#1a1a1a]">Agency</p>
-            <PricingBlock billing={billing} listMonthlyUsd={89} />
-            <p className="mt-3 text-sm font-bold text-[#1a1a1a]">40 searches included monthly</p>
-            <div className="mt-6">
-              <BlackCta>Start now</BlackCta>
-              <p className="mt-2 text-center text-[11px] text-gray-400">No commitment</p>
-            </div>
-            <div className="mt-6 border-t border-gray-100 pt-6">
-              <p className="text-[11px] font-bold text-[#1a1a1a]">Starter + Pro features, plus</p>
-              <ul className="mt-3 space-y-2.5">
-                <BrandCheckLi>250 ads per search</BrandCheckLi>
-                <BrandCheckLi>25 monitored competitors</BrandCheckLi>
-                <BrandCheckLi>White-label PDF exports</BrandCheckLi>
-                <BrandCheckLi>Dedicated account manager</BrandCheckLi>
-                <BrandCheckLi>API access (limited)</BrandCheckLi>
-                <BrandCheckLi>Slack support channel</BrandCheckLi>
+                <BrandCheckLi>CSV export & manual refresh</BrandCheckLi>
+                <BrandCheckLi>50 swaps/mo</BrandCheckLi>
+                <BrandCheckLi>Optional Smart Prioritization per competitor</BrandCheckLi>
+                <BrandCheckLi>Brand comparison</BrandCheckLi>
               </ul>
             </div>
           </div>

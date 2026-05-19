@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { resolveCompetitorForUser } from "@/lib/ad-library/classify-competitor-platforms";
+import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
+import { buildPlatformScheduleDebug } from "@/lib/ad-library/platform-tracking-schedule";
+import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -28,16 +31,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  const { data: competitorRow } = await supabase
-    .from("saved_competitors")
-    .select("platform_high_coverage_applied")
-    .eq("id", competitor.id)
-    .maybeSingle();
-
   const { data: rows, error } = await supabase
     .from("competitor_platform_tracking")
     .select(
-      "platform, classification, active_ad_count, high_coverage_demoted, classified_at, next_scrape_at"
+      "platform, classification, active_ad_count, high_coverage_demoted, classified_at, next_scrape_at, last_scrape_at"
     )
     .eq("competitor_id", competitor.id)
     .order("platform");
@@ -46,17 +43,34 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
+  const nowMs = Date.now();
+
   return NextResponse.json({
     ok: true,
     competitorId: competitor.id,
-    highCoverageApplied: competitorRow?.platform_high_coverage_applied ?? false,
-    platforms: (rows ?? []).map((r) => ({
-      platform: r.platform,
-      classification: r.classification,
-      activeAdCount: r.active_ad_count,
-      highCoverageDemoted: r.high_coverage_demoted,
-      classifiedAt: r.classified_at,
-      nextScrapeAt: r.next_scrape_at,
-    })),
+    platforms: (rows ?? []).map((r) => {
+      const platform = r.platform as InitialScrapePlatform;
+      const classification = r.classification as PlatformClassification;
+      const schedule = buildPlatformScheduleDebug({
+        platform,
+        classification,
+        activeAdCount: r.active_ad_count,
+        lastScrapeAt: r.last_scrape_at,
+        nextScrapeAt: r.next_scrape_at,
+        nowMs,
+      });
+      return {
+        platform: r.platform,
+        classification: r.classification,
+        activeAdCount: r.active_ad_count,
+        highCoverageDemoted: r.high_coverage_demoted,
+        classifiedAt: r.classified_at,
+        lastScrapeAt: r.last_scrape_at,
+        nextScrapeAt: r.next_scrape_at,
+        refreshIntervalDays: schedule.refreshIntervalDays,
+        adsPerRefresh: schedule.adsPerRefresh,
+        nextScrapeWindow: schedule.nextScrapeWindow,
+      };
+    }),
   });
 }

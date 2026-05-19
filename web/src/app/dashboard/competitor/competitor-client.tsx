@@ -162,8 +162,8 @@ import {
   readStoredPinterestCountry,
   readStoredTiktokRegion,
 } from "@/components/dashboard/competitor/competitor-session-readers";
-import { GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT } from "@/lib/ad-library/constants";
 import { toast } from "sonner";
+import type { ManualRefreshStatus } from "@/lib/billing/manual-refresh-status";
 
 function normalizeDomainHostForAdsEvent(input: string): string {
   return (
@@ -208,6 +208,49 @@ const GOOGLE_ARTICLE_MIN_HEIGHT_CLASS = "min-h-[440px] sm:min-h-[460px]";
 /** Content region inside each platform card (below header + refresh). */
 const platformAdsBodyShellClass =
   "border-t border-[#DDF1FD]/35 bg-[linear-gradient(180deg,rgba(248,250,252,0.88)_0%,rgba(255,255,255,0.35)_100%)] px-4 pb-5 pt-5 sm:px-5";
+
+function formatTimeAgo(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatLastScrapedLine(iso: string | null | undefined): string {
+  if (!iso) return "No scrape yet";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "No scrape yet";
+  return `Last scraped ${formatTimeAgo(d)}`;
+}
+
+function PlatformLastScrapedLine({
+  busy,
+  busyLabel,
+  lastScrapedAt,
+  errorSuffix,
+}: {
+  busy: boolean;
+  busyLabel: string;
+  lastScrapedAt: string | null | undefined;
+  errorSuffix?: string | null;
+}) {
+  if (busy) {
+    return <p className="mt-0.5 text-[13px] text-[#6b7280]">{busyLabel}</p>;
+  }
+  return (
+    <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-[#6b7280]">
+      <Clock className="h-3.5 w-3.5 shrink-0 text-[#94a3b8]" aria-hidden />
+      <span>
+        {formatLastScrapedLine(lastScrapedAt)}
+        {errorSuffix ? ` · ${errorSuffix}` : ""}
+      </span>
+    </p>
+  );
+}
 
 function AdsLibraryEmptyWithPlaceholders({ message }: { message: React.ReactNode }) {
   return (
@@ -1854,19 +1897,35 @@ function CompetitorDashboardBody({
   );
 
   const [serverScrapedAdTotal, setServerScrapedAdTotal] = useState<number | null>(null);
-  const [forceRescrapeBusy, setForceRescrapeBusy] = useState(false);
+  const [manualRefreshBusyPlatform, setManualRefreshBusyPlatform] =
+    useState<AdsLibraryPlatform | null>(null);
+  const [billingAllowManualRefresh, setBillingAllowManualRefresh] = useState(false);
+  const [billingIsUnlimited, setBillingIsUnlimited] = useState(false);
+  const [manualRefreshStatus, setManualRefreshStatus] = useState<ManualRefreshStatus | null>(null);
 
+  const canManualRefresh = billingAllowManualRefresh || billingIsUnlimited;
 
-  const getTimeAgo = (date: Date) => {
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (seconds < 60) return "just now";
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-  };
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/account/usage", { cache: "no-store", credentials: "include" })
+      .then((r) => r.json())
+      .then((j: { billing?: { limits?: { allowManualRefresh?: boolean }; isUnlimited?: boolean } }) => {
+        if (cancelled) return;
+        setBillingAllowManualRefresh(j.billing?.limits?.allowManualRefresh === true);
+        setBillingIsUnlimited(j.billing?.isUnlimited === true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBillingAllowManualRefresh(false);
+          setBillingIsUnlimited(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const getTimeAgo = formatTimeAgo;
 
   /** Stable id map — avoids effect loops when resolver returns a fresh object after each sidebar bump. */
   const platformIdsFingerprint = useMemo(() => {
@@ -1951,6 +2010,7 @@ function CompetitorDashboardBody({
     refreshPinterestAds,
     refreshLinkedInAds,
     refreshSnapchatAds,
+    reloadPlatformFromCache,
   } = useAdLibrary(
     { name: brand.name, domain: brand.domain, logoUrl: brand.logoUrl },
     platformIds,
@@ -2194,44 +2254,131 @@ function CompetitorDashboardBody({
 
   const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
 
+  const loadManualRefreshStatus = useCallback(async () => {
+    if (!competitorDbIdForSaved || !canManualRefresh) {
+      setManualRefreshStatus(null);
+      return;
+    }
+    try {
+      const res = await fetch(
+        `/api/competitor/manual-refresh-status?competitorId=${encodeURIComponent(competitorDbIdForSaved)}`,
+        { cache: "no-store", credentials: "include" },
+      );
+      const json = (await res.json()) as ManualRefreshStatus & { ok?: boolean };
+      if (res.ok && json.ok !== false) {
+        setManualRefreshStatus({
+          workspaceRefreshCount: json.workspaceRefreshCount,
+          workspaceLimit: json.workspaceLimit,
+          lastRefreshAt: json.lastRefreshAt,
+          canRefreshNow: json.canRefreshNow,
+          nextRefreshAt: json.nextRefreshAt,
+          blockReason: json.blockReason,
+        });
+      } else {
+        setManualRefreshStatus(null);
+      }
+    } catch {
+      setManualRefreshStatus(null);
+    }
+  }, [competitorDbIdForSaved, canManualRefresh]);
+
+  useEffect(() => {
+    void loadManualRefreshStatus();
+  }, [loadManualRefreshStatus]);
+
+  const manualRefreshQuotaHint = useMemo(() => {
+    if (!canManualRefresh || !manualRefreshStatus) return null;
+    const { workspaceRefreshCount, workspaceLimit, blockReason, nextRefreshAt } = manualRefreshStatus;
+    const used = `${workspaceRefreshCount}/${workspaceLimit} refreshes used this month`;
+    if (blockReason === "monthly_cap") return `${used} · monthly limit reached`;
+    if (blockReason === "cooldown" && nextRefreshAt) {
+      const hours = Math.max(1, Math.ceil((Date.parse(nextRefreshAt) - Date.now()) / 3_600_000));
+      return `${used} · next refresh for this competitor in ~${hours}h`;
+    }
+    return used;
+  }, [canManualRefresh, manualRefreshStatus]);
+
   const showPlatformClassificationDebug =
     process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
 
   const [platformTrackingByPlatform, setPlatformTrackingByPlatform] = useState<
-    Record<string, { classification: string; activeAdCount: number }>
+    Record<
+      string,
+      {
+        classification: string;
+        activeAdCount: number;
+        refreshIntervalDays: number;
+        adsPerRefresh: number;
+        lastScrapeAt: string | null;
+        nextScrapeAt: string | null;
+        nextScrapeWindow: { start: string; end: string };
+      }
+    >
   >({});
 
-  useEffect(() => {
-    if (!showPlatformClassificationDebug || !competitorDbIdForSaved) {
+  const loadPlatformTracking = useCallback(() => {
+    if (!competitorDbIdForSaved) {
       setPlatformTrackingByPlatform({});
-      return;
+      return Promise.resolve();
     }
-    let cancelled = false;
-    void fetch(
-      `/api/competitor/platform-tracking?competitorId=${encodeURIComponent(competitorDbIdForSaved)}`
+    return fetch(
+      `/api/competitor/platform-tracking?competitorId=${encodeURIComponent(competitorDbIdForSaved)}`,
+      { cache: "no-store", credentials: "include" },
     )
       .then((r) => r.json())
       .then((j: {
         ok?: boolean;
-        platforms?: { platform: string; classification: string; activeAdCount: number }[];
+        platforms?: {
+          platform: string;
+          classification: string;
+          activeAdCount: number;
+          refreshIntervalDays?: number;
+          adsPerRefresh?: number;
+          lastScrapeAt?: string | null;
+          nextScrapeAt?: string | null;
+          nextScrapeWindow?: { start: string; end: string };
+        }[];
       }) => {
-        if (cancelled || !j?.ok || !Array.isArray(j.platforms)) return;
-        const map: Record<string, { classification: string; activeAdCount: number }> = {};
+        if (!j?.ok || !Array.isArray(j.platforms)) return;
+        const map: Record<
+          string,
+          {
+            classification: string;
+            activeAdCount: number;
+            refreshIntervalDays: number;
+            adsPerRefresh: number;
+            lastScrapeAt: string | null;
+            nextScrapeAt: string | null;
+            nextScrapeWindow: { start: string; end: string };
+          }
+        > = {};
         for (const p of j.platforms) {
           map[p.platform] = {
             classification: p.classification,
             activeAdCount: p.activeAdCount,
+            refreshIntervalDays: p.refreshIntervalDays ?? 0,
+            adsPerRefresh: p.adsPerRefresh ?? 0,
+            lastScrapeAt: p.lastScrapeAt ?? null,
+            nextScrapeAt: p.nextScrapeAt ?? null,
+            nextScrapeWindow: p.nextScrapeWindow ?? { start: "", end: "" },
           };
         }
         setPlatformTrackingByPlatform(map);
       })
       .catch(() => {
-        /* debug-only */
+        /* best-effort */
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [showPlatformClassificationDebug, competitorDbIdForSaved]);
+  }, [competitorDbIdForSaved]);
+
+  useEffect(() => {
+    void loadPlatformTracking();
+  }, [loadPlatformTracking]);
+
+  const lastScrapedAtForPlatform = useCallback(
+    (platform: AdsLibraryPlatform): string | null =>
+      platformTrackingByPlatform[platform]?.lastScrapeAt ?? accountLastScrapedAt ?? null,
+    [platformTrackingByPlatform, accountLastScrapedAt],
+  );
 
   const adsLibraryShowsCreativesOnScreen = useMemo(
     () =>
@@ -2362,28 +2509,69 @@ function CompetitorDashboardBody({
     };
   }, [competitorDbIdForSaved, isOwnWorkspace]);
 
-  const handleForceRescrape = useCallback(async () => {
-    if (forceRescrapeBusy || !competitorDbIdForSaved) return;
-    setForceRescrapeBusy(true);
-    try {
-      const res = await fetch("/api/competitor/force-rescrape", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ competitorId: competitorDbIdForSaved }),
-      });
-      const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-      if (json?.ok) {
-        window.location.reload();
-      } else {
-        toast.error(typeof json?.error === "string" ? json.error : res.statusText || "Re-scrape failed");
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Re-scrape error");
-    } finally {
-      setForceRescrapeBusy(false);
+  const ensureManualRefreshAllowed = useCallback((): boolean => {
+    if (!canManualRefresh) {
+      toast.error("Manual refresh is available on the Pro plan.");
+      return false;
     }
-  }, [competitorDbIdForSaved, forceRescrapeBusy]);
+    if (manualRefreshStatus && !manualRefreshStatus.canRefreshNow) {
+      if (manualRefreshStatus.blockReason === "monthly_cap") {
+        toast.error(
+          `Manual refresh limit reached (${manualRefreshStatus.workspaceRefreshCount}/${manualRefreshStatus.workspaceLimit} this month).`,
+        );
+      } else if (manualRefreshStatus.nextRefreshAt) {
+        const hours = Math.max(
+          1,
+          Math.ceil((Date.parse(manualRefreshStatus.nextRefreshAt) - Date.now()) / 3_600_000),
+        );
+        toast.error(`Please wait ${hours} hour(s) before refreshing this competitor again.`);
+      } else {
+        toast.error("Manual refresh is not available right now.");
+      }
+      return false;
+    }
+    return true;
+  }, [canManualRefresh, manualRefreshStatus]);
+
+  const handleManualPlatformRefresh = useCallback(
+    async (platform: AdsLibraryPlatform) => {
+      if (manualRefreshBusyPlatform || !competitorDbIdForSaved) return;
+      if (!ensureManualRefreshAllowed()) return;
+      setManualRefreshBusyPlatform(platform);
+      try {
+        const res = await fetch("/api/competitor/force-rescrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ competitorId: competitorDbIdForSaved, platforms: [platform] }),
+        });
+        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+        if (json?.ok) {
+          await reloadPlatformFromCache(platform);
+          await syncSavedCompetitorsFromAccount();
+          void loadManualRefreshStatus();
+          void loadPlatformTracking();
+        } else {
+          toast.error(typeof json?.error === "string" ? json.error : res.statusText || "Refresh failed");
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Refresh error");
+      } finally {
+        setManualRefreshBusyPlatform(null);
+      }
+    },
+    [
+      competitorDbIdForSaved,
+      ensureManualRefreshAllowed,
+      loadManualRefreshStatus,
+      manualRefreshBusyPlatform,
+      reloadPlatformFromCache,
+      loadPlatformTracking,
+    ],
+  );
+
+  const manualRefreshDisabled =
+    !canManualRefresh || !manualRefreshStatus?.canRefreshNow || manualRefreshBusyPlatform != null;
 
   const savedAdsLibraryItems = useMemo(() => {
     const items: { platform: string; libraryItemId: string }[] = [];
@@ -2655,24 +2843,6 @@ function CompetitorDashboardBody({
                     <span>Spy monitoring on</span>
                   </div>
                 ) : null}
-                {competitorDbIdForSaved && serverScrapedAdTotal === 0 ? (
-                  <button
-                    type="button"
-                    disabled={forceRescrapeBusy}
-                    onClick={() => void handleForceRescrape()}
-                    title="Runs a fresh Apify scrape for all platforms and writes results to your library (uses scrape quota)."
-                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#343434] bg-[#343434] px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-colors hover:bg-[#1f1f1f] disabled:opacity-50"
-                  >
-                    {forceRescrapeBusy ? (
-                      <>
-                        <RivalLogoVideo size="inline" className="shrink-0" />
-                        <span>Re-scraping…</span>
-                      </>
-                    ) : (
-                      <span>Force re-scrape</span>
-                    )}
-                  </button>
-                ) : null}
               </div>
             ) : null}
           </div>
@@ -2925,7 +3095,7 @@ function CompetitorDashboardBody({
                 competitorLabel={competitorDisplayLabel}
                 cacheDomainNorm={cacheDomainNorm}
                 lastScrapedAt={accountLastScrapedAt}
-                onFreshnessRescrape={handleForceRescrape}
+                onFreshnessRescrape={undefined}
                 onOpenAd={openAd}
               />
             ) : (
@@ -2959,7 +3129,7 @@ function CompetitorDashboardBody({
                   snapchat: snapchatAds.length,
                 }}
                 onViewAllLandingPages={navigateToLandingPagesExplorer}
-                onFreshnessRescrape={handleForceRescrape}
+                onFreshnessRescrape={undefined}
                 landingPagesListCache={landingPagesListCacheForChildren}
               />
             ) : showAdLibraryLinkingAnalyticsShell ? (
@@ -3040,10 +3210,27 @@ function CompetitorDashboardBody({
                               </span>
                               {trackingChip ? (
                                 <span
-                                  className="mt-0.5 block max-w-full truncate text-center font-mono text-[9px] font-medium leading-tight text-amber-800"
-                                  title={`${trackingChip.classification} · ${trackingChip.activeAdCount} active`}
+                                  className="mt-0.5 block max-w-full text-center font-mono text-[8px] font-medium leading-tight text-amber-800 sm:text-[9px]"
+                                  title={[
+                                    `${trackingChip.classification} · ${trackingChip.activeAdCount} active`,
+                                    `${trackingChip.refreshIntervalDays}d interval · ${trackingChip.adsPerRefresh} ads/refresh`,
+                                    trackingChip.nextScrapeAt
+                                      ? `Next scrape: ${trackingChip.nextScrapeAt}`
+                                      : "Next scrape: —",
+                                    `Window: ${trackingChip.nextScrapeWindow.start} → ${trackingChip.nextScrapeWindow.end}`,
+                                  ].join("\n")}
                                 >
-                                  {trackingChip.classification} · {trackingChip.activeAdCount}
+                                  <span className="block truncate">
+                                    {trackingChip.classification} · {trackingChip.activeAdCount}
+                                  </span>
+                                  <span className="block truncate opacity-90">
+                                    {trackingChip.refreshIntervalDays}d · {trackingChip.adsPerRefresh} ads
+                                  </span>
+                                  <span className="block truncate opacity-80">
+                                    {trackingChip.nextScrapeAt
+                                      ? `next ${new Date(trackingChip.nextScrapeAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
+                                      : "next —"}
+                                  </span>
                                 </span>
                               ) : showPlatformClassificationDebug ? (
                                 <span className="mt-0.5 block text-center font-mono text-[9px] text-amber-800/50">
@@ -3071,8 +3258,9 @@ function CompetitorDashboardBody({
             {isConfirmed && adsPlatforms.length > 0 && adsApiConfigured && !adLibFetchError && !adLibLoading && adLib === null ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-[14px] text-slate-800">
                 <span className="font-semibold">No saved ads for this competitor yet. </span>
-                Click a platform&apos;s <strong className="font-semibold">Refresh … only</strong> button below to run
-                Apify and load ads (uses credits).
+                {canManualRefresh
+                  ? "Click a platform's Refresh … only button below to load up to 300 ads active today."
+                  : "Ads load automatically on a schedule, or upgrade to Pro for manual refresh."}
               </div>
             ) : null}
 
@@ -3080,6 +3268,10 @@ function CompetitorDashboardBody({
               <p className="text-[14px] text-[#6b7280] py-4">
                 None of your selected channels use the live ads API (Meta, Google/YouTube, LinkedIn, TikTok, Pinterest, or Snapchat). Pick at least one when you choose platforms to show during search, or add identifiers in discovery.
               </p>
+            ) : null}
+
+            {canManualRefresh && manualRefreshQuotaHint ? (
+              <p className="mb-4 text-[12px] text-[#6b7280]">{manualRefreshQuotaHint}</p>
             ) : null}
 
             <div className="flex flex-col gap-12">
@@ -3095,14 +3287,14 @@ function CompetitorDashboardBody({
                     <div className="min-w-0 flex-1">
                       <div className="min-w-0">
                         <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-[#343434]">Meta / Facebook</h3>
-                        <p className="mt-0.5 text-[13px] text-[#6b7280]">
-                          {metaSectionBusy
-                            ? metaRefreshing
-                              ? "Refreshing Meta ads…"
-                              : "Loading ads…"
-                            : `${metaAds.length} active ads loaded (max ${scrapeFields.metaMaxAds} per request) from Ad Library`}
-                          {adLib?.meta?.error && metaAds.length === 0 ? ` · ${adLib.meta?.error}` : ""}
-                        </p>
+                        <PlatformLastScrapedLine
+                          busy={metaSectionBusy}
+                          busyLabel={metaRefreshing ? "Refreshing Meta ads…" : "Loading ads…"}
+                          lastScrapedAt={lastScrapedAtForPlatform("meta")}
+                          errorSuffix={
+                            adLib?.meta?.error && metaAds.length === 0 ? adLib.meta.error : null
+                          }
+                        />
                       </div>
                     </div>
                   </div>
@@ -3116,23 +3308,23 @@ function CompetitorDashboardBody({
                     </button>
                   ) : null}
                 </div>
-                {adsApiConfigured ? (
+                {canManualRefresh && adsApiConfigured ? (
                   <div className={platformRefreshActionsRowClass}>
                     <button
                       type="button"
-                      disabled={metaRefreshing || adLibLoading || !fetchMeta}
-                      onClick={async () => {
-                        try {
-                          await refreshMetaAds();
-                          await syncSavedCompetitorsFromAccount();
-                        } catch {
-                          /* handled in hook */
-                        }
-                      }}
+                      disabled={
+                        metaRefreshing ||
+                        manualRefreshBusyPlatform === "meta" ||
+                        manualRefreshDisabled ||
+                        !fetchMeta
+                      }
+                      onClick={() => void handleManualPlatformRefresh("meta")}
                       className={platformRefreshOnlyButtonClass}
-                      title="Re-fetch Meta only (bypasses cache). Other platforms unchanged."
+                      title="Re-fetch Meta only (active today, up to 300 ads)."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${metaRefreshing ? "motion-safe:animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 shrink-0 ${metaRefreshing || manualRefreshBusyPlatform === "meta" ? "motion-safe:animate-spin" : ""}`}
+                      />
                       Refresh Meta only
                     </button>
                   </div>
@@ -3210,14 +3402,16 @@ function CompetitorDashboardBody({
                     </div>
                     <div>
                       <h3 className="font-semibold text-[#343434] text-[16px] tracking-[-0.01em]">Google / YouTube</h3>
-                      <p className="text-[13px] text-[#6b7280] mt-0.5">
-                        {googleSectionBusy
-                          ? googleRefreshing
-                            ? "Refreshing Google / YouTube ads…"
-                            : "Loading…"
-                          : `${googleRows.length} loaded (up to ${GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT} per run) from Ads Transparency`}
-                        {adLib?.google?.error && googleRows.length === 0 ? ` · ${adLib.google?.error}` : ""}
-                      </p>
+                      <PlatformLastScrapedLine
+                        busy={googleSectionBusy}
+                        busyLabel={
+                          googleRefreshing ? "Refreshing Google / YouTube ads…" : "Loading…"
+                        }
+                        lastScrapedAt={lastScrapedAtForPlatform("google")}
+                        errorSuffix={
+                          adLib?.google?.error && googleRows.length === 0 ? adLib.google.error : null
+                        }
+                      />
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 justify-end self-start">
@@ -3232,23 +3426,23 @@ function CompetitorDashboardBody({
                     ) : null}
                   </div>
                 </div>
-                {adsApiConfigured ? (
+                {canManualRefresh && adsApiConfigured ? (
                   <div className={platformRefreshActionsRowClass}>
                     <button
                       type="button"
-                      disabled={googleRefreshing || adLibLoading || !fetchGoogle}
-                      onClick={async () => {
-                        try {
-                          await refreshGoogleAds();
-                          await syncSavedCompetitorsFromAccount();
-                        } catch {
-                          /* handled in hook */
-                        }
-                      }}
+                      disabled={
+                        googleRefreshing ||
+                        manualRefreshBusyPlatform === "google" ||
+                        manualRefreshDisabled ||
+                        !fetchGoogle
+                      }
+                      onClick={() => void handleManualPlatformRefresh("google")}
                       className={platformRefreshOnlyButtonClass}
-                      title="Re-fetch Google / YouTube only (bypasses cache). Other platforms unchanged."
+                      title="Re-fetch Google / YouTube only (active today, up to 300 ads)."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${googleRefreshing ? "motion-safe:animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 shrink-0 ${googleRefreshing || manualRefreshBusyPlatform === "google" ? "motion-safe:animate-spin" : ""}`}
+                      />
                       Refresh Google only
                     </button>
                   </div>
@@ -3326,14 +3520,16 @@ function CompetitorDashboardBody({
                     </div>
                     <div>
                       <h3 className="font-semibold text-[#343434] text-[16px] tracking-[-0.01em]">LinkedIn</h3>
-                      <p className="text-[13px] text-[#6b7280] mt-0.5">
-                        {linkedinSectionBusy
-                          ? linkedinRefreshing
-                            ? "Refreshing LinkedIn ads…"
-                            : "Loading…"
-                          : `${linkedinAds.length} loaded (max ${scrapeFields.linkedinMaxAds} per request) from LinkedIn Ads Library`}
-                        {adLib?.linkedin?.error && linkedinAds.length === 0 ? ` · ${adLib.linkedin?.error}` : ""}
-                      </p>
+                      <PlatformLastScrapedLine
+                        busy={linkedinSectionBusy}
+                        busyLabel={linkedinRefreshing ? "Refreshing LinkedIn ads…" : "Loading…"}
+                        lastScrapedAt={lastScrapedAtForPlatform("linkedin")}
+                        errorSuffix={
+                          adLib?.linkedin?.error && linkedinAds.length === 0
+                            ? adLib.linkedin.error
+                            : null
+                        }
+                      />
                     </div>
                   </div>
                   {!linkedinSectionBusy && filteredLinkedInAds.length > META_ADS_INLINE_PREVIEW ? (
@@ -3346,23 +3542,23 @@ function CompetitorDashboardBody({
                     </button>
                   ) : null}
                 </div>
-                {adsApiConfigured ? (
+                {canManualRefresh && adsApiConfigured ? (
                   <div className={platformRefreshActionsRowClass}>
                     <button
                       type="button"
-                      disabled={linkedinRefreshing || adLibLoading || !fetchLinkedIn}
-                      onClick={async () => {
-                        try {
-                          await refreshLinkedInAds();
-                          await syncSavedCompetitorsFromAccount();
-                        } catch {
-                          /* handled in hook */
-                        }
-                      }}
+                      disabled={
+                        linkedinRefreshing ||
+                        manualRefreshBusyPlatform === "linkedin" ||
+                        manualRefreshDisabled ||
+                        !fetchLinkedIn
+                      }
+                      onClick={() => void handleManualPlatformRefresh("linkedin")}
                       className={platformRefreshOnlyButtonClass}
-                      title="Re-fetch LinkedIn only (bypasses cache). Other platforms unchanged."
+                      title="Re-fetch LinkedIn only (active today, up to 300 ads)."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${linkedinRefreshing ? "motion-safe:animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 shrink-0 ${linkedinRefreshing || manualRefreshBusyPlatform === "linkedin" ? "motion-safe:animate-spin" : ""}`}
+                      />
                       Refresh LinkedIn only
                     </button>
                   </div>
@@ -3437,14 +3633,14 @@ function CompetitorDashboardBody({
                     </div>
                     <div>
                       <h3 className="font-semibold text-[#343434] text-[16px] tracking-[-0.01em]">TikTok</h3>
-                      <p className="text-[13px] text-[#6b7280] mt-0.5">
-                        {tiktokSectionBusy
-                          ? tiktokRefreshing
-                            ? "Refreshing TikTok ads…"
-                            : "Loading…"
-                          : `${tiktokAds.length} loaded (max ${scrapeFields.tiktokMaxAds} per request) from TikTok Ads Library`}
-                        {adLib?.tiktok?.error && tiktokAds.length === 0 ? ` · ${adLib.tiktok?.error}` : ""}
-                      </p>
+                      <PlatformLastScrapedLine
+                        busy={tiktokSectionBusy}
+                        busyLabel={tiktokRefreshing ? "Refreshing TikTok ads…" : "Loading…"}
+                        lastScrapedAt={lastScrapedAtForPlatform("tiktok")}
+                        errorSuffix={
+                          adLib?.tiktok?.error && tiktokAds.length === 0 ? adLib.tiktok.error : null
+                        }
+                      />
                     </div>
                   </div>
                   {!tiktokSectionBusy && filteredTikTokAds.length > META_ADS_INLINE_PREVIEW ? (
@@ -3457,23 +3653,23 @@ function CompetitorDashboardBody({
                     </button>
                   ) : null}
                 </div>
-                {adsApiConfigured ? (
+                {canManualRefresh && adsApiConfigured ? (
                   <div className={platformRefreshActionsRowClass}>
                     <button
                       type="button"
-                      disabled={tiktokRefreshing || adLibLoading || !fetchTikTok}
-                      onClick={async () => {
-                        try {
-                          await refreshTikTokAds();
-                          await syncSavedCompetitorsFromAccount();
-                        } catch {
-                          /* handled in hook */
-                        }
-                      }}
+                      disabled={
+                        tiktokRefreshing ||
+                        manualRefreshBusyPlatform === "tiktok" ||
+                        manualRefreshDisabled ||
+                        !fetchTikTok
+                      }
+                      onClick={() => void handleManualPlatformRefresh("tiktok")}
                       className={platformRefreshOnlyButtonClass}
-                      title="Re-fetch TikTok only (bypasses cache). Other platforms unchanged."
+                      title="Re-fetch TikTok only (active today, up to 300 ads)."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${tiktokRefreshing ? "motion-safe:animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 shrink-0 ${tiktokRefreshing || manualRefreshBusyPlatform === "tiktok" ? "motion-safe:animate-spin" : ""}`}
+                      />
                       Refresh TikTok only
                     </button>
                   </div>
@@ -3542,14 +3738,16 @@ function CompetitorDashboardBody({
                     </div>
                     <div>
                       <h3 className="font-semibold text-[#343434] text-[16px] tracking-[-0.01em]">Pinterest ads</h3>
-                      <p className="text-[13px] text-[#6b7280] mt-0.5">
-                        {pinterestSectionBusy
-                          ? pinterestRefreshing
-                            ? "Refreshing Pinterest ads…"
-                            : "Loading…"
-                          : `${pinterestAds.length} loaded (max ${scrapeFields.pinterestMaxResults} per request) from Pinterest`}
-                        {adLib?.pinterest?.error && pinterestAds.length === 0 ? ` · ${adLib.pinterest?.error}` : ""}
-                      </p>
+                      <PlatformLastScrapedLine
+                        busy={pinterestSectionBusy}
+                        busyLabel={pinterestRefreshing ? "Refreshing Pinterest ads…" : "Loading…"}
+                        lastScrapedAt={lastScrapedAtForPlatform("pinterest")}
+                        errorSuffix={
+                          adLib?.pinterest?.error && pinterestAds.length === 0
+                            ? adLib.pinterest.error
+                            : null
+                        }
+                      />
                     </div>
                   </div>
                   {!pinterestSectionBusy && filteredPinterestAds.length > META_ADS_INLINE_PREVIEW ? (
@@ -3562,23 +3760,23 @@ function CompetitorDashboardBody({
                     </button>
                   ) : null}
                 </div>
-                {adsApiConfigured ? (
+                {canManualRefresh && adsApiConfigured ? (
                   <div className={platformRefreshActionsRowClass}>
                     <button
                       type="button"
-                      disabled={pinterestRefreshing || adLibLoading || !fetchPinterest}
-                      onClick={async () => {
-                        try {
-                          await refreshPinterestAds();
-                          await syncSavedCompetitorsFromAccount();
-                        } catch {
-                          /* handled in hook */
-                        }
-                      }}
+                      disabled={
+                        pinterestRefreshing ||
+                        manualRefreshBusyPlatform === "pinterest" ||
+                        manualRefreshDisabled ||
+                        !fetchPinterest
+                      }
+                      onClick={() => void handleManualPlatformRefresh("pinterest")}
                       className={platformRefreshOnlyButtonClass}
-                      title="Re-fetch Pinterest only (bypasses cache). Other platforms unchanged."
+                      title="Re-fetch Pinterest only (active today, up to 300 ads)."
                     >
-                      <RefreshCw className={`h-4 w-4 shrink-0 ${pinterestRefreshing ? "motion-safe:animate-spin" : ""}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 shrink-0 ${pinterestRefreshing || manualRefreshBusyPlatform === "pinterest" ? "motion-safe:animate-spin" : ""}`}
+                      />
                       Refresh Pinterest only
                     </button>
                   </div>
@@ -3658,19 +3856,18 @@ function CompetitorDashboardBody({
                         <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-[#343434]">
                           Snapchat (EU Ads Gallery)
                         </h3>
-                        <p className="mt-0.5 text-[13px] text-[#6b7280]">
-                          {snapchatSectionBusy ? (
+                        <PlatformLastScrapedLine
+                          busy={snapchatSectionBusy}
+                          busyLabel={
                             snapchatRefreshing ? "Refreshing Snapchat ads…" : "Loading…"
-                          ) : (
-                            <>
-                              {snapchatAds.length} ad{snapchatAds.length === 1 ? "" : "s"} from Snapchat’s EU
-                              Transparency Gallery, matched using “{competitorDisplayLabel}” and {brand.domain}.
-                            </>
-                          )}
-                          {adLib?.snapchat?.error && snapchatAds.length === 0
-                            ? ` · ${adLib.snapchat?.error}`
-                            : ""}
-                        </p>
+                          }
+                          lastScrapedAt={lastScrapedAtForPlatform("snapchat")}
+                          errorSuffix={
+                            adLib?.snapchat?.error && snapchatAds.length === 0
+                              ? adLib.snapchat.error
+                              : null
+                          }
+                        />
                       </div>
                     </div>
                     {!snapchatSectionBusy &&
@@ -3684,30 +3881,28 @@ function CompetitorDashboardBody({
                       </button>
                     ) : null}
                   </div>
-                  {adsApiConfigured ? (
-                    <div className={platformRefreshActionsRowClass}>
-                      <button
-                        type="button"
-                        disabled={snapchatRefreshing || adLibLoading || !fetchSnapchat}
-                        onClick={async () => {
-                          try {
-                            await refreshSnapchatAds();
-                            await syncSavedCompetitorsFromAccount();
-                          } catch {
-                            /* handled in hook */
-                          }
-                        }}
-                        className={platformRefreshOnlyButtonClass}
-                        title="Re-fetch Snapchat only (bypasses cache)."
-                      >
-                        <RefreshCw
-                          className={`h-4 w-4 shrink-0 ${snapchatRefreshing ? "motion-safe:animate-spin" : ""}`}
-                          aria-hidden
-                        />
-                        Refresh Snapchat only
-                      </button>
-                    </div>
-                  ) : null}
+                {canManualRefresh && adsApiConfigured ? (
+                  <div className={platformRefreshActionsRowClass}>
+                    <button
+                      type="button"
+                      disabled={
+                        snapchatRefreshing ||
+                        manualRefreshBusyPlatform === "snapchat" ||
+                        manualRefreshDisabled ||
+                        !fetchSnapchat
+                      }
+                      onClick={() => void handleManualPlatformRefresh("snapchat")}
+                      className={platformRefreshOnlyButtonClass}
+                      title="Re-fetch Snapchat only (active today, up to 300 ads)."
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 shrink-0 ${snapchatRefreshing || manualRefreshBusyPlatform === "snapchat" ? "motion-safe:animate-spin" : ""}`}
+                        aria-hidden
+                      />
+                      Refresh Snapchat only
+                    </button>
+                  </div>
+                ) : null}
                 <div className={platformAdsBodyShellClass}>
                   {snapchatSectionBusy ? (
                     <div className={ADS_GRID_CLASS}>
@@ -3777,7 +3972,7 @@ function CompetitorDashboardBody({
                 onOpenAdsLibrary={() => handleTabChange("ads library")}
                 competitorId={competitorDbIdForSaved || undefined}
                 lastScrapedAt={accountLastScrapedAt}
-                onFreshnessRescrape={handleForceRescrape}
+                onFreshnessRescrape={undefined}
               />
             </KeepMountedTab>
             <KeepMountedTab active={activeSubTab === "activity-feed"} className="min-h-0">
@@ -3802,7 +3997,7 @@ function CompetitorDashboardBody({
               competitorLabel={competitorDisplayLabel}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
-              onFreshnessRescrape={handleForceRescrape}
+              onFreshnessRescrape={undefined}
               onOpenAd={openAd}
             />
           </KeepMountedTab>
@@ -3812,7 +4007,7 @@ function CompetitorDashboardBody({
               competitorLabel={competitorDisplayLabel}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
-              onFreshnessRescrape={handleForceRescrape}
+              onFreshnessRescrape={undefined}
               onOpenAd={openAd}
             />
           </KeepMountedTab>
@@ -3822,7 +4017,7 @@ function CompetitorDashboardBody({
               competitorLabel={competitorDisplayLabel}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
-              onFreshnessRescrape={handleForceRescrape}
+              onFreshnessRescrape={undefined}
               onOpenAd={openAd}
               landingPagesListCache={landingPagesListCacheForChildren}
             />

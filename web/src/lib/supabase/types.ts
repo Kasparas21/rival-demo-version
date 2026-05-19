@@ -147,6 +147,8 @@ export type Database = {
           is_followed: boolean;
           followed_at: string | null;
           platform_high_coverage_applied: boolean;
+          first_scrape_completed_at: string | null;
+          smart_prioritization_disabled: boolean;
         };
         Insert: {
           id?: string;
@@ -167,6 +169,8 @@ export type Database = {
           is_followed?: boolean;
           followed_at?: string | null;
           platform_high_coverage_applied?: boolean;
+          first_scrape_completed_at?: string | null;
+          smart_prioritization_disabled?: boolean;
         };
         Update: {
           id?: string;
@@ -187,6 +191,8 @@ export type Database = {
           is_followed?: boolean;
           followed_at?: string | null;
           platform_high_coverage_applied?: boolean;
+          first_scrape_completed_at?: string | null;
+          smart_prioritization_disabled?: boolean;
         };
         Relationships: [];
       };
@@ -202,6 +208,7 @@ export type Database = {
           classified_at: string;
           last_classification_review_at: string;
           next_scrape_at: string | null;
+          last_scrape_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -216,6 +223,7 @@ export type Database = {
           classified_at?: string;
           last_classification_review_at?: string;
           next_scrape_at?: string | null;
+          last_scrape_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -230,6 +238,7 @@ export type Database = {
           classified_at?: string;
           last_classification_review_at?: string;
           next_scrape_at?: string | null;
+          last_scrape_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -436,6 +445,7 @@ export type Database = {
           ai_extracted_voice_tone: Json | null;
           ai_extracted_launch_date: string | null;
           created_at: string;
+          archived_at: string | null;
         };
         Insert: {
           id?: string;
@@ -456,6 +466,7 @@ export type Database = {
           ai_enrichment_status?: string | null;
           ai_extracted_voice_tone?: Json | null;
           ai_extracted_launch_date?: string | null;
+          archived_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -477,6 +488,7 @@ export type Database = {
           ai_enrichment_status?: string | null;
           ai_extracted_voice_tone?: Json | null;
           ai_extracted_launch_date?: string | null;
+          archived_at?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -916,6 +928,78 @@ export type Database = {
         };
         Relationships: [];
       };
+      competitor_swap_usage: {
+        Row: {
+          user_id: string;
+          year_month: string;
+          swap_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          year_month: string;
+          swap_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          year_month?: string;
+          swap_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      csv_export_usage: {
+        Row: {
+          user_id: string;
+          year_month: string;
+          export_count: number;
+          ads_exported: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          year_month: string;
+          export_count?: number;
+          ads_exported?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          year_month?: string;
+          export_count?: number;
+          ads_exported?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      manual_refresh_usage: {
+        Row: {
+          user_id: string;
+          year_month: string;
+          competitor_id: string;
+          refresh_count: number;
+          last_refresh_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          year_month: string;
+          competitor_id: string;
+          refresh_count?: number;
+          last_refresh_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          year_month?: string;
+          competitor_id?: string;
+          refresh_count?: number;
+          last_refresh_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       billing_subscriptions: {
         Row: {
           user_id: string;
@@ -1011,6 +1095,18 @@ export type Database = {
     Functions: {
       increment_monthly_scrape_usage: {
         Args: { p_ads_count: number; p_ops_count: number };
+        Returns: undefined;
+      };
+      increment_competitor_swap_usage: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      increment_csv_export_usage: {
+        Args: { p_ads_count: number };
+        Returns: undefined;
+      };
+      record_manual_refresh_usage: {
+        Args: { p_competitor_id: string };
         Returns: undefined;
       };
     };

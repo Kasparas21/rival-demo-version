@@ -20,10 +20,16 @@ import {
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { saveCompetitorToAccount, saveSearchToAccount } from "@/lib/account/client";
 import {
+  fetchAdsLibraryDeduplicated,
   normalizedBrandForAdsLibraryPayload,
   stableAdsLibraryPayloadKey,
   writeAdsLibrarySessionCache,
 } from "@/lib/ad-library/deduped-fetch";
+import {
+  clearDiscoveryScanInProgress,
+  markDiscoveryScanInProgress,
+  markFreshDiscoveryScan,
+} from "@/lib/ad-library/discovery-scan-guard";
 import { channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
 import {
   coerceAdsLibraryResponse,
@@ -222,7 +228,7 @@ function SearchingContent() {
     setFlowRehydrated(true);
   }, [flowKey]);
 
-  /** Fresh flows: default Meta/Google/TikTok/Pinterest/LinkedIn/Snapchat markets from the competitor site TLD. */
+  /** Fresh flows: Meta/Google/LinkedIn default to all countries; Pinterest/Snapchat/TikTok use TLD hints. */
   useEffect(() => {
     if (!flowRehydrated) return;
     if (hadSnapshotRegionPrefsRef.current) return;
@@ -432,8 +438,12 @@ function SearchingContent() {
     runDiscovery();
   }, [flowRehydrated, phase, runDiscovery]);
 
+  const scanRunningRef = useRef(false);
+
   const runScanAndNavigate = useCallback(
     async (mergedIds: PlatformIdentifier) => {
+      if (scanRunningRef.current) return;
+      scanRunningRef.current = true;
       setPhase("scanning");
       setScanProgress(0);
       const adsPlatforms = channelsQueryToAdsPlatforms(
@@ -456,6 +466,7 @@ function SearchingContent() {
       if (adsPlatforms.length === 0) {
         setScanFraction({ done: 0, total: 0 });
         setScanProgress(100);
+        scanRunningRef.current = false;
         navigateToCompetitor();
         return;
       }
@@ -500,13 +511,13 @@ function SearchingContent() {
         metaStatus: "ACTIVE" as const,
         googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
         metaMaxAds: scrape.metaMaxAds,
-        metaCountry: scrape.metaCountry.trim().toUpperCase() || "US",
+        metaCountry: adLibraryRegions.metaCountry.trim().toUpperCase() || "ALL",
         metaStartDate: scrape.metaStartDate.trim(),
         metaEndDate: scrape.metaEndDate.trim(),
         metaSortBy: scrape.metaSortBy.trim() || "impressions_desc",
         linkedinMaxAds: scrape.linkedinMaxAds,
         linkedinDateRange: scrape.linkedinDateRange.trim(),
-        linkedinCountryCode: scrape.linkedinCountryCode.trim(),
+        linkedinCountryCode: adLibraryRegions.linkedinCountryCode.trim(),
         tiktokMaxAds: scrape.tiktokMaxAds,
         tiktokStartDate: scrape.tiktokStartDate.trim(),
         tiktokEndDate: scrape.tiktokEndDate.trim(),
@@ -525,6 +536,8 @@ function SearchingContent() {
         ...(adsPlatforms.includes("pinterest") ? { pinterestCountry } : {}),
       };
       const payloadKey = stableAdsLibraryPayloadKey(payload);
+      const scanDomain = payload.brand.domain;
+      markDiscoveryScanInProgress(scanDomain);
 
       const markRunningTimer = window.setTimeout(() => {
         setPlatformStatuses((prev) => {
@@ -552,17 +565,15 @@ function SearchingContent() {
         // (`ads_cache` + `scraped_ads`) before the next Apify run — parallel 500-ad jobs often timed out.
         for (const p of adsPlatforms) {
           try {
-            const res = await fetch("/api/ads/library", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...payload, platforms: [p], skipCache: true }),
-            });
-            const json = (await res.json()) as AdsLibraryResponse | AdsLibraryPartialJson;
+            const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(
+              { ...payload, platforms: [p] },
+              { skipCache: true }
+            );
             mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
-            if (!res.ok) allHttpOk = false;
+            if (!httpOk) allHttpOk = false;
             setPlatformStatuses((prev) => ({
               ...prev,
-              [p]: res.ok ? "done" : "error",
+              [p]: httpOk ? "done" : "error",
             }));
           } catch {
             allHttpOk = false;
@@ -610,8 +621,10 @@ function SearchingContent() {
           /* Warmup must never block dashboard navigation */
         }
 
+        markFreshDiscoveryScan(scanDomain);
         navigateToCompetitor();
       } catch {
+        clearDiscoveryScanInProgress(scanDomain);
         setScanProgress(100);
         setScanFraction({ done: total, total });
         setPlatformStatuses((prev) => {
@@ -624,6 +637,7 @@ function SearchingContent() {
         navigateToCompetitor();
       } finally {
         window.clearTimeout(markRunningTimer);
+        scanRunningRef.current = false;
       }
     },
     [adLibraryRegions, discoveredBrand, displayName, flowKey, router, selectedChannels]

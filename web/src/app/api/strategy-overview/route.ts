@@ -117,6 +117,28 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
+  if (
+    billing.planTier === "free_trial" &&
+    billing.limits.maxAiStrategyOverviews != null &&
+    !billing.isUnlimited
+  ) {
+    const { count } = await supabase
+      .from("strategy_overview_cache")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+    if ((count ?? 0) >= billing.limits.maxAiStrategyOverviews) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: "quota_exceeded",
+          error: `Trial includes ${billing.limits.maxAiStrategyOverviews} AI strategy report. Upgrade for unlimited reports.`,
+          checkoutUrl: "/checkout?plan=pro",
+        },
+        { status: 402 },
+      );
+    }
+  }
+
   const userContent = [
     `Competitor: ${body.competitorName.trim()}`,
     `Domain: ${body.competitorDomain.trim()}`,

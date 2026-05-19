@@ -78,8 +78,8 @@ describe("classifyByActiveCount", () => {
   });
 });
 
-describe("computePlatformTracking high-coverage", () => {
-  it("demotes to top 3 when 5+ platforms have 30+ active ads", () => {
+describe("computePlatformTracking", () => {
+  it("classifies each platform independently", () => {
     const result = computePlatformTracking({
       meta: 100,
       google: 90,
@@ -88,12 +88,9 @@ describe("computePlatformTracking high-coverage", () => {
       linkedin: 60,
       snapchat: 40,
     });
-    expect(result.highCoverageApplied).toBe(true);
-    const inactive = result.platforms.filter((p) => p.classification === "INACTIVE");
-    expect(inactive.length).toBe(3);
-    expect(inactive.every((p) => p.highCoverageDemoted)).toBe(true);
-    const activeTrack = result.platforms.filter((p) => p.classification !== "INACTIVE");
-    expect(activeTrack).toHaveLength(3);
+    expect(result.highCoverageApplied).toBe(false);
+    expect(result.platforms.every((p) => !p.highCoverageDemoted)).toBe(true);
+    expect(result.platforms.filter((p) => p.classification === "PRIMARY")).toHaveLength(5);
   });
 });
 

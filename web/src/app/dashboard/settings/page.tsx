@@ -14,6 +14,13 @@ type ProfileState = {
   brand_context: string;
 };
 
+type PlanLimitsState = {
+  maxWatchedCompetitors: number;
+  maxAdsProcessedPerMonth: number;
+  maxSwapsPerMonth: number;
+  csvExportsPerMonth: number;
+};
+
 type UsageState = {
   scrapedAdsTotal: number;
   scrapedAdsThisMonth: number;
@@ -21,13 +28,14 @@ type UsageState = {
   competitorsWatched: number;
   aiStrategyOverviews: number;
   adLibraryRefreshes: number;
-  limits: {
-    maxWatchedCompetitors: number;
-    maxAdLibraryScrapeRunsPerMonth: number;
-  };
+  swapsThisMonth: number;
+  csvExportsThisMonth: number;
+  limits: PlanLimitsState;
   remaining: {
-    adLibraryScrapeRunsThisMonth: number;
+    adsProcessedThisMonth: number;
     competitorsWatched: number;
+    swapsThisMonth: number;
+    csvExportsThisMonth: number;
   };
 };
 
@@ -35,19 +43,28 @@ type BillingState = {
   hasAccess: boolean;
   isUnlimited: boolean;
   status: string;
+  planTier: string;
   planName: string;
   polarProductId: string | null;
   trialEnd: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  limits: {
-    maxWatchedCompetitors: number;
-    maxAdLibraryScrapeRunsPerMonth: number;
-  };
+  canUseDevPlanSwitcher: boolean;
+  devPlanOverride: string | null;
+  limits: PlanLimitsState;
   remaining: {
-    adLibraryScrapeRunsThisMonth: number;
+    adsProcessedThisMonth: number;
     competitorsWatched: number;
+    swapsThisMonth: number;
+    csvExportsThisMonth: number;
   };
+};
+
+const emptyLimits: PlanLimitsState = {
+  maxWatchedCompetitors: 5,
+  maxAdsProcessedPerMonth: 50_000,
+  maxSwapsPerMonth: 15,
+  csvExportsPerMonth: 0,
 };
 
 const emptyUsage: UsageState = {
@@ -57,13 +74,14 @@ const emptyUsage: UsageState = {
   competitorsWatched: 0,
   aiStrategyOverviews: 0,
   adLibraryRefreshes: 0,
-  limits: {
-    maxWatchedCompetitors: 10,
-    maxAdLibraryScrapeRunsPerMonth: 15,
-  },
+  swapsThisMonth: 0,
+  csvExportsThisMonth: 0,
+  limits: emptyLimits,
   remaining: {
-    adLibraryScrapeRunsThisMonth: 15,
-    competitorsWatched: 10,
+    adsProcessedThisMonth: 50_000,
+    competitorsWatched: 5,
+    swapsThisMonth: 15,
+    csvExportsThisMonth: 0,
   },
 };
 
@@ -71,20 +89,44 @@ const emptyBilling: BillingState = {
   hasAccess: false,
   isUnlimited: false,
   status: "none",
-  planName: "Spy Rival Pro",
+  planTier: "free_trial",
+  planName: "Free trial",
   polarProductId: null,
   trialEnd: null,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
-  limits: {
-    maxWatchedCompetitors: 10,
-    maxAdLibraryScrapeRunsPerMonth: 15,
-  },
+  canUseDevPlanSwitcher: false,
+  devPlanOverride: null,
+  limits: emptyLimits,
   remaining: {
-    adLibraryScrapeRunsThisMonth: 15,
-    competitorsWatched: 10,
+    adsProcessedThisMonth: 0,
+    competitorsWatched: 0,
+    swapsThisMonth: 0,
+    csvExportsThisMonth: 0,
   },
 };
+
+function mapLimitsFromApi(raw: Record<string, unknown> | undefined): PlanLimitsState {
+  if (!raw) return emptyLimits;
+  return {
+    maxWatchedCompetitors:
+      typeof raw.maxWatchedCompetitors === "number"
+        ? raw.maxWatchedCompetitors
+        : emptyLimits.maxWatchedCompetitors,
+    maxAdsProcessedPerMonth:
+      typeof raw.maxAdsProcessedPerMonth === "number"
+        ? raw.maxAdsProcessedPerMonth
+        : typeof raw.maxAdLibraryScrapeRunsPerMonth === "number"
+          ? raw.maxAdLibraryScrapeRunsPerMonth
+          : emptyLimits.maxAdsProcessedPerMonth,
+    maxSwapsPerMonth:
+      typeof raw.maxSwapsPerMonth === "number" ? raw.maxSwapsPerMonth : emptyLimits.maxSwapsPerMonth,
+    csvExportsPerMonth:
+      typeof raw.csvExportsPerMonth === "number"
+        ? raw.csvExportsPerMonth
+        : emptyLimits.csvExportsPerMonth,
+  };
+}
 
 function formatNum(n: number): string {
   return new Intl.NumberFormat().format(n);
@@ -122,6 +164,8 @@ export default function SettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [devPlanSaving, setDevPlanSaving] = useState(false);
+  const [devPlanError, setDevPlanError] = useState<string | null>(null);
 
   const hydrate = useCallback(async () => {
     setLoading(true);
@@ -160,6 +204,7 @@ export default function SettingsPage() {
           };
         };
         if (u.usage) {
+          const limits = mapLimitsFromApi(u.usage.limits as Record<string, unknown> | undefined);
           setUsage({
             scrapedAdsTotal: u.usage.scrapedAdsTotal ?? 0,
             scrapedAdsThisMonth: u.usage.scrapedAdsThisMonth ?? 0,
@@ -167,45 +212,43 @@ export default function SettingsPage() {
             competitorsWatched: u.usage.competitorsWatched ?? 0,
             aiStrategyOverviews: u.usage.aiStrategyOverviews ?? 0,
             adLibraryRefreshes: u.usage.adLibraryRefreshes ?? 0,
-            limits: {
-              maxWatchedCompetitors:
-                u.usage.limits?.maxWatchedCompetitors ?? emptyUsage.limits.maxWatchedCompetitors,
-              maxAdLibraryScrapeRunsPerMonth:
-                u.usage.limits?.maxAdLibraryScrapeRunsPerMonth ??
-                emptyUsage.limits.maxAdLibraryScrapeRunsPerMonth,
-            },
+            swapsThisMonth: u.usage.swapsThisMonth ?? 0,
+            csvExportsThisMonth: u.usage.csvExportsThisMonth ?? 0,
+            limits,
             remaining: {
-              adLibraryScrapeRunsThisMonth:
-                u.usage.remaining?.adLibraryScrapeRunsThisMonth ??
-                emptyUsage.remaining.adLibraryScrapeRunsThisMonth,
+              adsProcessedThisMonth:
+                u.usage.remaining?.adsProcessedThisMonth ?? limits.maxAdsProcessedPerMonth,
               competitorsWatched:
-                u.usage.remaining?.competitorsWatched ?? emptyUsage.remaining.competitorsWatched,
+                u.usage.remaining?.competitorsWatched ?? limits.maxWatchedCompetitors,
+              swapsThisMonth: u.usage.remaining?.swapsThisMonth ?? limits.maxSwapsPerMonth,
+              csvExportsThisMonth:
+                u.usage.remaining?.csvExportsThisMonth ?? limits.csvExportsPerMonth,
             },
           });
         }
         if (u.billing) {
+          const limits = mapLimitsFromApi(u.billing.limits as Record<string, unknown> | undefined);
           setBilling({
             hasAccess: u.billing.hasAccess ?? false,
             isUnlimited: u.billing.isUnlimited ?? false,
             status: u.billing.status ?? "none",
-            planName: u.billing.planName ?? "Spy Rival Pro",
+            planTier: u.billing.planTier ?? "free_trial",
+            planName: u.billing.planName ?? "Free",
             polarProductId: u.billing.polarProductId ?? null,
             trialEnd: u.billing.trialEnd ?? null,
             currentPeriodEnd: u.billing.currentPeriodEnd ?? null,
             cancelAtPeriodEnd: u.billing.cancelAtPeriodEnd ?? false,
-            limits: {
-              maxWatchedCompetitors:
-                u.billing.limits?.maxWatchedCompetitors ?? emptyBilling.limits.maxWatchedCompetitors,
-              maxAdLibraryScrapeRunsPerMonth:
-                u.billing.limits?.maxAdLibraryScrapeRunsPerMonth ??
-                emptyBilling.limits.maxAdLibraryScrapeRunsPerMonth,
-            },
+            canUseDevPlanSwitcher: u.billing.canUseDevPlanSwitcher ?? false,
+            devPlanOverride: u.billing.devPlanOverride ?? null,
+            limits,
             remaining: {
-              adLibraryScrapeRunsThisMonth:
-                u.billing.remaining?.adLibraryScrapeRunsThisMonth ??
-                emptyBilling.remaining.adLibraryScrapeRunsThisMonth,
+              adsProcessedThisMonth:
+                u.billing.remaining?.adsProcessedThisMonth ?? limits.maxAdsProcessedPerMonth,
               competitorsWatched:
-                u.billing.remaining?.competitorsWatched ?? emptyBilling.remaining.competitorsWatched,
+                u.billing.remaining?.competitorsWatched ?? limits.maxWatchedCompetitors,
+              swapsThisMonth: u.billing.remaining?.swapsThisMonth ?? limits.maxSwapsPerMonth,
+              csvExportsThisMonth:
+                u.billing.remaining?.csvExportsThisMonth ?? limits.csvExportsPerMonth,
             },
           });
         }
@@ -220,6 +263,28 @@ export default function SettingsPage() {
   useEffect(() => {
     queueMicrotask(() => void hydrate());
   }, [hydrate]);
+
+  const applyDevPlan = async (plan: string | null) => {
+    setDevPlanSaving(true);
+    setDevPlanError(null);
+    try {
+      const res = await fetch("/api/account/dev-plan-override", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ plan }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? "Could not switch plan.");
+      }
+      await hydrate();
+    } catch (e) {
+      setDevPlanError(e instanceof Error ? e.message : "Could not switch plan.");
+    } finally {
+      setDevPlanSaving(false);
+    }
+  };
 
   const isDirty =
     initialProfile !== null &&
@@ -434,13 +499,13 @@ export default function SettingsPage() {
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Scraped ads (month, UTC)</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Ads processed (month, UTC)</p>
               <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
                 {formatNum(usage.scrapedAdsThisMonth)}
               </p>
               <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.adLibraryScrapeRunsThisMonth)} of{" "}
-                {formatNum(usage.limits.maxAdLibraryScrapeRunsPerMonth)} fresh searches remaining.
+                {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
+                {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
               </p>
             </div>
             <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
@@ -486,6 +551,7 @@ export default function SettingsPage() {
               </p>
               <p className="mt-2 text-[12px] text-[#71717a]">
                 Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span>
+                <span className="text-[#a1a1aa]"> ({billing.planTier})</span>
                 {!billing.isUnlimited ? (
                   <>
                     {" "}
@@ -507,6 +573,50 @@ export default function SettingsPage() {
             </span>
           </div>
 
+          {billing.canUseDevPlanSwitcher ? (
+            <div className="mt-5 rounded-xl border border-dashed border-[#c7d2fe] bg-[#eef2ff]/60 p-4">
+              <p className="text-[12px] font-semibold text-[#3730a3]">Dev plan switcher</p>
+              <p className="mt-1 text-[11px] text-[#6366f1]">
+                Simulate Free trial, Starter, Pro, or Admin without Polar checkout.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(
+                  [
+                    { id: "free_trial", label: "Free trial" },
+                    { id: "starter", label: "Starter" },
+                    { id: "pro", label: "Pro" },
+                    { id: "admin", label: "Admin" },
+                  ] as const
+                ).map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={devPlanSaving}
+                    onClick={() => void applyDevPlan(id)}
+                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
+                      billing.planTier === id
+                        ? "bg-[#4f46e5] text-white"
+                        : "bg-white text-[#4338ca] ring-1 ring-[#c7d2fe] hover:bg-[#e0e7ff]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={devPlanSaving}
+                  onClick={() => void applyDevPlan(null)}
+                  className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-[#64748b] ring-1 ring-[#e2e8f0] hover:bg-white"
+                >
+                  Clear override
+                </button>
+              </div>
+              {devPlanError ? (
+                <p className="mt-2 text-[11px] font-medium text-[#b42318]">{devPlanError}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="mt-5 flex flex-wrap gap-3">
             {billing.isUnlimited ? (
               <p className="text-[13px] leading-relaxed text-[#52525b]">
@@ -524,7 +634,7 @@ export default function SettingsPage() {
                 href="/checkout"
                 className="rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
               >
-                Start 1-day free trial
+                Start 7-day free trial
               </a>
             )}
           </div>

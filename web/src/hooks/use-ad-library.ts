@@ -28,6 +28,10 @@ import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
 import { readGoogleAdDetailsPublicFlag } from "@/lib/ad-library/public-env-flags";
 import {
+  clearFreshDiscoveryScan,
+  shouldUseAdsLibraryCacheOnly,
+} from "@/lib/ad-library/discovery-scan-guard";
+import {
   ADS_LIBRARY_UPDATED_EVENT,
   markPendingStrategyRefresh,
   type AdsLibraryUpdatedDetail,
@@ -213,8 +217,12 @@ export function useAdLibrary(
         if (platforms?.length) {
           body.platforms = [...platforms].sort();
         }
+        const forceFresh = opts?.skipCache === true;
+        const cacheOnly =
+          !forceFresh && shouldUseAdsLibraryCacheOnly(brand.domain);
         let { response: json, httpOk } = await fetchAdsLibraryDeduplicated(body, {
-          skipCache: opts?.skipCache ?? false,
+          skipCache: forceFresh,
+          cacheOnly,
           clientSkipReadCache: isBackground,
           signal: ac.signal,
         });
@@ -364,43 +372,51 @@ export function useAdLibrary(
   const configured = data?.configured !== false;
 
   /** Re-run Apify scrapes for all selected platforms (uses credits). */
-  const refresh = useCallback(() => load({ skipCache: true }), [load]);
+  const refresh = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true });
+  }, [load, brand.domain]);
 
   /** Re-fetch only Google / YouTube — does not call Meta or LinkedIn (saves credits). */
-  const refreshGoogleAds = useCallback(
-    () => load({ skipCache: true, platforms: ["google"] }),
-    [load]
-  );
+  const refreshGoogleAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["google"] });
+  }, [load, brand.domain]);
 
   /** Re-fetch only Meta (`metaStatus`: active ads). */
-  const refreshMetaAds = useCallback(
-    () => load({ skipCache: true, platforms: ["meta"] }),
-    [load]
-  );
+  const refreshMetaAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["meta"] });
+  }, [load, brand.domain]);
 
-  const refreshTikTokAds = useCallback(
-    () => load({ skipCache: true, platforms: ["tiktok"] }),
-    [load]
-  );
+  const refreshTikTokAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["tiktok"] });
+  }, [load, brand.domain]);
 
-  const refreshPinterestAds = useCallback(
-    () => load({ skipCache: true, platforms: ["pinterest"] }),
-    [load]
-  );
+  const refreshPinterestAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["pinterest"] });
+  }, [load, brand.domain]);
 
-  const refreshLinkedInAds = useCallback(
-    () => load({ skipCache: true, platforms: ["linkedin"] }),
-    [load]
-  );
+  const refreshLinkedInAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["linkedin"] });
+  }, [load, brand.domain]);
 
-  const refreshMicrosoftAds = useCallback(
-    () => load({ skipCache: true, platforms: ["microsoft"] }),
-    [load]
-  );
+  const refreshMicrosoftAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["microsoft"] });
+  }, [load, brand.domain]);
 
-  const refreshSnapchatAds = useCallback(
-    () => load({ skipCache: true, platforms: ["snapchat"] }),
-    [load]
+  const refreshSnapchatAds = useCallback(() => {
+    clearFreshDiscoveryScan(brand.domain);
+    return load({ skipCache: true, platforms: ["snapchat"] });
+  }, [load, brand.domain]);
+
+  const reloadPlatformFromCache = useCallback(
+    (platform: AdsLibraryPlatform) => load({ platforms: [platform], skipCache: false, background: true }),
+    [load],
   );
 
   return {
@@ -423,5 +439,6 @@ export function useAdLibrary(
     refreshLinkedInAds,
     refreshMicrosoftAds,
     refreshSnapchatAds,
+    reloadPlatformFromCache,
   };
 }

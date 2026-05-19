@@ -1,5 +1,35 @@
 export const POLAR_PRODUCT_ID_FALLBACK = "a105e33c-ab82-4649-8740-c7a799f654bc";
 
+export type PolarPlanSlug = "starter" | "pro";
+
+export function getPolarProductIds(): {
+  starter: string | null;
+  pro: string;
+  legacy: string;
+} {
+  const legacy = process.env.POLAR_PRODUCT_ID?.trim() || POLAR_PRODUCT_ID_FALLBACK;
+  const starter = process.env.POLAR_STARTER_PRODUCT_ID?.trim() || null;
+  const pro = process.env.POLAR_PRO_PRODUCT_ID?.trim() || legacy;
+  return { starter, pro, legacy };
+}
+
+export function polarProductIdForPlan(plan: PolarPlanSlug): string {
+  const ids = getPolarProductIds();
+  if (plan === "starter") {
+    return ids.starter ?? ids.legacy;
+  }
+  return ids.pro;
+}
+
+export function isKnownPolarProductId(productId: string): boolean {
+  const ids = getPolarProductIds();
+  return (
+    productId === ids.legacy ||
+    (ids.starter !== null && productId === ids.starter) ||
+    productId === ids.pro
+  );
+}
+
 /** Hostnames from copy-paste env examples; outbound auth links must never use these. */
 const TUTORIAL_PLACEHOLDER_HOSTNAMES = new Set(["your-domain.com", "www.your-domain.com"]);
 
@@ -47,7 +77,7 @@ export function getAppUrl(): string {
 export function getPolarEnv() {
   const accessToken = process.env.POLAR_ACCESS_TOKEN?.trim();
   const webhookSecret = process.env.POLAR_WEBHOOK_SECRET?.trim();
-  const productId = process.env.POLAR_PRODUCT_ID?.trim() || POLAR_PRODUCT_ID_FALLBACK;
+  const productId = polarProductIdForPlan("pro");
   const server: "production" | "sandbox" =
     process.env.POLAR_SERVER?.trim() === "sandbox" ? "sandbox" : "production";
 

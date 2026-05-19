@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { ensureUserProfile } from "@/lib/auth/profile";
 import type { AdsLibraryContextPayload, SavedCompetitorPayload } from "@/lib/account/types";
-import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { getBillingEntitlement, quotaExceededResponseBody } from "@/lib/billing/entitlements";
+import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
@@ -535,6 +536,22 @@ export async function DELETE(request: Request) {
     );
   }
 
+  const entitlement = await getBillingEntitlement(supabase, user.id);
+  if (existing && !entitlement.isUnlimited && entitlement.limits.maxSwapsPerMonth > 0) {
+    const usage = await loadMonthlyUsageSnapshot(supabase, user.id, utcYearMonth());
+    if (usage.swapCount >= entitlement.limits.maxSwapsPerMonth) {
+      return NextResponse.json(
+        quotaExceededResponseBody({
+          used: usage.swapCount,
+          requested: 1,
+          limit: entitlement.limits.maxSwapsPerMonth,
+          metric: "competitor swaps",
+        }),
+        { status: 402 },
+      );
+    }
+  }
+
   const bodyCacheDomain = typeof body.cacheDomain === "string" && body.cacheDomain.trim() ? body.cacheDomain : undefined;
   let purgeDomains: string[] =
     existing?.slug || existing?.brand_domain
@@ -558,6 +575,10 @@ export async function DELETE(request: Request) {
 
   if (delSavedError) {
     return NextResponse.json({ error: delSavedError.message }, { status: 500 });
+  }
+
+  if (existing && !entitlement.isUnlimited) {
+    await supabase.rpc("increment_competitor_swap_usage");
   }
 
   let adsRes: { error: { message: string } | null } = { error: null };
