@@ -22,7 +22,7 @@ import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-opt
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import { countLibraryAdsForPlatform, platformScrapeSucceeded } from "@/lib/ad-library/persist-scraped-ads";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
-import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
+import { syncSavedCompetitorLibraryContext } from "@/lib/ad-library/sync-saved-competitor-context";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import type { AdsLibraryIds } from "@/lib/ad-library/run-ads-library-parallel-scrape";
@@ -164,6 +164,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     platforms?: AdsLibraryPlatform[];
     /** When true, skip server-side `ads_cache` and run Apify for all requested platforms. */
     skipCache?: boolean;
+    /** Channel picker ids — merged into `saved_competitors.ads_library_context`. */
+    libraryChannels?: string[];
   };
   try {
     body = await req.json();
@@ -312,11 +314,20 @@ export async function POST(req: Request): Promise<NextResponse> {
   let adsCacheReadDomains: string[] = domainNorm ? [domainNorm] : [];
   let resolvedCompetitorId: string | null = null;
   if (userId && domainNorm) {
-    await ensureSavedCompetitorForStrategyOverview(supabase, userId, domainNorm);
+    const libraryChannels = Array.isArray(body.libraryChannels)
+      ? body.libraryChannels.filter((c): c is string => typeof c === "string" && c.trim() !== "")
+      : undefined;
+    const syncedId = await syncSavedCompetitorLibraryContext(supabase, {
+      userId,
+      domainHint: domainNorm,
+      ids,
+      channels: libraryChannels,
+      confirmed: true,
+    });
     const resolved = await resolveAdsCacheDomainForUser(supabase, userId, domainNorm);
     adsCacheDomain = resolved.cacheDomain;
     adsCacheReadDomains = resolved.readDomains;
-    resolvedCompetitorId = resolved.competitorId;
+    resolvedCompetitorId = syncedId ?? resolved.competitorId;
   }
 
   const platformCacheHits = new Map<CacheablePlatform, unknown>();

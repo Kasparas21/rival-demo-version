@@ -464,6 +464,25 @@ function SearchingContent() {
       mergedAdsScanRef.current = null;
 
       writeAdLibraryRegionPrefsToSession(adLibraryRegions);
+
+      const slug = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
+      const label = discoveredBrand?.name ?? displayName;
+      const brandForSave = discoveredBrand
+        ? { name: discoveredBrand.name, domain: discoveredBrand.domain, logoUrl: discoveredBrand.logoUrl }
+        : undefined;
+      await saveCompetitorToAccount({
+        slug,
+        name: label,
+        logoUrl: discoveredBrand?.logoUrl,
+        brand: brandForSave,
+        pending: false,
+        adsLibraryContext: {
+          ids: mergedIds as Record<string, string>,
+          channels: selectedChannels,
+          confirmed: true,
+        },
+      });
+
       const scrape = applyInitialScrapeLimits(readScrapeRequestFieldsFromStorage());
       const tiktokRegion = normalizeTikTokAdsRegion(adLibraryRegions.tiktokRegion);
       const googleRegion = normalizeGoogleAdsRegion(adLibraryRegions.googleRegion);
@@ -477,6 +496,7 @@ function SearchingContent() {
           logoUrl: discoveredBrand?.logoUrl,
         }),
         ids: mergedIds,
+        libraryChannels: selectedChannels,
         metaStatus: "ACTIVE" as const,
         googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
         metaMaxAds: scrape.metaMaxAds,
@@ -528,33 +548,42 @@ function SearchingContent() {
       };
 
       try {
-        await Promise.all(
-          adsPlatforms.map(async (p) => {
-            try {
-              // Every discovery scan must hit Apify and refresh `ads_cache` / `scraped_ads`, not reuse TTL cache.
-              const res = await fetch("/api/ads/library", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...payload, platforms: [p], skipCache: true }),
-              });
-              const json = (await res.json()) as AdsLibraryResponse | AdsLibraryPartialJson;
-              mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
-              if (!res.ok) allHttpOk = false;
-              setPlatformStatuses((prev) => ({
-                ...prev,
-                [p]: res.ok ? "done" : "error",
-              }));
-            } catch {
-              allHttpOk = false;
-              setPlatformStatuses((prev) => ({ ...prev, [p]: "error" }));
-            } finally {
-              bumpProgress();
-            }
-          })
-        );
+        // Sequential scrapes so each platform gets the full server timeout and Supabase persist
+        // (`ads_cache` + `scraped_ads`) before the next Apify run — parallel 500-ad jobs often timed out.
+        for (const p of adsPlatforms) {
+          try {
+            const res = await fetch("/api/ads/library", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...payload, platforms: [p], skipCache: true }),
+            });
+            const json = (await res.json()) as AdsLibraryResponse | AdsLibraryPartialJson;
+            mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
+            if (!res.ok) allHttpOk = false;
+            setPlatformStatuses((prev) => ({
+              ...prev,
+              [p]: res.ok ? "done" : "error",
+            }));
+          } catch {
+            allHttpOk = false;
+            setPlatformStatuses((prev) => ({ ...prev, [p]: "error" }));
+          } finally {
+            bumpProgress();
+          }
+        }
 
         const normalized = coerceAdsLibraryResponse(mergedAdsScanRef.current);
         writeAdsLibrarySessionCache(payloadKey, { response: normalized, httpOk: allHttpOk });
+
+        try {
+          await fetch("/api/competitor/ads-library/ensure-persisted", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ domain: payload.brand.domain }),
+          });
+        } catch {
+          /* Belt-and-suspenders: copy ads_cache → scraped_ads if any platform finalize was partial */
+        }
 
         if (allHttpOk) {
           markPendingStrategyRefresh(payload.brand.domain);
@@ -605,12 +634,14 @@ function SearchingContent() {
     setManualIds(identifiers);
     const mergedIds = { ...discoveredIds, ...identifiers };
     const slug = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
+    const label = discoveredBrand?.name ?? displayName;
+    const brand = discoveredBrand
+      ? { name: discoveredBrand.name, domain: discoveredBrand.domain, logoUrl: discoveredBrand.logoUrl }
+      : undefined;
     const added = upsertSidebarCompetitor({
       slug,
-      name: discoveredBrand?.name ?? displayName,
-      brand: discoveredBrand
-        ? { name: discoveredBrand.name, domain: discoveredBrand.domain, logoUrl: discoveredBrand.logoUrl }
-        : undefined,
+      name: label,
+      brand,
       libraryContext: {
         ids: mergedIds as Record<string, string>,
         channels: selectedChannels,
@@ -624,7 +655,25 @@ function SearchingContent() {
       );
       return;
     }
-    void runScanAndNavigate(mergedIds);
+    void (async () => {
+      const saved = await saveCompetitorToAccount({
+        slug,
+        name: label,
+        logoUrl: discoveredBrand?.logoUrl,
+        brand,
+        pending: false,
+        adsLibraryContext: {
+          ids: mergedIds as Record<string, string>,
+          channels: selectedChannels,
+          confirmed: true,
+        },
+      });
+      if (!saved.ok) {
+        setDiscoveryError(saved.error);
+        return;
+      }
+      await runScanAndNavigate(mergedIds);
+    })();
   };
 
   /** Build competitor URL (same logic as auto-redirect). */

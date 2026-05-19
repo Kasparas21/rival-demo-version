@@ -17,6 +17,7 @@ import {
 } from "@/lib/ad-library/deduped-fetch";
 import { GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT } from "@/lib/ad-library/constants";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
+import { countLibraryAdsForPlatform } from "@/lib/ad-library/library-response-utils";
 import {
   DEFAULT_GOOGLE_ADS_REGION,
   normalizeGoogleAdsRegion,
@@ -78,6 +79,7 @@ export function useAdLibrary(
 
   const sessionRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
+  const persistRecoveryKeyRef = useRef<string | null>(null);
   /** Mirrors latest `data` so merges after `await fetch` use the correct prior state (functional `setData` + session write were racing React 18 batching). */
   const dataRef = useRef<AdsLibraryResponse | null>(null);
 
@@ -162,6 +164,7 @@ export function useAdLibrary(
 
   useEffect(() => {
     sessionRef.current += 1;
+    persistRecoveryKeyRef.current = null;
     loadAbortRef.current?.abort();
   }, [payloadKey, enabled]);
 
@@ -210,12 +213,52 @@ export function useAdLibrary(
         if (platforms?.length) {
           body.platforms = [...platforms].sort();
         }
-        const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(body, {
+        let { response: json, httpOk } = await fetchAdsLibraryDeduplicated(body, {
           skipCache: opts?.skipCache ?? false,
           clientSkipReadCache: isBackground,
           signal: ac.signal,
         });
         if (loadAbortRef.current !== ac) return;
+
+        const domain = brand.domain.trim();
+        const shouldTryPersistRecovery =
+          !opts?.skipCache &&
+          !partial &&
+          !isBackground &&
+          httpOk &&
+          domain.length > 0 &&
+          persistRecoveryKeyRef.current !== payloadKey;
+
+        if (shouldTryPersistRecovery) {
+          const shell = coerceAdsLibraryResponse(
+            mergeAdsLibraryState(dataRef.current, json)
+          );
+          const totalAds = ALL_ADS_API_PLATFORMS.reduce(
+            (sum, pl) => sum + countLibraryAdsForPlatform(pl, shell),
+            0
+          );
+          if (totalAds === 0) {
+            persistRecoveryKeyRef.current = payloadKey;
+            try {
+              await fetch("/api/competitor/ads-library/ensure-persisted", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ domain }),
+              });
+              const retry = await fetchAdsLibraryDeduplicated(body, {
+                skipCache: false,
+                clientSkipReadCache: true,
+                signal: ac.signal,
+              });
+              if (loadAbortRef.current === ac) {
+                json = retry.response;
+                httpOk = retry.httpOk;
+              }
+            } catch {
+              /* recovery best-effort */
+            }
+          }
+        }
 
         const merged = mergeAdsLibraryState(dataRef.current, json);
         setData(merged);

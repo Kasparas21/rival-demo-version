@@ -5,9 +5,9 @@ import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import {
   countLibraryAdsForPlatform,
-  persistScrapedAdsFromAdsLibraryResponse,
   platformScrapeSucceeded,
-} from "@/lib/ad-library/persist-scraped-ads";
+} from "@/lib/ad-library/library-response-utils";
+import { persistScrapedAdsFromAdsLibraryResponse } from "@/lib/ad-library/persist-scraped-ads";
 import type { Database } from "@/lib/supabase/types";
 
 function emptyResponse(): AdsLibraryResponse {
