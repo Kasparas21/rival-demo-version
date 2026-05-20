@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { OnboardingDevHints } from "@/components/onboarding/onboarding-dev-hints";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
-import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
+import {
+  adminSkipCheckoutDestination,
+  getBillingEntitlement,
+  shouldShowPostOnboardingPlanPicker,
+} from "@/lib/billing/entitlements";
+import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -23,16 +29,6 @@ function postOnboardingPath(path: string): string {
   return path === "/checkout" ? "/api/billing/checkout" : path;
 }
 
-/** After onboarding, land on dashboard with pricing overlay (client picks up `pricing=1`). */
-function withPostOnboardingPricingQuery(path: string, attach: boolean): string {
-  if (!attach) return path;
-  if (!path.startsWith("/dashboard")) return path;
-  if (path.startsWith("/api/")) return path;
-  const q = path.indexOf("?");
-  if (q === -1) return `${path}?pricing=1`;
-  return `${path}&pricing=1`;
-}
-
 export default async function OnboardingPage({
   searchParams,
 }: {
@@ -40,6 +36,7 @@ export default async function OnboardingPage({
 }) {
   const params = (await searchParams) ?? {};
   const nextPath = safeNextPath(firstParam(params.next));
+  const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -58,19 +55,18 @@ export default async function OnboardingPage({
   const billing = await getBillingEntitlement(supabase, user.id);
   const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard/spy";
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
-  const showPricingAfterOnboarding = !billing.hasAccess && !billing.isUnlimited;
-  const destinationWithOptionalPricing = withPostOnboardingPricingQuery(
-    destinationAfterOnboarding,
-    showPricingAfterOnboarding,
-  );
+  const showPlanStep = shouldShowPostOnboardingPlanPicker(billing);
 
-  if (profile?.onboarding_completed) {
-    redirect(destinationWithOptionalPricing);
+  if (profile?.onboarding_completed && !replayOnboarding) {
+    if (showPlanStep) {
+      redirect(`/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+    }
+    redirect(destinationAfterOnboarding);
   }
 
   return (
     <RivalVideoShell footerTint="light">
-      <div className="w-full max-w-[440px]">
+      <div className="flex w-full flex-col items-center px-4 sm:px-6">
         <div className="mb-8 flex justify-center">
           <Link
             href="/"
@@ -79,7 +75,13 @@ export default async function OnboardingPage({
             <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
           </Link>
         </div>
-        <OnboardingForm initialData={profile} postOnboardingPath={destinationWithOptionalPricing} userId={user.id} />
+        <OnboardingForm
+          initialData={profile}
+          postOnboardingPath={destinationAfterOnboarding}
+          showPlanStep={showPlanStep}
+          userId={user.id}
+        />
+        <OnboardingDevHints showReplay={replayOnboarding} />
       </div>
     </RivalVideoShell>
   );

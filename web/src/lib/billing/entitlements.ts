@@ -117,6 +117,28 @@ export function hasAccessForTier(tier: PlanTier, status: string, isUnlimited: bo
   return false;
 }
 
+/** Active Polar Starter/Pro subscription (not workspace free-trial tier). */
+export function hasActivePaidSubscription(
+  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
+): boolean {
+  if (billing.isUnlimited) return true;
+  return (
+    (billing.planTier === "starter" || billing.planTier === "pro") &&
+    isSubscriptionStatusAllowed(billing.status)
+  );
+}
+
+/**
+ * Post-onboarding plan picker (step 6 / choose-plan).
+ * Free-trial tier still has `hasAccess` for product features, but must pick Starter or Pro to subscribe.
+ */
+export function shouldShowPostOnboardingPlanPicker(
+  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
+): boolean {
+  if (billing.isUnlimited) return false;
+  return !hasActivePaidSubscription(billing);
+}
+
 export async function getBillingEntitlement(
   supabase: SupabaseClient<Database>,
   userId: string,

@@ -6,6 +6,10 @@ export const glassPillShellClass =
 export const glassPanelClass =
   "rounded-[28px] border border-white/60 bg-white/40 px-7 py-9 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 hover:bg-white/50 hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)] sm:px-10 sm:py-10";
 
+/** Narrower plan-picker shell (onboarding step 6, choose-plan). */
+export const planPickerGlassClass =
+  "rounded-[28px] border border-white/60 bg-white/40 px-6 py-8 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md sm:px-8 sm:py-9";
+
 export const glassInputClass =
   "w-full rounded-2xl border border-white/60 bg-white/35 px-4 py-2.5 text-[15px] font-medium text-gray-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_4px_24px_rgba(31,38,135,0.05)] outline-none placeholder:text-gray-600 transition focus:border-white/75 focus:bg-white/45 focus:ring-2 focus:ring-gray-900/10";
 

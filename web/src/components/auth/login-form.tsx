@@ -8,6 +8,7 @@ import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { glassPanelClass } from "@/components/ui/glass-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Google } from "@/components/icons/google-logo";
+import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
 
 function looksLikeWrongPasswordAttempt(message: string): boolean {
@@ -242,6 +243,8 @@ export function LoginForm() {
         </button>
 
         {googleError ? <p className="mt-4 text-[13px] text-[#b42318]">{googleError}</p> : null}
+
+        <DevLocalAuthPanel email={email} nextPath={next} />
 
         <p className={linkMutedClass}>
           Don&apos;t have an account?{" "}

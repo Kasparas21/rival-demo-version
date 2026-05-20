@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-
 import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
+import { isDevToolsRouteEnabled } from "@/lib/auth/local-dev";
 import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
 
 /**
@@ -10,15 +10,8 @@ import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashe
  * - `next start` on localhost: enabled (NODE_ENV is production but host is local)
  * - Deployed production: disabled (hostname is not localhost)
  */
-function isDevInstantLoginEnabled(request: NextRequest): boolean {
-  if (process.env.DEV_INSTANT_EMAIL_LOGIN === "false") return false;
-  if (process.env.NODE_ENV !== "production") return true;
-  const hn = request.nextUrl.hostname.toLowerCase();
-  return hn === "localhost" || hn === "127.0.0.1" || hn === "[::1]";
-}
-
 export async function POST(request: NextRequest) {
-  if (!isDevInstantLoginEnabled(request)) {
+  if (!isDevToolsRouteEnabled(request)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

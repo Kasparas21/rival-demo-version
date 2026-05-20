@@ -43,6 +43,7 @@ import {
   buildSnapchatAdsGalleryPreviewUrl,
   buildTikTokAdsLibraryPreviewUrl,
 } from "@/lib/onboarding/ad-library-preview-urls";
+import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import {
   adsProfileSetupV1,
@@ -51,22 +52,76 @@ import {
   type WorkspaceAdsScrapeHints,
 } from "@/lib/onboarding/workspace-ads-setup";
 
-/** Compact fields on the workspace ad-profile onboarding step (2-column grid) */
-const workspaceAdProfileInputClass = `${glassInputClass} rounded-lg px-2.5 py-1.5 text-[12px]`;
+/** Workspace ad-profile step (2-column grid): label + input only */
+const workspaceAdProfileInputClass = `${glassInputClass} rounded-xl px-3 py-2.5 text-[14px]`;
 const workspaceAdProfileCellClass =
-  "space-y-1 rounded-lg border border-gray-200/60 bg-white/40 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-sm";
+  "rounded-xl border border-gray-200/60 bg-white/40 px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-sm";
+const workspaceAdProfileOpenLinkClass =
+  "inline-flex shrink-0 items-center justify-center rounded-md p-1 text-gray-500 transition hover:bg-white/70 hover:text-[#1e6fa8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6fa8]/25";
 
-/** Text + icon Preview, same spirit as competitor confirmation */
-const onboardingLibraryPreviewLinkClass =
-  "inline-flex shrink-0 items-center gap-1 border border-transparent px-1 py-0.5 text-[11px] font-semibold text-[#1e6fa8] transition hover:bg-[#f8fcff] hover:text-[#155a8a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1e6fa8]/30 focus-visible:ring-offset-1";
+function WorkspaceAdProfileField({
+  Logo,
+  label,
+  value,
+  placeholder,
+  previewHref,
+  onChange,
+  onBlur,
+  error,
+  warning,
+  inputClassName,
+}: {
+  Logo: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+  placeholder: string;
+  previewHref: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  error?: string | null;
+  warning?: string | null;
+  inputClassName?: string;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Logo className="size-5 shrink-0 sm:size-6" />
+          <span className="text-[14px] font-semibold text-gray-900 sm:text-[15px]">{label}</span>
+        </div>
+        <a
+          href={previewHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={`Open ${label} ads library`}
+          className={workspaceAdProfileOpenLinkClass}
+        >
+          <ExternalLink className="size-3.5 opacity-80" strokeWidth={2} aria-hidden />
+          <span className="sr-only">Open {label} in new tab</span>
+        </a>
+      </div>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        spellCheck={false}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        className={`${workspaceAdProfileInputClass} w-full ${inputClassName ?? ""}`}
+      />
+      {error ? <p className="text-[12px] font-semibold leading-snug text-red-700">{error}</p> : null}
+      {warning ? <p className="text-[12px] font-semibold leading-snug text-amber-900/90">{warning}</p> : null}
+    </div>
+  );
+}
 
-const TOTAL_ONBOARD_STEPS = 5;
 /** step indices */
 const STEP_WEBSITE = 0;
 const STEP_BRAND = 1;
 const STEP_WORKSPACE_CHANNELS = 2;
 const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
+const STEP_CHOOSE_PLAN = 5;
 
 function defaultWorkspaceAdMarketCodes(hostname: string): string[] {
   const inferred = inferAdMarketFromHostname(hostname);
@@ -202,6 +257,8 @@ function AdMarketChips({
 type Props = {
   userId: string;
   postOnboardingPath?: string;
+  /** Final onboarding step: Starter vs Pro (skipped when user already has access). */
+  showPlanStep?: boolean;
   initialData: {
     company_name?: string | null;
     company_url?: string | null;
@@ -220,7 +277,12 @@ type BrandInsightsPayload = {
   message?: string;
 };
 
-export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", initialData }: Props) {
+export function OnboardingForm({
+  userId,
+  postOnboardingPath = "/dashboard/spy",
+  showPlanStep = false,
+  initialData,
+}: Props) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -325,6 +387,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
     workspaceAdMarketCodes.length > 0 ||
     workspaceMarketsAuto;
   const workspaceChannelSet = useMemo(() => new Set(workspaceChannels), [workspaceChannels]);
+  const singleWorkspaceAdProfile = workspaceChannels.length === 1;
 
   const handleCompanyChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setCompanyUrl(sanitizeCompanyUrlInput(e.target.value));
@@ -424,24 +487,25 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
     setStep(1);
   };
 
-  const finish = async () => {
-    if (finishInFlightRef.current) return;
+  const saveOnboarding = async (options?: { navigate?: boolean }): Promise<boolean> => {
+    if (finishInFlightRef.current) return false;
     finishInFlightRef.current = true;
     setSaving(true);
     setError(null);
+    const shouldNavigate = options?.navigate !== false;
 
     try {
       const companyHost = normalizedCompany;
       if (!isPlausiblePublicHostname(companyHost)) {
         setError("That doesn’t look like a valid website. Go back and fix your company URL.");
         setStep(0);
-        return;
+        return false;
       }
 
       if (!workspaceChannelsValid) {
         setError("Pick at least one platform where your brand runs ads.");
         setStep(STEP_WORKSPACE_CHANNELS);
-        return;
+        return false;
       }
 
       if (!workspaceMarketsComplete) {
@@ -451,7 +515,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
         setWorkspaceAdMarketCodes([]);
         setWorkspaceMarketsPickerExpanded(true);
         setStep(STEP_WORKSPACE_MARKETS);
-        return;
+        return false;
       }
 
       if (workspaceChannels.includes("google")) {
@@ -459,13 +523,13 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
         if (!gv) {
           setError("Add a Google Ads Transparency URL that includes …/advertiser/AR… in the path.");
           setStep(STEP_WORKSPACE_SCRAPE);
-          return;
+          return false;
         }
         const gre = validateIdentifierField("google", gv);
         if (!gre.valid && "error" in gre) {
           setError(gre.error);
           setStep(STEP_WORKSPACE_SCRAPE);
-          return;
+          return false;
         }
       }
 
@@ -540,7 +604,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
 
       if (profileError) {
         setError(profileError.message);
-        return;
+        return false;
       }
 
       const logoUrlPatch =
@@ -581,7 +645,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
 
       if (!brandRes.ok || !brandJson.ok) {
         setError(typeof brandJson.error === "string" ? brandJson.error : "Could not save workspace brand.");
-        return;
+        return false;
       }
 
       const competitorPayload = [
@@ -619,31 +683,52 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
             /* keep msg */
           }
           setError(typeof msg === "string" ? msg : "Could not save account competitors.");
-          return;
+          return false;
         }
       } catch {
         setError("Could not reach the server to save monitored brands.");
-        return;
+        return false;
       }
 
-      router.push(postOnboardingPath);
-      router.refresh();
+      if (shouldNavigate) {
+        router.push(postOnboardingPath);
+        router.refresh();
+      }
+      return true;
     } catch {
       setError("Something went wrong while finishing onboarding. Try again.");
+      return false;
     } finally {
       finishInFlightRef.current = false;
       setSaving(false);
     }
   };
 
-  const stepLabels = [
-    "Website",
-    "Your brand",
-    "Your platforms",
-    "Your regions",
-    "Your profiles",
-  ];
-  const totalSteps = TOTAL_ONBOARD_STEPS;
+  const advanceFromAdProfiles = async () => {
+    const ok = await saveOnboarding({ navigate: !showPlanStep });
+    if (ok && showPlanStep) {
+      setError(null);
+      setStep(STEP_CHOOSE_PLAN);
+    }
+  };
+
+  const stepLabels = useMemo(() => {
+    const labels = ["Website", "Your brand", "Your platforms", "Your regions", "Your profiles"];
+    if (showPlanStep) labels.push("Your plan");
+    return labels;
+  }, [showPlanStep]);
+  const totalSteps = stepLabels.length;
+  const isWideOnboardingStep = step === STEP_WORKSPACE_SCRAPE || step === STEP_CHOOSE_PLAN;
+  const onboardingCardMaxWidth =
+    step === STEP_WORKSPACE_SCRAPE
+      ? singleWorkspaceAdProfile
+        ? "max-w-md"
+        : "max-w-3xl"
+      : step === STEP_CHOOSE_PLAN
+        ? "max-w-3xl"
+        : step === STEP_WORKSPACE_CHANNELS
+          ? "max-w-xl"
+          : "max-w-[440px]";
 
   const goBack = () => {
     if (saving) return;
@@ -659,7 +744,11 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
   };
 
   return (
-    <div className="w-full rounded-[28px] border border-white/60 bg-white/40 px-7 py-9 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 sm:px-10 sm:py-10">
+    <div
+      className={`w-full rounded-[28px] border border-white/60 bg-white/40 px-7 py-9 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 sm:px-10 sm:py-10 ${
+        onboardingCardMaxWidth
+      }`}
+    >
       <div className="mb-5 flex items-center justify-between gap-2 sm:mb-6">
         <div className="flex min-w-0 shrink-0 items-center">
           {step > 0 ? (
@@ -677,7 +766,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
         </div>
         <div className="flex items-center justify-end gap-3 sm:gap-4">
           <div className="flex items-center gap-1.5">
-            {Array.from({ length: TOTAL_ONBOARD_STEPS }, (_, i) => i).map((i) => (
+            {Array.from({ length: totalSteps }, (_, i) => i).map((i) => (
               <div
                 key={i}
                 className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -826,14 +915,14 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
 
         {step === STEP_WORKSPACE_CHANNELS ? (
           <>
-            <div className="mb-5">
-              <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Your ad platforms</h1>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-gray-600">
+            <div className="mb-6">
+              <h1 className="text-[22px] font-semibold tracking-tight text-gray-900">Your ad platforms</h1>
+              <p className="mt-2 text-[14px] leading-relaxed text-gray-600">
                 Tell us everywhere you actively run ads. We scrape those libraries to map the angles, creatives, and
                 offers your company&apos;s pushing right now—which powers competitive strategy inside Rival.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {CHANNELS.map(({ id, name, Logo }) => {
                 const on = workspaceChannels.includes(id);
                 return (
@@ -842,23 +931,23 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                     type="button"
                     aria-pressed={on}
                     onClick={() => toggleWorkspaceChannel(id)}
-                    className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                    className={`flex w-full items-center gap-3.5 rounded-xl border px-4 py-3.5 text-left transition sm:gap-4 sm:px-4 sm:py-4 ${
                       on
                         ? "border-[#4a7fa5]/35 bg-white/55 text-gray-900 shadow-sm ring-1 ring-[#4a7fa5]/25"
                         : "border-gray-200/70 bg-white/30 text-gray-700 hover:border-gray-300/80 hover:bg-white/45"
                     }`}
                   >
-                    <Logo className="size-5 shrink-0" />
-                    <span className="min-w-0 flex-1 text-[12px] font-semibold leading-tight">{name}</span>
+                    <Logo className="size-8 shrink-0 sm:size-9" />
+                    <span className="min-w-0 flex-1 text-[15px] font-semibold leading-tight sm:text-[16px]">{name}</span>
                     <span
-                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition ${
+                      className={`flex size-7 shrink-0 items-center justify-center rounded-full border transition ${
                         on
                           ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
                           : "border-gray-300/80 bg-white/60"
                       }`}
                       aria-hidden
                     >
-                      {on ? <Check className="size-3" strokeWidth={2.75} /> : null}
+                      {on ? <Check className="size-4" strokeWidth={2.75} /> : null}
                     </span>
                   </button>
                 );
@@ -996,42 +1085,36 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 </span>
               </p>
             </div>
-            <div className="rounded-xl border border-white/65 bg-white/45 px-3 py-3 shadow-[0_8px_32px_rgba(31,38,135,0.06)] backdrop-blur-md ring-1 ring-gray-900/5">
-              <div className="mb-3 flex items-center gap-2">
-                <DomainFavicon domain={normalizedCompany} className="size-8 shrink-0" />
-                <span className="min-w-0 break-all text-[13px] font-semibold text-gray-900">{normalizedCompany}</span>
+            <div
+              className={`rounded-xl border border-white/65 bg-white/45 px-4 py-4 shadow-[0_8px_32px_rgba(31,38,135,0.06)] backdrop-blur-md ring-1 ring-gray-900/5 sm:px-5 sm:py-5 ${
+                singleWorkspaceAdProfile ? "mx-auto w-full max-w-sm" : "w-full"
+              }`}
+            >
+              <div
+                className={`mb-4 flex items-center gap-2.5 ${
+                  singleWorkspaceAdProfile ? "justify-center" : ""
+                }`}
+              >
+                <DomainFavicon domain={normalizedCompany} className="size-9 shrink-0" />
+                <span className="min-w-0 break-all text-[15px] font-semibold text-gray-900">{normalizedCompany}</span>
               </div>
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div
+                className={
+                  singleWorkspaceAdProfile
+                    ? "grid grid-cols-1 gap-3"
+                    : "grid grid-cols-1 gap-3 md:grid-cols-2"
+                }
+              >
                 {workspaceChannelSet.has("meta") ? (
-                  <div className={workspaceAdProfileCellClass}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                        <MetaLogo className="size-3.5 shrink-0" />
-                        Meta Ads Library URL
-                      </div>
-                      <a
-                        href={buildMetaAdsLibraryPreviewUrl(companyScrape.metaAdsLibraryUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Preview in new tab"
-                        className={onboardingLibraryPreviewLinkClass}
-                      >
-                        <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                        Preview
-                      </a>
-                    </div>
-                    <p className="text-[10px] leading-snug text-gray-500">
-                      Advertiser view from&nbsp;
-                      <span className="font-semibold text-gray-700">facebook.com/ads/library</span>
-                      , not your Page URL.
-                    </p>
-                    <input
-                      type="text"
+                  <div className={`${workspaceAdProfileCellClass}`}>
+                    <WorkspaceAdProfileField
+                      Logo={MetaLogo}
+                      label="Meta"
+                      previewHref={buildMetaAdsLibraryPreviewUrl(companyScrape.metaAdsLibraryUrl)}
                       placeholder="Ads Library advertiser URL"
                       value={companyScrape.metaAdsLibraryUrl}
-                      spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ metaAdsLibraryUrl: e.target.value })}
+                      onChange={(v) => patchCompanyScrape({ metaAdsLibraryUrl: v })}
                       onBlur={() => {
                         const v = companyScrape.metaAdsLibraryUrl.trim();
                         if (!v) return;
@@ -1040,47 +1123,20 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                           patchCompanyScrape({ metaAdsLibraryUrl: canon });
                         }
                       }}
-                      className={`${workspaceAdProfileInputClass} w-full`}
+                      error={workspaceMetaInputError}
                     />
-                    {workspaceMetaInputError ? (
-                      <p className="text-[10px] font-semibold leading-snug text-red-700">{workspaceMetaInputError}</p>
-                    ) : null}
                   </div>
                 ) : null}
 
                 {workspaceChannelSet.has("google") ? (
-                  <div className={workspaceAdProfileCellClass}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                        <GoogleLogo className="size-3.5 shrink-0" />
-                        Google Ads — URL with Advertiser ID
-                      </div>
-                      <a
-                        href={buildGoogleTransparencyPreviewUrl(
-                          companyScrape.googleAdsTransparencyUrl.trim(),
-                        )}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Preview in new tab"
-                        className={onboardingLibraryPreviewLinkClass}
-                      >
-                        <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                        Preview
-                      </a>
-                    </div>
-                    <p className="text-[10px] leading-snug text-gray-500">
-                      URL from&nbsp;
-                      <span className="font-semibold text-gray-700">Google Ads Transparency Center</span>
-                      &nbsp;that includes&nbsp;
-                      <span className="font-semibold text-gray-700">…/advertiser/AR…</span>
-                      &nbsp;in the path.
-                    </p>
-                    <input
-                      type="text"
-                      placeholder="https://adstransparency.google.com/advertiser/AR…"
+                  <div className={`${workspaceAdProfileCellClass}`}>
+                    <WorkspaceAdProfileField
+                      Logo={GoogleLogo}
+                      label="Google"
+                      previewHref={buildGoogleTransparencyPreviewUrl(companyScrape.googleAdsTransparencyUrl)}
+                      placeholder="Ads Transparency advertiser URL"
                       value={companyScrape.googleAdsTransparencyUrl}
-                      spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ googleAdsTransparencyUrl: e.target.value })}
+                      onChange={(v) => patchCompanyScrape({ googleAdsTransparencyUrl: v })}
                       onBlur={() => {
                         const v = companyScrape.googleAdsTransparencyUrl.trim();
                         if (!v) return;
@@ -1089,44 +1145,20 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                           patchCompanyScrape({ googleAdsTransparencyUrl: canon });
                         }
                       }}
-                      className={`${workspaceAdProfileInputClass} w-full font-mono`}
-                      autoComplete="off"
+                      error={workspaceGoogleInputError}
                     />
-                    {workspaceGoogleInputError ? (
-                      <p className="text-[10px] font-semibold leading-snug text-red-700">{workspaceGoogleInputError}</p>
-                    ) : null}
                   </div>
                 ) : null}
 
                 {workspaceChannelSet.has("linkedin") ? (
-                  <div className={`${workspaceAdProfileCellClass} sm:col-span-2`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                        <LinkedInLogo className="size-3.5 shrink-0" />
-                        LinkedIn Ads Library URL
-                      </div>
-                      <a
-                        href={buildLinkedInAdLibraryPreviewUrl(companyScrape.linkedInUrl)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Preview in new tab"
-                        className={onboardingLibraryPreviewLinkClass}
-                      >
-                        <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                        Preview
-                      </a>
-                    </div>
-                    <p className="text-[10px] leading-snug text-gray-500">
-                      Link from&nbsp;
-                      <span className="font-semibold text-gray-700">linkedin.com/ad-library</span>
-                      &nbsp;(advertiser disclosure), not a profile URL.
-                    </p>
-                    <input
-                      type="text"
+                  <div className={`${workspaceAdProfileCellClass}`}>
+                    <WorkspaceAdProfileField
+                      Logo={LinkedInLogo}
+                      label="LinkedIn"
+                      previewHref={buildLinkedInAdLibraryPreviewUrl(companyScrape.linkedInUrl)}
                       placeholder="Ad Library advertiser URL"
                       value={companyScrape.linkedInUrl}
-                      spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ linkedInUrl: e.target.value })}
+                      onChange={(v) => patchCompanyScrape({ linkedInUrl: v })}
                       onBlur={() => {
                         const v = companyScrape.linkedInUrl.trim();
                         if (!v) return;
@@ -1135,132 +1167,65 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                           patchCompanyScrape({ linkedInUrl: canon });
                         }
                       }}
-                      className={`${workspaceAdProfileInputClass} w-full`}
+                      warning={workspaceLinkedInWarning}
                     />
-                    {workspaceLinkedInWarning ? (
-                      <p className="text-[10px] font-semibold leading-snug text-amber-900/90">{workspaceLinkedInWarning}</p>
-                    ) : null}
                   </div>
                 ) : null}
 
                 {workspaceChannelSet.has("tiktok") ? (
-                  <div className={workspaceAdProfileCellClass}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                        <TikTokLogo className="size-3.5 shrink-0" />
-                        TikTok profile name
-                      </div>
-                      {companyScrape.tiktokKeyword.trim() ? (
-                        <a
-                          href={buildTikTokAdsLibraryPreviewUrl(companyScrape.tiktokKeyword.trim())}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Preview in new tab"
-                          className={onboardingLibraryPreviewLinkClass}
-                        >
-                          <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                          Preview
-                        </a>
-                      ) : null}
-                    </div>
-                    <p className="text-[10px] leading-snug text-gray-500">
-                      Advertiser name on TikTok Ads Library — your @handle or brand profile, not a generic keyword.
-                    </p>
-                    <input
-                      type="text"
+                  <div className={`${workspaceAdProfileCellClass}`}>
+                    <WorkspaceAdProfileField
+                      Logo={TikTokLogo}
+                      label="TikTok"
+                      previewHref={buildTikTokAdsLibraryPreviewUrl(companyScrape.tiktokKeyword)}
                       placeholder="@handle or profile name"
                       value={companyScrape.tiktokKeyword}
-                      spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ tiktokKeyword: e.target.value })}
-                      className={`${workspaceAdProfileInputClass} w-full`}
+                      onChange={(v) => patchCompanyScrape({ tiktokKeyword: v })}
                     />
                   </div>
                 ) : null}
 
                 {workspaceChannelSet.has("snapchat") ? (
-                  <div className={workspaceAdProfileCellClass}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                        <SnapchatLogo className="size-3.5 shrink-0" />
-                        Snapchat profile name
-                      </div>
-                      {companyScrape.snapchatKeyword.trim() ? (
-                        <a
-                          href={buildSnapchatAdsGalleryPreviewUrl(companyScrape.snapchatKeyword.trim())}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Preview in new tab"
-                          className={onboardingLibraryPreviewLinkClass}
-                        >
-                          <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                          Preview
-                        </a>
-                      ) : null}
-                    </div>
-                    <p className="text-[10px] leading-snug text-gray-500">
-                      Advertiser name in Snapchat&apos;s EU gallery — profile or brand name, not a search keyword.
-                    </p>
-                    <input
-                      type="text"
+                  <div className={`${workspaceAdProfileCellClass}`}>
+                    <WorkspaceAdProfileField
+                      Logo={SnapchatLogo}
+                      label="Snapchat"
+                      previewHref={buildSnapchatAdsGalleryPreviewUrl(companyScrape.snapchatKeyword)}
                       placeholder="@username or profile name"
                       value={companyScrape.snapchatKeyword}
-                      spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ snapchatKeyword: e.target.value })}
-                      className={`${workspaceAdProfileInputClass} w-full`}
+                      onChange={(v) => patchCompanyScrape({ snapchatKeyword: v })}
                     />
                   </div>
                 ) : null}
 
                 {workspaceChannelSet.has("pinterest") ? (
-                  <div className={workspaceAdProfileCellClass}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
-                        <PinterestLogo className="size-3.5 shrink-0" />
-                        Pinterest profile name
-                      </div>
-                      {companyScrape.pinterestKeyword.trim() ? (
-                        <a
-                          href={buildPinterestAdsPreviewUrl(companyScrape.pinterestKeyword.trim())}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Preview in new tab"
-                          className={onboardingLibraryPreviewLinkClass}
-                        >
-                          <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                          Preview
-                        </a>
-                      ) : null}
-                    </div>
-                    <p className="text-[10px] leading-snug text-gray-500">
-                      Pinterest advertiser profile — username from your Pinterest account, not a keyword search.
-                    </p>
-                    <input
-                      type="text"
+                  <div className={`${workspaceAdProfileCellClass}`}>
+                    <WorkspaceAdProfileField
+                      Logo={PinterestLogo}
+                      label="Pinterest"
+                      previewHref={buildPinterestAdsPreviewUrl(companyScrape.pinterestKeyword)}
                       placeholder="@username or profile name"
                       value={companyScrape.pinterestKeyword}
-                      spellCheck={false}
-                      onChange={(e) => patchCompanyScrape({ pinterestKeyword: e.target.value })}
-                      className={`${workspaceAdProfileInputClass} w-full`}
+                      onChange={(v) => patchCompanyScrape({ pinterestKeyword: v })}
                     />
                   </div>
                 ) : null}
-
-                <p className="rounded-lg border border-white/55 bg-white/40 px-2 py-1.5 text-[11px] text-gray-600 backdrop-blur-sm sm:col-span-2">
-                  Matching these fingerprints unlocks scraping your brand&apos;s own ads. You can add competitors and
-                  refine these anytime from the dashboard.
-                </p>
               </div>
             </div>
 
             <button
               type="button"
-              onClick={() => void finish()}
+              onClick={() => void advanceFromAdProfiles()}
               disabled={saving}
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
-              {saving ? "Setting up…" : "Get started →"}
+              {saving ? "Setting up…" : showPlanStep ? "Continue →" : "Get started →"}
             </button>
           </>
+        ) : null}
+
+        {step === STEP_CHOOSE_PLAN && showPlanStep ? (
+          <PlanPickerContent variant="onboarding" />
         ) : null}
       </div>
     </div>
