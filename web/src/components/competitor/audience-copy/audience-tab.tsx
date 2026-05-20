@@ -33,7 +33,9 @@ export function AudienceTab({
   comparisonPayloadError,
 }: Props) {
   if (comparisonPayloadLoading && !comparisonPayload?.competitor?.payload) {
-    return <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16" />;
+    return (
+      <RivalLoadingBlock size="2xl" padded className="mx-auto max-w-5xl py-16 sm:py-20" />
+    );
   }
 
   if (comparisonPayloadError) {

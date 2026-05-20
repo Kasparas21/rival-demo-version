@@ -56,7 +56,7 @@ export function emptyWorkspaceScrapeRow(domain: string): WorkspaceAdsScrapeHints
     linkedInUrl: "",
     tiktokKeyword: "",
     pinterestKeyword: "",
-    snapchatKeyword: h ? hostToBrandLabel(h) : "",
+    snapchatKeyword: "",
     facebookUrl: "",
     instagramUrl: "",
     tikTokUrl: "",
@@ -98,22 +98,21 @@ export function mergeWorkspaceScrapeFromSocials(
     }
   }
 
-  if (!out.snapchatKeyword.trim()) {
-    const snap = firstHrefForBucket(socials, "snapchat");
-    if (snap) {
-      try {
-        const u = new URL(snap);
-        const parts = u.pathname.split("/").filter(Boolean);
-        const addIdx = parts.indexOf("add");
-        if (addIdx >= 0 && parts[addIdx + 1]) {
-          out.snapchatKeyword = decodeURIComponent(parts[addIdx + 1]!);
+    if (!out.snapchatKeyword.trim()) {
+      const snap = firstHrefForBucket(socials, "snapchat");
+      if (snap) {
+        try {
+          const u = new URL(snap);
+          const parts = u.pathname.split("/").filter(Boolean);
+          const addIdx = parts.indexOf("add");
+          if (addIdx >= 0 && parts[addIdx + 1]) {
+            out.snapchatKeyword = decodeURIComponent(parts[addIdx + 1]!);
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
       }
     }
-    if (!out.snapchatKeyword.trim()) out.snapchatKeyword = hostToBrandLabel(siteDomain || workspaceDomain);
-  }
 
   return out;
 }

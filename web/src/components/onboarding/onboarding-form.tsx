@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Check, ExternalLink, X } from "lucide-react";
+import { Building2, Check, ExternalLink } from "lucide-react";
 import {
   GoogleLogo,
   LinkedInLogo,
@@ -29,7 +29,6 @@ import {
   ONBOARDING_AD_MARKETS,
   ONBOARDING_AD_MARKET_CODES,
 } from "@/lib/onboarding/ad-markets";
-import { brandSlugFromDomain } from "@/lib/discovery";
 import { validateIdentifierField } from "@/lib/validate-identifier-field";
 import {
   canonicalLinkedInAdLibraryUrl,
@@ -52,8 +51,10 @@ import {
   type WorkspaceAdsScrapeHints,
 } from "@/lib/onboarding/workspace-ads-setup";
 
-/** Shorter fields on the workspace ad-profile onboarding step */
-const workspaceAdProfileInputClass = `${glassInputClass} rounded-xl px-3 py-1.5 text-[13px]`;
+/** Compact fields on the workspace ad-profile onboarding step (2-column grid) */
+const workspaceAdProfileInputClass = `${glassInputClass} rounded-lg px-2.5 py-1.5 text-[12px]`;
+const workspaceAdProfileCellClass =
+  "space-y-1 rounded-lg border border-gray-200/60 bg-white/40 px-2.5 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-sm";
 
 /** Text + icon Preview, same spirit as competitor confirmation */
 const onboardingLibraryPreviewLinkClass =
@@ -276,12 +277,6 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
   const showTypingSkeleton = typingFaviconLag;
   const showFaviconSlot = showTypingSkeleton || Boolean(faviconSrc);
   const companyLooksValid = isPlausiblePublicHostname(normalizedCompany);
-  const workspaceSiteHostNoWww = normalizedCompany.replace(/^www\./i, "");
-  const workspaceAutoKeywordSlug = useMemo(() => {
-    if (!workspaceSiteHostNoWww) return "";
-    return brandSlugFromDomain(workspaceSiteHostNoWww).replace(/^@+/u, "").trim();
-  }, [workspaceSiteHostNoWww]);
-
   const toggleWorkspaceChannel = useCallback((id: ChannelId) => {
     setWorkspaceChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
@@ -345,41 +340,12 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
       workspaceSocialMergedSigRef.current = sig;
     }
 
-    setCompanyScrape((prev) => {
-      const base = mergeSocialLinks
+    setCompanyScrape((prev) =>
+      mergeSocialLinks
         ? mergeWorkspaceScrapeFromSocials(normalizedCompany, prev, socials)
-        : prev;
-
-      const hostNoWww = normalizedCompany.replace(/^www\./i, "");
-      if (!companyLooksValid || !hostNoWww) return base;
-
-      const patch: Partial<WorkspaceAdsScrapeHints> = {};
-      const kwBase = workspaceAutoKeywordSlug.trim();
-      if (workspaceChannels.includes("tiktok") && !base.tiktokKeyword.trim() && kwBase) {
-        patch.tiktokKeyword = kwBase;
-      }
-      if (workspaceChannels.includes("snapchat") && !base.snapchatKeyword.trim() && kwBase) {
-        patch.snapchatKeyword = kwBase;
-      }
-      if (workspaceChannels.includes("pinterest") && !base.pinterestKeyword.trim() && kwBase) {
-        patch.pinterestKeyword = kwBase;
-      }
-
-      if (Object.keys(patch).length === 0) return base;
-      return {
-        ...emptyWorkspaceScrapeRow(normalizedCompany),
-        ...base,
-        ...patch,
-      };
-    });
-  }, [
-    step,
-    normalizedCompany,
-    brandInsights,
-    companyLooksValid,
-    workspaceChannels,
-    workspaceAutoKeywordSlug,
-  ]);
+        : prev,
+    );
+  }, [step, normalizedCompany, brandInsights]);
 
   /** Step 1: Firecrawl-backed brand enrichment (skipped when cache matches workspace host) */
   useEffect(() => {
@@ -867,7 +833,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 offers your company&apos;s pushing right now—which powers competitive strategy inside Rival.
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
               {CHANNELS.map(({ id, name, Logo }) => {
                 const on = workspaceChannels.includes(id);
                 return (
@@ -876,23 +842,23 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                     type="button"
                     aria-pressed={on}
                     onClick={() => toggleWorkspaceChannel(id)}
-                    className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-[13px] font-semibold transition ${
+                    className={`flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
                       on
-                        ? "border-white/80 bg-white/50 text-gray-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] backdrop-blur-md ring-1 ring-gray-900/10"
-                        : "border-gray-200/65 bg-white/35 text-gray-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] backdrop-blur-md hover:border-gray-300/70 hover:bg-white/50"
+                        ? "border-[#4a7fa5]/35 bg-white/55 text-gray-900 shadow-sm ring-1 ring-[#4a7fa5]/25"
+                        : "border-gray-200/70 bg-white/30 text-gray-700 hover:border-gray-300/80 hover:bg-white/45"
                     }`}
                   >
-                    <Logo className="size-7 shrink-0" />
-                    <span className="min-w-0 flex-1">{name}</span>
+                    <Logo className="size-5 shrink-0" />
+                    <span className="min-w-0 flex-1 text-[12px] font-semibold leading-tight">{name}</span>
                     <span
-                      className={`flex size-8 shrink-0 items-center justify-center rounded-full border ${
+                      className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition ${
                         on
-                          ? "border-gray-900/35 bg-gray-900 text-white"
-                          : "border-gray-300/55 bg-white/50 text-gray-400"
+                          ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                          : "border-gray-300/80 bg-white/60"
                       }`}
                       aria-hidden
                     >
-                      {on ? <Check className="size-4" strokeWidth={2.75} /> : <X className="size-4" strokeWidth={2} />}
+                      {on ? <Check className="size-3" strokeWidth={2.75} /> : null}
                     </span>
                   </button>
                 );
@@ -1036,9 +1002,9 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 <span className="min-w-0 break-all text-[13px] font-semibold text-gray-900">{normalizedCompany}</span>
               </div>
 
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {workspaceChannelSet.has("meta") ? (
-                  <div className="space-y-1">
+                  <div className={workspaceAdProfileCellClass}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <MetaLogo className="size-3.5 shrink-0" />
@@ -1083,7 +1049,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 ) : null}
 
                 {workspaceChannelSet.has("google") ? (
-                  <div className="space-y-1">
+                  <div className={workspaceAdProfileCellClass}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <GoogleLogo className="size-3.5 shrink-0" />
@@ -1133,7 +1099,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 ) : null}
 
                 {workspaceChannelSet.has("linkedin") ? (
-                  <div className="space-y-1">
+                  <div className={`${workspaceAdProfileCellClass} sm:col-span-2`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <LinkedInLogo className="size-3.5 shrink-0" />
@@ -1178,31 +1144,31 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 ) : null}
 
                 {workspaceChannelSet.has("tiktok") ? (
-                  <div className="space-y-1">
+                  <div className={workspaceAdProfileCellClass}>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <TikTokLogo className="size-3.5 shrink-0" />
-                        TikTok Ads Library keyword
+                        TikTok profile name
                       </div>
-                      <a
-                        href={buildTikTokAdsLibraryPreviewUrl(
-                          companyScrape.tiktokKeyword.trim() ||
-                            workspaceAutoKeywordSlug ||
-                            workspaceSiteHostNoWww ||
-                            undefined,
-                        )}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Preview in new tab"
-                        className={onboardingLibraryPreviewLinkClass}
-                      >
-                        <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                        Preview
-                      </a>
+                      {companyScrape.tiktokKeyword.trim() ? (
+                        <a
+                          href={buildTikTokAdsLibraryPreviewUrl(companyScrape.tiktokKeyword.trim())}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Preview in new tab"
+                          className={onboardingLibraryPreviewLinkClass}
+                        >
+                          <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
+                          Preview
+                        </a>
+                      ) : null}
                     </div>
+                    <p className="text-[10px] leading-snug text-gray-500">
+                      Advertiser name on TikTok Ads Library — your @handle or brand profile, not a generic keyword.
+                    </p>
                     <input
                       type="text"
-                      placeholder="Brand name or @handle"
+                      placeholder="@handle or profile name"
                       value={companyScrape.tiktokKeyword}
                       spellCheck={false}
                       onChange={(e) => patchCompanyScrape({ tiktokKeyword: e.target.value })}
@@ -1212,28 +1178,31 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 ) : null}
 
                 {workspaceChannelSet.has("snapchat") ? (
-                  <div className="space-y-1">
+                  <div className={workspaceAdProfileCellClass}>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <SnapchatLogo className="size-3.5 shrink-0" />
-                        Snapchat Ads keyword
+                        Snapchat profile name
                       </div>
-                      <a
-                        href={buildSnapchatAdsGalleryPreviewUrl(
-                          companyScrape.snapchatKeyword.trim() || workspaceAutoKeywordSlug || undefined,
-                        )}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Preview in new tab"
-                        className={onboardingLibraryPreviewLinkClass}
-                      >
-                        <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                        Preview
-                      </a>
+                      {companyScrape.snapchatKeyword.trim() ? (
+                        <a
+                          href={buildSnapchatAdsGalleryPreviewUrl(companyScrape.snapchatKeyword.trim())}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Preview in new tab"
+                          className={onboardingLibraryPreviewLinkClass}
+                        >
+                          <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
+                          Preview
+                        </a>
+                      ) : null}
                     </div>
+                    <p className="text-[10px] leading-snug text-gray-500">
+                      Advertiser name in Snapchat&apos;s EU gallery — profile or brand name, not a search keyword.
+                    </p>
                     <input
                       type="text"
-                      placeholder="@username or keyword"
+                      placeholder="@username or profile name"
                       value={companyScrape.snapchatKeyword}
                       spellCheck={false}
                       onChange={(e) => patchCompanyScrape({ snapchatKeyword: e.target.value })}
@@ -1243,31 +1212,31 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                 ) : null}
 
                 {workspaceChannelSet.has("pinterest") ? (
-                  <div className="space-y-1">
+                  <div className={workspaceAdProfileCellClass}>
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-800">
+                      <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-gray-800">
                         <PinterestLogo className="size-3.5 shrink-0" />
-                        Pinterest Ads keyword
+                        Pinterest profile name
                       </div>
-                      <a
-                        href={buildPinterestAdsPreviewUrl(
-                          `${companyScrape.pinterestKeyword}`.trim() ||
-                            workspaceAutoKeywordSlug ||
-                            workspaceSiteHostNoWww ||
-                            "",
-                        )}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Preview in new tab"
-                        className={onboardingLibraryPreviewLinkClass}
-                      >
-                        <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
-                        Preview
-                      </a>
+                      {companyScrape.pinterestKeyword.trim() ? (
+                        <a
+                          href={buildPinterestAdsPreviewUrl(companyScrape.pinterestKeyword.trim())}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Preview in new tab"
+                          className={onboardingLibraryPreviewLinkClass}
+                        >
+                          <ExternalLink className="size-3 shrink-0 opacity-75" aria-hidden />
+                          Preview
+                        </a>
+                      ) : null}
                     </div>
+                    <p className="text-[10px] leading-snug text-gray-500">
+                      Pinterest advertiser profile — username from your Pinterest account, not a keyword search.
+                    </p>
                     <input
                       type="text"
-                      placeholder="Username or keyword"
+                      placeholder="@username or profile name"
                       value={companyScrape.pinterestKeyword}
                       spellCheck={false}
                       onChange={(e) => patchCompanyScrape({ pinterestKeyword: e.target.value })}
@@ -1276,7 +1245,7 @@ export function OnboardingForm({ userId, postOnboardingPath = "/dashboard/spy", 
                   </div>
                 ) : null}
 
-                <p className="rounded-lg border border-white/55 bg-white/40 px-2 py-1.5 text-[11px] text-gray-600 backdrop-blur-sm">
+                <p className="rounded-lg border border-white/55 bg-white/40 px-2 py-1.5 text-[11px] text-gray-600 backdrop-blur-sm sm:col-span-2">
                   Matching these fingerprints unlocks scraping your brand&apos;s own ads. You can add competitors and
                   refine these anytime from the dashboard.
                 </p>

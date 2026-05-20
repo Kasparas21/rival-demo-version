@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import { buildCheckoutHref } from "@/lib/billing/checkout-url";
+import type { BillingPeriod } from "@/lib/billing/config";
 
 /** Feature checklist (brand green `#95C14B`, matches `--rival-success`) */
 export function BrandCheckLi({ children }: { children: React.ReactNode }) {
@@ -39,7 +41,7 @@ export function AccentCta({ children, href = "/checkout" }: { children: React.Re
   );
 }
 
-export type BillingPeriod = "monthly" | "annual";
+export type { BillingPeriod };
 
 export function PricingBlock({
   billing,
@@ -128,7 +130,7 @@ export function LandingPricing() {
             <PricingBlock billing={billing} listMonthlyUsd={79} annualMonthlyUsd={59} />
             <p className="mt-4 text-sm font-bold text-[#1a1a1a]">5 competitors · 50k ads/mo processed</p>
             <div className="mt-8">
-              <BlackCta href="/checkout?plan=starter">Start free trial</BlackCta>
+              <BlackCta href={buildCheckoutHref("starter", billing)}>Start free trial</BlackCta>
               <p className="mt-3 text-center text-xs text-gray-400">No commitment</p>
             </div>
             <div className="mt-8 border-t border-gray-100 pt-8">
@@ -152,7 +154,7 @@ export function LandingPricing() {
             <PricingBlock billing={billing} listMonthlyUsd={149} annualMonthlyUsd={129} />
             <p className="mt-4 text-sm font-bold text-[#1a1a1a]">15 competitors · 150k ads/mo processed</p>
             <div className="mt-8">
-              <AccentCta href="/checkout?plan=pro">Start free trial</AccentCta>
+              <AccentCta href={buildCheckoutHref("pro", billing)}>Start free trial</AccentCta>
               <p className="mt-3 text-center text-xs text-gray-400">No commitment</p>
             </div>
             <div className="mt-8 border-t border-gray-100 pt-8">

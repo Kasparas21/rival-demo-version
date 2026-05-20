@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { buildApiBillingCheckoutHref, parseCheckoutPeriod } from "@/lib/billing/checkout-url";
+import type { PolarPlanSlug } from "@/lib/billing/config";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -33,13 +35,16 @@ function SetupError({ message }: { message: string }) {
 }
 
 type CheckoutPageProps = {
-  searchParams: Promise<{ plan?: string }>;
+  searchParams: Promise<{ plan?: string; period?: string }>;
 };
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
-  const { plan } = await searchParams;
-  const planQuery =
-    plan === "starter" || plan === "pro" ? `?plan=${plan}` : "";
+  const { plan, period: periodParam } = await searchParams;
+  const planSlug: PolarPlanSlug | null = plan === "starter" || plan === "pro" ? plan : null;
+  const period = parseCheckoutPeriod(periodParam);
+  const apiCheckoutPath = planSlug
+    ? buildApiBillingCheckoutHref(planSlug, period)
+    : "/api/billing/checkout";
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {
     supabase = await createSupabaseServerClient();
@@ -52,7 +57,7 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect(`/login?next=${encodeURIComponent(`/api/billing/checkout${planQuery}`)}`);
+    redirect(`/login?next=${encodeURIComponent(apiCheckoutPath)}`);
   }
 
   const billing = await getBillingEntitlement(supabase, user.id);
@@ -60,5 +65,5 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect("/dashboard/spy");
   }
 
-  redirect(`/api/billing/checkout${planQuery}`);
+  redirect(apiCheckoutPath);
 }

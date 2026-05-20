@@ -59,9 +59,19 @@ export function isDevPlanOverrideEnabled(): boolean {
 function tierFromPolarProductId(productId: string | null | undefined): PlanTier | null {
   if (!productId?.trim()) return null;
   const ids = getPolarProductIds();
-  if (ids.starter && productId === ids.starter) return "starter";
-  if (ids.pro && productId === ids.pro) return "pro";
-  if (ids.legacy && productId === ids.legacy) return "pro";
+  if (
+    (ids.starter && productId === ids.starter) ||
+    (ids.starterAnnual && productId === ids.starterAnnual)
+  ) {
+    return "starter";
+  }
+  if (
+    (ids.pro && productId === ids.pro) ||
+    (ids.proAnnual && productId === ids.proAnnual) ||
+    (ids.legacy && productId === ids.legacy)
+  ) {
+    return "pro";
+  }
   return null;
 }
 

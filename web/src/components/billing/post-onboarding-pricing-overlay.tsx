@@ -9,6 +9,7 @@ import {
   PricingBlock,
   type BillingPeriod,
 } from "@/components/landing/landing-pricing";
+import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import { RivalLogoImg } from "@/components/rival-logo";
 
 function BillingToggle({
@@ -100,7 +101,7 @@ export function PostOnboardingPricingOverlay() {
             <PricingBlock billing={billing} listMonthlyUsd={79} annualMonthlyUsd={59} />
             <p className="mt-3 text-sm font-bold text-[#1a1a1a]">5 competitors · 50k ads/mo</p>
             <div className="mt-6">
-              <BlackCta href="/checkout?plan=starter">Start free trial</BlackCta>
+              <BlackCta href={buildCheckoutHref("starter", billing)}>Start free trial</BlackCta>
               <p className="mt-2 text-center text-[11px] text-gray-400">No commitment</p>
             </div>
             <div className="mt-6 border-t border-gray-100 pt-6">
@@ -121,7 +122,7 @@ export function PostOnboardingPricingOverlay() {
             <PricingBlock billing={billing} listMonthlyUsd={149} annualMonthlyUsd={129} />
             <p className="mt-3 text-sm font-bold text-[#1a1a1a]">15 competitors · 150k ads/mo</p>
             <div className="mt-6">
-              <AccentCta href="/checkout?plan=pro">Start free trial</AccentCta>
+              <AccentCta href={buildCheckoutHref("pro", billing)}>Start free trial</AccentCta>
               <p className="mt-2 text-center text-[11px] text-gray-400">No commitment</p>
             </div>
             <div className="mt-6 border-t border-gray-100 pt-6">

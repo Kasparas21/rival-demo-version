@@ -1,33 +1,41 @@
 export const POLAR_PRODUCT_ID_FALLBACK = "a105e33c-ab82-4649-8740-c7a799f654bc";
 
 export type PolarPlanSlug = "starter" | "pro";
+export type BillingPeriod = "monthly" | "annual";
 
 export function getPolarProductIds(): {
   starter: string | null;
+  starterAnnual: string | null;
   pro: string;
+  proAnnual: string | null;
   legacy: string;
 } {
   const legacy = process.env.POLAR_PRODUCT_ID?.trim() || POLAR_PRODUCT_ID_FALLBACK;
   const starter = process.env.POLAR_STARTER_PRODUCT_ID?.trim() || null;
+  const starterAnnual = process.env.POLAR_STARTER_ANNUAL_PRODUCT_ID?.trim() || null;
   const pro = process.env.POLAR_PRO_PRODUCT_ID?.trim() || legacy;
-  return { starter, pro, legacy };
+  const proAnnual = process.env.POLAR_PRO_ANNUAL_PRODUCT_ID?.trim() || null;
+  return { starter, starterAnnual, pro, proAnnual, legacy };
 }
 
-export function polarProductIdForPlan(plan: PolarPlanSlug): string {
+export function polarProductIdForPlan(plan: PolarPlanSlug, period: BillingPeriod = "monthly"): string {
   const ids = getPolarProductIds();
   if (plan === "starter") {
+    if (period === "annual" && ids.starterAnnual) return ids.starterAnnual;
     return ids.starter ?? ids.legacy;
   }
+  if (period === "annual" && ids.proAnnual) return ids.proAnnual;
   return ids.pro;
 }
 
 export function isKnownPolarProductId(productId: string): boolean {
   const ids = getPolarProductIds();
-  return (
-    productId === ids.legacy ||
-    (ids.starter !== null && productId === ids.starter) ||
-    productId === ids.pro
+  const known = new Set(
+    [ids.legacy, ids.starter, ids.starterAnnual, ids.pro, ids.proAnnual].filter(
+      (id): id is string => Boolean(id?.trim()),
+    ),
   );
+  return known.has(productId);
 }
 
 /** Hostnames from copy-paste env examples; outbound auth links must never use these. */
