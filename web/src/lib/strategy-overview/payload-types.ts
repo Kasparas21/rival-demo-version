@@ -105,6 +105,12 @@ export type StrategyMapPayload = {
   dominantFormat: { format: string; percentage: number };
   toneOfVoice: { primary: string; attributes: string[] };
   topAngles: { angle: string; rank: number }[];
+  /** Richer sidebar breakdown (format mix, angle categories) — optional on older caches */
+  sidebarExtras?: {
+    formatMix: { label: string; sharePct: number }[];
+    angleCategories: { label: string; count: number; sharePct: number; category: string }[];
+    voiceConfidence: number | null;
+  };
   platformNodes: PlatformNodePayload[];
   /** Per (platform × funnel stage); optional for older cached payloads */
   funnelCells?: FunnelCellNodePayload[];

@@ -385,6 +385,10 @@ export function normalizeStrategyMapPayload(map: StrategyMapPayload): StrategyMa
     dominantFormat: normalizeDominantFormat(raw.dominantFormat),
     toneOfVoice: normalizeToneOfVoice(raw.toneOfVoice),
     topAngles: normalizeTopAngles(raw.topAngles),
+    sidebarExtras:
+      raw.sidebarExtras && typeof raw.sidebarExtras === "object"
+        ? (raw.sidebarExtras as StrategyMapPayload["sidebarExtras"])
+        : undefined,
   };
 }
 

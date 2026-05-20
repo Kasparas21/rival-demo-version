@@ -1,5 +1,6 @@
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
 import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
+import { deriveSidebarInsights } from "@/lib/strategy-overview/derive-sidebar-insights";
 import { strategyMapNodeSize } from "@/lib/strategy-overview/map-node-sizing";
 import { applyFunnelCellLayout } from "@/lib/strategy-overview/layout-funnel-cells";
 import { deriveFunnelCellEdges } from "@/lib/strategy-overview/funnel-cell-edges";
@@ -949,27 +950,13 @@ export function deriveStrategyOverviewPayload(
   }
   console.log(`[derivation] funnelEdges detected=${edgeDetected} | suppressed=${edgeSuppressed}`);
 
-  const formatCounts = new Map<string, number>();
-  for (const a of activeAds) {
-    const f = (a.format || "unknown").toLowerCase();
-    formatCounts.set(f, (formatCounts.get(f) ?? 0) + 1);
-  }
-  const topFmt = [...formatCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-  const dominantFormat = {
-    format: topFmt ? topFmt[0] : "video",
-    percentage:
-      topFmt && activeAds.length > 0 ? Math.round((topFmt[1] / activeAds.length) * 100) : activeAds.length === 0 ? 0 : 78,
-  };
+  const sidebarInsights = deriveSidebarInsights(activeAds);
 
   const angleAgg = new Map<string, number>();
   for (const a of activeAds) {
     const k = (a.ai_extracted_angle ?? "Unclassified").trim() || "Unclassified";
     angleAgg.set(k, (angleAgg.get(k) ?? 0) + 1);
   }
-  const topAngles = [...angleAgg.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([angle], i) => ({ angle, rank: i + 1 }));
 
   const map: StrategyMapPayload = {
     title: `${competitor.name} Full Funnel Strategy Map`,
@@ -985,27 +972,23 @@ export function deriveStrategyOverviewPayload(
     },
     spendVsSimilar: spendVsSimilarLabel(brandScaleScore),
     spendTrendline: buildSparklineFromAds(activeAds),
-    audienceSignals: {
-      interests:
-        topAngles.length > 0
-          ? topAngles.slice(0, 3).map((x) => x.angle)
-          : ["Lookalike-style broad interest", "Category shoppers", "Platform-native engagers"],
-      ageRange: "25–44 years old",
-      geo: "Multi-region (inferred)",
-      targetingType: ["Interest-based", "Performance"],
+    audienceSignals: sidebarInsights.audienceSignals,
+    dominantFormat: sidebarInsights.dominantFormat,
+    toneOfVoice: sidebarInsights.toneOfVoice,
+    topAngles: sidebarInsights.topAngles,
+    sidebarExtras: {
+      formatMix: sidebarInsights.extras.formatMix.map((f) => ({
+        label: f.label,
+        sharePct: f.sharePct,
+      })),
+      angleCategories: sidebarInsights.extras.topAngleCategories.map((c) => ({
+        label: c.label,
+        count: c.count,
+        sharePct: c.sharePct,
+        category: c.category,
+      })),
+      voiceConfidence: sidebarInsights.extras.voiceConfidence,
     },
-    dominantFormat: {
-      format:
-        dominantFormat.format === "video"
-          ? "Video (Vertical)"
-          : dominantFormat.format.charAt(0).toUpperCase() + dominantFormat.format.slice(1),
-      percentage: dominantFormat.percentage || 78,
-    },
-    toneOfVoice: {
-      primary: "Confident & Helpful",
-      attributes: ["Promotional", "Informative", "Benefit-driven"],
-    },
-    topAngles: topAngles.length ? topAngles : [{ angle: "Product benefits", rank: 1 }],
     platformNodes: nodes,
     funnelCells,
     funnelEdges,
