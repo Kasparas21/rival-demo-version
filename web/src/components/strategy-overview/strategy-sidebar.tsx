@@ -88,8 +88,8 @@ export function StrategyOverviewSidebar({
       <div className="grid grid-cols-2 gap-2.5">
         <InsightCard title="Audience signals" icon={Users} accent="#6366f1">
           <ul className="space-y-2">
-            {interestLabels.slice(0, 3).map((label) => (
-              <li key={label} className="flex items-start gap-2 rounded-lg bg-slate-50/90 px-2 py-1.5">
+            {interestLabels.slice(0, 3).map((label, idx) => (
+              <li key={`audience-${idx}-${label.slice(0, 48)}`} className="flex items-start gap-2 rounded-lg bg-slate-50/90 px-2 py-1.5">
                 <Target className="mt-0.5 h-3 w-3 shrink-0 text-indigo-500" />
                 <span className="line-clamp-2 text-[10px] font-medium leading-snug text-slate-700">{label}</span>
               </li>
@@ -153,7 +153,7 @@ export function StrategyOverviewSidebar({
               const hook = parsed.hook || a.angle;
               return (
                 <li
-                  key={a.rank}
+                  key={`top-angle-${a.rank}-${a.angle.slice(0, 80)}`}
                   className="rounded-lg border border-emerald-100/80 bg-gradient-to-br from-emerald-50/50 to-white px-2 py-1.5"
                 >
                   <div className="flex items-start gap-1.5">

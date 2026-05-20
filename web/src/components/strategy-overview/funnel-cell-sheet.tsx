@@ -504,7 +504,7 @@ function CreativeThumb({
           playsInline
           preload="metadata"
           poster={poster || undefined}
-          referrerPolicy="no-referrer"
+          {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
           onError={() => setPlaying(false)}
         />
       </div>
@@ -545,7 +545,7 @@ function CreativeThumb({
           controls
           playsInline
           preload="metadata"
-          referrerPolicy="no-referrer"
+          {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
         />
       </div>
     );

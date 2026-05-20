@@ -415,9 +415,9 @@ export function CopyVaultPanel({
           >
             All
           </button>
-          {topAngles.map(([ang]) => (
+          {topAngles.map(([ang], idx) => (
             <button
-              key={ang.slice(0, 120)}
+              key={`angle-pill-${idx}-${ang}`}
               type="button"
               onClick={() => patchQuery({ angle: null, anglePick: ang })}
               className={cn(
@@ -442,8 +442,8 @@ export function CopyVaultPanel({
               }}
             >
               <option value="">+ More angles…</option>
-              {angleCounts.slice(8).map(([ang]) => (
-                <option key={ang.slice(0, 80)} value={ang}>
+              {angleCounts.slice(8).map(([ang], idx) => (
+                <option key={`angle-opt-${idx}-${ang}`} value={ang}>
                   {ang.slice(0, 60)}
                 </option>
               ))}
@@ -730,7 +730,7 @@ function VaultCreativeMedia({
         playsInline
         preload="metadata"
         poster={poster || undefined}
-        referrerPolicy="no-referrer"
+        {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
         onError={() => setPlaying(false)}
       />
     );
@@ -786,7 +786,7 @@ function VaultCreativeMedia({
         controls
         playsInline
         preload="metadata"
-        referrerPolicy="no-referrer"
+        {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
       />
     );
   }
