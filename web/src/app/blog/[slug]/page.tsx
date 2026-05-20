@@ -5,7 +5,7 @@ import { notFound } from "next/navigation";
 import { BlogShell } from "@/components/blog/blog-shell";
 import { PortableTextBody } from "@/components/blog/portable-text-body";
 import { PostCover } from "@/components/blog/post-cover";
-import { sanityClient } from "@/lib/sanity/client";
+import { fetchSanity, sanityClient } from "@/lib/sanity/client";
 import { formatBlogDate, primaryCategory, truncateExcerpt } from "@/lib/sanity/format";
 import { postBySlugQuery, postSlugsQuery } from "@/lib/sanity/queries";
 import type { BlogPostDetail } from "@/lib/sanity/types";
@@ -17,7 +17,7 @@ type PageProps = {
 };
 
 export async function generateStaticParams() {
-  const slugs = await sanityClient.fetch<{ slug: string }[]>(postSlugsQuery);
+  const slugs = await fetchSanity<{ slug: string }[]>(postSlugsQuery);
   return slugs.map(({ slug }) => ({ slug }));
 }
 

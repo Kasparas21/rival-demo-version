@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { BlogShell } from "@/components/blog/blog-shell";
 import { PostCover } from "@/components/blog/post-cover";
-import { sanityClient } from "@/lib/sanity/client";
+import { fetchSanity } from "@/lib/sanity/client";
 import { formatBlogDate, primaryCategory, truncateExcerpt } from "@/lib/sanity/format";
 import { postsQuery } from "@/lib/sanity/queries";
 import type { BlogPostListItem } from "@/lib/sanity/types";
@@ -18,7 +18,7 @@ export const revalidate = 60;
 const categories = ["All", "Product", "Business"];
 
 export default async function BlogPage() {
-  const posts = await sanityClient.fetch<BlogPostListItem[]>(postsQuery);
+  const posts = await fetchSanity<BlogPostListItem[]>(postsQuery);
   const heroPost = posts[0] ?? null;
   const gridPosts = posts.slice(1);
 

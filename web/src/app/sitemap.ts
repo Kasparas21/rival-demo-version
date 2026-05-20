@@ -1,13 +1,13 @@
 import type { MetadataRoute } from "next";
 
-import { sanityClient } from "@/lib/sanity/client";
+import { fetchSanity } from "@/lib/sanity/client";
 import { postSlugsQuery } from "@/lib/sanity/queries";
 
 const siteUrl = "https://spy-rival.com";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const posts = await sanityClient.fetch<{ slug: string; publishedAt: string | null }[]>(postSlugsQuery);
+  const posts = await fetchSanity<{ slug: string; publishedAt: string | null }[]>(postSlugsQuery);
 
   return [
     {
