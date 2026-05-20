@@ -385,7 +385,7 @@ export function StrategyOverviewApp({
                 onEdgeHover={setEdgeTip}
               />
             </div>
-            <aside className="w-full shrink-0 xl:w-[300px]">
+            <aside className="w-full shrink-0 xl:w-[min(520px,36vw)] xl:max-w-[520px]">
               <StrategyOverviewSidebar
                 map={payload!.map}
                 competitorId={competitorId}
