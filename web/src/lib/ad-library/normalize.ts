@@ -728,6 +728,18 @@ function firstStringFromRecord(o: Record<string, unknown>, keys: string[]): stri
   return "";
 }
 
+function pickMetaVideoPoster(
+  card: NonNullable<FacebookAdSnapshot["cards"]>[number] | undefined,
+  snapshotImages: FacebookAdSnapshot["images"] | undefined
+): string {
+  const fromCard = card?.resized_image_url?.trim() || card?.original_image_url?.trim() || "";
+  if (fromCard) return fromCard;
+  const fromPreview = card?.video_preview_image_url?.trim() || "";
+  if (fromPreview) return fromPreview;
+  const snapImg = snapshotImages?.[0];
+  return snapImg?.resized_image_url?.trim() || snapImg?.original_image_url?.trim() || "";
+}
+
 function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; isVideo: boolean } {
   if (!snap) return { url: "", isVideo: false };
   const snapLoose = snap as Record<string, unknown>;
@@ -759,11 +771,9 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
     if (looseStill) return { url: looseStill, isVideo: false };
 
     const c = rawCard as NonNullable<FacebookAdSnapshot["cards"]>[number];
-    if (c?.video_preview_image_url) {
-      return { url: c.video_preview_image_url, isVideo: true };
-    }
-    if (c?.video_hd_url || c?.video_sd_url) {
-      return { url: c.video_preview_image_url || "", isVideo: true };
+    const hasVideo = Boolean(c?.video_hd_url || c?.video_sd_url || c?.video_preview_image_url);
+    if (hasVideo) {
+      return { url: pickMetaVideoPoster(c, snap.images), isVideo: true };
     }
     const cardImage = c?.resized_image_url || c?.original_image_url || "";
     if (cardImage) {
@@ -772,11 +782,13 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
   }
 
   const v = snap.videos?.[0];
-  if (v?.video_preview_image_url) {
-    return { url: v.video_preview_image_url, isVideo: true };
-  }
-  if (v?.video_hd_url || v?.video_sd_url) {
-    return { url: v.video_preview_image_url || "", isVideo: true };
+  if (v?.video_hd_url || v?.video_sd_url || v?.video_preview_image_url) {
+    const poster =
+      snap.images?.[0]?.resized_image_url?.trim() ||
+      snap.images?.[0]?.original_image_url?.trim() ||
+      v.video_preview_image_url?.trim() ||
+      "";
+    return { url: poster, isVideo: true };
   }
   const img = snap.images?.[0];
   const url = img?.resized_image_url || img?.original_image_url || "";

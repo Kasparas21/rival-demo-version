@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { libraryItemIdFromRawPayload } from "@/lib/saved-ads/resolve-scraped-ad";
+import { resolveCellAdLifecycle } from "@/lib/strategy-overview/cell-ad-lifecycle";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,6 +21,7 @@ const STAGES = new Set(["TOF", "MOF", "BOF"]);
 function rawPayloadSubset(raw: unknown): {
   landing_page_url?: string;
   video_url?: string;
+  poster_url?: string;
   headline?: string;
   cta_type?: string;
 } {
@@ -27,10 +29,15 @@ function rawPayloadSubset(raw: unknown): {
   const o = raw as Record<string, unknown>;
   const pickStr = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : undefined);
   return {
-    landing_page_url: pickStr("landing_page_url") ?? pickStr("link_url"),
-    video_url: pickStr("video_url") ?? pickStr("video_sd_url"),
+    landing_page_url: pickStr("landing_page_url") ?? pickStr("link_url") ?? pickStr("destinationUrl"),
+    video_url:
+      pickStr("video_url") ??
+      pickStr("videoUrl") ??
+      pickStr("video_sd_url") ??
+      pickStr("video_hd_url"),
+    poster_url: pickStr("img") ?? pickStr("thumbnail") ?? pickStr("image_url"),
     headline: pickStr("headline") ?? pickStr("title"),
-    cta_type: pickStr("cta_type") ?? pickStr("cta_text"),
+    cta_type: pickStr("cta_type") ?? pickStr("cta_text") ?? pickStr("cta"),
   };
 }
 
@@ -80,8 +87,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       .eq("user_id", user.id)
       .eq("competitor_id", competitorId)
       .eq("platform", platform)
-      .eq("funnel_stage", stageParam)
-      .eq("is_active", true);
+      .eq("funnel_stage", stageParam);
 
   const { count: totalInCell, error: countErr } = await base();
 
@@ -92,13 +98,12 @@ export async function GET(req: Request): Promise<NextResponse> {
   let listQuery = supabase
     .from("scraped_ads")
     .select(
-      "id, platform, format, ad_text, ad_creative_url, ai_extracted_angle, first_seen_at, last_seen_at, raw_payload"
+      "id, platform, format, ad_text, ad_creative_url, ai_extracted_angle, first_seen_at, last_seen_at, is_active, raw_payload"
     )
     .eq("user_id", user.id)
     .eq("competitor_id", competitorId)
     .eq("platform", platform)
     .eq("funnel_stage", stageParam)
-    .eq("is_active", true)
     .order("first_seen_at", { ascending: false })
     .limit(limit);
 
@@ -113,19 +118,34 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   const ads =
-    rows?.map((r) => ({
-      id: r.id,
-      platform: r.platform,
-      format: r.format,
-      ad_text: r.ad_text,
-      ad_creative_url: r.ad_creative_url,
-      ai_extracted_angle: r.ai_extracted_angle,
-      first_seen_at: r.first_seen_at,
-      last_seen_at: r.last_seen_at,
-      /** Ad library card id when present in raw_payload (for saved-ads check/toggle). */
-      library_item_id: libraryItemIdFromRawPayload(r.raw_payload),
-      raw_payload_subset: rawPayloadSubset(r.raw_payload),
-    })) ?? [];
+    rows?.map((r) => {
+      const lifecycle = resolveCellAdLifecycle({
+        platform: r.platform,
+        first_seen_at: r.first_seen_at,
+        last_seen_at: r.last_seen_at,
+        is_active: r.is_active,
+        raw_payload: r.raw_payload,
+      });
+      return {
+        id: r.id,
+        platform: r.platform,
+        format: r.format,
+        ad_text: r.ad_text,
+        ad_creative_url: r.ad_creative_url,
+        ai_extracted_angle: r.ai_extracted_angle,
+        first_seen_at: r.first_seen_at,
+        last_seen_at: r.last_seen_at,
+        is_active: r.is_active,
+        is_running: lifecycle.isRunning,
+        runtime_days: lifecycle.runtimeDays,
+        ended_days_ago: lifecycle.endedDaysAgo,
+        status_label: lifecycle.statusLabel,
+        sort_runtime_ms: lifecycle.sortRuntimeMs,
+        /** Ad library card id when present in raw_payload (for saved-ads check/toggle). */
+        library_item_id: libraryItemIdFromRawPayload(r.raw_payload),
+        raw_payload_subset: rawPayloadSubset(r.raw_payload),
+      };
+    }) ?? [];
 
   const nextCursor =
     rows && rows.length === limit ? (rows[rows.length - 1]!.first_seen_at ?? null) : null;

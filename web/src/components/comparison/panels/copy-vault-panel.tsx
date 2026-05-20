@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Bookmark, Eye, X } from "lucide-react";
+import { Bookmark, Eye, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
@@ -11,7 +11,6 @@ import {
   classifyAngleCategory,
   type AngleCardCategory,
 } from "@/lib/comparison/stealable-angle-present";
-import { RivalLoadingRow } from "@/components/ui/rival-loading";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import {
   isAdSaved,
@@ -75,6 +74,16 @@ const ANGLE_CAT_VALUES: AngleCardCategory[] = [
   "other",
 ];
 const ANGLE_CAT_SET = new Set<string>(ANGLE_CAT_VALUES);
+
+const FUNNEL_PILL: Record<string, string> = {
+  TOF: "bg-blue-100 text-blue-800 border-blue-200",
+  MOF: "bg-amber-100 text-amber-800 border-amber-200",
+  BOF: "bg-emerald-100 text-emerald-800 border-emerald-200",
+};
+
+function isDirectVideoUrl(url: string): boolean {
+  return /\.(mp4|webm|m3u8)(\?|$)/i.test(url);
+}
 
 const FUNNELS: { id: string; label: string }[] = [
   { id: "all", label: "All" },
@@ -354,7 +363,7 @@ export function CopyVaultPanel({
         }
       />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.05)]">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Filters</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="w-full text-[12px] font-medium text-slate-500">Platform</span>
@@ -485,8 +494,19 @@ export function CopyVaultPanel({
       {vaultError ? (
         <p className="text-sm text-red-700">{vaultError.message}</p>
       ) : vaultLoading && !rawAds ? (
-        <div className="flex justify-center py-14">
-          <RivalLoadingRow />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="overflow-hidden rounded-2xl border border-slate-200 bg-white animate-pulse">
+              <div className="bg-[#eef2f7]/60 p-3">
+                <div className="min-h-[280px] rounded-xl bg-slate-100" />
+              </div>
+              <div className="space-y-3 p-4">
+                <div className="h-4 w-20 rounded bg-slate-100" />
+                <div className="h-5 w-full rounded bg-slate-100" />
+                <div className="h-16 w-full rounded bg-slate-100" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : !rawAds?.length ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-600">
@@ -502,128 +522,29 @@ export function CopyVaultPanel({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {visibleAds.map((ad) => {
-            const platform = pl(ad.platform);
-            const pill = ad.ai_extracted_angle ? angleCategoryPill(ad.ai_extracted_angle) : null;
-            const funnel = normalizeFunnel(ad.funnel_stage);
-            const saved = isAdSaved(savedMap, ad.id);
-            const expanded = expandIds.has(ad.id);
-            const life = Math.round(ad.lifespanDays ?? 0);
-            const lifeCls =
-              life > 60 ? "bg-slate-800/95 text-white" : life >= 30 ? "bg-slate-600/95 text-white" : "bg-slate-500/90 text-white";
-
-            return (
-              <div
-                key={ad.id}
-                className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-              >
-                <div className="relative aspect-video overflow-hidden rounded-lg bg-slate-100">
-                  {ad.ad_creative_url ? (
-                    <img
-                      src={ad.ad_creative_url}
-                      alt=""
-                      loading="lazy"
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = "none";
-                      }}
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-                      {platform ? (
-                        <ComparisonPlatformIcon platform={platform} className="h-12 w-12 text-slate-400" />
-                      ) : (
-                        <span className="text-xs font-medium capitalize text-slate-500">{ad.platform}</span>
-                      )}
-                    </div>
-                  )}
-                  <div
-                    className={cn(
-                      "absolute right-2 top-2 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold",
-                      lifeCls
-                    )}
-                  >
-                    ●{life}d
-                  </div>
-                  <div className="absolute left-2 top-2 flex items-center gap-1">
-                    {platform ? (
-                      <span className="rounded-md bg-white/95 p-1 shadow-sm ring-1 ring-slate-200/80">
-                        <ComparisonPlatformIcon platform={platform} className="h-4 w-4" />
-                      </span>
-                    ) : null}
-                    <span className="rounded-md bg-white/95 px-2 py-0.5 text-[10px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-200/80">
-                      {funnel}
-                    </span>
-                  </div>
-                </div>
-
-                {pill ? (
-                  <span
-                    className={cn(
-                      "mt-3 inline-flex self-start rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                      pill.className
-                    )}
-                  >
-                    {pill.label}
-                  </span>
-                ) : null}
-
-                <p className="mt-2 line-clamp-2 text-base font-semibold leading-snug text-slate-900">{hookFromText(ad.ad_text)}</p>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(ad.id)) next.delete(ad.id);
-                      else next.add(ad.id);
-                      return next;
-                    })
-                  }
-                  className="mt-2 text-left"
-                >
-                  <p
-                    className={cn(
-                      "text-sm leading-relaxed text-slate-600 transition-[max-height]",
-                      expanded ? "line-clamp-none" : "line-clamp-3"
-                    )}
-                  >
-                    {ad.ad_text?.trim() || "—"}
-                  </p>
-                  <span className="mt-1 text-[11px] font-semibold text-slate-500">{expanded ? "Show less" : "Expand copy"}</span>
-                </button>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    disabled={savedLoading}
-                    onClick={async () => {
-                      if (saved) await unsaveAd(ad.id);
-                      else await saveAd({ scrapedAdId: ad.id });
-                    }}
-                    className={cn(
-                      "inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition",
-                      saved ? "border-slate-300 bg-slate-100 text-slate-900" : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
-                    )}
-                  >
-                    <Bookmark className={cn("h-3.5 w-3.5", saved && "fill-slate-800 text-slate-800")} />
-                    {saved ? "Saved" : "Save"}
-                  </button>
-                  {onOpenAd ? (
-                    <button
-                      type="button"
-                      onClick={() => onOpenAd(ad.id)}
-                      className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:opacity-95"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      Open
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          {visibleAds.map((ad) => (
+            <VaultAdCard
+              key={ad.id}
+              ad={ad}
+              expanded={expandIds.has(ad.id)}
+              saved={isAdSaved(savedMap, ad.id)}
+              savedLoading={savedLoading}
+              onToggleExpand={() =>
+                setExpandIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(ad.id)) next.delete(ad.id);
+                  else next.add(ad.id);
+                  return next;
+                })
+              }
+              onSave={async () => {
+                if (isAdSaved(savedMap, ad.id)) await unsaveAd(ad.id);
+                else await saveAd({ scrapedAdId: ad.id });
+              }}
+              onOpen={onOpenAd ? () => onOpenAd(ad.id) : undefined}
+            />
+          ))}
         </div>
       )}
 
@@ -640,6 +561,243 @@ export function CopyVaultPanel({
       ) : filteredAds.length > 0 && visibleAds.length >= filteredAds.length ? (
         <p className="text-center text-xs text-slate-500">Showing all {filteredAds.length} matching ads</p>
       ) : null}
+    </div>
+  );
+}
+
+function lifespanBadgeClass(days: number): string {
+  if (days > 60) return "bg-slate-900/90 text-white";
+  if (days >= 30) return "bg-slate-700/90 text-white";
+  return "bg-slate-500/90 text-white";
+}
+
+function VaultAdCard({
+  ad,
+  expanded,
+  saved,
+  savedLoading,
+  onToggleExpand,
+  onSave,
+  onOpen,
+}: {
+  ad: VaultAdRow;
+  expanded: boolean;
+  saved: boolean;
+  savedLoading: boolean;
+  onToggleExpand: () => void;
+  onSave: () => void | Promise<void>;
+  onOpen?: () => void;
+}) {
+  const platform = pl(ad.platform);
+  const pill = ad.ai_extracted_angle ? angleCategoryPill(ad.ai_extracted_angle) : null;
+  const funnel = normalizeFunnel(ad.funnel_stage);
+  const life = Math.round(ad.lifespanDays ?? 0);
+  const formatLabel = (ad.format || "ad").toLowerCase().includes("video") ? "Video" : "Image";
+
+  return (
+    <article className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-b from-white to-slate-50/70 shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_12px_36px_rgba(15,23,42,0.09)]">
+      <div className="border-b border-slate-100 bg-[#eef2f7]/60 p-3">
+        <div className="relative overflow-hidden rounded-xl bg-white p-2 shadow-[inset_0_1px_2px_rgba(15,23,42,0.04)] ring-1 ring-slate-200/90">
+          <VaultCreativeMedia creativeUrl={ad.ad_creative_url} format={ad.format} platform={platform} />
+          <div className="pointer-events-none absolute inset-x-2 top-2 flex items-start justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {platform ? (
+                <span className="inline-flex items-center rounded-lg bg-white/95 p-1.5 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm">
+                  <ComparisonPlatformIcon platform={platform} className="h-4 w-4" />
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  "rounded-lg border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm backdrop-blur-sm",
+                  FUNNEL_PILL[funnel] ?? "bg-white/95 text-slate-700 border-slate-200"
+                )}
+              >
+                {funnel}
+              </span>
+            </div>
+            <div className="flex flex-col items-end gap-1">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold shadow-sm backdrop-blur-sm",
+                  lifespanBadgeClass(life)
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                {life}d run
+              </span>
+              <span className="rounded-full bg-black/55 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                {formatLabel}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-3 p-4 pt-3">
+        {pill ? (
+          <span
+            className={cn(
+              "inline-flex self-start rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+              pill.className
+            )}
+          >
+            {pill.label}
+          </span>
+        ) : null}
+
+        <p className="text-[17px] font-semibold leading-snug text-slate-900">{hookFromText(ad.ad_text)}</p>
+
+        <button type="button" onClick={onToggleExpand} className="text-left">
+          <p
+            className={cn(
+              "text-[13px] leading-relaxed text-slate-600",
+              expanded ? "whitespace-pre-wrap" : "line-clamp-4"
+            )}
+          >
+            {ad.ad_text?.trim() || "—"}
+          </p>
+          <span className="mt-1.5 inline-block text-[11px] font-semibold text-sky-700">
+            {expanded ? "Show less" : "Expand copy"}
+          </span>
+        </button>
+
+        <div className="mt-auto grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            disabled={savedLoading}
+            onClick={() => void onSave()}
+            className={cn(
+              "inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition",
+              saved
+                ? "border-[color:var(--rival-accent-blue)] bg-[#DDF1FD]/90 text-[#111827]"
+                : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+            )}
+          >
+            <Bookmark className={cn("h-3.5 w-3.5", saved && "fill-current")} />
+            {saved ? "Saved" : "Save"}
+          </button>
+          {onOpen ? (
+            <button
+              type="button"
+              onClick={onOpen}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:opacity-95"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Open
+            </button>
+          ) : (
+            <div className="h-10 rounded-xl border border-dashed border-slate-200 bg-slate-50/80" aria-hidden />
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function VaultCreativeMedia({
+  creativeUrl,
+  format,
+  platform,
+}: {
+  creativeUrl: string | null;
+  format: string;
+  platform: StrategyPlatform | null;
+}) {
+  const [broken, setBroken] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  const url = creativeUrl?.trim() ?? "";
+  const isVideoFormat = (format || "").toLowerCase().includes("video");
+  const stream = url && isDirectVideoUrl(url) ? url : "";
+  const poster = url && !isDirectVideoUrl(url) ? url : "";
+  const isVideo = isVideoFormat && Boolean(stream || poster);
+
+  useEffect(() => {
+    setBroken(false);
+    setPlaying(false);
+  }, [creativeUrl, format]);
+
+  const mediaClass =
+    "mx-auto block w-full h-auto max-h-[min(560px,72vh)] object-contain rounded-lg";
+
+  if (isVideo && playing && stream) {
+    return (
+      <video
+        src={stream}
+        className={`${mediaClass} bg-slate-900`}
+        controls
+        autoPlay
+        playsInline
+        preload="metadata"
+        poster={poster || undefined}
+        referrerPolicy="no-referrer"
+        onError={() => setPlaying(false)}
+      />
+    );
+  }
+
+  if (isVideo && poster && !broken) {
+    return (
+      <button
+        type="button"
+        className="relative block w-full border-0 bg-slate-900/5 p-0"
+        onClick={() => (stream ? setPlaying(true) : undefined)}
+        aria-label={stream ? "Play video ad" : "Video ad preview"}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={poster}
+          alt=""
+          loading="lazy"
+          className={mediaClass}
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
+        />
+        {stream ? (
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/30 via-transparent to-transparent">
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/55 text-white shadow-lg">
+              <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+            </span>
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+
+  if (poster && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={poster}
+        alt=""
+        loading="lazy"
+        className={mediaClass}
+        referrerPolicy="no-referrer"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
+  if (isVideo && stream) {
+    return (
+      <video
+        src={stream}
+        className={`${mediaClass} bg-slate-900`}
+        controls
+        playsInline
+        preload="metadata"
+        referrerPolicy="no-referrer"
+      />
+    );
+  }
+
+  return (
+    <div className="flex min-h-[200px] w-full items-center justify-center rounded-lg bg-gradient-to-br from-slate-100 to-slate-200/80">
+      {platform ? (
+        <ComparisonPlatformIcon platform={platform} className="h-14 w-14 text-slate-400" />
+      ) : (
+        <span className="text-xs font-medium capitalize text-slate-500">No preview</span>
+      )}
     </div>
   );
 }

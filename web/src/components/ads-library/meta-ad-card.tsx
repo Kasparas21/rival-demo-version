@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ExternalLink, Globe } from "lucide-react";
+import { ExternalLink, Globe, Play } from "lucide-react";
 import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
@@ -11,42 +11,93 @@ import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-sourc
 
 function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: boolean }) {
   const [videoFailed, setVideoFailed] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const stream = ad.videoUrl?.trim() ?? "";
   useEffect(() => {
     setVideoFailed(false);
+    setPlaying(false);
   }, [ad.id, stream]);
   const still = ad.img?.trim() ?? "";
-  /** Try native `<video>` first for Ad Library MP4s (`referrerPolicy` helps FB CDN). Fallback on `error`. */
+  /** Poster-first preview so video tiles match image size; mount `<video>` only after play. */
   const wantsVideo = Boolean(stream && ad.isVideo);
   const maxH = compact ? "max-h-[300px]" : "max-h-[420px]";
-  const minH = compact ? "min-h-[120px]" : "min-h-[180px]";
-  const videoClass = `max-w-full w-auto h-auto ${maxH} rounded-xl object-contain bg-black`;
+  const previewFrameH = compact ? "h-[200px]" : "h-[280px]";
+  /** Image ads: natural aspect, width-first. Video posters: fixed frame fills like hero creative. */
+  const imageMediaClass = `block w-full ${maxH} object-contain rounded-xl`;
+  const videoPreviewMediaClass = "block h-full w-full object-cover rounded-xl";
 
-  if (wantsVideo && !videoFailed) {
+  if (wantsVideo && playing && !videoFailed) {
     return (
-      <video
-        controls
-        playsInline
-        preload="metadata"
-        poster={still || undefined}
-        className={compact ? `w-full h-full ${videoClass}` : videoClass}
-        src={stream}
-        onClick={(e) => e.stopPropagation()}
-        onError={() => setVideoFailed(true)}
-        // DOM: HTMLVideoElement.referrerPolicy — @types/react VideoHTMLAttributes omit it in this project
-        {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
-      />
+      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
+        <video
+          controls
+          autoPlay
+          playsInline
+          preload="metadata"
+          poster={still || undefined}
+          className={`${videoPreviewMediaClass} bg-black object-contain`}
+          src={stream}
+          onClick={(e) => e.stopPropagation()}
+          onError={() => setVideoFailed(true)}
+          // DOM: HTMLVideoElement.referrerPolicy — @types/react VideoHTMLAttributes omit it in this project
+          {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
+        />
+      </div>
+    );
+  }
+
+  if (wantsVideo && still && !videoFailed) {
+    return (
+      <button
+        type="button"
+        className={`relative block w-full overflow-hidden rounded-xl border-0 bg-[#f3f4f6] p-0 ${previewFrameH}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          setPlaying(true);
+        }}
+        aria-label="Play video ad"
+      >
+        <img
+          src={still}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={videoPreviewMediaClass}
+          onClick={(e) => e.stopPropagation()}
+        />
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
+            <Play className="ml-1 h-7 w-7" fill="currentColor" aria-hidden />
+          </span>
+        </span>
+      </button>
+    );
+  }
+
+  if (wantsVideo && !still && !videoFailed) {
+    return (
+      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
+        <video
+          controls
+          playsInline
+          preload="metadata"
+          className={`${videoPreviewMediaClass} bg-black object-contain`}
+          src={stream}
+          onClick={(e) => e.stopPropagation()}
+          onError={() => setVideoFailed(true)}
+          {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
+        />
+      </div>
     );
   }
 
   if (wantsVideo && videoFailed && still) {
     return (
-      <div className={`relative flex w-full items-center justify-center ${compact ? "min-h-0" : ""}`}>
+      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
         <img
           src={still}
           alt=""
           referrerPolicy="no-referrer"
-          className={`max-w-full ${maxH} w-auto h-auto object-contain rounded-xl ${compact ? "" : "object-center"}`}
+          className={videoPreviewMediaClass}
           onClick={(e) => e.stopPropagation()}
         />
         <a
@@ -65,7 +116,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
   if (wantsVideo && videoFailed && !still) {
     return (
       <div
-        className={`flex w-full ${minH} flex-col items-center justify-center gap-2 px-4 text-center`}
+        className={`flex w-full ${compact ? "min-h-[200px]" : "min-h-[280px]"} flex-col items-center justify-center gap-2 px-4 text-center`}
       >
         <p className="text-[12px] text-[#6b7280]">Video didn&apos;t load in the browser. Open it on Meta.</p>
         <a
@@ -87,7 +138,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
         src={still}
         alt=""
         referrerPolicy="no-referrer"
-        className={`max-w-full ${maxH} w-auto h-auto object-contain rounded-xl ${compact ? "" : "object-center"}`}
+        className={imageMediaClass}
         onClick={(e) => e.stopPropagation()}
       />
     );
@@ -95,7 +146,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
 
   return (
     <div
-      className={`flex w-full ${minH} items-center justify-center text-[12px] text-[#9ca3af] px-2 text-center`}
+      className={`flex w-full ${compact ? "min-h-[200px]" : "min-h-[280px]"} items-center justify-center text-[12px] text-[#9ca3af] px-2 text-center`}
     >
       {compact ? "No preview" : "No creative preview"}
     </div>
@@ -252,8 +303,8 @@ export function MetaAdCard({
             </div>
           ) : null}
           {viewMode === "grid" && (
-            <div className="relative w-full flex-1 border-y border-[#e5e7eb] bg-[#f3f4f6] p-3">
-              <div className="relative flex min-h-[240px] w-full items-center justify-center overflow-hidden rounded-xl bg-white">
+            <div className="relative w-full shrink-0 border-y border-[#e5e7eb] bg-[#f3f4f6] p-3">
+              <div className="relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-white">
                 <MetaCreativeMedia ad={ad} compact={false} />
               </div>
             </div>

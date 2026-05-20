@@ -76,6 +76,22 @@ import {
   type LinkedInAdCard,
 } from "@/lib/ad-library/normalize";
 import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import {
+  countActiveGoogleRows,
+  countActiveLinkedInAds,
+  countActiveMetaAds,
+  countActivePinterestAds,
+  countActiveSnapchatAds,
+  countActiveTikTokAds,
+} from "@/lib/ad-library/count-active-ads";
+import {
+  sortGoogleRowsActiveFirst,
+  sortLinkedInAdsActiveFirst,
+  sortMetaAdsActiveFirst,
+  sortPinterestAdsActiveFirst,
+  sortSnapchatAdsActiveFirst,
+  sortTikTokAdsActiveFirst,
+} from "@/lib/ad-library/sort-ads-active-first";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
 import { RIVAL_BRANDS_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { CHANNELS, type ChannelId, DEFAULT_SELECTED_CHANNELS } from "@/components/channel-picker-modal";
@@ -2215,17 +2231,71 @@ function CompetitorDashboardBody({
   const snapchatAds = useMemo(() => adLib?.snapchat?.ads ?? [], [adLib?.snapchat?.ads]);
   const filteredMetaAds = useMemo(() => {
     const seen = new Set<string>();
-    return metaAds.filter((ad) => {
+    const unique = metaAds.filter((ad) => {
       if (seen.has(ad.id)) return false;
       seen.add(ad.id);
       return true;
     });
+    return sortMetaAdsActiveFirst(unique);
   }, [metaAds]);
-  const filteredGoogleRows = googleRows;
-  const filteredLinkedInAds = linkedinAds;
-  const filteredTikTokAds = tiktokAds;
-  const filteredPinterestAds = pinterestAds;
-  const filteredSnapchatAds = snapchatAds;
+  const filteredGoogleRows = useMemo(
+    () => sortGoogleRowsActiveFirst(googleRows),
+    [googleRows]
+  );
+  const filteredLinkedInAds = useMemo(
+    () => sortLinkedInAdsActiveFirst(linkedinAds),
+    [linkedinAds]
+  );
+  const filteredTikTokAds = useMemo(
+    () => sortTikTokAdsActiveFirst(tiktokAds),
+    [tiktokAds]
+  );
+  const filteredPinterestAds = useMemo(
+    () => sortPinterestAdsActiveFirst(pinterestAds),
+    [pinterestAds]
+  );
+  const filteredSnapchatAds = useMemo(
+    () => sortSnapchatAdsActiveFirst(snapchatAds),
+    [snapchatAds]
+  );
+
+  const platformTotalCounts = useMemo(
+    () => ({
+      meta: filteredMetaAds.length,
+      google: filteredGoogleRows.length,
+      tiktok: filteredTikTokAds.length,
+      linkedin: filteredLinkedInAds.length,
+      pinterest: filteredPinterestAds.length,
+      snapchat: filteredSnapchatAds.length,
+    }),
+    [
+      filteredMetaAds.length,
+      filteredGoogleRows.length,
+      filteredTikTokAds.length,
+      filteredLinkedInAds.length,
+      filteredPinterestAds.length,
+      filteredSnapchatAds.length,
+    ]
+  );
+
+  const platformActiveCounts = useMemo(
+    () => ({
+      meta: countActiveMetaAds(filteredMetaAds),
+      google: countActiveGoogleRows(filteredGoogleRows),
+      tiktok: countActiveTikTokAds(filteredTikTokAds),
+      linkedin: countActiveLinkedInAds(filteredLinkedInAds),
+      pinterest: countActivePinterestAds(filteredPinterestAds),
+      snapchat: countActiveSnapchatAds(filteredSnapchatAds),
+    }),
+    [
+      filteredMetaAds,
+      filteredGoogleRows,
+      filteredLinkedInAds,
+      filteredTikTokAds,
+      filteredPinterestAds,
+      filteredSnapchatAds,
+    ]
+  );
 
   const inlinePreviewMetaAds = useMemo(
     () => filteredMetaAds.filter(metaAdHasDashboardInlinePreview),
@@ -3163,14 +3233,8 @@ function CompetitorDashboardBody({
                 competitorId={competitorDbIdForSaved}
                 cacheDomainNorm={cacheDomainNorm}
                 lastScrapedAt={accountLastScrapedAt}
-                platformCounts={{
-                  meta: filteredMetaAds.length,
-                  google: filteredGoogleRows.length,
-                  tiktok: tiktokAds.length,
-                  linkedin: linkedinAds.length,
-                  pinterest: pinterestAds.length,
-                  snapchat: snapchatAds.length,
-                }}
+                platformActiveCounts={platformActiveCounts}
+                platformTotalCounts={platformTotalCounts}
                 onViewAllLandingPages={navigateToLandingPagesExplorer}
                 onFreshnessRescrape={undefined}
                 landingPagesListCache={landingPagesListCacheForChildren}

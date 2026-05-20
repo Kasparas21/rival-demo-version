@@ -34,7 +34,16 @@ type Props = {
   /** Normalized domain for cache keys + invalidation. */
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
-  platformCounts: {
+  platformActiveCounts: {
+    meta: number;
+    google: number;
+    tiktok: number;
+    linkedin: number;
+    pinterest: number;
+    snapchat: number;
+  };
+  /** All scraped ads per platform (active + inactive). */
+  platformTotalCounts: {
     meta: number;
     google: number;
     tiktok: number;
@@ -91,7 +100,8 @@ export function AdLibraryAnalyticsPanel({
   competitorId,
   cacheDomainNorm,
   lastScrapedAt = null,
-  platformCounts,
+  platformActiveCounts,
+  platformTotalCounts,
   onViewAllLandingPages,
   onFreshnessRescrape,
   landingPagesListCache = null,
@@ -131,13 +141,18 @@ export function AdLibraryAnalyticsPanel({
   }, [lpRes]);
 
   const totalActiveAds = useMemo(
-    () => Object.values(platformCounts).reduce((sum, n) => sum + n, 0),
-    [platformCounts]
+    () => Object.values(platformActiveCounts).reduce((sum, n) => sum + n, 0),
+    [platformActiveCounts]
+  );
+
+  const totalAllAds = useMemo(
+    () => Object.values(platformTotalCounts).reduce((sum, n) => sum + n, 0),
+    [platformTotalCounts]
   );
 
   const platformsWithAds = useMemo(
-    () => Object.values(platformCounts).filter((n) => n > 0).length,
-    [platformCounts]
+    () => Object.values(platformActiveCounts).filter((n) => n > 0).length,
+    [platformActiveCounts]
   );
 
   const landingLoading = loading;
@@ -177,8 +192,9 @@ export function AdLibraryAnalyticsPanel({
             </div>
             <PlatformDistributionGauge
               total={totalActiveAds}
+              totalAllAds={totalAllAds}
               platformsCount={platformsWithAds}
-              counts={platformCounts}
+              activeCounts={platformActiveCounts}
             />
           </div>
 
@@ -259,18 +275,28 @@ export function AdLibraryAnalyticsPanel({
 
 function PlatformDistributionGauge({
   total,
+  totalAllAds,
   platformsCount,
-  counts,
+  activeCounts,
 }: {
   total: number;
+  totalAllAds: number;
   platformsCount: number;
-  counts: Props["platformCounts"];
+  activeCounts: Props["platformActiveCounts"];
 }) {
   const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
 
   if (total === 0) {
     return (
-      <div className="py-4 text-[11px] italic text-[#94a3b8]">No active ads found across platforms.</div>
+      <div className="flex flex-col items-center">
+        <div className="py-4 text-[11px] italic text-[#94a3b8]">No active ads found across platforms.</div>
+        {totalAllAds > 0 ? (
+          <p className="w-full border-t border-slate-100 pt-2.5 text-center text-[10px] leading-snug text-[#64748b]">
+            <span className="font-semibold text-[#475569]">{totalAllAds.toLocaleString()}</span> total ads scraped
+            <span> · 0 active · {totalAllAds.toLocaleString()} inactive</span>
+          </p>
+        ) : null}
+      </div>
     );
   }
 
@@ -280,7 +306,7 @@ function PlatformDistributionGauge({
     <div className="flex flex-col items-center">
       <div className="relative flex w-full justify-center" style={{ height: 190 }}>
         <GaugeArc
-          counts={counts}
+          counts={activeCounts}
           total={total}
           hoveredPlatform={hoveredPlatform}
           onHover={setHoveredPlatform}
@@ -291,7 +317,7 @@ function PlatformDistributionGauge({
 
       <div className="mt-2 w-full space-y-1.5">
         {PLATFORM_ORDER.map((platform) => {
-          const count = counts[platform];
+          const count = activeCounts[platform];
           if (count === 0) return null;
           const pct = Math.round((count / total) * 100);
           const isHovered = hoveredPlatform === platform;
@@ -335,12 +361,21 @@ function PlatformDistributionGauge({
           );
         })}
       </div>
+
+      {totalAllAds > 0 ? (
+        <p className="mt-3 w-full border-t border-slate-100 pt-2.5 text-center text-[10px] leading-snug text-[#64748b]">
+          <span className="font-semibold text-[#475569]">{totalAllAds.toLocaleString()}</span> total ads scraped
+          {totalAllAds !== total ? (
+            <span> · {total.toLocaleString()} active · {(totalAllAds - total).toLocaleString()} inactive</span>
+          ) : null}
+        </p>
+      ) : null}
     </div>
   );
 }
 
 type GaugeArcProps = {
-  counts: Props["platformCounts"];
+  counts: Props["platformActiveCounts"];
   total: number;
   hoveredPlatform: string | null;
   onHover: (p: string | null) => void;
@@ -447,7 +482,7 @@ function GaugeArc({
           {hoveredPlatform ? (
             <HoveredPlatformLabel
               platform={hoveredPlatform}
-              count={counts[hoveredPlatform as keyof Props["platformCounts"]] ?? 0}
+              count={counts[hoveredPlatform as keyof Props["platformActiveCounts"]] ?? 0}
               total={total}
             />
           ) : (
