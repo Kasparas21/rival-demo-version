@@ -7,6 +7,13 @@ import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/li
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { derivePayloadFromActiveScrapedAds } from "@/lib/strategy-overview/derive-payload-from-active-ads";
+import {
+  hydrateAudienceInferenceIfReady,
+  isStrategyRecomputeRunning,
+  mergeAudienceInference,
+  scrapeIsNewerThanOverview,
+} from "@/lib/strategy-overview/strategy-overview-display";
 import {
   getCachedStrategyOverview,
   getStaleStrategyOverviewPayload,
@@ -204,7 +211,7 @@ function metaFromSavedRow(
 }
 
 /**
- * Fresh cache when possible; otherwise stale payload + background recompute (compiled-style).
+ * Serve the best available payload immediately. Background recompute only when scrape is newer than cache.
  */
 async function resolveSidePayload(params: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -219,26 +226,40 @@ async function resolveSidePayload(params: {
     return { payload: fresh, recomputing: false };
   }
 
-  const stale = await getStaleStrategyOverviewPayload(supabase, userId, competitorId);
-  if (stale) {
+  const [stale, derived, meta, scrapeIsNewer, running] = await Promise.all([
+    getStaleStrategyOverviewPayload(supabase, userId, competitorId),
+    derivePayloadFromActiveScrapedAds({ supabase, userId, competitorId, domainHint }),
+    loadSavedCompetitorForUser(supabase, userId, domainHint),
+    scrapeIsNewerThanOverview(supabase, competitorId),
+    isStrategyRecomputeRunning(supabase, competitorId),
+  ]);
+
+  let payload = derived ?? stale;
+  if (payload) {
+    payload = mergeAudienceInference(payload, stale);
+    if (meta) {
+      payload = await hydrateAudienceInferenceIfReady(payload, {
+        brandName: meta.name,
+        brandDomain: meta.brandDomain ?? meta.cacheDomain,
+      });
+    }
+  }
+
+  const needsBackgroundRecompute = scrapeIsNewer && !running;
+  if (needsBackgroundRecompute) {
     scheduleBackgroundRecompute({
       competitorDomain: domainHint,
       userId,
       competitorId,
-      stealLock: true,
-      refreshAdEnrichment: true,
+      stealLock: false,
+      refreshAdEnrichment: false,
     });
-    return { payload: stale, recomputing: true };
   }
 
-  scheduleBackgroundRecompute({
-    competitorDomain: domainHint,
-    userId,
-    competitorId,
-    stealLock: true,
-    refreshAdEnrichment: true,
-  });
-  return { payload: null, recomputing: true };
+  return {
+    payload,
+    recomputing: running || needsBackgroundRecompute,
+  };
 }
 
 export async function GET(req: Request): Promise<NextResponse> {

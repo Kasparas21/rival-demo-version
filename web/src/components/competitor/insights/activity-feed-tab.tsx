@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ActivityPulseBar } from "@/components/competitor/insights/activity-pulse-bar";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/components/competitor/insights/move-filters";
 import { groupMovesByRecency, MoveCard } from "@/components/competitor/insights/move-card";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 
@@ -43,6 +43,7 @@ type Props = {
   comparisonPayload: ComparisonPayloadJson | null;
   comparisonPayloadLoading: boolean;
   comparisonPayloadError: string | null;
+  refetchComparisonPayload?: () => void | Promise<void>;
 };
 
 export function ActivityFeedTab({
@@ -52,6 +53,7 @@ export function ActivityFeedTab({
   comparisonPayload,
   comparisonPayloadLoading,
   comparisonPayloadError,
+  refetchComparisonPayload,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -69,6 +71,48 @@ export function ActivityFeedTab({
   const side = data?.ok ? data.competitor : null;
   const snapshotCount = side?.snapshot_count ?? 0;
   const brandName = side?.meta.name ?? competitorLabel;
+  const pipelinePending = side?.recomputing === true || comparisonPayloadLoading;
+
+  const bootstrapKeyRef = useRef<string | null>(null);
+
+  const triggerRecompute = useCallback(async () => {
+    const d = competitorDomain.trim();
+    if (!d) return;
+    await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(d)}&force=1`, {
+      credentials: "include",
+    });
+    await fetch("/api/strategy-overview/recompute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ competitorDomain: d }),
+      credentials: "include",
+    });
+  }, [competitorDomain]);
+
+  useEffect(() => {
+    bootstrapKeyRef.current = null;
+  }, [competitorDomain]);
+
+  useEffect(() => {
+    if (comparisonPayloadLoading || snapshotCount >= 2) return;
+    const key = competitorDomain.trim().toLowerCase();
+    if (!key) return;
+    if (bootstrapKeyRef.current === key) return;
+    bootstrapKeyRef.current = key;
+
+    void triggerRecompute();
+    const id = window.setInterval(() => {
+      void triggerRecompute();
+      void refetchComparisonPayload?.();
+    }, 10000);
+    return () => window.clearInterval(id);
+  }, [
+    comparisonPayloadLoading,
+    snapshotCount,
+    competitorDomain,
+    triggerRecompute,
+    refetchComparisonPayload,
+  ]);
 
   useEffect(() => {
     if (side?.recent_moves) {
@@ -127,24 +171,14 @@ export function ActivityFeedTab({
 
   const { thisWeek, lastWeek, earlier } = useMemo(() => groupMovesByRecency(filteredMoves), [filteredMoves]);
 
-  const triggerRecompute = useCallback(async () => {
-    const d = competitorDomain.trim();
-    if (!d) return;
-    await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(d)}&force=1`, {
-      credentials: "include",
-    });
-  }, [competitorDomain]);
-
   const lastAnalyzed = side?.meta.lastMoveDetectionAt ?? null;
   const cooldownRemaining =
     lastAnalyzed && Number.isFinite(Date.parse(lastAnalyzed))
       ? Math.max(0, COOLDOWN_MS - (Date.now() - Date.parse(lastAnalyzed)))
       : 0;
 
-  if (comparisonPayloadLoading) {
-    return (
-      <RivalLoadingBlock padded className="mx-auto max-w-3xl py-16" />
-    );
+  if (pipelinePending || snapshotCount < 2) {
+    return <RivalLoadingBlock padded className="mx-auto max-w-3xl py-16" />;
   }
 
   if (comparisonPayloadError) {
@@ -161,27 +195,6 @@ export function ActivityFeedTab({
         <div className="text-center text-[13px] text-slate-500">
           {data?.error ?? "Could not load activity feed. Confirm workspace brand and competitor are set up."}
         </div>
-      </div>
-    );
-  }
-
-  if (snapshotCount < 2) {
-    return (
-      <div className="mx-auto w-full max-w-lg px-6 py-16 text-center">
-        <FeatureSectionHeader
-          className="text-left"
-          overline="Activity feed"
-          title="Move detection needs more history"
-          description="We compare the latest two strategy snapshots to infer changes. Run another full scrape and recompute so at least two snapshots exist."
-        />
-        <button
-          type="button"
-          onClick={() => void triggerRecompute()}
-          className="mt-6 inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-[11px] font-semibold text-white hover:bg-slate-800"
-        >
-          <RivalLogoVideo size="inline" />
-          Trigger recompute
-        </button>
       </div>
     );
   }

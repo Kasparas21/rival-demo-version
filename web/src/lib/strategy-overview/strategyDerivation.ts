@@ -1,5 +1,8 @@
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
 import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
+import { strategyMapNodeSize } from "@/lib/strategy-overview/map-node-sizing";
+import { applyFunnelCellLayout } from "@/lib/strategy-overview/layout-funnel-cells";
+import { deriveFunnelCellEdges } from "@/lib/strategy-overview/funnel-cell-edges";
 import type {
   ActivityLevel,
   CompetitorStrategyMeta,
@@ -182,19 +185,9 @@ function computeAvgActiveDaysFromAds(ads: ScrapedAdInput[]): number {
   return days.reduce((a, b) => a + b, 0) / days.length;
 }
 
+/** Funnel stages as rows; platforms as columns — positions applied in layout-funnel-cells. */
 function layoutFunnelCells(cells: FunnelCellNodePayload[]): FunnelCellNodePayload[] {
-  const ROW_Y: Record<FunnelStage, number> = { TOF: 0, MOF: 240, BOF: 480 };
-  const COL_WIDTH = 240;
-  const platforms = [...new Set(cells.map((c) => c.platform))].sort();
-  const colX = new Map(platforms.map((p, i) => [p, i * COL_WIDTH] as const));
-
-  return cells.map((c) => ({
-    ...c,
-    position: {
-      x: colX.get(c.platform) ?? 0,
-      y: ROW_Y[c.funnelStage],
-    },
-  }));
+  return applyFunnelCellLayout(cells);
 }
 
 /**
@@ -386,24 +379,61 @@ export function deriveFunnelEdges(params: {
   return { edges, detected, suppressed };
 }
 
+function angleTokensByCell(
+  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>
+): Map<FunnelCellId, Set<string>> {
+  const byCell = new Map<FunnelCellId, Set<string>>();
+  for (const [platform, liveList] of byPlatformLive) {
+    for (const a of adsForEdgeAngles(liveList)) {
+      const stage = parseStage(a.funnel_stage);
+      if (!stage) continue;
+      const id = `${platform}:${stage}` as FunnelCellId;
+      const ang = (a.ai_extracted_angle ?? "general").trim().toLowerCase() || "general";
+      if (!byCell.has(id)) byCell.set(id, new Set());
+      byCell.get(id)!.add(ang);
+    }
+  }
+  return byCell;
+}
+
+function enrichedCountByCell(
+  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>
+): Map<FunnelCellId, number> {
+  const m = new Map<FunnelCellId, number>();
+  for (const [platform, liveList] of byPlatformLive) {
+    for (const a of liveList) {
+      const stage = parseStage(a.funnel_stage);
+      if (!stage || !(a.ai_extracted_angle ?? "").trim()) continue;
+      const id = `${platform}:${stage}` as FunnelCellId;
+      m.set(id, (m.get(id) ?? 0) + 1);
+    }
+  }
+  return m;
+}
+
 function layoutNodes(
   nodes: PlatformNodePayload[],
   stageByPlatform: Map<StrategyPlatform, FunnelStage>
 ): PlatformNodePayload[] {
-  const colX: Record<FunnelStage, number> = { TOF: 80, MOF: 360, BOF: 640 };
+  const colX: Record<FunnelStage, number> = { TOF: 32, MOF: 400, BOF: 768 };
   const byCol: Record<FunnelStage, PlatformNodePayload[]> = { TOF: [], MOF: [], BOF: [] };
+  const maxCount = Math.max(1, ...nodes.map((n) => n.adCount));
+
   for (const n of nodes) {
     byCol[stageByPlatform.get(n.platform)!].push(n);
   }
   for (const stage of STAGE_ORDER) {
     const list = byCol[stage];
     list.sort((a, b) => b.adCount - a.adCount);
-    const totalH = list.reduce((s, n, i) => s + Math.max(120, 90 + Math.sqrt(n.adCount) * 14) + (i > 0 ? 24 : 0), 0);
-    let y = Math.max(40, 240 - totalH / 2);
+    const totalH = list.reduce((s, n, i) => {
+      const { height } = strategyMapNodeSize(n.adCount, maxCount);
+      return s + height + (i > 0 ? 36 : 0);
+    }, 0);
+    let y = Math.max(48, 280 - totalH / 2);
     for (const n of list) {
-      const h = Math.max(120, 90 + Math.sqrt(n.adCount) * 14);
+      const { height } = strategyMapNodeSize(n.adCount, maxCount);
       n.position = { x: colX[stage], y };
-      y += h + 24;
+      y += height + 36;
     }
   }
   return nodes;
@@ -892,7 +922,21 @@ export function deriveStrategyOverviewPayload(
   let funnelEdges: FunnelEdgePayload[] = [];
   let edgeDetected = 0;
   let edgeSuppressed = 0;
-  if (!suppressEdgesReason) {
+  const angleByCell = angleTokensByCell(byPlatformLive);
+  const enrByCell = enrichedCountByCell(byPlatformLive);
+
+  if (funnelCells.length > 0) {
+    const allowCrossPlatform = suppressEdgesReason !== "single_platform" && suppressEdgesReason !== "low_sample";
+    const { edges, detected, suppressed } = deriveFunnelCellEdges({
+      cells: funnelCells,
+      angleByCell,
+      enrichedCountByCell: enrByCell,
+      allowCrossPlatform,
+    });
+    funnelEdges = edges;
+    edgeDetected = detected;
+    edgeSuppressed = suppressed;
+  } else if (!suppressEdgesReason) {
     const { edges, detected, suppressed } = deriveFunnelEdges({
       platforms: nodes.map((n) => n.platform),
       stageByPlatform,

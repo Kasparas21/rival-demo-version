@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useState } from "react";
 import { BarChart3, ChevronDown, ChevronUp, Link as LinkIcon } from "lucide-react";
 
 import { describeArcClockwise } from "@/lib/charts/arc-geometry";
@@ -97,18 +97,19 @@ export function AdLibraryAnalyticsPanel({
   landingPagesListCache = null,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
+
+  const domainKey = cacheDomainNorm.trim().toLowerCase();
+  const stamp = lastScrapedAt ?? "none";
+  const lpCacheKey = `${domainKey}:landing-pages:${competitorId}:${stamp}:100`;
+
   const [activityScoreLoading, setActivityScoreLoading] = useState(() => Boolean(competitorId));
   const onActivityScoreLoadingChange = useCallback((v: boolean) => {
     setActivityScoreLoading(v);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setActivityScoreLoading(Boolean(competitorId));
   }, [competitorId]);
-
-  const domainKey = cacheDomainNorm.trim().toLowerCase();
-  const stamp = lastScrapedAt ?? "none";
-  const lpCacheKey = `${domainKey}:landing-pages:${competitorId}:${stamp}:100`;
 
   const internalLp = useScrapeKeyedCache<LandingPagesResponse>({
     cacheKey: lpCacheKey,
@@ -121,7 +122,8 @@ export function AdLibraryAnalyticsPanel({
   });
 
   const lpRes = (landingPagesListCache?.data as LandingPagesResponse | undefined) ?? internalLp.data;
-  const loading = landingPagesListCache?.loading ?? internalLp.loading;
+  const lpHasData = Boolean(lpRes?.ok && lpRes.landingPages && lpRes.landingPages.length > 0);
+  const loading = (landingPagesListCache?.loading ?? internalLp.loading) && !lpHasData;
 
   const landingPages = useMemo(() => {
     if (!lpRes?.ok || !lpRes.landingPages) return [];

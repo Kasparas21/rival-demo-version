@@ -17,7 +17,6 @@ type Props = {
   comparisonPayload: ComparisonPayloadJson | null;
   comparisonPayloadLoading: boolean;
   comparisonPayloadError: string | null;
-  onRequestAudienceRefresh?: () => void;
 };
 
 export function AudienceTab({
@@ -32,12 +31,9 @@ export function AudienceTab({
   comparisonPayload,
   comparisonPayloadLoading,
   comparisonPayloadError,
-  onRequestAudienceRefresh,
 }: Props) {
-  if (comparisonPayloadLoading) {
-    return (
-      <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16" />
-    );
+  if (comparisonPayloadLoading && !comparisonPayload?.competitor?.payload) {
+    return <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16" />;
   }
 
   if (comparisonPayloadError) {
@@ -50,7 +46,10 @@ export function AudienceTab({
 
   const data = comparisonPayload;
 
-  if (!data?.ok || !data.workspace?.payload || !data.competitor?.payload) {
+  if (!data?.ok || !data.competitor?.payload) {
+    if (data?.competitor?.recomputing) {
+      return <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16" />;
+    }
     return (
       <div className="py-12 text-center">
         <p className="text-[13px] text-slate-500">
@@ -60,7 +59,7 @@ export function AudienceTab({
     );
   }
 
-  const wsPayload = data.workspace.payload;
+  const wsPayload = data.workspace?.payload ?? null;
   const compPayload = data.competitor.payload;
   const wsLogo =
     workspaceLogoUrl?.trim() ||
@@ -85,7 +84,7 @@ export function AudienceTab({
           badge: workspaceBadge,
           logoUrl: wsLogo,
           domain: workspaceDomain,
-          audience: wsPayload.audience_inference,
+          audience: wsPayload?.audience_inference,
         }}
         competitor={{
           name: competitorLabel,
@@ -98,7 +97,7 @@ export function AudienceTab({
         competitorAudienceHistory={audienceHistory}
         competitorLastScrapedAt={lastScrapedAt}
         competitorActiveAdCount={activeAdCount}
-        onRequestAudienceRefresh={onRequestAudienceRefresh}
+        competitorRecomputing={data.competitor.recomputing === true}
       />
     </div>
   );

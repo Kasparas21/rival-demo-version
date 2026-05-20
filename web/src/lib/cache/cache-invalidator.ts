@@ -2,26 +2,38 @@ import { ADS_LIBRARY_UPDATED_EVENT } from "@/lib/strategy-overview/ads-library-s
 
 import { SESSION_PREFIX } from "./use-scrape-keyed-cache";
 
-/** Deletes session entries written as `rival:cache:<domain>:…`. */
-export function invalidateCachesForDomain(domain: string): void {
-  if (typeof window === "undefined") return;
+function collectKeysForDomain(domain: string, storage: Storage): string[] {
   const normalized = domain.trim().toLowerCase();
-  if (!normalized) return;
+  if (!normalized) return [];
   const prefix = `${SESSION_PREFIX}${normalized}:`;
   const keysToDelete: string[] = [];
 
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const k = sessionStorage.key(i);
+  for (let i = 0; i < storage.length; i++) {
+    const k = storage.key(i);
     if (!k?.startsWith(SESSION_PREFIX)) continue;
     if (k.startsWith(prefix) || k.toLowerCase().includes(`:${normalized}:`)) {
       keysToDelete.push(k);
     }
   }
 
-  keysToDelete.forEach((k) => sessionStorage.removeItem(k));
+  return keysToDelete;
+}
 
-  if (process.env.NODE_ENV === "development" && keysToDelete.length) {
-    console.log(`[scrape-cache] INVALIDATED ${keysToDelete.length} entries for "${domain}"`);
+/** Deletes session + local entries written as `rival:cache:<domain>:…`. */
+export function invalidateCachesForDomain(domain: string): void {
+  if (typeof window === "undefined") return;
+  const keysToDelete = new Set<string>([
+    ...collectKeysForDomain(domain, sessionStorage),
+    ...collectKeysForDomain(domain, localStorage),
+  ]);
+
+  keysToDelete.forEach((k) => {
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k);
+  });
+
+  if (process.env.NODE_ENV === "development" && keysToDelete.size) {
+    console.log(`[scrape-cache] INVALIDATED ${keysToDelete.size} entries for "${domain}"`);
   }
 }
 
@@ -30,12 +42,17 @@ export function invalidateCachesByPrefix(prefix: string): void {
   if (typeof window === "undefined") return;
   const fullPrefix = SESSION_PREFIX + prefix;
   const keysToDelete: string[] = [];
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const k = sessionStorage.key(i);
-    if (!k?.startsWith(fullPrefix)) continue;
-    keysToDelete.push(k);
+  for (const storage of [sessionStorage, localStorage]) {
+    for (let i = 0; i < storage.length; i++) {
+      const k = storage.key(i);
+      if (!k?.startsWith(fullPrefix)) continue;
+      keysToDelete.push(k);
+    }
   }
-  keysToDelete.forEach((k) => sessionStorage.removeItem(k));
+  keysToDelete.forEach((k) => {
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k);
+  });
 }
 
 /** Any GET cache row for this competitor’s saved-ads list (all revision suffixes). */
@@ -46,12 +63,17 @@ export function invalidateSavedAdsCaches(domainNorm: string, competitorId: strin
   const dom = domainNorm.trim().toLowerCase();
   const needle = `${dom}:saved-ads:${id}`.toLowerCase();
   const keysToDelete: string[] = [];
-  for (let i = 0; i < sessionStorage.length; i++) {
-    const k = sessionStorage.key(i);
-    if (!k?.startsWith(SESSION_PREFIX)) continue;
-    if (k.toLowerCase().includes(needle)) keysToDelete.push(k);
+  for (const storage of [sessionStorage, localStorage]) {
+    for (let i = 0; i < storage.length; i++) {
+      const k = storage.key(i);
+      if (!k?.startsWith(SESSION_PREFIX)) continue;
+      if (k.toLowerCase().includes(needle)) keysToDelete.push(k);
+    }
   }
-  keysToDelete.forEach((k) => sessionStorage.removeItem(k));
+  keysToDelete.forEach((k) => {
+    sessionStorage.removeItem(k);
+    localStorage.removeItem(k);
+  });
 }
 
 export function setupGlobalCacheInvalidator(): () => void {

@@ -3,29 +3,23 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { memo } from "react";
 
-import type { FunnelStage } from "@/lib/strategy-overview/payload-types";
+import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import {
+  STAGE_THEME,
+  activityIntensity,
+} from "@/lib/strategy-overview/map-node-sizing";
+import type { FunnelStage, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 export type PlatformNodeData = {
   label: string;
-  platform: string;
+  platform: StrategyPlatform;
   adCount: number;
+  maxAdCount?: number;
   activityLevel: string;
   estSpendEur: number;
   estSpendEurLow?: number;
   estSpendEurHigh?: number;
   funnelStage: FunnelStage;
-};
-
-const STAGE_BORDER: Record<FunnelStage, string> = {
-  TOF: "rgba(59, 130, 246, 0.55)",
-  MOF: "rgba(245, 158, 11, 0.65)",
-  BOF: "rgba(16, 185, 129, 0.6)",
-};
-
-const STAGE_BADGE: Record<FunnelStage, string> = {
-  TOF: "bg-blue-100 text-blue-800 border-blue-200",
-  MOF: "bg-amber-100 text-amber-900 border-amber-200",
-  BOF: "bg-emerald-100 text-emerald-900 border-emerald-200",
 };
 
 function fmtSpendEurShort(n: number): string {
@@ -34,35 +28,51 @@ function fmtSpendEurShort(n: number): string {
 }
 
 function describeEstSpend(d: PlatformNodeData): string {
-  const low = d.estSpendEurLow ?? d.estSpendEur;
-  const high = d.estSpendEurHigh ?? d.estSpendEur;
-  return `Modeled ${fmtSpendEurShort(low)}–${fmtSpendEurShort(high)}/mo`;
+  const mid = d.estSpendEur;
+  return `Est. Spend ${fmtSpendEurShort(mid)}/mo`;
 }
 
 function PlatformNodeInner({ data, selected }: NodeProps) {
   const d = data as PlatformNodeData;
+  const theme = STAGE_THEME[d.funnelStage];
+  const intensity = activityIntensity(d.adCount, d.maxAdCount ?? d.adCount);
+  const borderWidth = 1.5 + intensity * 1.5;
+
   return (
     <div
-      className={`rounded-2xl border bg-white/95 px-4 py-3 shadow-[0_8px_28px_rgba(15,23,42,0.08)] transition-all min-w-[140px] max-w-[220px] ${
-        selected ? "ring-2 ring-[#343434]/25 scale-[1.02]" : ""
+      className={`relative flex h-full w-full flex-col rounded-2xl px-4 py-3.5 transition-all duration-200 ${
+        selected ? "scale-[1.02] ring-2 ring-slate-400/40" : "hover:scale-[1.015]"
       }`}
-      style={{ borderColor: STAGE_BORDER[d.funnelStage], borderWidth: "0.5px" }}
+      style={{
+        background: theme.bg,
+        borderColor: theme.border,
+        borderWidth,
+        borderStyle: "solid",
+        boxShadow: selected ? theme.glow : `0 8px 28px rgba(15, 23, 42, 0.08), ${theme.glow}`,
+        opacity: 0.88 + intensity * 0.12,
+      }}
     >
-      <Handle type="target" position={Position.Left} className="!bg-slate-400 !w-2 !h-2" />
-      <div className="flex items-start justify-between gap-2 mb-1.5">
-        <span className="text-[13px] font-semibold text-[#0f172a] truncate">{d.label}</span>
+      <Handle type="target" position={Position.Left} className="!h-2.5 !w-2.5 !border-2 !border-white !bg-slate-400" />
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/90 shadow-sm ring-1 ring-white/80">
+            <ComparisonPlatformIcon platform={d.platform} className="h-5 w-5" />
+          </div>
+          <span className="truncate text-[14px] font-bold text-slate-900">{d.label}</span>
+        </div>
         <span
-          className={`shrink-0 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${STAGE_BADGE[d.funnelStage]}`}
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${theme.badge}`}
         >
           {d.funnelStage}
         </span>
       </div>
-      <p className="text-[22px] font-bold text-[#0f172a] leading-tight tabular-nums">
-        {d.adCount} <span className="text-[14px] font-semibold text-[#64748b]">ads</span>
+      <p className={`text-[28px] font-extrabold leading-none tabular-nums ${theme.adText}`}>
+        {d.adCount}
+        <span className="ml-1.5 text-[15px] font-bold text-slate-600">ads</span>
       </p>
-      <p className="text-[11px] text-[#64748b] mt-0.5">{d.activityLevel} activity</p>
-      <p className="text-[11px] font-medium text-[#334155] mt-2">{describeEstSpend(d)}</p>
-      <Handle type="source" position={Position.Right} className="!bg-slate-400 !w-2 !h-2" />
+      <p className={`mt-2 text-[12px] font-semibold capitalize ${theme.subtle}`}>{d.activityLevel} activity</p>
+      <p className={`mt-1 text-[12px] font-bold ${theme.subtle}`}>{describeEstSpend(d)}</p>
+      <Handle type="source" position={Position.Right} className="!h-2.5 !w-2.5 !border-2 !border-white !bg-slate-400" />
     </div>
   );
 }

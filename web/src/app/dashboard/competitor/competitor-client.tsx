@@ -17,6 +17,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
 import { setupGlobalCacheInvalidator } from "@/lib/cache/cache-invalidator";
+import { evictBulkyLocalStorageCaches } from "@/lib/cache/storage-quota";
 import { findSidebarRowForHost, resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
 import { useActiveBrand } from "../brand-context";
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
@@ -1861,6 +1862,7 @@ function CompetitorDashboardBody({
   const [lastScrapeRelativeTick, setLastScrapeRelativeTick] = useState(0);
 
   useEffect(() => {
+    evictBulkyLocalStorageCaches();
     return setupGlobalCacheInvalidator();
   }, []);
 
@@ -2418,10 +2420,10 @@ function CompetitorDashboardBody({
   } = useScrapeKeyedCache<ComparisonPayloadJson>({
     cacheKey: comparisonPayloadCacheKey,
     enabled: Boolean(cacheDomainNorm.trim()),
+    persistAcrossTabs: true,
     validateCached: (c) =>
       c.ok === true &&
-      Boolean(c.workspace && c.competitor) &&
-      typeof c.workspace?.derivedStats?.avgAdAgeDays === "number" &&
+      Boolean(c.competitor?.payload?.map) &&
       typeof c.competitor?.derivedStats?.avgAdAgeDays === "number",
     fetcher: async () => {
       const res = await fetch(
@@ -2442,6 +2444,49 @@ function CompetitorDashboardBody({
   );
 
   const comparisonPayloadErrorMessage = comparisonPayloadCacheError?.message ?? null;
+
+  useEffect(() => {
+    if (!cacheDomainNorm.trim() || !brand.domain.trim()) return;
+
+    let cancelled = false;
+    let sawRunning = comparisonPayload?.competitor?.recomputing === true;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(
+          `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(brand.domain)}`,
+          { credentials: "include" }
+        );
+        const json = (await res.json()) as { ok?: boolean; status?: string };
+        if (cancelled || !json.ok) return;
+
+        if (json.status === "running") {
+          sawRunning = true;
+          return;
+        }
+
+        const missingAudience = !comparisonPayload?.competitor?.payload?.audience_inference?.segments?.length;
+        if (sawRunning && json.status === "idle" && missingAudience) {
+          void refetchComparisonPayload();
+        }
+      } catch {
+        /* ignore poll errors */
+      }
+    };
+
+    void poll();
+    const id = window.setInterval(poll, 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [
+    brand.domain,
+    cacheDomainNorm,
+    comparisonPayload?.competitor?.payload?.audience_inference,
+    comparisonPayload?.competitor?.recomputing,
+    refetchComparisonPayload,
+  ]);
 
   const landingPagesListStamp = accountLastScrapedAt ?? "none";
   const landingPagesListDomainKey = cacheDomainNorm.trim().toLowerCase();
@@ -3981,6 +4026,7 @@ function CompetitorDashboardBody({
                 comparisonPayload={comparisonPayload}
                 comparisonPayloadLoading={comparisonPayloadLoading}
                 comparisonPayloadError={comparisonPayloadErrorMessage}
+                refetchComparisonPayload={refetchComparisonPayload}
               />
             </KeepMountedTab>
           </Suspense>
@@ -4038,7 +4084,6 @@ function CompetitorDashboardBody({
               comparisonPayload={comparisonPayload}
               comparisonPayloadLoading={comparisonPayloadLoading}
               comparisonPayloadError={comparisonPayloadErrorMessage}
-              onRequestAudienceRefresh={() => void refetchComparisonPayload()}
             />
           </KeepMountedTab>
           <KeepMountedTab active={activeSubTab === "copy-vault"} className="min-h-0">

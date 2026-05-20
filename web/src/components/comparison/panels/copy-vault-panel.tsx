@@ -491,15 +491,8 @@ export function CopyVaultPanel({
       ) : !rawAds?.length ? (
         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-600">
           {minLifespanUsed === 0
-            ? "Ads are being analyzed. Check back after the next scrape, or widen filters above."
+            ? "Ads are being analyzed. They will appear here automatically after enrichment finishes."
             : "No qualifying enriched ads yet. Run a scrape and wait for enrichment."}
-          <button
-            type="button"
-            onClick={() => void refetchVault({ force: true })}
-            className="mt-3 block w-full text-center text-xs font-semibold text-slate-900 underline"
-          >
-            Refresh
-          </button>
         </div>
       ) : filteredAds.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-8 text-center text-sm text-slate-700">

@@ -4,25 +4,26 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MarkerType,
   ReactFlow,
   ReactFlowProvider,
-  useEdgesState,
   useNodesState,
   useReactFlow,
-  type Edge,
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 
+import { FunnelArrowsLayer } from "@/components/strategy-overview/funnel-arrows-layer";
 import { FunnelCellNode, type FunnelCellNodeData } from "@/components/strategy-overview/funnel-cell-node";
-import { FunnelEdge } from "@/components/strategy-overview/funnel-edge";
 import type { PlatformNodeData } from "@/components/strategy-overview/platform-node";
 import { PlatformNode } from "@/components/strategy-overview/platform-node";
+import { StrategyMapLegend } from "@/components/strategy-overview/strategy-map-legend";
 import { coerceStrategyPlatformForDisplay } from "@/lib/strategy-overview/brand-scale-score";
+import { layoutFunnelCellPositions } from "@/lib/strategy-overview/layout-funnel-cells";
+import { strategyMapNodeSize } from "@/lib/strategy-overview/map-node-sizing";
 import { normalizeStrategyMapPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
-import type { FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
+import type { StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
+import { resolveStrategyMapEdges } from "@/lib/strategy-overview/resolve-map-edges";
 
 type Props = {
   map: StrategyMapPayload;
@@ -30,18 +31,6 @@ type Props = {
   onNodeClick?: (nodeId: string) => void;
   onEdgeHover?: (edge: { reasoning: string; confidence: number } | null) => void;
 };
-
-const STAGE_STROKE: Record<FunnelStage, string> = {
-  TOF: "#3b82f6",
-  MOF: "#f59e0b",
-  BOF: "#10b981",
-};
-
-function stageForPlatform(payload: StrategyMapPayload, platform: string): FunnelStage {
-  const rows = payload.platformNodes ?? [];
-  const n = rows.find((p) => p.platform === platform);
-  return n?.funnelStage ?? "MOF";
-}
 
 function FlowInner({
   map,
@@ -53,11 +42,28 @@ function FlowInner({
 
   const runFit = useCallback(() => {
     requestAnimationFrame(() => {
-      fitView({ padding: 0.2, duration: 200, maxZoom: 1.35 });
+      fitView({ padding: 0.18, duration: 220, maxZoom: 1.25 });
     });
   }, [fitView]);
 
-  const useCellsLayout = map.funnelCells != null && map.funnelCells.length > 0;
+  const platformRows = Array.isArray(map.platformNodes) ? map.platformNodes : [];
+  const cellRows = Array.isArray(map.funnelCells) ? map.funnelCells : [];
+  const useCellsLayout = cellRows.length > 0;
+
+  const maxAdCount = useMemo(() => {
+    if (useCellsLayout) return Math.max(1, ...cellRows.map((c) => c.adCount));
+    return Math.max(1, ...platformRows.map((n) => n.adCount));
+  }, [useCellsLayout, platformRows, cellRows]);
+
+  const cellLayout = useMemo(
+    () => (useCellsLayout ? layoutFunnelCellPositions(cellRows, maxAdCount) : new Map()),
+    [useCellsLayout, cellRows, maxAdCount]
+  );
+
+  const funnelEdges = useMemo(
+    () => (useCellsLayout ? resolveStrategyMapEdges(map) : []),
+    [useCellsLayout, map]
+  );
 
   const nodeTypes = useMemo(
     () => ({
@@ -67,88 +73,66 @@ function FlowInner({
     []
   );
 
-  const edgeTypes = useMemo(
-    () => ({
-      funnel: FunnelEdge as React.ComponentType<unknown>,
-    }),
-    []
-  );
-
   const initialNodes: Node<PlatformNodeData | FunnelCellNodeData>[] = useMemo(() => {
     if (useCellsLayout) {
-      return map.funnelCells!.map((c) => ({
-        id: c.id,
-        type: "funnel-cell",
-        position: c.position,
-        style: { width: 200 },
+      return cellRows.map((c) => {
+        const slot = cellLayout.get(c.id);
+        const width = slot?.width ?? strategyMapNodeSize(c.adCount, maxAdCount).width;
+        const height = slot?.height ?? strategyMapNodeSize(c.adCount, maxAdCount).height;
+        return {
+          id: c.id,
+          type: "funnel-cell",
+          position: { x: slot?.x ?? 0, y: slot?.y ?? 0 },
+          width,
+          height,
+          style: { width, height },
+          draggable: false,
+          selectable: true,
+          data: {
+            label: c.label,
+            platform: coerceStrategyPlatformForDisplay(String(c.platform)),
+            funnelStage: c.funnelStage,
+            adCount: c.adCount,
+            maxAdCount,
+            estSpendEurLow: c.estSpendEurLow,
+            estSpendEurHigh: c.estSpendEurHigh,
+            cellConfidence: c.cellConfidence,
+          },
+        };
+      });
+    }
+    return platformRows.map((n) => {
+      const { width, height } = strategyMapNodeSize(n.adCount, maxAdCount);
+      return {
+        id: n.platform,
+        type: "platform",
+        position: n.position,
+        width,
+        height,
+        style: { width, height },
         draggable: false,
         selectable: true,
         data: {
-          label: c.label,
-          platform: coerceStrategyPlatformForDisplay(String(c.platform)),
-          funnelStage: c.funnelStage,
-          adCount: c.adCount,
-          estSpendEurLow: c.estSpendEurLow,
-          estSpendEurHigh: c.estSpendEurHigh,
-          cellConfidence: c.cellConfidence,
-        },
-      }));
-    }
-    const nodesRows = Array.isArray(map.platformNodes) ? map.platformNodes : [];
-    return nodesRows.map((n) => ({
-      id: n.platform,
-      type: "platform",
-      position: n.position,
-      style: { width: 200 },
-      draggable: false,
-      selectable: true,
-      data: {
-        label: n.label,
-        platform: n.platform,
-        adCount: n.adCount,
-        activityLevel: n.activityLevel,
-        estSpendEur: n.estSpendEur,
-        estSpendEurLow: n.estSpendEurLow,
-        estSpendEurHigh: n.estSpendEurHigh,
-        funnelStage: n.funnelStage,
-      },
-    }));
-  }, [map, useCellsLayout]);
-
-  const initialEdges: Edge[] = useMemo(() => {
-    // TODO: design cell-level relationship edges (e.g., TOF → MOF cross-platform) in a future pass.
-    if (useCellsLayout) return [];
-
-    const edgesRows = Array.isArray(map.funnelEdges) ? map.funnelEdges : [];
-    return edgesRows.map((e) => {
-      const st = stageForPlatform(map, e.from);
-      const stroke = STAGE_STROKE[st];
-      return {
-        id: `${e.from}-${e.to}`,
-        source: e.from,
-        target: e.to,
-        type: "funnel",
-        animated: false,
-        markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: stroke },
-        data: {
-          stroke,
-          dashed: e.style === "dashed",
-          reasoning: e.reasoning,
-          confidence: e.confidence,
+          label: n.label,
+          platform: n.platform,
+          adCount: n.adCount,
+          maxAdCount,
+          activityLevel: n.activityLevel,
+          estSpendEur: n.estSpendEur,
+          estSpendEurLow: n.estSpendEurLow,
+          estSpendEurHigh: n.estSpendEurHigh,
+          funnelStage: n.funnelStage,
         },
       };
     });
-  }, [map, useCellsLayout]);
+  }, [useCellsLayout, platformRows, cellRows, maxAdCount, cellLayout]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
   useEffect(() => {
     setNodes(initialNodes);
-    setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+  }, [initialNodes, setNodes]);
 
-  /** KeepMountedTab uses `display:none` while mounted — fitView with 0×0 viewport corrupts pan/zoom. Refit when the pane gets real dimensions. */
   useEffect(() => {
     const el = fitContainerRef?.current;
     if (!el) return;
@@ -170,7 +154,7 @@ function FlowInner({
 
   useEffect(() => {
     runFit();
-  }, [runFit, initialNodes, initialEdges]);
+  }, [runFit, initialNodes, funnelEdges.length]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -179,49 +163,67 @@ function FlowInner({
     [onNodeClick]
   );
 
-  const handleEdgeMouseEnter = useCallback(
-    (_: React.MouseEvent, edge: Edge) => {
-      const d = edge.data as { reasoning?: string; confidence?: number } | undefined;
-      if (d?.reasoning != null && d.confidence != null) {
-        onEdgeHover?.({ reasoning: d.reasoning, confidence: d.confidence });
-      }
-    },
-    [onEdgeHover]
+  const arrowCells = useMemo(
+    () =>
+      cellRows.map((c) => ({
+        id: c.id,
+        platform: String(c.platform),
+        funnelStage: c.funnelStage,
+      })),
+    [cellRows]
   );
-
-  const handleEdgeMouseLeave = useCallback(() => {
-    onEdgeHover?.(null);
-  }, [onEdgeHover]);
 
   return (
     <>
       <style>{`
         @keyframes rivalFlowDash {
-          to { stroke-dashoffset: -28; }
+          to { stroke-dashoffset: -36; }
+        }
+        .rival-strategy-flow .react-flow__controls-button {
+          border-radius: 8px;
+        }
+        .rival-funnel-arrow-dash {
+          animation: rivalFlowDash 1.4s linear infinite;
+        }
+        .rival-funnel-arrows {
+          z-index: 3;
+          pointer-events: none;
+        }
+        .rival-funnel-arrow-group {
+          pointer-events: auto;
+        }
+        .rival-strategy-flow .react-flow__nodes {
+          z-index: 2;
         }
       `}</style>
       <ReactFlow
+        className="rival-strategy-flow"
         nodes={nodes}
-        edges={edges}
+        edges={[]}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes as never}
-        edgeTypes={edgeTypes as never}
         onNodeClick={handleNodeClick}
-        onEdgeMouseEnter={handleEdgeMouseEnter}
-        onEdgeMouseLeave={handleEdgeMouseLeave}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable
-        minZoom={0.4}
-        maxZoom={2}
+        minZoom={0.35}
+        maxZoom={1.75}
         proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#cbd5e1" />
+        {useCellsLayout ? (
+          <FunnelArrowsLayer
+            edges={funnelEdges}
+            layout={cellLayout}
+            cells={arrowCells}
+            onEdgeHover={onEdgeHover}
+          />
+        ) : null}
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#cbd5e1" />
         <Controls
           position="bottom-center"
           orientation="horizontal"
-          className="!bg-white/90 !border !border-slate-200/80 !rounded-xl !shadow-md"
+          showInteractive={false}
+          className="!rounded-xl !border !border-slate-200/90 !bg-white/95 !shadow-lg"
         />
       </ReactFlow>
     </>
@@ -231,17 +233,18 @@ function FlowInner({
 export function StrategyMapFlow(props: Props) {
   const { mapKey, map, ...rest } = props;
   const safeMap = normalizeStrategyMapPayload(map);
-  const useCellsLayout = safeMap.funnelCells != null && safeMap.funnelCells.length > 0;
-  const heightClass = useCellsLayout ? "h-[min(640px,76vh)]" : "h-[min(520px,70vh)]";
   const containerRef = useRef<HTMLDivElement>(null);
   return (
-    <div
-      ref={containerRef}
-      className={`${heightClass} w-full rounded-2xl border border-[0.5px] border-slate-200/90 bg-white/60 overflow-hidden`}
-    >
-      <ReactFlowProvider>
-        <FlowInner key={mapKey} map={safeMap} fitContainerRef={containerRef} {...rest} />
-      </ReactFlowProvider>
+    <div className="w-full">
+      <StrategyMapLegend />
+      <div
+        ref={containerRef}
+        className="h-[min(680px,78vh)] w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
+      >
+        <ReactFlowProvider>
+          <FlowInner key={mapKey} map={safeMap} fitContainerRef={containerRef} {...rest} />
+        </ReactFlowProvider>
+      </div>
     </div>
   );
 }

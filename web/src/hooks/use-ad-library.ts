@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   coerceAdsLibraryResponse,
   mergeAdsLibraryState,
@@ -163,7 +163,7 @@ export function useAdLibrary(
   );
   const payloadKey = useMemo(() => stableAdsLibraryPayloadKey(payload), [payload]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sessionRef.current += 1;
     persistRecoveryKeyRef.current = null;
     loadAbortRef.current?.abort();
@@ -171,8 +171,8 @@ export function useAdLibrary(
 
   /**
    * Loads ads via POST /api/ads/library. `skipCache: true` forces fresh Apify runs (uses credits).
-   * `skipCache: false` uses Supabase `ads_cache` when logged in. Session/local stash applies an instant
-   * paint first, then a background fetch always runs to hydrate from Supabase (no loading flash).
+   * `skipCache: false` uses Supabase `ads_cache` when logged in. Cached ads paint instantly on revisit;
+   * network fetch runs only when no local cache exists (not on every competitor switch).
    */
   const load = useCallback(
     async (opts?: { skipCache?: boolean; platforms?: AdsLibraryPlatform[]; background?: boolean }) => {
@@ -313,7 +313,7 @@ export function useAdLibrary(
     [payload, payloadKey, brand.domain]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!enabled) {
       setLoading(false);
       setGoogleRefreshing(false);
@@ -339,7 +339,6 @@ export function useAdLibrary(
       setLinkedinRefreshing(false);
       setMicrosoftRefreshing(false);
       setSnapchatRefreshing(false);
-      void load({ skipCache: false, background: true });
       return;
     }
     const legacy = readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
@@ -360,9 +359,10 @@ export function useAdLibrary(
       setLinkedinRefreshing(false);
       setMicrosoftRefreshing(false);
       setSnapchatRefreshing(false);
-      void load({ skipCache: false, background: true });
       return;
     }
+    setData(null);
+    setLoading(true);
     void load({ skipCache: false });
   }, [enabled, payloadKey, brand.domain, load]);
 

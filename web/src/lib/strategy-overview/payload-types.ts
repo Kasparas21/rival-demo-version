@@ -78,8 +78,11 @@ export type FunnelCellNodePayload = {
 };
 
 export type FunnelEdgePayload = {
-  from: StrategyPlatform;
-  to: StrategyPlatform;
+  /** Platform id (legacy) or composite cell id e.g. "meta:TOF" */
+  from: string;
+  to: string;
+  fromStage?: FunnelStage;
+  toStage?: FunnelStage;
   confidence: number;
   reasoning: string;
   style: "solid" | "dashed";

@@ -8,7 +8,6 @@ import {
   Crosshair,
   Eye,
   Lightbulb,
-  RefreshCw,
   Target,
 } from "lucide-react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -70,7 +69,6 @@ type Props = {
   errorMessage: string | null;
   workspaceName: string;
   competitorName: string;
-  onInvalidate: () => void;
 };
 
 export function ThreeMovesPanel({
@@ -80,7 +78,6 @@ export function ThreeMovesPanel({
   errorMessage,
   workspaceName,
   competitorName,
-  onInvalidate,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -168,14 +165,6 @@ export function ThreeMovesPanel({
         <div className="mt-6 rounded-xl border border-amber-100 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
           <p className="font-medium">Analysis in progress</p>
           <p className="mt-1 text-amber-900/90">{errorMessage}</p>
-          <button
-            type="button"
-            onClick={() => onInvalidate()}
-            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-medium text-amber-950 shadow-sm"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Retry
-          </button>
         </div>
       ) : isLoading && !moves ? (
         <RivalLoadingBlock padded className="mt-6 py-10" />

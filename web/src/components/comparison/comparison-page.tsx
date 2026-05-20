@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Download, RefreshCw } from "lucide-react";
+import { ArrowLeftRight, Download } from "lucide-react";
 
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 
@@ -131,6 +131,7 @@ export function ComparisonPage({
   } = useScrapeKeyedCache<BrandComparisonApi>({
     cacheKey: brandComparisonCacheKey,
     enabled: isConfirmed && Boolean(wsId && rivalId && wsPayload && compPayload),
+    persistAcrossTabs: true,
     validateCached: (c) =>
       Boolean(
         c.ok === true &&
@@ -197,13 +198,6 @@ export function ComparisonPage({
     ? { name: workspace.name, payload: wsPayload }
     : { name: competitorDisplayLabel, payload: compPayload };
 
-  const recomputingNote =
-    workspaceSide?.recomputing || competitorSide?.recomputing ? (
-      <div className="rounded-lg border border-amber-100 bg-amber-50/90 px-3 py-2 text-[11px] text-amber-950">
-        Strategy data is refreshing in the background. Numbers may update after a minute — use Refresh to reload.
-      </div>
-    ) : null;
-
   const sideBySideOk = Boolean(wsId && !workspaceSide?.needsScrape);
 
   if (!isConfirmed) {
@@ -245,22 +239,6 @@ export function ComparisonPage({
               </button>
               <button
                 type="button"
-                disabled={payloadLoading}
-                onClick={() => {
-                  invalidateBrandComparisonCache();
-                  onRefreshComparisonPayload();
-                }}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50"
-              >
-                {payloadLoading ? (
-                  <RivalLogoVideo size="inline" className="shrink-0" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Refresh
-              </button>
-              <button
-                type="button"
                 onClick={() => window.print()}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 shadow-sm hover:bg-slate-50"
               >
@@ -287,8 +265,6 @@ export function ComparisonPage({
           </div>
         ) : null}
 
-        {recomputingNote ? <div className="mb-8">{recomputingNote}</div> : null}
-
         {payloadLoading && !wsPayload && !compPayload ? (
           <RivalLoadingBlock padded className="py-14 sm:py-16" />
         ) : payloadError ? (
@@ -310,7 +286,6 @@ export function ComparisonPage({
             errorMessage={llmError}
             workspaceName={workspace.name}
             competitorName={competitorDisplayLabel}
-            onInvalidate={() => invalidateBrandComparisonCache()}
           />
         ) : (
           <>
@@ -351,7 +326,6 @@ export function ComparisonPage({
               errorMessage={llmError}
               workspaceName={workspace.name}
               competitorName={competitorDisplayLabel}
-              onInvalidate={() => invalidateBrandComparisonCache()}
             />
 
             <AdWallPanel

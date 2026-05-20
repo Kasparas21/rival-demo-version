@@ -10,6 +10,7 @@ import type { AngleCardCategory } from "@/lib/comparison/stealable-angle-present
 import type { AudienceInferenceResult, AudienceInferenceSegment } from "@/lib/strategy-overview/payload-types";
 import { ComparisonInsufficient, ComparisonPanelShell } from "@/components/comparison/panel-shell";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 
 type Side = {
   name: string;
@@ -32,7 +33,7 @@ type Props = {
   competitorLastScrapedAt?: string | null;
   /** Active / total ad count from strategy payload (for low-data warnings). */
   competitorActiveAdCount?: number;
-  onRequestAudienceRefresh?: () => void;
+  competitorRecomputing?: boolean;
 };
 
 function computeAudienceOverlap(wsSegments: AudienceInferenceSegment[], compSegments: AudienceInferenceSegment[]): number {
@@ -447,46 +448,27 @@ export function AudienceInferencePanel({
   competitorAudienceHistory = [],
   competitorLastScrapedAt = null,
   competitorActiveAdCount = 0,
-  onRequestAudienceRefresh,
+  competitorRecomputing = false,
 }: Props) {
-  const hasAny = Boolean(workspace.audience || competitor.audience);
   const overlap = useMemo(() => {
     if (!workspace.audience?.segments || !competitor.audience?.segments) return 0.4;
     return computeAudienceOverlap(workspace.audience.segments, competitor.audience.segments);
   }, [workspace.audience, competitor.audience]);
-
-  if (!hasAny) {
-    return (
-      <ComparisonPanelShell
-        title="Audience inference"
-        subtitle="Who each brand is likely speaking to — from platform mix, angles, voice, and formats"
-        tooltip="Generated during strategy recompute and cached on the overview payload."
-      >
-        <ComparisonInsufficient message="Audience inference appears after the next strategy recompute. Click 'Refresh' above to reload once your overview has finished." />
-      </ComparisonPanelShell>
-    );
-  }
 
   const wsColor = "#475569";
   const rivalColor = "#0f172a";
 
   if (standaloneMode) {
     if (!competitor.audience) {
+      if (competitorRecomputing) {
+        return <RivalLoadingBlock padded className="py-16" />;
+      }
       return (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
           <p className="text-sm font-medium text-slate-900">Audience analysis pending</p>
           <p className="mt-2 text-sm text-slate-600">
-            Inference runs during strategy overview recompute. Refresh in a moment or trigger a recompute from Strategy Overview.
+            Inference runs automatically after ad enrichment completes. It will appear here without any action needed.
           </p>
-          {onRequestAudienceRefresh ? (
-            <button
-              type="button"
-              onClick={() => onRequestAudienceRefresh()}
-              className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
-            >
-              Reload audience data
-            </button>
-          ) : null}
         </div>
       );
     }
@@ -497,6 +479,20 @@ export function AudienceInferencePanel({
         lastScrapedAt={competitorLastScrapedAt}
         activeAdCount={competitorActiveAdCount}
       />
+    );
+  }
+
+  const hasAny = Boolean(workspace.audience || competitor.audience);
+
+  if (!hasAny) {
+    return (
+      <ComparisonPanelShell
+        title="Audience inference"
+        subtitle="Who each brand is likely speaking to — from platform mix, angles, voice, and formats"
+        tooltip="Generated during strategy recompute and cached on the overview payload."
+      >
+        <ComparisonInsufficient message="Audience inference appears after the next strategy recompute. Click 'Refresh' above to reload once your overview has finished." />
+      </ComparisonPanelShell>
     );
   }
 

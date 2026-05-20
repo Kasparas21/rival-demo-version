@@ -1,6 +1,7 @@
 /** Persisted “spied” competitors for the dashboard sidebar */
 
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
+import { safeSetLocalStorage } from "@/lib/cache/storage-quota";
 
 export const SIDEBAR_COMPETITORS_EVENT = "rival_sidebar_competitors";
 export const SIDEBAR_COMPETITORS_STORAGE_KEY = "rival_sidebar_competitors_v2";
@@ -303,7 +304,7 @@ function migrateV1IfNeeded(): SidebarCompetitor[] {
               pending: false,
             };
           });
-        window.localStorage.setItem(SIDEBAR_COMPETITORS_STORAGE_KEY, JSON.stringify(migrated));
+        safeSetLocalStorage(SIDEBAR_COMPETITORS_STORAGE_KEY, JSON.stringify(migrated));
         window.localStorage.removeItem(STORAGE_V1);
         return migrated;
       }
@@ -338,7 +339,10 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
     const withLogos = deduped.map(hoistLogoOntoRow);
     const logosHoisted = withLogos.some((c, i) => c.logoUrl !== deduped[i].logoUrl);
     if (deduped.length !== list.length || logosHoisted) {
-      window.localStorage.setItem(SIDEBAR_COMPETITORS_STORAGE_KEY, JSON.stringify(withLogos.slice(0, MAX_STORED)));
+      safeSetLocalStorage(
+        SIDEBAR_COMPETITORS_STORAGE_KEY,
+        JSON.stringify(withLogos.slice(0, MAX_STORED))
+      );
     }
     return withLogos.slice(0, MAX_STORED);
   } catch {
@@ -352,7 +356,12 @@ export function saveSidebarCompetitors(list: SidebarCompetitor[]) {
   const serialized = JSON.stringify(cleaned);
   const prev = window.localStorage.getItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
   if (prev === serialized) return;
-  window.localStorage.setItem(SIDEBAR_COMPETITORS_STORAGE_KEY, serialized);
+  if (!safeSetLocalStorage(SIDEBAR_COMPETITORS_STORAGE_KEY, serialized)) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[sidebar] could not persist competitors list — storage full");
+    }
+    return;
+  }
   window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
 }
 

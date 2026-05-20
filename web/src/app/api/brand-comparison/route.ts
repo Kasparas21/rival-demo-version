@@ -9,6 +9,7 @@ import {
 } from "@/lib/brand-comparison/run-brand-comparison-llm";
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -198,7 +199,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const responseBody = { ok: true as const, model: out.model, comparison: out.result };
 
-  const { error: upsertErr } = await supabase.from("brand_comparison_results").upsert(
+  const admin = createSupabaseAdminClient();
+  const { error: upsertErr } = await admin.from("brand_comparison_results").upsert(
     {
       user_id: user.id,
       your_brand_id: pair.yourBrandId,

@@ -1,4 +1,5 @@
 import type { AdsLibraryPartialJson, AdsLibraryResponse } from "./api-types";
+import { mirrorToLocalStorageIfSmall, safeSetSessionStorage } from "@/lib/cache/storage-quota";
 
 export type FetchAdsLibraryResult = {
   response: AdsLibraryResponse | AdsLibraryPartialJson;
@@ -195,8 +196,11 @@ export function writeAdsLibrarySessionCache(
   try {
     const effectiveTtl = ttlMs ?? cacheTtlFor(result);
     const payload = { expires: Date.now() + effectiveTtl, result };
-    window.sessionStorage.setItem(`${SESSION_CACHE_PREFIX}${payloadKey}`, JSON.stringify(payload));
-    window.localStorage.setItem(`${LOCAL_CACHE_PREFIX}${payloadKey}`, JSON.stringify(payload));
+    const serialized = JSON.stringify(payload);
+    const sessionKey = `${SESSION_CACHE_PREFIX}${payloadKey}`;
+    const localKey = `${LOCAL_CACHE_PREFIX}${payloadKey}`;
+    safeSetSessionStorage(sessionKey, serialized);
+    mirrorToLocalStorageIfSmall(localKey, serialized);
   } catch {
     // Ignore storage quota and serialization issues.
   }
