@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { buildApiBillingCheckoutHref, buildTesterCheckoutHref } from "@/lib/billing/checkout-url";
-import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
+import { buildApiBillingCheckoutHref } from "@/lib/billing/checkout-url";
+import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import type { BillingPeriod } from "@/lib/billing/config";
 import {
   PLAN_OFFERS,
@@ -102,11 +102,10 @@ function TesterPlanPicker({
 }) {
   const router = useRouter();
   const [claiming, setClaiming] = useState(false);
-  const [polarLoading, setPolarLoading] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const proOffer = PLAN_OFFERS.find((offer) => offer.slug === "pro") ?? PLAN_OFFERS[1]!;
   const isOnboarding = variant === "onboarding";
-  const showDevClaimFallback = isDebugPlatformClassificationEnabled();
+  const destinationAfterActivate = dashboardNext ?? DASHBOARD_HOME_PATH;
 
   const titleClass =
     variant === "onboarding"
@@ -114,32 +113,6 @@ function TesterPlanPicker({
       : variant === "page"
         ? "text-[clamp(1.3rem,4vw,1.65rem)] font-semibold tracking-tight text-gray-900"
         : "text-[clamp(1.2rem,4vw,1.55rem)] font-bold leading-tight text-gray-900";
-
-  async function activateViaPolar() {
-    setClaimError(null);
-    setPolarLoading(true);
-    try {
-      const res = await fetch(buildTesterCheckoutHref({ intent: "json" }), {
-        method: "GET",
-        credentials: "include",
-      });
-      const json = (await res.json()) as { ok?: boolean; url?: string; redirect?: string; error?: string };
-      if (res.ok && json.ok && json.url) {
-        window.location.assign(json.url);
-        return;
-      }
-      if (res.ok && json.ok && json.redirect) {
-        router.push(json.redirect);
-        router.refresh();
-        return;
-      }
-      setClaimError(json.error ?? "Could not open Polar checkout.");
-    } catch {
-      setClaimError("Network error — try again.");
-    } finally {
-      setPolarLoading(false);
-    }
-  }
 
   async function claimWithoutCard() {
     setClaiming(true);
@@ -154,7 +127,7 @@ function TesterPlanPicker({
         setClaimError(json.error ?? "Could not activate tester access.");
         return;
       }
-      router.push(dashboardNext ?? "/dashboard/spy");
+      router.push(destinationAfterActivate);
       router.refresh();
     } catch {
       setClaimError("Network error — try again.");
@@ -206,23 +179,12 @@ function TesterPlanPicker({
 
           <button
             type="button"
-            disabled={polarLoading || claiming}
-            onClick={() => void activateViaPolar()}
+            disabled={claiming}
+            onClick={() => void claimWithoutCard()}
             className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {polarLoading ? "Opening checkout…" : "Activate without payment (no card)"}
+            {claiming ? "Activating…" : "Activate without payment (no card)"}
           </button>
-
-          {showDevClaimFallback ? (
-            <button
-              type="button"
-              disabled={claiming || polarLoading}
-              onClick={() => void claimWithoutCard()}
-              className="mt-2 w-full text-center text-[12px] font-medium text-[#64748b] underline-offset-2 hover:underline disabled:opacity-50"
-            >
-              {claiming ? "Activating…" : "Dev: skip Polar and activate in-app"}
-            </button>
-          ) : null}
 
           {claimError ? (
             <p className="mt-2 text-[12px] font-medium text-[#b42318]">{claimError}</p>
