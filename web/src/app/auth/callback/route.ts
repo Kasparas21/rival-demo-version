@@ -7,6 +7,7 @@ import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billi
 import { persistTesterInviteToUserMetadata, readTesterInviteFromUserMetadata } from "@/lib/billing/tester-invite-user";
 import {
   getTesterInviteCodeFromRequest,
+  OAUTH_TESTER_INVITE_COOKIE,
   setTesterInviteCookie,
 } from "@/lib/billing/tester-invite";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -165,6 +166,7 @@ export async function GET(request: NextRequest) {
     out.cookies.set(name, value, options);
   });
   out.cookies.set("rival_oauth_next", "", { maxAge: 0, path: "/" });
+  out.cookies.set(OAUTH_TESTER_INVITE_COOKIE, "", { maxAge: 0, path: "/" });
 
   const inviteCode =
     getTesterInviteCodeFromRequest(request) ?? readTesterInviteFromUserMetadata(user.user_metadata);

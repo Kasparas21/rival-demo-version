@@ -10,17 +10,13 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Google } from "@/components/icons/google-logo";
 import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
 import { buildAuthCallbackPath } from "@/lib/auth/build-email-token-callback-url";
+import { rememberOAuthNext, rememberOAuthTesterInvite } from "@/lib/auth/oauth-bridge-cookies";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
+import { TESTER_INVITE_METADATA_KEY } from "@/lib/billing/tester-invite-user";
 
 function buildRedirectTo(path: string) {
   if (typeof window === "undefined") return path;
   return new URL(path, window.location.origin).toString();
-}
-
-function rememberOAuthNext(path: string) {
-  if (typeof document === "undefined") return;
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `rival_oauth_next=${encodeURIComponent(path)}; Path=/; Max-Age=900; SameSite=Lax${secure}`;
 }
 
 const glassInputWrap =
@@ -113,6 +109,7 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
     setGoogleError(null);
     setFormError(null);
     rememberOAuthNext(next);
+    rememberOAuthTesterInvite(testerInviteCode);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -121,6 +118,13 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
         queryParams: {
           prompt: "select_account",
         },
+        ...(testerInviteCode
+          ? {
+              data: {
+                [TESTER_INVITE_METADATA_KEY]: testerInviteCode,
+              },
+            }
+          : {}),
       },
     });
 

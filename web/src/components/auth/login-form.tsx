@@ -9,7 +9,10 @@ import { glassPanelClass } from "@/components/ui/glass-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Google } from "@/components/icons/google-logo";
 import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
+import { buildAuthCallbackPath } from "@/lib/auth/build-email-token-callback-url";
+import { rememberOAuthNext, rememberOAuthTesterInvite } from "@/lib/auth/oauth-bridge-cookies";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
+import { TESTER_INVITE_METADATA_KEY } from "@/lib/billing/tester-invite-user";
 
 function looksLikeWrongPasswordAttempt(message: string): boolean {
   const m = message.toLowerCase();
@@ -26,19 +29,13 @@ function buildRedirectTo(path: string) {
   return new URL(path, window.location.origin).toString();
 }
 
-function rememberOAuthNext(path: string) {
-  if (typeof document === "undefined") return;
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `rival_oauth_next=${encodeURIComponent(path)}; Path=/; Max-Age=900; SameSite=Lax${secure}`;
-}
-
 const glassInputWrap =
   "mt-2 rounded-2xl border border-white/60 bg-white/35 px-4 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_4px_24px_rgba(31,38,135,0.05)] backdrop-blur-sm transition focus-within:border-white/75 focus-within:bg-white/45 focus-within:shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_4px_28px_rgba(31,38,135,0.08)]";
 
 const glassInputField =
   "w-full border-none bg-transparent py-3 text-[15px] font-medium tracking-wide text-gray-900 outline-none placeholder:text-gray-600 focus:ring-0";
 
-export function LoginForm() {
+export function LoginForm({ testerInviteCode = null }: { testerInviteCode?: string | null }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -105,14 +102,22 @@ export function LoginForm() {
     setGoogleError(null);
     setFormError(null);
     rememberOAuthNext(next);
+    rememberOAuthTesterInvite(testerInviteCode);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: buildRedirectTo(`/auth/callback?next=${encodeURIComponent(next)}`),
+        redirectTo: buildRedirectTo(buildAuthCallbackPath(next, testerInviteCode)),
         queryParams: {
           prompt: "select_account",
         },
+        ...(testerInviteCode
+          ? {
+              data: {
+                [TESTER_INVITE_METADATA_KEY]: testerInviteCode,
+              },
+            }
+          : {}),
       },
     });
 

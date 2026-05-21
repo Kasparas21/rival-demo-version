@@ -8,6 +8,8 @@ import {
   safeAuthNextPath,
   type SearchParams,
 } from "@/lib/auth/auth-page-helpers";
+import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
+import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
 import { DASHBOARD_HOME_PATH, isGenericDashboardLanding } from "@/lib/dashboard/default-home";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -47,5 +49,12 @@ export default async function LoginPage({
     redirect(dest);
   }
 
-  return <LoginForm />;
+  const testerFromQuery = firstParam(params.tester);
+  const testerFromQueryCode =
+    testerFromQuery && matchesTesterInviteCode(testerFromQuery)
+      ? normalizeInviteCode(testerFromQuery)
+      : null;
+  const testerInviteCode = (await getTesterInviteCodeFromCookies()) ?? testerFromQueryCode;
+
+  return <LoginForm testerInviteCode={testerInviteCode} />;
 }

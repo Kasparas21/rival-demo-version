@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/supabase/types";
+import { OAUTH_TESTER_INVITE_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
+
 export const TESTER_INVITE_COOKIE = "rival_tester_invite";
+export { OAUTH_TESTER_INVITE_COOKIE };
 const TESTER_INVITE_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30;
 
 export type TesterInviteConfig = {
@@ -58,6 +61,10 @@ export function getTesterInviteCodeFromRequest(request: NextRequest): string | n
   const fromCookie = request.cookies.get(TESTER_INVITE_COOKIE)?.value;
   if (fromCookie && matchesTesterInviteCode(fromCookie)) {
     return normalizeInviteCode(fromCookie);
+  }
+  const fromOAuthBridge = request.cookies.get(OAUTH_TESTER_INVITE_COOKIE)?.value;
+  if (fromOAuthBridge && matchesTesterInviteCode(fromOAuthBridge)) {
+    return normalizeInviteCode(fromOAuthBridge);
   }
   return null;
 }
