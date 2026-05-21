@@ -29,7 +29,18 @@ export async function resolveScrapedAdIdForLibraryItem(
     .filter("raw_payload->>id", "eq", lid)
     .maybeSingle();
 
-  if (error || !data?.id) return null;
+  if (error || !data?.id) {
+    const { data: byKey, error: keyErr } = await supabase
+      .from("scraped_ads")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("competitor_id", competitorId)
+      .eq("platform", pl)
+      .eq("stable_ad_key", lid)
+      .maybeSingle();
+    if (keyErr || !byKey?.id) return null;
+    return byKey.id;
+  }
   return data.id;
 }
 

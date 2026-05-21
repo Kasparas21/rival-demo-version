@@ -13,6 +13,14 @@ export function computeManualRefreshTodayWindow(nowMs = Date.now()): ManualRefre
   return { startYmd: today, endYmd: today };
 }
 
+/** TikTok library search works better with a rolling window than a single UTC day. */
+export function computeManualRefreshTikTokWindow(nowMs = Date.now()): ManualRefreshDateWindow {
+  const endYmd = msToUtcYmd(nowMs);
+  const start = new Date(nowMs);
+  start.setUTCDate(start.getUTCDate() - 30);
+  return { startYmd: msToUtcYmd(start.getTime()), endYmd };
+}
+
 export type ManualRefreshScrapeParams = {
   metaStatus: "ACTIVE";
   metaStartDate: string;
@@ -33,13 +41,14 @@ export function buildManualRefreshScrapeParams(
   window: ManualRefreshDateWindow = computeManualRefreshTodayWindow(),
 ): ManualRefreshScrapeParams {
   const { startYmd, endYmd } = window;
+  const tiktokWindow = computeManualRefreshTikTokWindow(Date.parse(`${endYmd}T12:00:00.000Z`));
   return {
     metaStatus: "ACTIVE",
     metaStartDate: startYmd,
     metaEndDate: endYmd,
     linkedinDateRange: "past-day",
-    tiktokStartDate: startYmd,
-    tiktokEndDate: endYmd,
+    tiktokStartDate: tiktokWindow.startYmd,
+    tiktokEndDate: tiktokWindow.endYmd,
     microsoftStartDate: startYmd,
     microsoftEndDate: endYmd,
     pinterestStartDate: startYmd,

@@ -24,6 +24,7 @@ import {
   stableAdKeyForSnapchat,
   stableAdKeyForTikTok,
 } from "./stable-ad-keys";
+import { repairMetaAdCardMedia } from "./repair-library-ad-media";
 
 function minOptionalUnix(a?: number, b?: number): number | undefined {
   if (a == null && b == null) return undefined;
@@ -83,13 +84,26 @@ function metaLastSeenMs(card: MetaAdCard): number {
   return metaTimeToMs(t ?? undefined) || 0;
 }
 
+function mergeMetaEndedAt(a?: number, b?: number): number | undefined {
+  const aOpen = a == null || !Number.isFinite(a) || a <= 0;
+  const bOpen = b == null || !Number.isFinite(b) || b <= 0;
+  if (aOpen || bOpen) return undefined;
+  return Math.max(a, b);
+}
+
 function mergeMetaCards(a: MetaAdCard, b: MetaAdCard): MetaAdCard {
-  return {
+  const isActive = a.isActive === true || b.isActive === true;
+  const endedAt = isActive ? undefined : mergeMetaEndedAt(a.endedAt, b.endedAt);
+  return repairMetaAdCardMedia({
     ...a,
     ...b,
+    img: b.img?.trim() || a.img?.trim() || "",
+    videoUrl: b.videoUrl?.trim() || a.videoUrl?.trim() || undefined,
+    snapshot: b.snapshot ?? a.snapshot,
     startedAt: minOptionalUnix(a.startedAt, b.startedAt),
-    endedAt: maxOptionalUnix(a.endedAt, b.endedAt),
-  };
+    endedAt,
+    ...(isActive ? { isActive: true as const } : {}),
+  });
 }
 
 function mergeGoogleRows(a: GoogleAdRow, b: GoogleAdRow): GoogleAdRow {
@@ -270,7 +284,12 @@ function mergeTikTokCards(a: TikTokAdCard, b: TikTokAdCard): TikTokAdCard {
       firstShown = da <= db ? a.firstShown : b.firstShown;
     }
   }
-  return { ...m, firstShown };
+  return {
+    ...m,
+    img: b.img?.trim() || a.img?.trim() || "",
+    videoUrl: b.videoUrl?.trim() || a.videoUrl?.trim() || undefined,
+    firstShown,
+  };
 }
 
 function mergeMicrosoftCards(a: MicrosoftAdCard, b: MicrosoftAdCard): MicrosoftAdCard {

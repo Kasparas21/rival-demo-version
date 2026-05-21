@@ -250,6 +250,9 @@ async function runWeeklyJobForRow(
     const resolved = await resolveAdsCacheDomainForUser(admin, row.user_id, domainNorm.toLowerCase());
     const resolvedCompetitorId = resolved.competitorId ?? row.id;
     const adsCacheDomain = resolved.cacheDomain || domainNorm.toLowerCase();
+    const adsCacheReadDomains = resolved.readDomains?.length
+      ? resolved.readDomains
+      : [adsCacheDomain];
     const domainNormLower = domainNorm.toLowerCase();
 
     const out: AdsLibraryResponse = {
@@ -335,6 +338,7 @@ async function runWeeklyJobForRow(
       resolvedCompetitorId,
       domainNorm: domainNormLower,
       adsCacheDomain,
+      adsCacheReadDomains,
       platformsRequested,
       platformsNeedingScrape,
       out,

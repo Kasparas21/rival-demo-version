@@ -153,6 +153,27 @@ describe("merge-library-platform-ads", () => {
     expect(mergeSnapchatAdCards(a, b, opts)).toHaveLength(12);
   });
 
+  it("preserves still-running Meta when merging active scrape with historical end_date", () => {
+    const historical = { ...metaCard(0), endedAt: Math.floor(Date.parse("2024-01-01T00:00:00.000Z") / 1000) };
+    const active = { ...metaCard(0), endedAt: undefined };
+    const merged = mergeMetaAdCards([historical], [active], opts);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].endedAt).toBeUndefined();
+  });
+
+  it("clears stale endedAt when merging incoming isActive true", () => {
+    const historical = { ...metaCard(0), endedAt: Math.floor(Date.parse("2024-01-01T00:00:00.000Z") / 1000) };
+    const active = {
+      ...metaCard(0),
+      isActive: true as const,
+      endedAt: Math.floor(Date.parse("2024-06-01T00:00:00.000Z") / 1000),
+    };
+    const merged = mergeMetaAdCards([historical], [active], opts);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].isActive).toBe(true);
+    expect(merged[0].endedAt).toBeUndefined();
+  });
+
   it("orders Meta by scrape recency: incoming rows rank above stale-only keys", () => {
     const nowMs = 1_700_000_000_000;
     const staleOnly = metaCard(8);
@@ -162,5 +183,19 @@ describe("merge-library-platform-ads", () => {
     const idxStale = merged.findIndex((c) => c.id === "m8");
     const idxNew = merged.findIndex((c) => c.id === "m10");
     expect(idxNew).toBeLessThan(idxStale);
+  });
+
+  it("preserves non-empty Meta img when merging sparse incoming row", () => {
+    const withImg = { ...metaCard(0), img: "https://cdn.example.com/a.jpg" };
+    const sparse = { ...metaCard(0), img: "" };
+    const merged = mergeMetaAdCards([withImg], [sparse], opts);
+    expect(merged[0]?.img).toBe("https://cdn.example.com/a.jpg");
+  });
+
+  it("preserves non-empty TikTok img when merging sparse incoming row", () => {
+    const withImg = { ...ttCard(0), img: "https://p16-sign.tiktokcdn.com/a.jpg" };
+    const sparse = { ...ttCard(0), img: "" };
+    const merged = mergeTikTokAdCards([withImg], [sparse], opts);
+    expect(merged[0]?.img).toBe("https://p16-sign.tiktokcdn.com/a.jpg");
   });
 });

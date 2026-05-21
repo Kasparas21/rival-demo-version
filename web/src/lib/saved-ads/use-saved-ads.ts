@@ -26,7 +26,10 @@ export function useSavedAdsStatus(
 ) {
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
+  const [libraryLifecycle, setLibraryLifecycle] = useState<Record<string, { isRunning: boolean }>>({});
+  const [libraryPreviewUrls, setLibraryPreviewUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
   const lastKeyRef = useRef("");
   const savedMapRef = useRef<SavedMap>({});
   const saveAbortByScrapedRef = useRef(new Map<string, AbortController>());
@@ -59,6 +62,8 @@ export function useSavedAdsStatus(
     if (!cid || (dedupedItems.length === 0 && dedupedScrapedIds.length === 0)) {
       setSavedMap((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setResolvedToScraped((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      setLibraryLifecycle((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      setLibraryPreviewUrls((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       lastKeyRef.current = "";
       return;
     }
@@ -81,11 +86,19 @@ export function useSavedAdsStatus(
     })
       .then((r) => r.json())
       .then(
-        (res: { ok?: boolean; savedMap?: SavedMap; resolvedToScraped?: Record<string, string> }) => {
+        (res: {
+          ok?: boolean;
+          savedMap?: SavedMap;
+          resolvedToScraped?: Record<string, string>;
+          libraryLifecycle?: Record<string, { isRunning: boolean }>;
+          libraryPreviewUrls?: Record<string, string>;
+        }) => {
           if (cancelled) return;
           if (res.ok) {
             setSavedMap(res.savedMap ?? {});
             setResolvedToScraped(res.resolvedToScraped ?? {});
+            setLibraryLifecycle(res.libraryLifecycle ?? {});
+            setLibraryPreviewUrls(res.libraryPreviewUrls ?? {});
           }
           setLoading(false);
         },
@@ -97,14 +110,53 @@ export function useSavedAdsStatus(
     return () => {
       cancelled = true;
     };
-  }, [competitorId, dedupedItems, dedupedScrapedIds]);
+  }, [competitorId, dedupedItems, dedupedScrapedIds, refreshToken]);
+
+  const refreshLibraryMappings = useCallback(() => {
+    lastKeyRef.current = "";
+    setRefreshToken((n) => n + 1);
+  }, []);
+
+  const previewUrlForCard = useCallback(
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      const pl = platform.trim().toLowerCase();
+      for (const rawId of [libraryItemId, ...alternateIds]) {
+        const id = rawId.trim();
+        if (!id) continue;
+        const url = libraryPreviewUrls[`${pl}:${id}`];
+        if (url) return url;
+      }
+      return undefined;
+    },
+    [libraryPreviewUrls],
+  );
 
   const scrapedIdForCard = useCallback(
-    (platform: string, libraryItemId: string) => {
-      const key = `${platform.trim().toLowerCase()}:${libraryItemId.trim()}`;
-      return resolvedToScraped[key];
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      const pl = platform.trim().toLowerCase();
+      for (const rawId of [libraryItemId, ...alternateIds]) {
+        const id = rawId.trim();
+        if (!id) continue;
+        const hit = resolvedToScraped[`${pl}:${id}`];
+        if (hit) return hit;
+      }
+      return undefined;
     },
     [resolvedToScraped],
+  );
+
+  const libraryRunStatusForCard = useCallback(
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      const pl = platform.trim().toLowerCase();
+      for (const rawId of [libraryItemId, ...alternateIds]) {
+        const id = rawId.trim();
+        if (!id) continue;
+        const hit = libraryLifecycle[`${pl}:${id}`];
+        if (hit) return hit;
+      }
+      return undefined;
+    },
+    [libraryLifecycle],
   );
 
   const bumpSavedAdsListCache = useCallback(() => {
@@ -269,5 +321,18 @@ export function useSavedAdsStatus(
     [competitorId, scrapedIdForCard, postSaveAd, bumpSavedAdsListCache],
   );
 
-  return { savedMap, resolvedToScraped, loading, scrapedIdForCard, saveAd, unsaveAd, toggleSave };
+  return {
+    savedMap,
+    resolvedToScraped,
+    libraryLifecycle,
+    libraryPreviewUrls,
+    loading,
+    scrapedIdForCard,
+    previewUrlForCard,
+    libraryRunStatusForCard,
+    saveAd,
+    unsaveAd,
+    toggleSave,
+    refreshLibraryMappings,
+  };
 }

@@ -22,13 +22,18 @@ function baseMeta(over: Partial<MetaAdCard> = {}): MetaAdCard {
 }
 
 describe("dashboard-inline-preview", () => {
-  it("Meta: image counts; video only when isVideo", () => {
+  it("Meta: requires a still image URL (video poster counts)", () => {
     expect(metaAdHasDashboardInlinePreview(baseMeta({ img: " https://x.test/a.jpg " }))).toBe(true);
+    expect(
+      metaAdHasDashboardInlinePreview(
+        baseMeta({ img: "https://x.test/poster.jpg", videoUrl: "https://v.test/x.mp4", isVideo: true }),
+      ),
+    ).toBe(true);
     expect(metaAdHasDashboardInlinePreview(baseMeta({ videoUrl: "https://v.test/x.mp4", isVideo: true }))).toBe(
-      true
+      false,
     );
     expect(metaAdHasDashboardInlinePreview(baseMeta({ videoUrl: "https://v.test/x.mp4", isVideo: false }))).toBe(
-      false
+      false,
     );
     expect(metaAdHasDashboardInlinePreview(baseMeta())).toBe(false);
   });

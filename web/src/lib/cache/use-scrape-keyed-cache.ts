@@ -83,26 +83,11 @@ export type UseScrapeKeyedCacheOptions<T> = {
 
 type InternalCacheState<T> = CacheState<T> & { boundKey: string | null };
 
-function initialCacheState<T>(
-  enabled: boolean,
-  cacheKey: string,
-  useLocal: boolean,
-  validateCached?: (cached: T) => boolean
-): InternalCacheState<T> {
+function initialCacheState<T>(enabled: boolean, cacheKey: string): InternalCacheState<T> {
   if (!enabled) {
     return { data: null, loading: false, isValidating: false, error: null, cacheHit: false, boundKey: null };
   }
-  const cached = readValidCache<T>(cacheKey, useLocal, validateCached);
-  if (cached != null) {
-    return {
-      data: cached,
-      loading: false,
-      isValidating: false,
-      error: null,
-      cacheHit: true,
-      boundKey: cacheKey,
-    };
-  }
+  /** Always match SSR first paint — client cache is applied in `useLayoutEffect` before paint. */
   return {
     data: null,
     loading: true,
@@ -140,9 +125,7 @@ export function useScrapeKeyedCache<T>(
   const validateRef = useRef(validateCached);
   validateRef.current = validateCached;
 
-  const [state, setState] = useState<InternalCacheState<T>>(() =>
-    initialCacheState(enabled, cacheKey, useLocal, validateCached)
-  );
+  const [state, setState] = useState<InternalCacheState<T>>(() => initialCacheState(enabled, cacheKey));
 
   const inFlightRef = useRef<Promise<void> | null>(null);
   const fetchGenRef = useRef(0);

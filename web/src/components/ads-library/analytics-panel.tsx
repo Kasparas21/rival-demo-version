@@ -96,6 +96,9 @@ const PLATFORM_TEXT_COLORS: Record<string, string> = {
   snapchat: "#5c4f00",
 };
 
+const showDebugLandingPagesViewAll =
+  process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
+
 export function AdLibraryAnalyticsPanel({
   competitorId,
   cacheDomainNorm,
@@ -132,6 +135,9 @@ export function AdLibraryAnalyticsPanel({
   });
 
   const lpRes = (landingPagesListCache?.data as LandingPagesResponse | undefined) ?? internalLp.data;
+  const onViewAllLandingPagesDebug = showDebugLandingPagesViewAll
+    ? onViewAllLandingPages
+    : undefined;
   const lpHasData = Boolean(lpRes?.ok && lpRes.landingPages && lpRes.landingPages.length > 0);
   const loading = (landingPagesListCache?.loading ?? internalLp.loading) && !lpHasData;
 
@@ -240,7 +246,7 @@ export function AdLibraryAnalyticsPanel({
                     <LandingPagesList
                       groups={landingPages}
                       loading={landingLoading}
-                      onViewAll={onViewAllLandingPages}
+                      onViewAll={onViewAllLandingPagesDebug}
                       suppressLocalLoader
                     />
                   </div>
@@ -261,7 +267,7 @@ export function AdLibraryAnalyticsPanel({
                 <LandingPagesList
                   groups={landingPages}
                   loading={landingLoading}
-                  onViewAll={onViewAllLandingPages}
+                  onViewAll={onViewAllLandingPagesDebug}
                   suppressLocalLoader
                 />
               </div>

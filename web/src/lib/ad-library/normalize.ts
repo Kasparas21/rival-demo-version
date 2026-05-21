@@ -14,7 +14,11 @@ import {
   effectiveCompetitorBrandLabel,
   junkUserBrandDisplayName,
 } from "@/lib/ad-library/competitor-brand-display";
-import { stableIdForGoogleItemRow } from "@/lib/ad-library/google-stable-id";
+import {
+  buildGoogleTransparencyCreativeUrl,
+  parseGoogleTransparencyAdvertiserCreative,
+  stableIdForGoogleItemRow,
+} from "@/lib/ad-library/google-stable-id";
 import { parseGoogleRegionStatsFromRecord } from "@/lib/ad-library/google-region-stats";
 import {
   gatherMetaReachBreakdownEntries,
@@ -67,6 +71,8 @@ export type MetaAdCard = {
   adLibraryUrl: string;
   startedAt?: number;
   endedAt?: number;
+  /** From Meta Ad Library scrape (`is_active`) — still running when true. */
+  isActive?: boolean;
   impressionsIndex?: number;
   /** Advertiser shown in card header (from Ad Library) */
   pageName: string;
@@ -85,6 +91,8 @@ export type MetaAdCard = {
   impressionsRange?: string | null;
   /** Raw Meta regional transparency subtree when present on scrape rows (detail drawer DFS). */
   transparency_by_location?: Record<string, unknown>;
+  /** Apify snapshot subtree — kept on cached cards so preview repair works without re-scrape. */
+  snapshot?: FacebookAdSnapshot;
 };
 
 /** Google / YouTube style row */
@@ -540,6 +548,20 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
       ? (transparencyBlobRaw as Record<string, unknown>)
       : undefined;
 
+  const is_active = (() => {
+    for (const k of ["is_active", "isActive"] as const) {
+      const v = baseObj[k];
+      if (typeof v === "boolean") return v;
+      if (v === 1 || v === "1" || v === "true") return true;
+      if (v === 0 || v === "0" || v === "false") return false;
+    }
+    const dv = deepT.is_active ?? deepT.isActive;
+    if (typeof dv === "boolean") return dv;
+    if (dv === 1 || dv === "1" || dv === "true") return true;
+    if (dv === 0 || dv === "0" || dv === "false") return false;
+    return undefined;
+  })();
+
   return {
     ad_archive_id: pickStr("ad_archive_id", "adArchiveId", "archive_id", "adId", "id"),
     collation_id: pickStr("collation_id", "collationId"),
@@ -570,6 +592,7 @@ export function coerceFacebookDatasetRow(raw: unknown): FacebookAdLibraryItem {
       ? { age_country_gender_reach_breakdown: scrapedReachBreakdown }
       : {}),
     ...(transparency_by_location ? { transparency_by_location } : {}),
+    ...(typeof is_active === "boolean" ? { is_active } : {}),
   };
 }
 
@@ -728,6 +751,69 @@ function firstStringFromRecord(o: Record<string, unknown>, keys: string[]): stri
   return "";
 }
 
+export function looksLikeMetaRasterPreviewUrl(url: string): boolean {
+  const s = url.trim();
+  if (!/^https?:\/\//i.test(s) || s.length < 16) return false;
+  if (/\.(mp4|webm|m3u8|mov)(\?|$)/i.test(s)) return false;
+  if (/fbcdn\.net|fbsbx\.com|scontent\.|cdninstagram\.com/i.test(s)) return true;
+  if (/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(s)) return true;
+  return false;
+}
+
+const META_PREVIEW_URL_KEYS = [
+  "video_preview_image_url",
+  "original_image_url",
+  "resized_image_url",
+  "image_url",
+  "imageUrl",
+  "image_uri",
+  "imageUri",
+  "preview_url",
+  "previewUrl",
+  "thumbnail_url",
+  "thumbnailUrl",
+  "thumbnail_uri",
+  "thumbnailUri",
+  "picture",
+  "full_picture",
+  "fullPicture",
+  "media_url",
+  "mediaUrl",
+  "creative_image_url",
+  "creativeImageUrl",
+  "static_image_url",
+  "staticImageUrl",
+  "url",
+  "uri",
+] as const;
+
+/** Walk Apify / cached Meta payloads for any raster preview URL (fbcdn, scontent, …). */
+export function deepFindMetaPreviewUrl(raw: unknown, depth = 0): string {
+  if (depth > 12 || raw == null) return "";
+  if (typeof raw === "string") {
+    return looksLikeMetaRasterPreviewUrl(raw) ? raw.trim() : "";
+  }
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const hit = deepFindMetaPreviewUrl(item, depth + 1);
+      if (hit) return hit;
+    }
+    return "";
+  }
+  if (typeof raw === "object") {
+    const rec = raw as Record<string, unknown>;
+    for (const key of META_PREVIEW_URL_KEYS) {
+      const v = rec[key];
+      if (typeof v === "string" && looksLikeMetaRasterPreviewUrl(v)) return v.trim();
+    }
+    for (const value of Object.values(rec)) {
+      const hit = deepFindMetaPreviewUrl(value, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return "";
+}
+
 function pickMetaVideoPoster(
   card: NonNullable<FacebookAdSnapshot["cards"]>[number] | undefined,
   snapshotImages: FacebookAdSnapshot["images"] | undefined
@@ -749,6 +835,10 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
     "picture",
     "full_picture",
     "fullPicture",
+    "preview_url",
+    "previewUrl",
+    "thumbnail_url",
+    "thumbnailUrl",
   ]);
   if (directStill) return { url: directStill, isVideo: false };
 
@@ -767,13 +857,19 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
       "full_picture",
       "thumbnail_uri",
       "thumbnailUri",
+      "preview_url",
+      "previewUrl",
+      "thumbnail_url",
+      "thumbnailUrl",
     ]);
     if (looseStill) return { url: looseStill, isVideo: false };
 
     const c = rawCard as NonNullable<FacebookAdSnapshot["cards"]>[number];
     const hasVideo = Boolean(c?.video_hd_url || c?.video_sd_url || c?.video_preview_image_url);
     if (hasVideo) {
-      return { url: pickMetaVideoPoster(c, snap.images), isVideo: true };
+      const poster = pickMetaVideoPoster(c, snap.images);
+      if (poster) return { url: poster, isVideo: true };
+      continue;
     }
     const cardImage = c?.resized_image_url || c?.original_image_url || "";
     if (cardImage) {
@@ -792,7 +888,12 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
   }
   const img = snap.images?.[0];
   const url = img?.resized_image_url || img?.original_image_url || "";
-  return { url, isVideo: fmt === "VIDEO" && Boolean(v) };
+  if (url) return { url, isVideo: fmt === "VIDEO" && Boolean(v) };
+
+  const deep = deepFindMetaPreviewUrl(snap);
+  if (deep) return { url: deep, isVideo: false };
+
+  return { url: "", isVideo: fmt === "VIDEO" && Boolean(v) };
 }
 
 function pickMetaVideoUrl(snap: FacebookAdLibraryItem["snapshot"]): string | undefined {
@@ -986,8 +1087,13 @@ export function facebookItemToMetaCard(
     facebookSnapshotString(snap, ["cta_text", "ctaText"]) ||
     "Learn more";
 
-  const { url: img, isVideo } = pickMetaImage(snap);
+  const { url: pickedImg, isVideo } = pickMetaImage(snap);
   const videoUrl = pickMetaVideoUrl(snap);
+  const img =
+    pickedImg.trim() ||
+    deepFindMetaPreviewUrl(itemUnknown) ||
+    deepFindMetaPreviewUrl(item) ||
+    "";
 
   const rawLinkUrl = typeof card?.link_url === "string" ? card.link_url.trim() : "";
   const rawSnapLink = typeof snap?.link_url === "string" ? snap.link_url.trim() : "";
@@ -1020,6 +1126,11 @@ export function facebookItemToMetaCard(
   const advertiserMismatch =
     Boolean(confirmedNorm) && Boolean(pageIdNorm) && pageIdNorm !== confirmedNorm;
 
+  let finalImg = img || "";
+  if (!finalImg.trim() && snap) {
+    finalImg = deepFindMetaPreviewUrl(snap) || finalImg;
+  }
+
   return {
     id: String(id),
     headline,
@@ -1028,11 +1139,16 @@ export function facebookItemToMetaCard(
     subtext,
     ...(destinationUrl ? { destinationUrl } : {}),
     ...(linkDescOut ? { linkDescription: linkDescOut } : {}),
-    img: img || "",
+    img: finalImg || "",
     isVideo,
     adLibraryUrl,
     startedAt: item.start_date,
-    endedAt: item.end_date,
+    ...(typeof item.is_active === "boolean" ? { isActive: item.is_active } : {}),
+    ...(item.is_active === true
+      ? {}
+      : item.end_date != null && Number.isFinite(item.end_date)
+        ? { endedAt: item.end_date }
+        : {}),
     impressionsIndex: item.impressions_with_index?.impressions_index,
     pageName,
     pageProfilePic: pic,
@@ -1054,6 +1170,7 @@ export function facebookItemToMetaCard(
     !Array.isArray(item.transparency_by_location)
       ? { transparency_by_location: item.transparency_by_location }
       : {}),
+    ...(snap ? { snapshot: snap } : {}),
   };
 }
 
@@ -1071,9 +1188,6 @@ export function extractGoogleAdsFromResponse(body: unknown): unknown[] {
   return [];
 }
 
-function transparencyCreativeUrl(advertiserId: string, creativeId: string): string {
-  return `https://adstransparency.google.com/advertiser/${encodeURIComponent(advertiserId)}/creative/${encodeURIComponent(creativeId)}`;
-}
 
 function cleanHost(input: string): string {
   return input.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || input;
@@ -1554,9 +1668,15 @@ export function googleItemToRow(
   const advertiserId = item.advertiserId?.trim();
   const creativeId = item.creativeId?.trim();
 
+  const creativeUrlFromItem = item.creativeUrl?.trim() || "";
   let adUrl = item.adUrl?.trim() || "";
-  if (!adUrl && advertiserId && creativeId) {
-    adUrl = transparencyCreativeUrl(advertiserId, creativeId);
+  if (creativeUrlFromItem && parseGoogleTransparencyAdvertiserCreative(creativeUrlFromItem)) {
+    adUrl = creativeUrlFromItem;
+  } else if (advertiserId && creativeId) {
+    const built = buildGoogleTransparencyCreativeUrl(advertiserId, creativeId);
+    if (!parseGoogleTransparencyAdvertiserCreative(adUrl)) {
+      adUrl = built;
+    }
   }
   if (!adUrl && queryDomain) {
     adUrl = `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(queryDomain)}`;

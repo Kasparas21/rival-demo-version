@@ -12,15 +12,13 @@ import {
   isUsableGoogleStillImagePreviewUrl,
   youtubeThumbnailFromUrl,
 } from "./normalize";
-
-/** Shown when ads exist but none qualify for the inline 3-up (no image/video URL for the card UI). */
+import { resolveMetaLibraryCardPreview } from "./resolve-meta-library-card-preview";
 export const DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE =
   "The newest ads don’t have a dashboard image or video yet. Open View all for the full list.";
 
-/** Matches Meta dashboard creative rules (still image, or library-flagged video with URL). */
+/** Matches Meta dashboard creative rules — needs a renderable still (including video poster). */
 export function metaAdHasDashboardInlinePreview(ad: MetaAdCard): boolean {
-  if (ad.img?.trim()) return true;
-  return Boolean(ad.videoUrl?.trim() && ad.isVideo);
+  return Boolean(resolveMetaLibraryCardPreview(ad));
 }
 
 export function googleAdRowHasDashboardInlinePreview(row: GoogleAdRow): boolean {

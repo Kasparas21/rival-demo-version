@@ -5,6 +5,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ADS_CACHE_TTL_MS, CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
+import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
+import {
+  pickBestAdsCacheHitsByPlatform,
+  type AdsCachePickRow,
+} from "@/lib/ad-library/ads-cache-pick";
 import { mergeAdsCachePayloadForPlatform } from "@/lib/ad-library/ads-cache-merge";
 import { savedCompetitorDomainOrFilter } from "@/lib/ad-library/competitor-cache-domain";
 import {
@@ -12,11 +17,16 @@ import {
   countLibraryAdsForPlatform,
   persistScrapedAdsFromAdsLibraryResponse,
 } from "@/lib/ad-library/persist-scraped-ads";
+import { refreshPlatformTrackingAfterScrape } from "@/lib/ad-library/persist-platform-tracking";
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import type { Database, Json } from "@/lib/supabase/types";
 
 function isCacheablePlatform(p: AdsLibraryPlatform): p is CacheablePlatform {
   return (CACHEABLE_PLATFORMS as readonly string[]).includes(p);
+}
+
+function isInitialScrapePlatform(p: AdsLibraryPlatform): p is InitialScrapePlatform {
+  return p !== "microsoft";
 }
 
 export async function finalizeAdsLibraryAfterFreshScrape(
@@ -26,6 +36,8 @@ export async function finalizeAdsLibraryAfterFreshScrape(
     resolvedCompetitorId: string | null;
     domainNorm: string;
     adsCacheDomain: string;
+    /** Slug/FQDN variants — used when merging so manual refresh cannot miss prior cache rows. */
+    adsCacheReadDomains?: string[];
     platformsRequested: Set<AdsLibraryPlatform>;
     platformsNeedingScrape: Set<AdsLibraryPlatform>;
     out: AdsLibraryResponse;
@@ -38,6 +50,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
     resolvedCompetitorId,
     domainNorm,
     adsCacheDomain,
+    adsCacheReadDomains,
     platformsRequested,
     platformsNeedingScrape,
     out,
@@ -46,21 +59,23 @@ export async function finalizeAdsLibraryAfterFreshScrape(
 
   if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
     const cacheableToMerge = [...platformsNeedingScrape].filter(isCacheablePlatform);
-    if (cacheableToMerge.length > 0) {
+    const readDomains = (
+      adsCacheReadDomains?.length ? adsCacheReadDomains : [adsCacheDomain]
+    ).filter(Boolean);
+    if (cacheableToMerge.length > 0 && readDomains.length > 0) {
+      const nowIso = new Date().toISOString();
       const { data: existingCacheRows } = await supabase
         .from("ads_cache")
-        .select("platform, ads_data")
+        .select("platform, ads_data, competitor_domain, scraped_at, expires_at")
         .eq("user_id", userId)
-        .eq("competitor_domain", adsCacheDomain)
+        .in("competitor_domain", readDomains)
         .in("platform", cacheableToMerge);
 
-      const prevByPl = new Map<string, unknown>();
-      for (const r of existingCacheRows ?? []) {
-        const pl = r.platform;
-        if (pl && isCacheablePlatform(pl as AdsLibraryPlatform)) {
-          prevByPl.set(pl, r.ads_data);
-        }
-      }
+      const prevByPl = pickBestAdsCacheHitsByPlatform(
+        (existingCacheRows ?? []) as AdsCachePickRow[],
+        adsCacheDomain,
+        nowIso,
+      );
 
       for (const p of cacheableToMerge) {
         const prev = prevByPl.get(p);
@@ -122,6 +137,8 @@ export async function finalizeAdsLibraryAfterFreshScrape(
 
     for (const p of platformsNeedingScrape) {
       if (!isCacheablePlatform(p)) continue;
+      const adCount = countLibraryAdsForPlatform(p, out);
+      if (adCount === 0) continue;
       const adsData: Json = sanitizeJsonForPostgres(
         (p === "meta"
           ? out.meta
@@ -181,6 +198,21 @@ export async function finalizeAdsLibraryAfterFreshScrape(
             : await lastScrapedQuery.eq("brand_domain", domainNorm);
         if (lastScrapedError) {
           console.error("[finalizeAdsLibrary] last_scraped_at update", lastScrapedError);
+        }
+        if (resolvedCompetitorId) {
+          const platformsScraped = [...platformsNeedingScrape].filter(isInitialScrapePlatform);
+          if (platformsScraped.length > 0) {
+            try {
+              await refreshPlatformTrackingAfterScrape(supabase, {
+                userId,
+                competitorId: resolvedCompetitorId,
+                platformsScraped,
+                nowIso: now,
+              });
+            } catch (trackingErr) {
+              console.error("[finalizeAdsLibrary] refreshPlatformTrackingAfterScrape", trackingErr);
+            }
+          }
         }
       }
     }

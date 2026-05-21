@@ -1,0 +1,70 @@
+import { NextResponse } from "next/server";
+
+import { isMetaAdActive, isTikTokAdActive } from "@/lib/ad-library/count-active-ads";
+import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
+import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
+import type { MetaAdCard, TikTokAdCard } from "@/lib/ad-library/normalize";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+/** Bulk lifecycle for ads-library cards (key = `platform:libraryItemId`). */
+export async function GET(request: Request): Promise<NextResponse> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: authErr,
+  } = await supabase.auth.getUser();
+  if (authErr || !user) {
+    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+
+  const competitorId = new URL(request.url).searchParams.get("competitorId")?.trim() ?? "";
+  if (!competitorId) {
+    return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
+  }
+
+  const [{ data: compRow }, { data: rows, error }] = await Promise.all([
+    supabase
+      .from("saved_competitors")
+      .select("last_scraped_at")
+      .eq("id", competitorId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("scraped_ads")
+      .select("platform, raw_payload, last_seen_at, is_active")
+      .eq("user_id", user.id)
+      .eq("competitor_id", competitorId),
+  ]);
+
+  if (error) {
+    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  const lastScrapedAt = compRow?.last_scraped_at ?? null;
+  const libraryLifecycle: Record<string, { isRunning: boolean }> = {};
+
+  for (const row of rows ?? []) {
+    const cardId = libraryItemIdFromRawPayload(row.raw_payload);
+    if (!cardId) continue;
+    const key = libraryItemKey(String(row.platform), cardId);
+    const pl = String(row.platform).trim().toLowerCase();
+    const payload = row.raw_payload;
+
+    let running = false;
+    const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
+    const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
+    if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+      running = isMetaAdActive(payload as MetaAdCard, scrapeAtMs);
+    } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+      running = isTikTokAdActive(payload as TikTokAdCard);
+    } else {
+      running = row.is_active === true || isScrapedAdRunning(row.last_seen_at, lastScrapedAt);
+    }
+    libraryLifecycle[key] = { isRunning: running };
+  }
+
+  return NextResponse.json({ ok: true, libraryLifecycle });
+}

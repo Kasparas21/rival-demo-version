@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdsLibraryPlatform } from "./api-types";
 import { resolveAdsCacheDomainForUser } from "./competitor-cache-domain";
+import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "./ads-cache-pick";
 import { countLibraryAdsForPlatform, platformScrapeSucceeded } from "./library-response-utils";
 import { persistScrapedAdsFromAdsLibraryResponse } from "./persist-scraped-ads";
 import {
@@ -23,16 +24,15 @@ export type EnsureCompetitorAdsPersistedResult = {
  */
 export async function ensureCompetitorAdsPersisted(
   supabase: SupabaseClient<Database>,
-  params: { userId: string; domainHint: string }
+  params: { userId: string; domainHint: string; competitorId?: string }
 ): Promise<EnsureCompetitorAdsPersistedResult> {
   const { userId, domainHint } = params;
   const errors: string[] = [];
 
-  const { competitorId, readDomains, cacheDomain } = await resolveAdsCacheDomainForUser(
-    supabase,
-    userId,
-    domainHint
-  );
+  const { competitorId: resolvedFromDomain, readDomains, cacheDomain } =
+    await resolveAdsCacheDomainForUser(supabase, userId, domainHint);
+
+  const competitorId = params.competitorId?.trim() || resolvedFromDomain;
 
   if (!competitorId) {
     return {
@@ -47,7 +47,7 @@ export async function ensureCompetitorAdsPersisted(
   const domains = readDomains.length > 0 ? readDomains : expandAdsCacheDomainCandidates([cacheDomain]);
   const { data: cacheRows, error: cacheErr } = await supabase
     .from("ads_cache")
-    .select("platform, ads_data, scraped_at, competitor_domain")
+    .select("platform, ads_data, scraped_at, expires_at, competitor_domain")
     .eq("user_id", userId)
     .in("competitor_domain", domains);
 
@@ -72,16 +72,11 @@ export async function ensureCompetitorAdsPersisted(
     };
   }
 
-  const latestByPlatform = new Map<string, (typeof rows)[0]>();
-  for (const row of rows) {
-    const pl = row.platform;
-    if (!pl) continue;
-    const prev = latestByPlatform.get(pl);
-    if (!prev || String(row.scraped_at) > String(prev.scraped_at)) {
-      latestByPlatform.set(pl, row);
-    }
-  }
-
+  const latestByPlatform = pickBestAdsCacheRowMapByPlatform(
+    rows as AdsCachePickRow[],
+    cacheDomain,
+    new Date().toISOString(),
+  );
   const deduped = [...latestByPlatform.values()];
   const out = adsLibraryResponseFromAdsCacheRows(deduped);
   const platformsToPersist = new Set<AdsLibraryPlatform>();

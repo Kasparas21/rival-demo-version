@@ -11,6 +11,23 @@ export function parseGoogleTransparencyAdvertiserCreative(adUrl: string): {
   return { advertiserId: decodeURIComponent(m[1]), creativeId: decodeURIComponent(m[2]) };
 }
 
+/** Per-creative Transparency Center URL (not the advertiser account landing page). */
+export function buildGoogleTransparencyCreativeUrl(advertiserId: string, creativeId: string): string {
+  return `https://adstransparency.google.com/advertiser/${encodeURIComponent(advertiserId.trim())}/creative/${encodeURIComponent(creativeId.trim())}`;
+}
+
+export function parseStableGoogleTransparencyRowId(id: string): {
+  advertiserId: string;
+  creativeId: string;
+} | null {
+  const m = /^(?:g|yt):([^:]+):([^:]+)$/i.exec(id.trim());
+  if (!m) return null;
+  const advertiserId = m[1].trim();
+  const creativeId = m[2].trim();
+  if (!advertiserId || !creativeId || advertiserId === "na" || creativeId === "na") return null;
+  return { advertiserId, creativeId };
+}
+
 export function stableIdForGoogleItemRow(params: {
   type: "google" | "youtube";
   advertiserId?: string | null;

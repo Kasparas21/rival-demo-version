@@ -38,6 +38,16 @@ export const REFRESH_ADS_PER_PLATFORM = 100;
 /** Pro/Admin manual force-rescrape: active-today window, all platforms. */
 export const MANUAL_REFRESH_ADS_PER_PLATFORM = 300;
 
+/** Workspace “Rescrape ads” — small refresh per platform (not full discovery). */
+export const WORKSPACE_RESCRAPE_ADS_PER_PLATFORM = {
+  meta: 10,
+  google: 25,
+  linkedin: 10,
+  tiktok: 10,
+  pinterest: 10,
+  snapchat: 10,
+} as const satisfies Partial<Record<InitialScrapePlatform, number>>;
+
 /** Quick monthly probe for INACTIVE platforms. */
 export const INACTIVE_PROBE_ADS_PER_PLATFORM = 50;
 

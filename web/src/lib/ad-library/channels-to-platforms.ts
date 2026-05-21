@@ -79,3 +79,16 @@ export function resolveAdsPlatformsForCompetitorView(
   }
   return ALL_ADS_API_PLATFORMS;
 }
+
+/** Merge multiple channel/id sources without dropping platforms from an earlier scrape or onboarding setup. */
+export function unionAdsPlatformsFromSources(
+  ...sources: { channelsCsv?: string; ids?: Record<string, string> | null | undefined }[]
+): AdsLibraryPlatform[] {
+  const set = new Set<AdsLibraryPlatform>();
+  for (const src of sources) {
+    for (const platform of resolveAdsPlatformsForCompetitorView(src.channelsCsv ?? "", src.ids)) {
+      set.add(platform);
+    }
+  }
+  return ALL_ADS_API_PLATFORMS.filter((p) => set.has(p));
+}

@@ -1,7 +1,57 @@
 import { NextResponse } from "next/server";
 
-import { computeCreativeTestsForCompetitor } from "@/lib/creative-tests/compute-creative-tests";
+import {
+  computeCreativeTestsForCompetitor,
+  launchDateKeyForAd,
+} from "@/lib/creative-tests/compute-creative-tests";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+type ScrapedAdRow = {
+  id: string;
+  platform: string;
+  ad_creative_url: string | null;
+  ad_text: string;
+  ai_extracted_angle: string | null;
+  first_seen_at: string;
+  last_seen_at: string;
+  format: string;
+  ai_extracted_launch_date?: string | null;
+};
+
+function hydrateCreativeTestAds(test: {
+  launch_date: string;
+  platform: string;
+  ad_ids: string[] | null;
+  ad_count: number;
+}, adsById: Map<string, ScrapedAdRow>, allAds: ScrapedAdRow[]): ScrapedAdRow[] {
+  const ids = test.ad_ids ?? [];
+  const byStoredId = ids
+    .map((adId) => adsById.get(adId))
+    .filter((ad): ad is ScrapedAdRow => ad != null);
+
+  if (byStoredId.length >= 2) return byStoredId;
+
+  const byLaunchGroup = allAds.filter(
+    (ad) => launchDateKeyForAd(ad) === test.launch_date && ad.platform === test.platform
+  );
+
+  if (byLaunchGroup.length >= 2) return byLaunchGroup;
+
+  if (byStoredId.length > 0) return byStoredId;
+  return byLaunchGroup;
+}
+
+function testsNeedRecompute(
+  tests: { ad_ids: string[] | null; ad_count: number }[],
+  adsById: Map<string, ScrapedAdRow>,
+  allAds: ScrapedAdRow[]
+): boolean {
+  return tests.some((test) => {
+    const hydrated = hydrateCreativeTestAds(test, adsById, allAds);
+    const expected = Math.max(test.ad_count, (test.ad_ids ?? []).length);
+    return expected >= 2 && hydrated.length < 2;
+  });
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +86,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
 
+  async function loadTestsAndAds() {
+    const [{ data: tests, error: testsErr }, { data: allAds, error: adsErr }] = await Promise.all([
+      supabase
+        .from("creative_tests")
+        .select("*")
+        .eq("competitor_id", competitorId)
+        .order("launch_date", { ascending: false }),
+      supabase
+        .from("scraped_ads")
+        .select(
+          "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, ai_extracted_launch_date"
+        )
+        .eq("user_id", user.id)
+        .eq("competitor_id", competitorId),
+    ]);
+
+    if (testsErr) return { error: testsErr.message as string };
+    if (adsErr) return { error: adsErr.message as string };
+
+    const adsById = new Map<string, ScrapedAdRow>();
+    for (const ad of allAds ?? []) {
+      adsById.set(ad.id, ad as ScrapedAdRow);
+    }
+
+    return { tests: tests ?? [], allAds: (allAds ?? []) as ScrapedAdRow[], adsById };
+  }
+
   if (force) {
     const recomputeResult = await computeCreativeTestsForCompetitor({
       supabase,
@@ -47,47 +124,37 @@ export async function GET(request: Request) {
     }
   }
 
-  const { data: tests, error: testsErr } = await supabase
-    .from("creative_tests")
-    .select("*")
-    .eq("competitor_id", competitorId)
-    .order("launch_date", { ascending: false });
-
-  if (testsErr) {
-    return NextResponse.json({ ok: false, error: testsErr.message }, { status: 500 });
+  let loaded = await loadTestsAndAds();
+  if ("error" in loaded) {
+    return NextResponse.json({ ok: false, error: loaded.error }, { status: 500 });
   }
 
-  const allAdIds = [...new Set((tests ?? []).flatMap((t) => t.ad_ids ?? []))];
-  const adsById = new Map<
-    string,
-    {
-      id: string;
-      platform: string;
-      ad_creative_url: string | null;
-      ad_text: string;
-      ai_extracted_angle: string | null;
-      first_seen_at: string;
-      last_seen_at: string;
-      format: string;
-    }
-  >();
+  let { tests, allAds, adsById } = loaded;
 
-  if (allAdIds.length > 0) {
-    const { data: ads } = await supabase
-      .from("scraped_ads")
-      .select("id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format")
-      .eq("user_id", user.id)
-      .in("id", allAdIds);
-
-    for (const ad of ads ?? []) {
-      adsById.set(ad.id, ad);
+  if (!force && tests.length > 0 && testsNeedRecompute(tests, adsById, allAds)) {
+    const recomputeResult = await computeCreativeTestsForCompetitor({
+      supabase,
+      userId: user.id,
+      competitorId,
+    });
+    if (recomputeResult.ok) {
+      loaded = await loadTestsAndAds();
+      if (!("error" in loaded)) {
+        tests = loaded.tests;
+        allAds = loaded.allAds;
+        adsById = loaded.adsById;
+      }
     }
   }
 
-  const hydratedTests = (tests ?? []).map((test) => ({
-    ...test,
-    ads: (test.ad_ids ?? []).map((adId) => adsById.get(adId)).filter(Boolean),
-  }));
+  const hydratedTests = tests.map((test) => {
+    const ads = hydrateCreativeTestAds(test, adsById, allAds);
+    return {
+      ...test,
+      ads,
+      ad_count: ads.length > 0 ? ads.length : test.ad_count,
+    };
+  });
 
   const summary = {
     total: hydratedTests.length,

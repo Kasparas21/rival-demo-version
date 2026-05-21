@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
-import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
+import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "@/lib/ad-library/ads-cache-pick";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import {
   adsLibraryResponseFromAdsCacheRows,
@@ -21,13 +21,13 @@ export async function fetchLatestAdsLibraryFromUserCache(
   const trimmed = domainHint.trim();
   if (!trimmed) return null;
 
-  const { readDomains } = await resolveAdsCacheDomainForUser(supabase, userId, trimmed);
+  const { readDomains, cacheDomain } = await resolveAdsCacheDomainForUser(supabase, userId, trimmed);
   if (readDomains.length === 0) return null;
 
   const fetchCache = async (domains: string[]) => {
     const { data, error } = await supabase
       .from("ads_cache")
-      .select("platform, ads_data, scraped_at, competitor_domain")
+      .select("platform, ads_data, scraped_at, expires_at, competitor_domain")
       .eq("user_id", userId)
       .in("competitor_domain", domains);
     return { data, error };
@@ -52,16 +52,11 @@ export async function fetchLatestAdsLibraryFromUserCache(
 
   if (cacheRows.length === 0) return null;
 
-  const latestByPlatform = new Map<string, (typeof cacheRows)[0]>();
-  for (const row of cacheRows) {
-    const p = row.platform as AdsLibraryPlatform;
-    if (!p || !ALL_ADS_API_PLATFORMS.includes(p)) continue;
-    const prev = latestByPlatform.get(p);
-    if (!prev || Date.parse(row.scraped_at) > Date.parse(prev.scraped_at)) {
-      latestByPlatform.set(p, row);
-    }
-  }
-
+  const latestByPlatform = pickBestAdsCacheRowMapByPlatform(
+    cacheRows as AdsCachePickRow[],
+    cacheDomain,
+    new Date().toISOString(),
+  );
   if (latestByPlatform.size === 0) return null;
   return adsLibraryResponseFromAdsCacheRows([...latestByPlatform.values()]);
 }

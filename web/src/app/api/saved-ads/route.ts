@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveScrapedAdIdForLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
+import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 import type { Database } from "@/lib/supabase/types";
@@ -32,6 +33,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
+
+  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, competitorId);
+  if (blocked) return blocked;
 
   const { data, error } = await supabase
     .from("saved_ads")
@@ -91,6 +95,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (srcErr || !srcAd) {
     return NextResponse.json({ ok: false, error: "ad not found" }, { status: 404 });
   }
+
+  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, srcAd.competitor_id);
+  if (blocked) return blocked;
 
   const { data: existing } = await supabase
     .from("saved_ads")

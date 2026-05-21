@@ -4,6 +4,13 @@
  */
 
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
+import { extractDomainFromTransparencyDomainSearchUrl } from "@/lib/ad-library/google-transparency-url";
+import {
+  buildGoogleTransparencyCreativeUrl,
+  parseGoogleTransparencyAdvertiserCreative,
+  parseStableGoogleTransparencyRowId,
+} from "@/lib/ad-library/google-stable-id";
+import type { GoogleAdRow } from "@/lib/ad-library/normalize";
 
 function stringField(o: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) {
@@ -18,6 +25,70 @@ function isHttpUrl(s: string): boolean {
 }
 
 /** Synthetic ids from normalizers — not safe for public library URLs. */
+/** Advertiser account or `?domain=` search — not a single-creative detail page. */
+function isGoogleTransparencyAccountOrSearchUrl(url: string): boolean {
+  if (!isHttpUrl(url)) return false;
+  if (parseGoogleTransparencyAdvertiserCreative(url)) return false;
+  try {
+    const u = new URL(url.trim());
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    if (host !== "adstransparency.google.com") return false;
+    if (extractDomainFromTransparencyDomainSearchUrl(url)) return true;
+    const segments = u.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+    return segments.length === 2 && segments[0] === "advertiser" && /^AR\d+$/i.test(segments[1] ?? "");
+  } catch {
+    return false;
+  }
+}
+
+function googleTransparencyIdsFromPayload(p: Record<string, unknown>): {
+  advertiserId: string;
+  creativeId: string;
+} | null {
+  const advertiserId =
+    stringField(p, ["advertiserId", "advertiser_id", "advertiserID"]) ?? null;
+  let creativeId = stringField(p, ["creativeId", "creative_id", "creativeID"]);
+  if (!creativeId && typeof p.id === "string") {
+    const fromStable = parseStableGoogleTransparencyRowId(p.id);
+    if (fromStable) return fromStable;
+    const rawId = p.id.trim();
+    if (/^CR\d+/i.test(rawId)) creativeId = rawId;
+  }
+  if (advertiserId && creativeId && /^CR\d+/i.test(creativeId)) {
+    return { advertiserId, creativeId };
+  }
+  return null;
+}
+
+function resolveGoogleFamilyAdLibraryUrl(p: Record<string, unknown>): string | null {
+  for (const key of ["creativeUrl", "creative_url", "creativeURL", "adUrl", "ad_url", "adLibraryUrl", "ad_library_url"]) {
+    const raw = typeof p[key] === "string" ? (p[key] as string).trim() : "";
+    if (raw && isHttpUrl(raw) && parseGoogleTransparencyAdvertiserCreative(raw)) {
+      return raw;
+    }
+  }
+
+  const ids = googleTransparencyIdsFromPayload(p);
+  if (ids) {
+    return buildGoogleTransparencyCreativeUrl(ids.advertiserId, ids.creativeId);
+  }
+
+  const fallback = stringField(p, [
+    "creativeUrl",
+    "creative_url",
+    "creativeURL",
+    "adUrl",
+    "ad_url",
+    "adLibraryUrl",
+    "ad_library_url",
+  ]);
+  if (fallback && isHttpUrl(fallback) && !isGoogleTransparencyAccountOrSearchUrl(fallback)) {
+    return fallback;
+  }
+
+  return null;
+}
+
 function isSyntheticFallbackId(platform: string, id: string): boolean {
   const t = id.trim();
   if (!t) return true;
@@ -83,17 +154,8 @@ export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown)
     }
 
     case "google":
-    case "youtube": {
-      const youtubeish =
-        pl === "youtube" ||
-        (typeof p.youtubeVideoId === "string" && p.youtubeVideoId.trim().length > 0);
-
-      const creative = stringField(p, ["creativeUrl", "creative_url", "creativeURL"]);
-      if (youtubeish && creative && isHttpUrl(creative)) return creative;
-
-      const u = stringField(p, ["adUrl"]);
-      return u && isHttpUrl(u) ? u : null;
-    }
+    case "youtube":
+      return resolveGoogleFamilyAdLibraryUrl(p);
 
     case "pinterest":
     case "snapchat":
@@ -107,6 +169,23 @@ export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown)
     default:
       return null;
   }
+}
+
+/** Per-creative Transparency URL for Google / YouTube library cards (not advertiser account). */
+export function resolveGoogleAdRowTransparencyHref(
+  ad: GoogleAdRow,
+  fallbackDomain?: string | null
+): string {
+  const platform = ad.type === "youtube" ? "youtube" : "google";
+  const resolved = resolveAdLibrarySourceUrl(platform, ad);
+  if (resolved) return resolved;
+  const domain = fallbackDomain?.trim();
+  if (domain) {
+    return `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(domain)}`;
+  }
+  const raw = ad.adUrl?.trim();
+  if (raw) return raw;
+  return "https://adstransparency.google.com/";
 }
 
 export function adLibraryLinkLabel(platform: string): string {

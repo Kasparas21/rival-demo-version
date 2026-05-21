@@ -5,21 +5,31 @@ import { ExternalLink, Globe, Play } from "lucide-react";
 import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
+import {
+  computeLibraryAdRunDays,
+  isLibraryAdKilled,
+  type LibraryRunStatus,
+} from "@/lib/ad-library/library-run-status";
 import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
 import { safeHttpsUrl } from "@/lib/ad-library/normalize";
+import { resolveMetaLibraryCardPreview } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
 function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: boolean }) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
   const stream = ad.videoUrl?.trim() ?? "";
   useEffect(() => {
     setVideoFailed(false);
     setPlaying(false);
-  }, [ad.id, stream]);
-  const still = ad.img?.trim() ?? "";
+    setImageFailed(false);
+  }, [ad.id, stream, ad.img]);
+  const still = resolveMetaLibraryCardPreview(ad);
+  const fallbackStill = ad.img?.trim() ?? "";
+  const displayStill = !imageFailed ? still || fallbackStill : fallbackStill;
   /** Poster-first preview so video tiles match image size; mount `<video>` only after play. */
-  const wantsVideo = Boolean(stream && ad.isVideo);
+  const wantsVideo = Boolean(stream && ad.isVideo && displayStill);
   const maxH = compact ? "max-h-[300px]" : "max-h-[420px]";
   const previewFrameH = compact ? "h-[200px]" : "h-[280px]";
   /** Image ads: natural aspect, width-first. Video posters: fixed frame fills like hero creative. */
@@ -34,7 +44,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
           autoPlay
           playsInline
           preload="metadata"
-          poster={still || undefined}
+          poster={displayStill || undefined}
           className={`${videoPreviewMediaClass} bg-black object-contain`}
           src={stream}
           onClick={(e) => e.stopPropagation()}
@@ -46,7 +56,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
     );
   }
 
-  if (wantsVideo && still && !videoFailed) {
+  if (wantsVideo && displayStill && !videoFailed) {
     return (
       <button
         type="button"
@@ -58,11 +68,12 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
         aria-label="Play video ad"
       >
         <img
-          src={still}
+          src={displayStill}
           alt=""
           referrerPolicy="no-referrer"
           className={videoPreviewMediaClass}
           onClick={(e) => e.stopPropagation()}
+          onError={() => setImageFailed(true)}
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
@@ -73,7 +84,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
     );
   }
 
-  if (wantsVideo && !still && !videoFailed) {
+  if (wantsVideo && !displayStill && !videoFailed) {
     return (
       <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
         <video
@@ -90,11 +101,11 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
     );
   }
 
-  if (wantsVideo && videoFailed && still) {
+  if (wantsVideo && videoFailed && displayStill) {
     return (
       <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
         <img
-          src={still}
+          src={displayStill}
           alt=""
           referrerPolicy="no-referrer"
           className={videoPreviewMediaClass}
@@ -113,7 +124,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
     );
   }
 
-  if (wantsVideo && videoFailed && !still) {
+  if (wantsVideo && videoFailed && !displayStill) {
     return (
       <div
         className={`flex w-full ${compact ? "min-h-[200px]" : "min-h-[280px]"} flex-col items-center justify-center gap-2 px-4 text-center`}
@@ -132,14 +143,15 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
     );
   }
 
-  if (still) {
+  if (displayStill) {
     return (
       <img
-        src={still}
+        src={displayStill}
         alt=""
         referrerPolicy="no-referrer"
         className={imageMediaClass}
         onClick={(e) => e.stopPropagation()}
+        onError={() => setImageFailed(true)}
       />
     );
   }
@@ -151,25 +163,6 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
       {compact ? "No preview" : "No creative preview"}
     </div>
   );
-}
-
-function metaTimestampToMs(ts: number): number {
-  return ts > 1e12 ? ts : ts * 1000;
-}
-
-function computeMetaAdLifespanDays(ad: MetaAdCardModel): number {
-  if (ad.startedAt == null || !Number.isFinite(ad.startedAt)) return 0;
-  const start = metaTimestampToMs(ad.startedAt);
-  const end =
-    ad.endedAt != null && Number.isFinite(ad.endedAt)
-      ? metaTimestampToMs(ad.endedAt)
-      : Date.now();
-  return Math.max(0, Math.floor((end - start) / (24 * 60 * 60 * 1000)));
-}
-
-function isMetaAdKilled(ad: MetaAdCardModel): boolean {
-  if (ad.endedAt == null || !Number.isFinite(ad.endedAt)) return false;
-  return metaTimestampToMs(ad.endedAt) < Date.now() - 48 * 60 * 60 * 1000;
 }
 
 function metaSiteLabel(ad: MetaAdCardModel, brandDomain: string): { destHttps: string | null; siteLabel: string } {
@@ -201,6 +194,8 @@ export function MetaAdCard({
   isSaved,
   onToggleSave,
   saveDisabled,
+  runStatus,
+  metaScrapeAtMs,
 }: {
   ad: MetaAdCardModel;
   viewMode: "grid" | "list";
@@ -211,7 +206,12 @@ export function MetaAdCard({
   isSaved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  runStatus?: LibraryRunStatus;
+  /** UTC ms of last Meta scrape — used for end_date vs scrape-day active rule. */
+  metaScrapeAtMs?: number;
 }) {
+  const killed = isLibraryAdKilled("meta", ad, runStatus, metaScrapeAtMs);
+  const runDays = computeLibraryAdRunDays("meta", ad, runStatus, metaScrapeAtMs);
   const { destHttps, siteLabel } = metaSiteLabel(ad, brand.domain);
   const ctaHref = destHttps || ad.adLibraryUrl;
   const metaTitle = ad.headline?.trim() || "";
@@ -261,11 +261,11 @@ export function MetaAdCard({
                 <div className="flex items-center gap-1.5 text-[11px] text-[#6b7280]">
                   <span
                     className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                      isMetaAdKilled(ad) ? "bg-[#9ca3af]" : "bg-green-500"
+                      killed ? "bg-[#9ca3af]" : "bg-green-500"
                     }`}
                   />
                   <span className="font-medium whitespace-nowrap">
-                    {isMetaAdKilled(ad) ? "Ended" : "Active"} {computeMetaAdLifespanDays(ad)}D
+                    {killed ? "Ended" : "Active"} {runDays}D
                   </span>
                 </div>
               ) : null}

@@ -19,13 +19,14 @@ function googleRow(overrides: Partial<Extract<GoogleAdRow, { type: "google" }>> 
 }
 
 describe("filterGoogleRowsActiveToday", () => {
-  it("keeps rows with lastShown today", () => {
+  it("keeps rows still in visibility window", () => {
     const rows = [
       googleRow({ id: "a", lastShown: "2026-05-19T08:00:00.000Z" }),
-      googleRow({ id: "b", lastShown: "2026-05-01T08:00:00.000Z" }),
+      googleRow({ id: "b", lastShown: "2026-06-01T08:00:00.000Z" }),
+      googleRow({ id: "c", lastShown: "2026-05-01T08:00:00.000Z" }),
     ];
     const out = filterGoogleRowsActiveToday(rows, nowMs);
-    expect(out.map((r) => r.id)).toEqual(["a"]);
+    expect(out.map((r) => r.id)).toEqual(["a", "b"]);
   });
 
   it("returns all rows when filter would be empty", () => {

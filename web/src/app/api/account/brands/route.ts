@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { adsProfileSetupV1, parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
+import { syncWorkspaceBrandLibraryContextFromSetup } from "@/lib/account/sync-workspace-brand-library-context";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Json } from "@/lib/supabase/types";
 
@@ -128,11 +129,14 @@ export async function PATCH(req: Request) {
     logo_url?: string | null;
   } = {};
 
+  let parsedAdsSetup: ReturnType<typeof parseAdsProfileSetup> = null;
+
   if (body.ads_profile_setup !== undefined) {
     const parsed = parseAdsProfileSetup(body.ads_profile_setup);
     if (!parsed) {
       return NextResponse.json({ error: "Invalid ads_profile_setup" }, { status: 400 });
     }
+    parsedAdsSetup = parsed;
     rowPatch.ads_profile_setup = adsProfileSetupV1(parsed) as Json;
   }
 
@@ -214,6 +218,29 @@ export async function PATCH(req: Request) {
 
   if (updErr) {
     return brandsDbErrorResponse(updErr.message);
+  }
+
+  if (parsedAdsSetup) {
+    const { data: brandRow } = await admin
+      .from("brands")
+      .select("domain, name")
+      .eq("id", targetId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const domainHint = brandRow?.domain?.trim() || rowPatch.domain?.trim() || "";
+    if (domainHint) {
+      try {
+        await syncWorkspaceBrandLibraryContextFromSetup(
+          admin,
+          user.id,
+          domainHint,
+          parsedAdsSetup,
+          brandRow?.name ?? rowPatch.name,
+        );
+      } catch (syncErr) {
+        console.error("[brands PATCH] sync workspace library context", syncErr);
+      }
+    }
   }
 
   return NextResponse.json({ ok: true });

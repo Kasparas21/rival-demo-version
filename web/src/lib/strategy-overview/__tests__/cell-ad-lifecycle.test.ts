@@ -12,7 +12,10 @@ describe("resolveCellAdLifecycle", () => {
         first_seen_at: "2026-05-01T00:00:00.000Z",
         last_seen_at: "2026-05-19T00:00:00.000Z",
         is_active: true,
-        raw_payload: { endedAt: Math.floor(Date.parse("2026-05-19T00:00:00.000Z") / 1000) },
+        raw_payload: {
+          isActive: true,
+          endedAt: Math.floor(Date.parse("2026-05-19T00:00:00.000Z") / 1000),
+        },
       },
       now
     );
@@ -27,7 +30,10 @@ describe("resolveCellAdLifecycle", () => {
         first_seen_at: "2026-04-01T00:00:00.000Z",
         last_seen_at: "2026-04-10T00:00:00.000Z",
         is_active: false,
-        raw_payload: { endedAt: Math.floor(Date.parse("2026-04-10T00:00:00.000Z") / 1000) },
+        raw_payload: {
+          isActive: false,
+          endedAt: Math.floor(Date.parse("2026-04-10T00:00:00.000Z") / 1000),
+        },
       },
       now
     );

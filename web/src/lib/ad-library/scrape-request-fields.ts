@@ -2,6 +2,7 @@ import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
   getInitialAdsCount,
+  WORKSPACE_RESCRAPE_ADS_PER_PLATFORM,
 } from "./constants";
 /**
  * Extra POST `/api/ads/library` fields for per-platform Apify actors.
@@ -77,6 +78,18 @@ export function applyInitialScrapeLimits(fields: ScrapeRequestFields): ScrapeReq
     tiktokMaxAds: getInitialAdsCount("tiktok"),
     pinterestMaxResults: getInitialAdsCount("pinterest"),
     snapchatMaxItems: getInitialAdsCount("snapchat"),
+  };
+}
+
+/** Workspace “Rescrape ads” — cheap refresh caps; keeps region/date/sort settings. */
+export function applyWorkspaceRescrapeLimits(fields: ScrapeRequestFields): ScrapeRequestFields {
+  return {
+    ...fields,
+    metaMaxAds: WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.meta,
+    linkedinMaxAds: WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.linkedin,
+    tiktokMaxAds: WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.tiktok,
+    pinterestMaxResults: WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.pinterest,
+    snapchatMaxItems: WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.snapchat,
   };
 }
 

@@ -22,6 +22,8 @@ export interface MetaAdsAllModalProps {
     isSaved?: boolean;
     onToggleSave?: () => void;
     saveDisabled?: boolean;
+    runStatus?: { isRunning: boolean };
+    metaScrapeAtMs?: number;
   };
 }
 
@@ -157,6 +159,8 @@ export function MetaAdsAllModal({
                           isSaved={extras?.isSaved}
                           onToggleSave={extras?.onToggleSave}
                           saveDisabled={extras?.saveDisabled}
+                          runStatus={extras?.runStatus}
+                          metaScrapeAtMs={extras?.metaScrapeAtMs}
                         />
                       </div>
                     );

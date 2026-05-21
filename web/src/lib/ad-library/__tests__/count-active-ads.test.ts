@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  computeGoogleAdRunDays,
+  countActiveGoogleRowsWithLifecycle,
+  isGoogleAdActiveFromScrapeRow,
   isGoogleAdRowActive,
   isMetaAdActive,
   isSnapchatAdActive,
@@ -10,35 +13,37 @@ import {
 import { classifyByActiveCount, computePlatformTracking } from "@/lib/ad-library/platform-prioritization";
 
 const NOW = Date.parse("2026-05-19T12:00:00.000Z");
+const SCRAPE = Date.parse("2026-05-19T10:00:00.000Z");
 const TODAY = "2026-05-19";
 const YESTERDAY = "2026-05-18";
 
 describe("isMetaAdActive", () => {
   it("treats open-ended ads as active", () => {
-    expect(isMetaAdActive({}, NOW)).toBe(true);
+    expect(isMetaAdActive({}, SCRAPE, NOW)).toBe(true);
   });
 
-  it("treats recently ended ads as active (48h grace)", () => {
-    const endedSec = Math.floor((NOW - 24 * 60 * 60 * 1000) / 1000);
-    expect(isMetaAdActive({ endedAt: endedSec }, NOW)).toBe(true);
+  it("treats endedAt before scrape day as inactive", () => {
+    const endedSec = Math.floor(Date.parse("2026-05-10T00:00:00.000Z") / 1000);
+    expect(isMetaAdActive({ endedAt: endedSec }, SCRAPE, NOW)).toBe(false);
   });
 
-  it("treats ads ended 3+ days ago as inactive", () => {
-    const endedSec = Math.floor((NOW - 4 * 24 * 60 * 60 * 1000) / 1000);
-    expect(isMetaAdActive({ endedAt: endedSec }, NOW)).toBe(false);
+  it("treats endedAt on scrape day as active", () => {
+    const endedSec = Math.floor(Date.parse("2026-05-19T08:00:00.000Z") / 1000);
+    expect(isMetaAdActive({ endedAt: endedSec }, SCRAPE, NOW)).toBe(true);
+  });
+
+  it("treats isActive false as inactive regardless of endedAt", () => {
+    const endedSec = Math.floor(Date.parse("2026-05-19T08:00:00.000Z") / 1000);
+    expect(isMetaAdActive({ isActive: false, endedAt: endedSec }, SCRAPE, NOW)).toBe(false);
   });
 });
 
-describe("isGoogleAdRowActive", () => {
-  it("active only when lastShown is today", () => {
+describe("isGoogleAdActiveFromScrapeRow", () => {
+  it("treats ad as active when last_seen is within scrape recency even if lastShown is past", () => {
+    const lastScraped = "2026-05-19T10:00:00.000Z";
+    const lastSeen = "2026-05-19T09:00:00.000Z";
     expect(
-      isGoogleAdRowActive(
-        { type: "google", id: "1", title: "t", url: "", desc: "", img: null, adUrl: "", lastShown: TODAY },
-        NOW
-      )
-    ).toBe(true);
-    expect(
-      isGoogleAdRowActive(
+      isGoogleAdActiveFromScrapeRow(
         {
           type: "google",
           id: "1",
@@ -49,9 +54,159 @@ describe("isGoogleAdRowActive", () => {
           adUrl: "",
           lastShown: YESTERDAY,
         },
+        lastSeen,
+        lastScraped,
+        null,
+        NOW
+      )
+    ).toBe(true);
+  });
+});
+
+describe("countActiveGoogleRowsWithLifecycle", () => {
+  it("counts rows marked running in library lifecycle", () => {
+    const rows = [
+      {
+        type: "google" as const,
+        id: "g:AR1:CR1",
+        title: "a",
+        url: "",
+        desc: "",
+        img: null,
+        adUrl: "",
+        lastShown: YESTERDAY,
+      },
+      {
+        type: "google" as const,
+        id: "g:AR2:CR2",
+        title: "b",
+        url: "",
+        desc: "",
+        img: null,
+        adUrl: "",
+        lastShown: YESTERDAY,
+      },
+    ];
+    const lookup = (platform: string, id: string) =>
+      id === "g:AR1:CR1" ? { isRunning: true } : { isRunning: false };
+    expect(countActiveGoogleRowsWithLifecycle(rows, lookup, NOW)).toBe(1);
+  });
+});
+
+describe("isGoogleAdRowActive", () => {
+  it("active when visibility window end (lastShown) is today or later", () => {
+    expect(
+      isGoogleAdRowActive(
+        { type: "google", id: "1", title: "t", url: "", desc: "", img: null, adUrl: "", lastShown: TODAY },
+        NOW
+      )
+    ).toBe(true);
+    expect(
+      isGoogleAdRowActive(
+        {
+          type: "google",
+          id: "2",
+          title: "t",
+          url: "",
+          desc: "",
+          img: null,
+          adUrl: "",
+          lastShown: "2026-06-01",
+        },
+        NOW
+      )
+    ).toBe(true);
+    expect(
+      isGoogleAdRowActive(
+        {
+          type: "google",
+          id: "3",
+          title: "t",
+          url: "",
+          desc: "",
+          img: null,
+          adUrl: "",
+          lastShown: YESTERDAY,
+        },
         NOW
       )
     ).toBe(false);
+  });
+});
+
+describe("computeGoogleAdRunDays", () => {
+  it("counts UTC calendar days from firstShown through lastShown when ended", () => {
+    expect(
+      computeGoogleAdRunDays(
+        {
+          type: "google",
+          id: "1",
+          title: "t",
+          url: "",
+          desc: "",
+          img: null,
+          adUrl: "",
+          firstShown: "2024-03-11",
+          lastShown: YESTERDAY,
+        },
+        NOW
+      )
+    ).toBe(798);
+  });
+
+  it("counts through today when visibility window end is today or later", () => {
+    expect(
+      computeGoogleAdRunDays(
+        {
+          type: "google",
+          id: "2",
+          title: "t",
+          url: "",
+          desc: "",
+          img: null,
+          adUrl: "",
+          firstShown: "2024-03-11",
+          lastShown: TODAY,
+        },
+        NOW
+      )
+    ).toBe(799);
+  });
+
+  it("parses first/last from shownSummary when ISO fields are absent", () => {
+    expect(
+      computeGoogleAdRunDays(
+        {
+          type: "google",
+          id: "3",
+          title: "t",
+          url: "",
+          desc: "",
+          img: null,
+          adUrl: "https://example.com",
+          shownSummary: "Shown 2024-03-11 -> 2026-05-19",
+        },
+        NOW
+      )
+    ).toBe(799);
+  });
+});
+
+describe("isMetaAdActive sentinel", () => {
+  it("treats endedAt 0 as still running", () => {
+    expect(isMetaAdActive({ endedAt: 0 }, SCRAPE, NOW)).toBe(true);
+  });
+});
+
+describe("isMetaAdActive isActive flag", () => {
+  it("treats isActive true with old endedAt as active", () => {
+    const endedSec = Math.floor((NOW - 8 * 24 * 60 * 60 * 1000) / 1000);
+    expect(isMetaAdActive({ isActive: true, endedAt: endedSec }, SCRAPE, NOW)).toBe(true);
+  });
+
+  it("treats isActive false as inactive even with endedAt on scrape day", () => {
+    const endedSec = Math.floor(Date.parse("2026-05-19T08:00:00.000Z") / 1000);
+    expect(isMetaAdActive({ isActive: false, endedAt: endedSec }, SCRAPE, NOW)).toBe(false);
   });
 });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,6 +19,20 @@ export async function DELETE(
   if (authErr || !user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
+
+  const { data: savedRow } = await supabase
+    .from("saved_ads")
+    .select("competitor_id")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!savedRow) {
+    return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
+  }
+
+  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, savedRow.competitor_id);
+  if (blocked) return blocked;
 
   const { error } = await supabase.from("saved_ads").delete().eq("id", id).eq("user_id", user.id);
 
@@ -60,6 +75,20 @@ export async function PATCH(
   if (notes === undefined) {
     return NextResponse.json({ ok: false, error: "missing notes" }, { status: 400 });
   }
+
+  const { data: savedRow } = await supabase
+    .from("saved_ads")
+    .select("competitor_id")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!savedRow) {
+    return NextResponse.json({ ok: false, error: "not found" }, { status: 404 });
+  }
+
+  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, savedRow.competitor_id);
+  if (blocked) return blocked;
 
   const { data, error } = await supabase
     .from("saved_ads")

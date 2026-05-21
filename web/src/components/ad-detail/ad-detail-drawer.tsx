@@ -25,6 +25,7 @@ import { MetaMark } from "@/components/icons/meta-mark";
 import { ThreadsMark } from "@/components/icons/threads-mark";
 import { WhatsAppMark } from "@/components/icons/whatsapp-mark";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { AD_SAVE_DEBUG_TITLE } from "@/components/ads-library/ad-save-row";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import type { Json } from "@/lib/supabase/types";
@@ -167,11 +168,15 @@ export function AdDetailDrawer({
   onClose,
   onPrev,
   onNext,
+  saveEnabled = true,
+  showDebugIndicator = false,
 }: {
   adId: string | null;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
+  saveEnabled?: boolean;
+  showDebugIndicator?: boolean;
 }) {
   const [data, setData] = useState<AdDetailData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -223,7 +228,7 @@ export function AdDetailDrawer({
   }, [adId]);
 
   useEffect(() => {
-    if (!data?.ad.id || !data?.competitor.id) {
+    if (!saveEnabled || !data?.ad.id || !data?.competitor.id) {
       setSavedRowId(null);
       return;
     }
@@ -245,7 +250,7 @@ export function AdDetailDrawer({
     return () => {
       cancelled = true;
     };
-  }, [data?.ad.id, data?.competitor.id]);
+  }, [saveEnabled, data?.ad.id, data?.competitor.id]);
 
   const handleToggleSave = useCallback(async () => {
     if (!data?.ad.id || saveInFlight) return;
@@ -401,33 +406,42 @@ export function AdDetailDrawer({
               </div>
 
               <div className="flex w-[min(100%,400px)] flex-shrink-0 flex-col border-l border-slate-200">
-                <div className="border-b border-slate-100 p-4">
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleSave()}
-                    disabled={!data?.ad.id || saveInFlight}
-                    className={`flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${
-                      savedRowId
-                        ? "border border-sky-200/90 bg-[#DDF1FD] text-[#343434] hover:bg-[#c8e8fc]"
-                        : "bg-[#343434] text-white hover:bg-[#1f1f1f]"
-                    } disabled:cursor-not-allowed disabled:opacity-50`}
-                  >
-                    {savedRowId ? (
-                      <>
-                        <BookmarkCheck className="h-4 w-4" />
-                        Saved · view in Saved tab
-                      </>
-                    ) : (
-                      <>
-                        <Bookmark className="h-4 w-4" />
-                        Save the Ad
-                      </>
-                    )}
-                  </button>
-                  <p className="mt-2 text-[10px] text-slate-500">
-                    Saved ads are preserved forever, even if the source ad is removed.
-                  </p>
-                </div>
+                {saveEnabled ? (
+                  <div className="border-b border-slate-100 p-4">
+                    <button
+                      type="button"
+                      onClick={() => void handleToggleSave()}
+                      disabled={!data?.ad.id || saveInFlight}
+                      title={showDebugIndicator ? AD_SAVE_DEBUG_TITLE : undefined}
+                      className={`relative flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition-colors ${
+                        savedRowId
+                          ? "border border-sky-200/90 bg-[#DDF1FD] text-[#343434] hover:bg-[#c8e8fc]"
+                          : "bg-[#343434] text-white hover:bg-[#1f1f1f]"
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
+                    >
+                      {showDebugIndicator ? (
+                        <span
+                          className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-amber-400 ring-2 ring-white/80"
+                          aria-hidden
+                        />
+                      ) : null}
+                      {savedRowId ? (
+                        <>
+                          <BookmarkCheck className="h-4 w-4" />
+                          Saved · view in Saved tab
+                        </>
+                      ) : (
+                        <>
+                          <Bookmark className="h-4 w-4" />
+                          Save the Ad
+                        </>
+                      )}
+                    </button>
+                    <p className="mt-2 text-[10px] text-slate-500">
+                      Saved ads are preserved forever, even if the source ad is removed.
+                    </p>
+                  </div>
+                ) : null}
 
                 <div className="flex border-b border-slate-100 px-4">
                   <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   coerceAdsLibraryResponse,
   mergeAdsLibraryState,
@@ -8,31 +8,32 @@ import {
   type AdsLibraryResponse,
 } from "@/lib/ad-library/api-types";
 import {
+  buildClientAdsLibraryPayload,
+  normalizeAdsLibraryEventDomain,
+} from "@/lib/ad-library/build-client-ads-library-payload";
+import {
   fetchAdsLibraryDeduplicated,
-  normalizedBrandForAdsLibraryPayload,
   readAdsLibraryCacheLastKnownGood,
   readAdsLibraryCacheLastKnownGoodForBrandDomain,
   stableAdsLibraryPayloadKey,
   writeAdsLibrarySessionCache,
 } from "@/lib/ad-library/deduped-fetch";
-import { GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT } from "@/lib/ad-library/constants";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import { countLibraryAdsForPlatform } from "@/lib/ad-library/library-response-utils";
 import {
   DEFAULT_GOOGLE_ADS_REGION,
   normalizeGoogleAdsRegion,
-  normalizeGoogleAdsResultsLimit,
 } from "@/lib/ad-library/google-ads-regions";
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
-import { readGoogleAdDetailsPublicFlag } from "@/lib/ad-library/public-env-flags";
 import { clearFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   markPendingStrategyRefresh,
   type AdsLibraryUpdatedDetail,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
+import { repairAdsLibraryResponseMedia } from "@/lib/ad-library/repair-library-ad-media";
 
 type Brand = { name: string; domain: string; logoUrl?: string };
 
@@ -88,75 +89,25 @@ export function useAdLibrary(
     dataRef.current = data;
   }, [data]);
 
-  /**
-   * Must match `/dashboard/searching` + `channelsQueryToAdsPlatforms`: canonical API order inside
-   * `ALL_ADS_API_PLATFORMS`. Alphabetical `.sort()` breaks `stableAdsLibraryPayloadKey()` vs scan cache.
-   */
-  const platformsSorted = useMemo(
-    () => ALL_ADS_API_PLATFORMS.filter((p) => adsPlatforms.includes(p)),
-    [adsPlatforms]
-  );
-
-  const googleRegionNorm = normalizeGoogleAdsRegion(googleRegion);
-  const googleResultsLimitNorm = normalizeGoogleAdsResultsLimit(GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT);
-
   const payload = useMemo(
-    () => ({
-      brand: normalizedBrandForAdsLibraryPayload({
-        name: brand.name,
-        domain: brand.domain,
-        logoUrl: brand.logoUrl,
+    () =>
+      buildClientAdsLibraryPayload({
+        brand,
+        ids,
+        adsPlatforms,
+        scrapeFields,
+        tiktokRegion,
+        googleRegion,
+        pinterestCountry,
       }),
-      ids: ids ?? {},
-      metaStatus: "ACTIVE" as const,
-      googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
-      platforms: platformsSorted,
-      ...(platformsSorted.includes("tiktok") ? { tiktokRegion } : {}),
-      ...(platformsSorted.includes("google")
-        ? { googleRegion: googleRegionNorm, googleResultsLimit: googleResultsLimitNorm }
-        : {}),
-      /** Always send ISO2 when Pinterest is requested so `/api/ads/library` never falls back to DE from a missing body field. */
-      ...(platformsSorted.includes("pinterest")
-        ? { pinterestCountry: normalizePinterestAdsCountry(pinterestCountry) }
-        : {}),
-      metaMaxAds: scrapeFields.metaMaxAds,
-      metaCountry: scrapeFields.metaCountry.trim().toUpperCase() || "US",
-      metaStartDate: scrapeFields.metaStartDate.trim(),
-      metaEndDate: scrapeFields.metaEndDate.trim(),
-      metaSortBy: scrapeFields.metaSortBy.trim() || "impressions_desc",
-      linkedinMaxAds: scrapeFields.linkedinMaxAds,
-      linkedinDateRange: scrapeFields.linkedinDateRange.trim(),
-      linkedinCountryCode: scrapeFields.linkedinCountryCode.trim(),
-      tiktokMaxAds: scrapeFields.tiktokMaxAds,
-      tiktokStartDate: scrapeFields.tiktokStartDate.trim(),
-      tiktokEndDate: scrapeFields.tiktokEndDate.trim(),
-      microsoftMaxSearchResults: scrapeFields.microsoftMaxSearchResults,
-      microsoftCountryCode: scrapeFields.microsoftCountryCode.trim().replace(/\D/g, "") || "66",
-      microsoftStartDate: scrapeFields.microsoftStartDate.trim(),
-      microsoftEndDate: scrapeFields.microsoftEndDate.trim(),
-      pinterestMaxResults: scrapeFields.pinterestMaxResults,
-      pinterestStartDate: scrapeFields.pinterestStartDate.trim(),
-      pinterestEndDate: scrapeFields.pinterestEndDate.trim(),
-      pinterestGender: scrapeFields.pinterestGender.trim(),
-      pinterestAge: scrapeFields.pinterestAge.trim(),
-      ...(platformsSorted.includes("snapchat")
-        ? {
-            snapchatMaxItems: scrapeFields.snapchatMaxItems,
-            snapchatCountry: scrapeFields.snapchatCountry.trim().toUpperCase(),
-            snapchatStartDate: scrapeFields.snapchatStartDate.trim(),
-            snapchatEndDate: scrapeFields.snapchatEndDate.trim(),
-          }
-        : {}),
-    }),
     [
       brand.name,
       brand.domain,
       brand.logoUrl,
       ids,
-      platformsSorted,
+      adsPlatforms,
       tiktokRegion,
-      googleRegionNorm,
-      googleResultsLimitNorm,
+      googleRegion,
       pinterestCountry,
       scrapeFields,
     ]
@@ -175,7 +126,13 @@ export function useAdLibrary(
    * network fetch runs only when no local cache exists (not on every competitor switch).
    */
   const load = useCallback(
-    async (opts?: { skipCache?: boolean; platforms?: AdsLibraryPlatform[]; background?: boolean }) => {
+    async (opts?: {
+      skipCache?: boolean;
+      platforms?: AdsLibraryPlatform[];
+      background?: boolean;
+      /** When true, do not broadcast `ADS_LIBRARY_UPDATED_EVENT` (prevents reload loops). */
+      suppressUpdatedEvent?: boolean;
+    }) => {
       const platforms = opts?.platforms;
       const isBackground = opts?.background === true;
       const partial =
@@ -225,6 +182,16 @@ export function useAdLibrary(
         });
         if (loadAbortRef.current !== ac) return;
 
+        let mergeBase = dataRef.current;
+        if (mergeBase === null) {
+          const cached =
+            readAdsLibraryCacheLastKnownGood(payloadKey) ??
+            readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
+          if (cached) {
+            mergeBase = coerceAdsLibraryResponse(cached.response as AdsLibraryResponse);
+          }
+        }
+
         const domain = brand.domain.trim();
         const shouldTryPersistRecovery =
           !opts?.skipCache &&
@@ -236,7 +203,7 @@ export function useAdLibrary(
 
         if (shouldTryPersistRecovery) {
           const shell = coerceAdsLibraryResponse(
-            mergeAdsLibraryState(dataRef.current, json)
+            mergeAdsLibraryState(mergeBase, json)
           );
           const totalAds = ALL_ADS_API_PLATFORMS.reduce(
             (sum, pl) => sum + countLibraryAdsForPlatform(pl, shell),
@@ -244,28 +211,22 @@ export function useAdLibrary(
           );
           if (totalAds === 0) {
             persistRecoveryKeyRef.current = payloadKey;
-            try {
-              await fetch("/api/competitor/ads-library/ensure-persisted", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ domain }),
+            void fetch("/api/competitor/ads-library/ensure-persisted", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ domain }),
+            })
+              .catch(() => {
+                /* recovery best-effort */
+              })
+              .finally(() => {
+                if (loadAbortRef.current !== ac) return;
+                void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
               });
-              const retry = await fetchAdsLibraryDeduplicated(body, {
-                skipCache: false,
-                clientSkipReadCache: true,
-                signal: ac.signal,
-              });
-              if (loadAbortRef.current === ac) {
-                json = retry.response;
-                httpOk = retry.httpOk;
-              }
-            } catch {
-              /* recovery best-effort */
-            }
           }
         }
 
-        const merged = mergeAdsLibraryState(dataRef.current, json);
+        const merged = repairAdsLibraryResponseMedia(mergeAdsLibraryState(mergeBase, json));
         setData(merged);
         writeAdsLibrarySessionCache(payloadKey, {
           response: coerceAdsLibraryResponse(merged),
@@ -277,15 +238,17 @@ export function useAdLibrary(
           setFetchError("Request failed");
         } else if (httpOk && typeof window !== "undefined") {
           const d = brand.domain.trim();
-          markPendingStrategyRefresh(d);
-          try {
-            window.dispatchEvent(
-              new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
-                detail: { domain: d },
-              })
-            );
-          } catch {
-            /* ignore */
+          if (d) markPendingStrategyRefresh(d);
+          if (!opts?.suppressUpdatedEvent && opts?.skipCache === true) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+                  detail: { domain: d },
+                })
+              );
+            } catch {
+              /* ignore */
+            }
           }
         }
       } catch (e) {
@@ -329,7 +292,7 @@ export function useAdLibrary(
     const exact = readAdsLibraryCacheLastKnownGood(payloadKey);
     if (exact) {
       if (snapshot !== sessionRef.current) return;
-      setData(mergeAdsLibraryState(null, exact.response));
+      setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, exact.response)));
       setFetchError(null);
       setLoading(false);
       setGoogleRefreshing(false);
@@ -339,12 +302,13 @@ export function useAdLibrary(
       setLinkedinRefreshing(false);
       setMicrosoftRefreshing(false);
       setSnapchatRefreshing(false);
+      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
       return;
     }
     const legacy = readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
     if (legacy) {
       if (snapshot !== sessionRef.current) return;
-      setData(mergeAdsLibraryState(null, legacy.response));
+      setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, legacy.response)));
       setFetchError(null);
       try {
         writeAdsLibrarySessionCache(payloadKey, legacy);
@@ -359,12 +323,42 @@ export function useAdLibrary(
       setLinkedinRefreshing(false);
       setMicrosoftRefreshing(false);
       setSnapchatRefreshing(false);
+      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
       return;
     }
     setData(null);
     setLoading(true);
     void load({ skipCache: false });
   }, [enabled, payloadKey, brand.domain, load]);
+
+  /** Rescrape / discovery writes session cache + dispatches this event — reload without a full navigation. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onUpdated = (ev: Event) => {
+      const detail = (ev as CustomEvent<AdsLibraryUpdatedDetail>).detail;
+      const incoming = normalizeAdsLibraryEventDomain(detail?.domain ?? "");
+      const current = normalizeAdsLibraryEventDomain(brand.domain);
+      if (!incoming || !current || incoming !== current) return;
+
+      const exact = readAdsLibraryCacheLastKnownGood(payloadKey);
+      const legacy = exact ?? readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
+      if (legacy) {
+        setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, legacy.response)));
+        setFetchError(null);
+        setLoading(false);
+        if (!exact) {
+          try {
+            writeAdsLibrarySessionCache(payloadKey, legacy);
+          } catch {
+            /* migrate best-effort */
+          }
+        }
+      }
+      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
+    };
+    window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, onUpdated);
+    return () => window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, onUpdated);
+  }, [brand.domain, load, payloadKey]);
 
   const configured = data?.configured !== false;
 

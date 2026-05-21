@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "@/lib/ad-library/ads-cache-pick";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import {
@@ -195,13 +196,11 @@ export async function tryHydrateScrapedAdsFromAdsCache(
     return none("no_cache_rows");
   }
 
-  const latestByPlatform = new Map<string, (typeof cacheRows)[0]>();
-  for (const row of cacheRows) {
-    const prev = latestByPlatform.get(row.platform);
-    if (!prev || Date.parse(row.scraped_at) > Date.parse(prev.scraped_at)) {
-      latestByPlatform.set(row.platform, row);
-    }
-  }
+  const latestByPlatform = pickBestAdsCacheRowMapByPlatform(
+    cacheRows as AdsCachePickRow[],
+    cacheDomain,
+    new Date().toISOString(),
+  );
 
   const presentPlatforms = new Set(latestByPlatform.keys());
   for (const p of ALL_ADS_API_PLATFORMS) {

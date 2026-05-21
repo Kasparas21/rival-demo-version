@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { ExternalLink } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
+import { buildCheckoutHref } from "@/lib/billing/checkout-url";
+import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
 
 type ProfileState = {
   full_name: string;
@@ -145,6 +148,8 @@ function labelStatus(status: string): string {
   if (status === "none") return "No active subscription";
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+const POLAR_BILLING_PORTAL_HREF = "/api/billing/portal";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -350,6 +355,28 @@ export default function SettingsPage() {
     window.location.assign("/login");
   };
 
+  const subscriptionActions = useMemo(() => {
+    if (billing.isUnlimited) {
+      return {
+        showCheckout: false,
+        showPolarPortal: false,
+        showCancel: false,
+        cancelScheduled: false,
+      };
+    }
+
+    const paidPolar = hasActivePaidSubscription(billing);
+    const hasPolarRecord = Boolean(billing.polarProductId) && billing.status !== "none";
+    const cancelScheduled = billing.cancelAtPeriodEnd && (billing.status === "active" || billing.status === "trialing");
+
+    return {
+      showCheckout: !paidPolar && !hasPolarRecord,
+      showPolarPortal: paidPolar || hasPolarRecord,
+      showCancel: paidPolar && !cancelScheduled,
+      cancelScheduled,
+    };
+  }, [billing]);
+
   return (
     <div className="mx-auto max-w-[720px] px-6 py-10 pb-16">
       <header className="mb-8">
@@ -488,48 +515,6 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
-            Totals from your workspace mapped to your current subscription quotas. Monthly figures use the calendar
-            month in UTC. <span className="text-[#52525b]">Ad-library refreshes</span> (
-            {formatNum(usage.adLibraryRefreshes)}) count cached platform snapshots;{" "}
-            <span className="text-[#52525b]">Scrape runs (month)</span> (
-            {formatNum(usage.adLibraryScrapeRunsThisMonth)}) are fresh Apify jobs not served from cache.
-          </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Ads processed (month, UTC)</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.scrapedAdsThisMonth)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
-                {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Competitors watched</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.competitorsWatched)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
-                slots remaining.
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">AI strategy overviews</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.aiStrategyOverviews)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                Generated summaries (token cost)—good limit target alongside ads volume.
-              </p>
-            </div>
-          </div>
-        </section>
-
         <section className="rounded-2xl border border-[#e8eafd] bg-gradient-to-br from-[#fafaff] to-[#f8fafc] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
@@ -545,20 +530,20 @@ export default function SettingsPage() {
                       : billing.hasAccess
                         ? ` · Renews ${formatDate(billing.currentPeriodEnd)}`
                         : ""}
-                    {billing.cancelAtPeriodEnd ? " · Cancels at period end" : ""}
+                    {subscriptionActions.cancelScheduled ? " · Cancels at period end" : ""}
                   </>
                 )}
               </p>
               <p className="mt-2 text-[12px] text-[#71717a]">
                 Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span>
                 <span className="text-[#a1a1aa]"> ({billing.planTier})</span>
-                {!billing.isUnlimited ? (
-                  <>
-                    {" "}
-                    · Product: {billing.polarProductId ?? "Not connected"} · Checkout and billing are handled by Polar.
-                  </>
-                ) : null}
               </p>
+              {!billing.isUnlimited ? (
+                <p className="mt-2 text-[11px] leading-relaxed text-[#a1a1aa]">
+                  Checkout, upgrades, and cancellations are handled securely by Polar. After you cancel in Polar,
+                  access continues until the end of your billing period.
+                </p>
+              ) : null}
             </div>
             <span
               className={`w-fit rounded-full px-3 py-1 text-[11px] font-semibold ${
@@ -572,6 +557,14 @@ export default function SettingsPage() {
               {billing.isUnlimited ? "Admin access" : billing.hasAccess ? "Access enabled" : "Subscription required"}
             </span>
           </div>
+
+          {subscriptionActions.cancelScheduled ? (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-[12px] leading-relaxed text-amber-950">
+              Your subscription is set to cancel on{" "}
+              <span className="font-semibold">{formatDate(billing.currentPeriodEnd)}</span>. You can reopen Polar billing
+              to keep your plan or change it before that date.
+            </div>
+          ) : null}
 
           {billing.canUseDevPlanSwitcher ? (
             <div className="mt-5 rounded-xl border border-dashed border-[#c7d2fe] bg-[#eef2ff]/60 p-4">
@@ -617,26 +610,97 @@ export default function SettingsPage() {
             </div>
           ) : null}
 
-          <div className="mt-5 flex flex-wrap gap-3">
+          <div className="mt-5 flex flex-col gap-3">
             {billing.isUnlimited ? (
               <p className="text-[13px] leading-relaxed text-[#52525b]">
                 No subscription or checkout needed — your account is enabled for full usage.
               </p>
-            ) : billing.hasAccess ? (
-              <a
-                href="/api/billing/portal"
-                className="rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
-              >
-                Manage subscription
-              </a>
-            ) : (
-              <a
-                href="/checkout"
-                className="rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
-              >
-                Start 7-day free trial
-              </a>
-            )}
+            ) : subscriptionActions.showCheckout ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <a
+                  href={buildCheckoutHref("starter")}
+                  className="inline-flex items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
+                >
+                  Start 7-day free trial — Starter
+                </a>
+                <a
+                  href={buildCheckoutHref("pro")}
+                  className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
+                >
+                  Upgrade to Pro
+                </a>
+              </div>
+            ) : null}
+
+            {subscriptionActions.showPolarPortal ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <a
+                  href={POLAR_BILLING_PORTAL_HREF}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
+                >
+                  {billing.planTier === "starter" ? "Upgrade to Pro" : "Manage subscription"}
+                  <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
+                </a>
+                {subscriptionActions.showCancel ? (
+                  <a
+                    href={POLAR_BILLING_PORTAL_HREF}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
+                  >
+                    Cancel subscription
+                    <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+
+            {subscriptionActions.showPolarPortal ? (
+              <p className="text-[11px] leading-relaxed text-[#a1a1aa]">
+                Opens Polar&apos;s billing portal — change plan, update payment method, or cancel there. We sync status
+                automatically after you finish in Polar.
+              </p>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
+            Totals from your workspace mapped to your current subscription quotas. Monthly figures use the calendar
+            month in UTC. <span className="text-[#52525b]">Ad-library refreshes</span> (
+            {formatNum(usage.adLibraryRefreshes)}) count cached platform snapshots;{" "}
+            <span className="text-[#52525b]">Scrape runs (month)</span> (
+            {formatNum(usage.adLibraryScrapeRunsThisMonth)}) are fresh Apify jobs not served from cache.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Ads processed (month, UTC)</p>
+              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
+                {formatNum(usage.scrapedAdsThisMonth)}
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
+                {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
+                {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Competitors watched</p>
+              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
+                {formatNum(usage.competitorsWatched)}
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
+                {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
+                slots remaining.
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">AI strategy overviews</p>
+              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
+                {formatNum(usage.aiStrategyOverviews)}
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
+                Generated summaries (token cost)—good limit target alongside ads volume.
+              </p>
+            </div>
           </div>
         </section>
 

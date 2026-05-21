@@ -52,14 +52,28 @@ export async function classifyCompetitorPlatforms(
   if (params.libraryResponse) {
     activeCounts = countActiveAdsFromLibraryResponse(params.libraryResponse);
   } else {
-    const { data } = await supabase
-      .from("scraped_ads")
-      .select("platform, raw_payload")
-      .eq("competitor_id", params.competitorId)
-      .eq("user_id", params.userId);
+    const [{ data }, { data: compRow }] = await Promise.all([
+      supabase
+        .from("scraped_ads")
+        .select("platform, raw_payload, last_seen_at, is_active")
+        .eq("competitor_id", params.competitorId)
+        .eq("user_id", params.userId),
+      supabase
+        .from("saved_competitors")
+        .select("last_scraped_at")
+        .eq("id", params.competitorId)
+        .eq("user_id", params.userId)
+        .maybeSingle(),
+    ]);
 
     activeCounts = countActiveAdsFromRawPayloads(
-      (data ?? []).map((r) => ({ platform: r.platform, raw_payload: r.raw_payload }))
+      (data ?? []).map((r) => ({
+        platform: r.platform,
+        raw_payload: r.raw_payload,
+        last_seen_at: r.last_seen_at,
+        is_active: r.is_active,
+      })),
+      { lastScrapedAt: compRow?.last_scraped_at ?? null }
     );
   }
 

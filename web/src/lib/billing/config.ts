@@ -82,6 +82,23 @@ export function getAppUrl(): string {
   return base.replace(/\/+$/, "");
 }
 
+/**
+ * Polar Dashboard → Webhooks endpoint. Must hit the canonical host directly — apex `spy-rival.com`
+ * 307-redirects to `www` and Polar treats that as delivery failure.
+ */
+export function getPolarWebhookEndpointUrl(): string {
+  const base = getAppUrl();
+  try {
+    const url = new URL(base);
+    if (url.hostname === "spy-rival.com") {
+      url.hostname = "www.spy-rival.com";
+    }
+    return `${url.origin}/api/billing/webhook`;
+  } catch {
+    return `${base}/api/billing/webhook`;
+  }
+}
+
 export function getPolarEnv() {
   const accessToken = process.env.POLAR_ACCESS_TOKEN?.trim();
   const webhookSecret = process.env.POLAR_WEBHOOK_SECRET?.trim();

@@ -3,20 +3,13 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, Play } from "lucide-react";
 import { AdSaveRow } from "@/components/ads-library/ad-save-row";
+import {
+  computeLibraryAdRunDays,
+  isLibraryAdKilled,
+  type LibraryRunStatus,
+} from "@/lib/ad-library/library-run-status";
 import type { TikTokAdCard as TikTokAdCardModel } from "@/lib/ad-library/normalize";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
-
-function tikTokFlightLifespanDays(ad: TikTokAdCardModel): number {
-  const start = ad.flightStartMs;
-  if (start == null || Number.isNaN(start)) return 0;
-  const end = ad.flightEndMs != null && !Number.isNaN(ad.flightEndMs) ? ad.flightEndMs : Date.now();
-  return Math.max(0, Math.floor((end - start) / (24 * 60 * 60 * 1000)));
-}
-
-function isTikTokAdKilled(ad: TikTokAdCardModel): boolean {
-  if (ad.flightEndMs == null || Number.isNaN(ad.flightEndMs)) return false;
-  return ad.flightEndMs < Date.now() - 48 * 60 * 60 * 1000;
-}
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
@@ -57,6 +50,7 @@ export function TikTokAdCard({
   isSaved,
   onToggleSave,
   saveDisabled,
+  runStatus,
 }: {
   ad: TikTokAdCardModel;
   onClick?: () => void;
@@ -64,7 +58,10 @@ export function TikTokAdCard({
   isSaved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  runStatus?: LibraryRunStatus;
 }) {
+  const killed = isLibraryAdKilled("tiktok", ad, runStatus);
+  const runDays = computeLibraryAdRunDays("tiktok", ad, runStatus);
   const [videoFailed, setVideoFailed] = useState(false);
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -115,11 +112,11 @@ export function TikTokAdCard({
               <div className="flex items-center gap-1.5 text-[11px] text-[#64748b]">
                 <span
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    isTikTokAdKilled(ad) ? "bg-[#94a3b8]" : "bg-green-500"
+                    killed ? "bg-[#94a3b8]" : "bg-green-500"
                   }`}
                 />
                 <span className="font-medium whitespace-nowrap">
-                  {isTikTokAdKilled(ad) ? "Ended" : "Active"} {tikTokFlightLifespanDays(ad)}D
+                  {killed ? "Ended" : "Active"} {runDays}D
                 </span>
               </div>
               {ad.adUrl?.trim() ? (

@@ -3,6 +3,7 @@ import {
   ALL_ADS_API_PLATFORMS,
   channelsQueryToAdsPlatforms,
   resolveAdsPlatformsForCompetitorView,
+  unionAdsPlatformsFromSources,
 } from "../channels-to-platforms";
 
 describe("resolveAdsPlatformsForCompetitorView", () => {
@@ -25,5 +26,16 @@ describe("resolveAdsPlatformsForCompetitorView", () => {
 describe("channelsQueryToAdsPlatforms", () => {
   it("maps channel ids to API platforms", () => {
     expect(channelsQueryToAdsPlatforms(["meta", "google"])).toEqual(["meta", "google"]);
+  });
+});
+
+describe("unionAdsPlatformsFromSources", () => {
+  it("keeps platforms from every source instead of letting a partial sidebar context win", () => {
+    expect(
+      unionAdsPlatformsFromSources(
+        { channelsCsv: "meta,tiktok" },
+        { channelsCsv: "meta,google,linkedin,pinterest,snapchat" },
+      ),
+    ).toEqual(["meta", "google", "linkedin", "tiktok", "pinterest", "snapchat"]);
   });
 });

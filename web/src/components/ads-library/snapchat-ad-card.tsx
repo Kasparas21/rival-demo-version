@@ -1,6 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
+import { isSnapchatAdActive } from "@/lib/ad-library/count-active-ads";
 import type { SnapchatAdCard as SnapchatCardModel } from "@/lib/ad-library/normalize";
 import { AdSaveRow } from "@/components/ads-library/ad-save-row";
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
@@ -47,7 +48,7 @@ export function SnapchatAdCard({
   const hasCreative = hasVideo || tryImg;
   /** Light gallery framing + equal padding instead of letterboxed black chrome. */
   const lightCreativeChrome = hasCreative && tryImg && !hasVideo;
-  const isActive = ad.status === "ACTIVE";
+  const isActive = isSnapchatAdActive(ad);
 
   return (
     <article

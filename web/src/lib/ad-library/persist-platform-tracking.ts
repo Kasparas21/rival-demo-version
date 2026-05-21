@@ -100,10 +100,17 @@ export async function loadActiveCountsFromScrapedAds(
   supabase: SupabaseClient<Database>,
   competitorId: string
 ): Promise<ActiveAdCounts> {
-  const { data, error } = await supabase
-    .from("scraped_ads")
-    .select("platform, raw_payload")
-    .eq("competitor_id", competitorId);
+  const [{ data, error }, { data: compRow }] = await Promise.all([
+    supabase
+      .from("scraped_ads")
+      .select("platform, raw_payload, last_seen_at, is_active")
+      .eq("competitor_id", competitorId),
+    supabase
+      .from("saved_competitors")
+      .select("last_scraped_at")
+      .eq("id", competitorId)
+      .maybeSingle(),
+  ]);
 
   if (error || !data) {
     console.error("[loadActiveCountsFromScrapedAds]", error?.message);
@@ -112,7 +119,13 @@ export async function loadActiveCountsFromScrapedAds(
 
   const { countActiveAdsFromRawPayloads } = await import("./count-active-ads");
   return countActiveAdsFromRawPayloads(
-    data.map((r) => ({ platform: r.platform, raw_payload: r.raw_payload }))
+    data.map((r) => ({
+      platform: r.platform,
+      raw_payload: r.raw_payload,
+      last_seen_at: r.last_seen_at,
+      is_active: r.is_active,
+    })),
+    { lastScrapedAt: compRow?.last_scraped_at ?? null }
   );
 }
 
@@ -169,18 +182,23 @@ export async function refreshPlatformTrackingAfterScrape(
   }
 
   for (const p of tracking) {
-    const { error } = await supabase
-      .from("competitor_platform_tracking")
-      .update({
+    const prev = existingByPlatform.get(p.platform);
+    const { error } = await supabase.from("competitor_platform_tracking").upsert(
+      {
+        user_id: params.userId,
+        competitor_id: params.competitorId,
+        platform: p.platform,
         active_ad_count: p.activeAdCount,
         classification: p.classification,
         high_coverage_demoted: false,
         last_scrape_at: nowIso,
         next_scrape_at: computeNextScrapeAt(p.platform, p.classification, nowMs),
+        classified_at: prev?.classified_at ?? nowIso,
+        last_classification_review_at: prev?.last_classification_review_at ?? nowIso,
         updated_at: nowIso,
-      })
-      .eq("competitor_id", params.competitorId)
-      .eq("platform", p.platform);
+      },
+      { onConflict: "competitor_id,platform" },
+    );
     if (error) {
       console.error("[refreshPlatformTrackingAfterScrape]", p.platform, error.message);
     }

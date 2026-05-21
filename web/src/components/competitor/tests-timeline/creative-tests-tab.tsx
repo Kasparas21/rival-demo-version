@@ -77,7 +77,11 @@ export function CreativeTestsTab({
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<CreativeTestsApiResponse>({
     cacheKey,
     enabled: Boolean(competitorId && domainKey),
-    validateCached: (c) => Boolean(c.ok),
+    validateCached: (c) => {
+      if (!c.ok) return false;
+      const rows = c.tests ?? [];
+      return !rows.some((t) => (t.ad_count ?? 0) >= 2 && (t.ads?.length ?? 0) === 0);
+    },
     fetcher: async () => {
       const r = await fetch(`/api/creative-tests?competitorId=${encodeURIComponent(competitorId)}`, {
         credentials: "include",
@@ -315,6 +319,12 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
       {expanded ? (
         <div className="border-t border-slate-100 bg-slate-50/30 px-4 py-3">
           <div className="flex flex-col gap-2">
+            {test.ads.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-[12px] text-slate-500">
+                Could not load ads for this test. Refresh competitor data or open Creative Tests again after the next
+                scrape.
+              </p>
+            ) : null}
             {test.ads.map((ad) => {
               const isWinner = ad.id === test.winner_ad_id;
               const start = new Date(ad.first_seen_at).getTime();

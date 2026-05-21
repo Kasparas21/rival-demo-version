@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
+import { friendlySavedCompetitorsSchemaError } from "@/lib/account/saved-competitors-schema";
 import { useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
 import { setupGlobalCacheInvalidator } from "@/lib/cache/cache-invalidator";
 import { evictBulkyLocalStorageCaches } from "@/lib/cache/storage-quota";
@@ -40,7 +41,8 @@ import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-mod
 import { MetaAdsAllModal } from "@/components/ads-library/meta-ads-all-modal";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
-import { AdSaveRow } from "@/components/ads-library/ad-save-row";
+import { AdSaveRow, AdSaveVisibilityProvider } from "@/components/ads-library/ad-save-row";
+import { AdLibraryRunStatusBadge } from "@/components/ads-library/ad-library-run-status-badge";
 import { TikTokAdCard } from "@/components/ads-library/tiktok-ad-card";
 import { SavedAdsPanel } from "@/components/ads-library/saved-ads-panel";
 import { PinterestAdCard } from "@/components/ads-library/pinterest-ad-card";
@@ -64,8 +66,32 @@ import {
   canonicalMetaAdsLibraryUrl,
 } from "@/lib/ad-library/canonical-library-url";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
-import { resolveAdsPlatformsForCompetitorView } from "@/lib/ad-library/channels-to-platforms";
-import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
+import {
+  channelsQueryToAdsPlatforms,
+  unionAdsPlatformsFromSources,
+} from "@/lib/ad-library/channels-to-platforms";
+import {
+  coerceAdsLibraryResponse,
+  mergeAdsLibraryState,
+  type AdsLibraryPlatform,
+} from "@/lib/ad-library/api-types";
+import {
+  fetchAdsLibraryDeduplicated,
+  stableAdsLibraryPayloadKey,
+  writeAdsLibrarySessionCache,
+} from "@/lib/ad-library/deduped-fetch";
+import { buildClientAdsLibraryPayload } from "@/lib/ad-library/build-client-ads-library-payload";
+import {
+  normalizeGoogleAdsRegion,
+} from "@/lib/ad-library/google-ads-regions";
+import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
+import {
+  applyWorkspaceRescrapeLimits,
+  mergeScrapeFieldsWithWorkspaceMarkets,
+  readScrapeRequestFieldsFromStorage,
+} from "@/lib/ad-library/scrape-request-fields";
+import { WORKSPACE_RESCRAPE_ADS_PER_PLATFORM } from "@/lib/ad-library/constants";
+import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import {
   extractYouTubeVideoId,
   googleAdsExternalLinkLabel,
@@ -75,15 +101,25 @@ import {
   type GoogleAdRow,
   type LinkedInAdCard,
 } from "@/lib/ad-library/normalize";
+import { hydrateMetaLibraryCardForDisplay } from "@/lib/ad-library/resolve-meta-library-card-preview";
+import { metaLibraryItemLookupKeys } from "@/lib/ad-library/meta-library-item-keys";
 import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import { resolveGoogleAdRowTransparencyHref } from "@/lib/ad-detail/resolve-ad-library-url";
 import {
-  countActiveGoogleRows,
+  countActiveGoogleRowsWithLifecycle,
   countActiveLinkedInAds,
   countActiveMetaAds,
+  googleRowFirstShownYmd,
+  hydrateMetaAdCardForLibrary,
   countActivePinterestAds,
   countActiveSnapchatAds,
   countActiveTikTokAds,
 } from "@/lib/ad-library/count-active-ads";
+import {
+  computeLibraryAdRunDays,
+  isLibraryAdKilled,
+  type LibraryRunStatus,
+} from "@/lib/ad-library/library-run-status";
 import {
   sortGoogleRowsActiveFirst,
   sortLinkedInAdsActiveFirst,
@@ -115,10 +151,6 @@ import {
   upsertSidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
-import {
-  mergeScrapeFieldsWithWorkspaceMarkets,
-  readScrapeRequestFieldsFromStorage,
-} from "@/lib/ad-library/scrape-request-fields";
 import { ComparisonPage } from "@/components/comparison/comparison-page";
 import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
@@ -146,10 +178,12 @@ import {
   ONBOARDING_AD_MARKETS,
 } from "@/lib/onboarding/ad-markets";
 import {
-  COMPETITOR_PAGE_TABS,
-  WORKSPACE_ADS_TAB,
-  WORKSPACE_MARKETING_IMPROVEMENTS_TAB,
+  OWN_BRAND_DEBUG_ONLY_TAB_IDS,
+  competitorPageTabsForView,
+  competitorSubTabsForView,
   findCompetitorTab,
+  isOwnBrandDebugOnlySubTab,
+  isOwnBrandDebugOnlyTab,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
 import { ActivityFeedTab } from "@/components/competitor/insights/activity-feed-tab";
@@ -346,6 +380,7 @@ function GoogleTransparencyCard({
   isSaved,
   onToggleSave,
   saveDisabled,
+  runStatus,
 }: {
   ad: Extract<GoogleAdRow, { type: "google" }>;
   brandDomain: string;
@@ -354,6 +389,7 @@ function GoogleTransparencyCard({
   isSaved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  runStatus?: LibraryRunStatus;
 }) {
   const [creativeImgFailed, setCreativeImgFailed] = useState(false);
   useEffect(() => {
@@ -361,8 +397,7 @@ function GoogleTransparencyCard({
   }, [ad.id]);
 
   const sn = googleTextSnippet(ad);
-  const href =
-    ad.adUrl || `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(brandDomain)}`;
+  const href = resolveGoogleAdRowTransparencyHref(ad, brandDomain);
   const linkCta = googleAdsExternalLinkLabel(href);
 
   /** Prefer Transparency “Preview URL” only when it is a still image — `content.js` loaders are not valid `<img src>`. */
@@ -380,6 +415,9 @@ function GoogleTransparencyCard({
   const detailTitle = ad.advertiserName?.trim() || sn.headline.split(" — ")[0]?.trim() || sn.headline;
   const lastShown =
     ad.lastShownLabel?.trim() || ad.shownSummary?.replace(/\s*–\s*/, " → ") || "—";
+  const showRunBadge = googleRowFirstShownYmd(ad) != null;
+  const killed = isLibraryAdKilled("google", ad, runStatus);
+  const runDays = computeLibraryAdRunDays("google", ad, runStatus);
 
   return (
     <article
@@ -392,17 +430,20 @@ function GoogleTransparencyCard({
         <h3 className="text-[17px] font-medium leading-snug text-[#202124] text-pretty [overflow-wrap:anywhere] break-words">
           {detailTitle}
         </h3>
-        <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t border-[#f1f3f4] pt-3 text-[13px]">
-          <span className="text-[#5f6368]">Last shown</span>
-          <span className="font-medium text-[#202124] [overflow-wrap:anywhere] break-words">{lastShown}</span>
-          {ad.format?.trim() ? (
-            <>
-              <span className="text-[#dadce0]" aria-hidden>
-                ·
-              </span>
-              <GoogleAdFormatIcon format={ad.format} />
-            </>
-          ) : null}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-[#f1f3f4] pt-3 text-[13px]">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="text-[#5f6368]">Last shown</span>
+            <span className="font-medium text-[#202124] [overflow-wrap:anywhere] break-words">{lastShown}</span>
+            {ad.format?.trim() ? (
+              <>
+                <span className="text-[#dadce0]" aria-hidden>
+                  ·
+                </span>
+                <GoogleAdFormatIcon format={ad.format} />
+              </>
+            ) : null}
+          </div>
+          {showRunBadge ? <AdLibraryRunStatusBadge killed={killed} runDays={runDays} /> : null}
         </div>
       </div>
 
@@ -505,6 +546,7 @@ function GoogleYoutubeAdCard({
   isSaved,
   onToggleSave,
   saveDisabled,
+  runStatus,
 }: {
   ad: Extract<GoogleAdRow, { type: "youtube" }>;
   brand: { name: string; domain: string; logoUrl?: string };
@@ -513,6 +555,7 @@ function GoogleYoutubeAdCard({
   isSaved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  runStatus?: LibraryRunStatus;
 }) {
   const [posterIdx, setPosterIdx] = useState(0);
   const [videoDead, setVideoDead] = useState(false);
@@ -551,12 +594,14 @@ function GoogleYoutubeAdCard({
   const videoSrcNorm =
     videoSrc.length > 0 && !videoSrc.includes("#") ? `${videoSrc}#t=0.01` : videoSrc;
 
-  const href =
-    ad.adUrl || `https://adstransparency.google.com/?region=any&domain=${encodeURIComponent(brand.domain)}`;
+  const href = resolveGoogleAdRowTransparencyHref(ad, brand.domain);
   const { primary: linkLabel } = googleAdsExternalLinkLabel(href);
 
   const showVideoEl = Boolean(videoSrc) && !videoDead;
   const canBumpPoster = posterIdx < posterList.length - 1;
+  const showRunBadge = googleRowFirstShownYmd(ad) != null;
+  const killed = isLibraryAdKilled("youtube", ad, runStatus);
+  const runDays = computeLibraryAdRunDays("youtube", ad, runStatus);
 
   return (
     <article
@@ -634,9 +679,12 @@ function GoogleYoutubeAdCard({
             shape="circle"
           />
           <div className="min-w-0 flex-1">
-            <p className="text-pretty break-words text-[14px] font-medium leading-snug text-[#0f0f0f] [overflow-wrap:anywhere]">
-              {ad.title}
-            </p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 text-pretty break-words text-[14px] font-medium leading-snug text-[#0f0f0f] [overflow-wrap:anywhere]">
+                {ad.title}
+              </p>
+              {showRunBadge ? <AdLibraryRunStatusBadge killed={killed} runDays={runDays} /> : null}
+            </div>
             <p className="mt-0.5 break-words text-[12px] text-[#606060] [overflow-wrap:anywhere]">{ad.channel}</p>
             <p className="text-[12px] text-[#606060]">{ad.views}</p>
           </div>
@@ -672,6 +720,7 @@ function GoogleAdRowCard({
   isSaved,
   onToggleSave,
   saveDisabled,
+  runStatus,
 }: {
   ad: GoogleAdRow;
   brand: { name: string; domain: string; logoUrl?: string };
@@ -680,6 +729,7 @@ function GoogleAdRowCard({
   isSaved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  runStatus?: LibraryRunStatus;
 }) {
   if (ad.type === "google") {
     return (
@@ -691,6 +741,7 @@ function GoogleAdRowCard({
         isSaved={isSaved}
         onToggleSave={onToggleSave}
         saveDisabled={saveDisabled}
+        runStatus={runStatus}
       />
     );
   }
@@ -703,6 +754,7 @@ function GoogleAdRowCard({
       isSaved={isSaved}
       onToggleSave={onToggleSave}
       saveDisabled={saveDisabled}
+      runStatus={runStatus}
     />
   );
 }
@@ -1030,11 +1082,13 @@ function workspacePreviewHrefForChannel(
 
 function WorkspaceAdSourcesPanel({
   brandId,
+  brandName,
   domain,
   initialSetup,
   noBottomMargin,
 }: {
   brandId: string;
+  brandName: string;
   domain: string;
   initialSetup: AdsProfileSetup | null;
   /** When embedded in a full tab, avoid extra bottom margin. */
@@ -1062,10 +1116,13 @@ function WorkspaceAdSourcesPanel({
     return emptyWorkspaceScrapeRow(baseDomain);
   });
   const [saving, setSaving] = useState(false);
+  const [rescraping, setRescraping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
   /** Full country flag strip — only after user expands (default: Auto, compact). */
   const [showRegionFlags, setShowRegionFlags] = useState(false);
+  const showDebugRescrapeAds =
+    process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
 
   useEffect(() => {
     const c = initialSetup?.channels;
@@ -1115,52 +1172,179 @@ function WorkspaceAdSourcesPanel({
     setScrape((s) => ({ ...s, ...patch }));
   };
 
+  const persistSetup = async (): Promise<boolean> => {
+    const adMarketCountryCodes = marketsAuto
+      ? [...ONBOARDING_AD_MARKET_CODES]
+      : [...selectedMarketCodes];
+    if (!marketsAuto && adMarketCountryCodes.length === 0) {
+      setError("Select at least one region below, or turn on Auto (all supported regions).");
+      return false;
+    }
+    if (channels.length === 0) {
+      setError("Select at least one ad platform.");
+      return false;
+    }
+    const payload: AdsProfileSetup = {
+      channels,
+      adMarketCountryCodes: [...adMarketCountryCodes].sort(),
+      scrape: { ...scrape },
+    };
+    const body: { id?: string; ads_profile_setup: Record<string, unknown> } = {
+      ads_profile_setup: adsProfileSetupV1(payload),
+    };
+    if (brandId && brandId !== "_workspace") {
+      body.id = brandId;
+    }
+    const res = await fetch("/api/account/brands", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok || !json.ok) {
+      setError(json.error ?? "Save failed");
+      return false;
+    }
+    setSavedFlash(true);
+    window.setTimeout(() => setSavedFlash(false), 2000);
+    window.dispatchEvent(new Event(RIVAL_BRANDS_UPDATED_EVENT));
+    return true;
+  };
+
   const onSave = async () => {
     setSaving(true);
     setError(null);
     try {
-      const adMarketCountryCodes = marketsAuto
-        ? [...ONBOARDING_AD_MARKET_CODES]
-        : [...selectedMarketCodes];
-      if (!marketsAuto && adMarketCountryCodes.length === 0) {
-        setError("Select at least one region below, or turn on Auto (all supported regions).");
-        setSaving(false);
-        return;
-      }
-      if (channels.length === 0) {
-        setError("Select at least one ad platform.");
-        setSaving(false);
-        return;
-      }
-      const payload: AdsProfileSetup = {
-        channels,
-        adMarketCountryCodes: [...adMarketCountryCodes].sort(),
-        scrape: { ...scrape },
-      };
-      const body: { id?: string; ads_profile_setup: Record<string, unknown> } = {
-        ads_profile_setup: adsProfileSetupV1(payload),
-      };
-      if (brandId && brandId !== "_workspace") {
-        body.id = brandId;
-      }
-      const res = await fetch("/api/account/brands", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || !json.ok) {
-        setError(json.error ?? "Save failed");
-        return;
-      }
-      setSavedFlash(true);
-      window.setTimeout(() => setSavedFlash(false), 2000);
-      window.dispatchEvent(new Event(RIVAL_BRANDS_UPDATED_EVENT));
+      await persistSetup();
     } catch {
       setError("Network error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const onRescrapeAds = async () => {
+    setRescraping(true);
+    setError(null);
+    const toastId = toast.loading("Starting fresh scrape…");
+    try {
+      const saved = await persistSetup();
+      if (!saved) {
+        toast.dismiss(toastId);
+        return;
+      }
+
+      const adMarketCountryCodes = marketsAuto
+        ? [...ONBOARDING_AD_MARKET_CODES]
+        : [...selectedMarketCodes];
+      const mergedIds = scrapeHintsToPlatformIds({
+        scrape,
+        workspaceDomain: baseDomain,
+        channels,
+      });
+      const platforms = channelsQueryToAdsPlatforms(channels);
+      if (platforms.length === 0) {
+        toast.dismiss(toastId);
+        toast.error("Enable at least one platform to rescrape.");
+        return;
+      }
+
+      const scrapeFields = mergeScrapeFieldsWithWorkspaceMarkets(
+        readScrapeRequestFieldsFromStorage(),
+        adMarketCountryCodes,
+      );
+      const scrapeFieldsForApify = applyWorkspaceRescrapeLimits(scrapeFields);
+      const tiktokRegion = normalizeTikTokAdsRegion(readStoredTiktokRegion());
+      const googleRegion = normalizeGoogleAdsRegion(readStoredGoogleRegion());
+      const pinterestCountry = normalizePinterestAdsCountry(readStoredPinterestCountry());
+
+      const hookPayload = buildClientAdsLibraryPayload({
+        brand: { name: brandName.trim() || baseDomain, domain: baseDomain },
+        ids: mergedIds,
+        adsPlatforms: platforms,
+        scrapeFields,
+        tiktokRegion,
+        googleRegion,
+        pinterestCountry,
+      });
+
+      const apiPayload = {
+        ...hookPayload,
+        libraryChannels: channels,
+        metaMaxAds: scrapeFieldsForApify.metaMaxAds,
+        linkedinMaxAds: scrapeFieldsForApify.linkedinMaxAds,
+        tiktokMaxAds: scrapeFieldsForApify.tiktokMaxAds,
+        pinterestMaxResults: scrapeFieldsForApify.pinterestMaxResults,
+        snapchatMaxItems: scrapeFieldsForApify.snapchatMaxItems,
+        googleResultsLimit: WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.google,
+      };
+
+      let mergedResponse = coerceAdsLibraryResponse(null);
+      let allHttpOk = true;
+
+      for (let i = 0; i < platforms.length; i += 1) {
+        const platform = platforms[i]!;
+        toast.loading(`Scraping ${platform} (${i + 1}/${platforms.length})…`, { id: toastId });
+        const { response, httpOk } = await fetchAdsLibraryDeduplicated(
+          { ...apiPayload, platforms: [platform] },
+          { skipCache: true, clientSkipReadCache: true },
+        );
+        mergedResponse = coerceAdsLibraryResponse(mergeAdsLibraryState(mergedResponse, response));
+        if (!httpOk) allHttpOk = false;
+      }
+
+      writeAdsLibrarySessionCache(stableAdsLibraryPayloadKey(hookPayload), {
+        response: mergedResponse,
+        httpOk: allHttpOk,
+      });
+
+      let competitorIdForPersist = "";
+      try {
+        const qs =
+          brandId && brandId !== "_workspace" ? `?brandId=${encodeURIComponent(brandId)}` : "";
+        const wsRes = await fetch(`/api/account/workspace-last-scrape${qs}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (wsRes.ok) {
+          const wsJson = (await wsRes.json()) as { competitorId?: string | null };
+          competitorIdForPersist = wsJson.competitorId?.trim() ?? "";
+        }
+      } catch {
+        /* best-effort */
+      }
+
+      try {
+        await fetch("/api/competitor/ads-library/ensure-persisted", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            domain: baseDomain,
+            ...(competitorIdForPersist ? { competitorId: competitorIdForPersist } : {}),
+          }),
+        });
+      } catch {
+        /* best-effort */
+      }
+
+      toast.dismiss(toastId);
+      if (allHttpOk) {
+        toast.success("Rescrape complete. Ad Library is updating with fresh ads.");
+      } else {
+        toast.error("Some platforms failed to scrape. Check your connections and try again.");
+      }
+      window.dispatchEvent(
+        new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+          detail: { domain: baseDomain },
+        }),
+      );
+    } catch {
+      toast.dismiss(toastId);
+      toast.error("Network error");
+    } finally {
+      setRescraping(false);
     }
   };
 
@@ -1554,14 +1738,36 @@ function WorkspaceAdSourcesPanel({
         ) : null}
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <button
-            type="button"
-            onClick={() => void onSave()}
-            disabled={saving}
-            className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-sky-800 px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(14,116,144,0.25)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 sm:w-auto"
-          >
-            {saving ? "Saving…" : "Save connections"}
-          </button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={() => void onSave()}
+              disabled={saving || rescraping}
+              className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-sky-800 px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(14,116,144,0.25)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 sm:w-auto"
+            >
+              {saving ? "Saving…" : "Save connections"}
+            </button>
+            {showDebugRescrapeAds ? (
+              <button
+                type="button"
+                onClick={() => void onRescrapeAds()}
+                disabled={saving || rescraping || channels.length === 0}
+                title="Hidden from users — visible only with NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION"
+                className="relative inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-300/90 bg-white px-4 py-2.5 text-[13px] font-semibold text-sky-950 shadow-sm transition-colors hover:bg-sky-50 disabled:opacity-50 sm:w-auto"
+              >
+                <span
+                  className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-white"
+                  aria-hidden
+                />
+                {rescraping ? (
+                  <RivalLogoVideo size="inline" className="shrink-0" aria-hidden />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
+                )}
+                {rescraping ? "Rescraping…" : "Rescrape ads"}
+              </button>
+            ) : null}
+          </div>
           <div className="flex items-center justify-center gap-2 sm:justify-end">
             {savedFlash ? (
               <span className="text-[12px] font-semibold text-emerald-700">Saved to your brand</span>
@@ -1574,8 +1780,6 @@ function WorkspaceAdSourcesPanel({
     </div>
   );
 }
-
-const tabs = COMPETITOR_PAGE_TABS;
 
 type CompetitorDashboardBodyProps = {
   canonicalHost: string;
@@ -1651,8 +1855,18 @@ function CompetitorDashboardBody({
     }
 
     let channelsFromResolver = base.channelsParam;
-    if (!channelsFromResolver.trim() && adsSetup?.channels?.length) {
-      channelsFromResolver = adsSetup.channels.join(",");
+    if (adsSetup?.channels?.length) {
+      const fromSetup = adsSetup.channels.join(",");
+      if (!channelsFromResolver.trim()) {
+        channelsFromResolver = fromSetup;
+      } else {
+        const merged = new Set(
+          [...channelsFromResolver.split(","), ...adsSetup.channels]
+            .map((c) => c.trim())
+            .filter(Boolean),
+        );
+        channelsFromResolver = [...merged].join(",");
+      }
     }
 
     let nextConfirmed = base.isConfirmed;
@@ -1694,19 +1908,15 @@ function CompetitorDashboardBody({
     myBrand.adsSetup,
   ]);
 
-  const pageTabs = useMemo(() => {
-    const base = isOwnWorkspace ? tabs.filter((t) => t.id !== "comparison") : tabs;
-    if (!isOwnWorkspace) return base;
-    const adsIdx = base.findIndex((t) => t.id === "ads library");
-    const next = [...base];
-    next.splice(
-      adsIdx >= 0 ? adsIdx + 1 : 0,
-      0,
-      WORKSPACE_ADS_TAB,
-      WORKSPACE_MARKETING_IMPROVEMENTS_TAB,
-    );
-    return next;
-  }, [isOwnWorkspace]);
+  const showBrandDebugTabs =
+    process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
+
+  const ownBrandSavedAdsEnabled = !isOwnWorkspace || showBrandDebugTabs;
+
+  const pageTabs = useMemo(
+    () => competitorPageTabsForView({ isOwnWorkspace, showDebugTabs: showBrandDebugTabs }),
+    [isOwnWorkspace, showBrandDebugTabs]
+  );
 
   const router = useRouter();
   const pathname = usePathname();
@@ -1750,11 +1960,7 @@ function CompetitorDashboardBody({
   }, [pathname, router, searchParams]);
 
   const tabParamRaw = (searchParams.get("tab") ?? "").trim();
-  const isValidTab = (id: string) => {
-    if (COMPETITOR_PAGE_TABS.some((t) => t.id === id)) return true;
-    if (isOwnWorkspace && (id === "workspace-ads" || id === "workspace-marketing-improvements")) return true;
-    return false;
-  };
+  const isValidTab = (id: string) => pageTabs.some((t) => t.id === id);
   const activeTab = isValidTab(tabParamRaw) ? tabParamRaw : "ads library";
 
   const activeSubTab = useMemo(() => {
@@ -1796,6 +2002,25 @@ function CompetitorDashboardBody({
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
   }, [isOwnWorkspace, activeTab, pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (!isOwnWorkspace || showBrandDebugTabs) return;
+    if (!OWN_BRAND_DEBUG_ONLY_TAB_IDS.includes(activeTab as (typeof OWN_BRAND_DEBUG_ONLY_TAB_IDS)[number])) {
+      return;
+    }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", "ads library");
+    params.delete("sub");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [isOwnWorkspace, showBrandDebugTabs, activeTab, pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (!isOwnWorkspace || showBrandDebugTabs) return;
+    if (activeTab !== "ads library" || activeSubTab !== "saved") return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("sub", "all");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [isOwnWorkspace, showBrandDebugTabs, activeTab, activeSubTab, pathname, router, searchParams]);
 
   useEffect(() => {
     if (
@@ -1874,19 +2099,88 @@ function CompetitorDashboardBody({
   const [pinterestCountry, setPinterestCountry] = useState(readStoredPinterestCountry);
   const [googleRegion, setGoogleRegion] = useState(readStoredGoogleRegion);
   const [accountLastScrapedAt, setAccountLastScrapedAt] = useState<string | null>(null);
+  const [workspaceBrandCompetitorId, setWorkspaceBrandCompetitorId] = useState("");
+  type WorkspaceLibraryLinkState = "idle" | "linking" | "persisting" | "ready" | "error";
+  const [workspaceLibraryLinkState, setWorkspaceLibraryLinkState] =
+    useState<WorkspaceLibraryLinkState>("idle");
+  const [workspaceLibraryLinkError, setWorkspaceLibraryLinkError] = useState<string | null>(null);
+  const [workspaceLibraryContext, setWorkspaceLibraryContext] = useState<{
+    channels?: string[];
+    ids?: Record<string, string>;
+  } | null>(null);
   /** Bumps every minute so `getTimeAgo` in the header stays fresh while the page is open. */
   const [lastScrapeRelativeTick, setLastScrapeRelativeTick] = useState(0);
+
+  /** Workspace brand: load server cache when scrape exists in Supabase (matches competitor sidebar `lastScrapedAt`). */
+  const adLibraryConfirmed = useMemo(() => {
+    if (!isOwnWorkspace) return isConfirmed;
+    if (isConfirmed) return true;
+    if (myBrand.adsSetup?.channels?.length) return true;
+    if (accountLastScrapedAt?.trim()) return true;
+    if (workspaceBrandCompetitorId.trim()) return true;
+    return false;
+  }, [
+    isOwnWorkspace,
+    isConfirmed,
+    myBrand.adsSetup?.channels,
+    accountLastScrapedAt,
+    workspaceBrandCompetitorId,
+  ]);
+
+  const effectiveChannelsFromResolver = useMemo(() => {
+    if (channelsFromResolver.trim()) return channelsFromResolver;
+    if (isOwnWorkspace && workspaceLibraryContext?.channels?.length) {
+      return workspaceLibraryContext.channels.join(",");
+    }
+    return channelsFromResolver;
+  }, [channelsFromResolver, isOwnWorkspace, workspaceLibraryContext]);
+
+  const effectivePlatformIds = useMemo(() => {
+    if (platformIds && Object.keys(platformIds).length > 0) return platformIds;
+    if (
+      isOwnWorkspace &&
+      workspaceLibraryContext?.ids &&
+      Object.keys(workspaceLibraryContext.ids).length > 0
+    ) {
+      return workspaceLibraryContext.ids;
+    }
+    return platformIds;
+  }, [platformIds, isOwnWorkspace, workspaceLibraryContext]);
 
   useEffect(() => {
     evictBulkyLocalStorageCaches();
     return setupGlobalCacheInvalidator();
   }, []);
 
-  /** Platforms to hydrate from `ads_cache` — from saved channels, else identifiers, never blind “all six” scrape. */
-  const adsPlatforms: AdsLibraryPlatform[] = useMemo(
-    () => resolveAdsPlatformsForCompetitorView(channelsFromResolver, platformIds),
-    [channelsFromResolver, platformIds]
-  );
+  const workspaceAdsSetupPlatformIds = useMemo(() => {
+    if (!isOwnWorkspace || !myBrand.adsSetup?.channels?.length) return null;
+    const ids = scrapeHintsToPlatformIds({
+      scrape: myBrand.adsSetup.scrape,
+      workspaceDomain: myBrand.domain ?? "",
+      channels: myBrand.adsSetup.channels,
+    });
+    return Object.keys(ids).length > 0 ? ids : null;
+  }, [isOwnWorkspace, myBrand.adsSetup, myBrand.domain]);
+
+  /** Platforms to hydrate from `ads_cache` — union saved channels, onboarding setup, and identifiers. */
+  const adsPlatforms: AdsLibraryPlatform[] = useMemo(() => {
+    const sources: { channelsCsv?: string; ids?: Record<string, string> | null }[] = [
+      { channelsCsv: effectiveChannelsFromResolver, ids: effectivePlatformIds },
+    ];
+    if (isOwnWorkspace && myBrand.adsSetup?.channels?.length) {
+      sources.push({
+        channelsCsv: myBrand.adsSetup.channels.join(","),
+        ids: workspaceAdsSetupPlatformIds,
+      });
+    }
+    return unionAdsPlatformsFromSources(...sources);
+  }, [
+    effectiveChannelsFromResolver,
+    effectivePlatformIds,
+    isOwnWorkspace,
+    myBrand.adsSetup?.channels,
+    workspaceAdsSetupPlatformIds,
+  ]);
 
   /** Page/API “brand name” can be the logged-in display name (e.g. Admin); prefer domain-derived label for UI + ad matching copy. */
   const competitorDisplayLabel = useMemo(
@@ -1902,15 +2196,6 @@ function CompetitorDashboardBody({
   }, [sidebarSnapshot, canonicalHost]);
 
   const { activeAdId, openAd, closeAd, resolveLibraryAdAndOpen } = useAdDetailState();
-
-  const openAdLibraryCard = useCallback(
-    (platform: string, libraryItemId: string) => {
-      const cid = competitorSidebarMatch?.savedCompetitorDbId?.trim();
-      if (!cid || !libraryItemId.trim()) return;
-      void resolveLibraryAdAndOpen(cid, platform, libraryItemId);
-    },
-    [competitorSidebarMatch?.savedCompetitorDbId, resolveLibraryAdAndOpen],
-  );
 
   const [serverScrapedAdTotal, setServerScrapedAdTotal] = useState<number | null>(null);
   const [manualRefreshBusyPlatform, setManualRefreshBusyPlatform] =
@@ -2009,6 +2294,13 @@ function CompetitorDashboardBody({
     isOwnWorkspace,
   ]);
 
+  const mergedPlatformIdsForAdLibrary = useMemo(() => {
+    const merged = { ...(effectivePlatformIds ?? {}), ...(workspaceAdsSetupPlatformIds ?? {}) };
+    return Object.keys(merged).length > 0 ? merged : effectivePlatformIds;
+  }, [effectivePlatformIds, workspaceAdsSetupPlatformIds]);
+
+  const adLibraryDataEnabled = adLibraryConfirmed && activeTab === "ads library";
+
   const {
     data: adLib,
     loading: adLibLoading,
@@ -2028,10 +2320,14 @@ function CompetitorDashboardBody({
     refreshSnapchatAds,
     reloadPlatformFromCache,
   } = useAdLibrary(
-    { name: brand.name, domain: brand.domain, logoUrl: brand.logoUrl },
-    platformIds,
+    {
+      name: isOwnWorkspace ? competitorDisplayLabel : brand.name,
+      domain: brand.domain,
+      logoUrl: brand.logoUrl,
+    },
+    mergedPlatformIdsForAdLibrary,
     adsPlatforms,
-    isConfirmed,
+    adLibraryDataEnabled,
     tiktokRegion,
     googleRegion,
     effectiveScrapeFields,
@@ -2110,27 +2406,64 @@ function CompetitorDashboardBody({
     marketingCoachRefresh,
   ]);
 
-  const readAccountLastScraped = useCallback(async () => {
+  const readAccountLastScrapedInFlightRef = useRef<Promise<string | null> | null>(null);
+
+  const readAccountLastScraped = useCallback(async (): Promise<string | null> => {
+    if (readAccountLastScrapedInFlightRef.current) {
+      return readAccountLastScrapedInFlightRef.current;
+    }
+
+    const run = async (): Promise<string | null> => {
     if (isOwnWorkspace) {
       try {
-        const qs =
-          myBrand.id && myBrand.id !== "default"
-            ? `?brandId=${encodeURIComponent(myBrand.id)}`
-            : "";
-        const res = await fetch(`/api/account/workspace-last-scrape${qs}`, {
+        const params = new URLSearchParams();
+        const brandId = myBrand.id?.trim();
+        if (brandId && brandId !== "default" && brandId !== "_workspace") {
+          params.set("brandId", brandId);
+        }
+        const pageDomain = brand.domain.trim();
+        if (pageDomain) {
+          params.set("domain", pageDomain);
+        }
+        const qs = params.toString();
+        const res = await fetch(`/api/account/workspace-last-scrape${qs ? `?${qs}` : ""}`, {
           credentials: "include",
           cache: "no-store",
         });
+        const json = (await res.json()) as {
+          lastScrapedAt?: string | null;
+          competitorId?: string | null;
+          libraryContext?: { channels?: string[]; ids?: Record<string, string> } | null;
+          error?: string;
+          hint?: string;
+        };
         if (!res.ok) {
-          setAccountLastScrapedAt(null);
-          return;
+          setWorkspaceLibraryLinkError(
+            friendlySavedCompetitorsSchemaError(json.hint ?? json.error),
+          );
+          return null;
         }
-        const json = (await res.json()) as { lastScrapedAt?: string | null };
         setAccountLastScrapedAt(json.lastScrapedAt ?? null);
+        const cid = json.competitorId?.trim() ?? "";
+        setWorkspaceBrandCompetitorId(cid);
+        setWorkspaceLibraryContext(json.libraryContext ?? null);
+        if (cid) {
+          setWorkspaceLibraryLinkError(null);
+        } else {
+          setWorkspaceLibraryLinkError(
+            friendlySavedCompetitorsSchemaError(
+              json.hint ??
+                (json.error === "no_brand_domain"
+                  ? "Set your brand domain in Settings or complete onboarding to enable analytics and ad detail."
+                  : "Could not register your brand for analytics and ad detail. Save your ad connections on the Workspace tab, then retry."),
+            ),
+          );
+        }
+        return cid || null;
       } catch {
-        setAccountLastScrapedAt(null);
+        setWorkspaceLibraryLinkError("Network error while setting up analytics and ad detail.");
+        return null;
       }
-      return;
     }
     const list = loadSidebarCompetitors();
     const bdom = brand.domain.trim().toLowerCase();
@@ -2140,7 +2473,89 @@ function CompetitorDashboardBody({
         (c.brand?.domain != null && slugsLikelySameCompany(c.slug, brand.domain))
     );
     setAccountLastScrapedAt(row?.lastScrapedAt ?? null);
+    return row?.savedCompetitorDbId?.trim() || null;
+    };
+
+    const promise = run();
+    readAccountLastScrapedInFlightRef.current = promise;
+    try {
+      return await promise;
+    } finally {
+      if (readAccountLastScrapedInFlightRef.current === promise) {
+        readAccountLastScrapedInFlightRef.current = null;
+      }
+    }
   }, [isOwnWorkspace, brand.domain, brand.name, myBrand.id]);
+
+  const workspaceLibraryLinkStateRef = useRef(workspaceLibraryLinkState);
+  workspaceLibraryLinkStateRef.current = workspaceLibraryLinkState;
+  const workspaceLinkInFlightRef = useRef(false);
+
+  const ensureWorkspaceLibraryLinked = useCallback(async (): Promise<string | null> => {
+    if (!isOwnWorkspace) {
+      return workspaceBrandCompetitorId.trim() || competitorSidebarMatch?.savedCompetitorDbId?.trim() || null;
+    }
+
+    const existingId = workspaceBrandCompetitorId.trim();
+    if (workspaceLibraryLinkStateRef.current === "ready" && existingId) {
+      return existingId;
+    }
+
+    if (workspaceLinkInFlightRef.current) {
+      return existingId || null;
+    }
+
+    workspaceLinkInFlightRef.current = true;
+    setWorkspaceLibraryLinkError(null);
+    setWorkspaceLibraryLinkState("linking");
+
+    try {
+      const cid = (await readAccountLastScraped())?.trim() ?? "";
+      if (!cid) {
+        setWorkspaceLibraryLinkState("error");
+        setWorkspaceLibraryLinkError(
+          (prev) =>
+            prev ??
+            "Could not register your brand for analytics and ad detail. Set your brand domain in Settings or save ad connections on the Workspace tab, then retry.",
+        );
+        return null;
+      }
+
+      setWorkspaceLibraryLinkState("ready");
+      setWorkspaceLibraryLinkError(null);
+      return cid;
+    } catch {
+      setWorkspaceLibraryLinkState("error");
+      setWorkspaceLibraryLinkError("Network error while syncing ads");
+      return workspaceBrandCompetitorId.trim() || null;
+    } finally {
+      workspaceLinkInFlightRef.current = false;
+    }
+  }, [
+    brand.domain,
+    competitorSidebarMatch?.savedCompetitorDbId,
+    isOwnWorkspace,
+    readAccountLastScraped,
+    workspaceBrandCompetitorId,
+  ]);
+
+  const workspaceLinkResetKey = useMemo(
+    () => `${normalizeCompetitorSlug(brand.domain)}:${isOwnWorkspace}:${myBrand.id ?? ""}`,
+    [brand.domain, isOwnWorkspace, myBrand.id],
+  );
+
+  const workspaceLinkBootstrappedRef = useRef(false);
+  useEffect(() => {
+    workspaceLinkBootstrappedRef.current = false;
+    setWorkspaceLibraryLinkState("idle");
+    setWorkspaceLibraryLinkError(null);
+  }, [workspaceLinkResetKey]);
+
+  useEffect(() => {
+    if (!isOwnWorkspace || !adLibraryConfirmed || workspaceLinkBootstrappedRef.current) return;
+    workspaceLinkBootstrappedRef.current = true;
+    void ensureWorkspaceLibraryLinked();
+  }, [adLibraryConfirmed, ensureWorkspaceLibraryLinked, isOwnWorkspace]);
 
   useEffect(() => {
     void readAccountLastScraped();
@@ -2149,23 +2564,35 @@ function CompetitorDashboardBody({
   }, [readAccountLastScraped]);
 
   useEffect(() => {
+    if (!isOwnWorkspace || workspaceBrandCompetitorId.trim()) return;
+    if (!adLibraryConfirmed) return;
+    let cancelled = false;
+    let attempts = 0;
+    const tick = () => {
+      if (cancelled || attempts >= 2) return;
+      attempts += 1;
+      void readAccountLastScraped().then((cid) => {
+        if (cancelled || cid) return;
+        window.setTimeout(tick, 1500);
+      });
+    };
+    const id = window.setTimeout(tick, 800);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
+  }, [
+    adLibraryConfirmed,
+    isOwnWorkspace,
+    readAccountLastScraped,
+    workspaceBrandCompetitorId,
+  ]);
+
+  useEffect(() => {
     if (!accountLastScrapedAt) return;
     const id = window.setInterval(() => setLastScrapeRelativeTick((n) => n + 1), 60_000);
     return () => clearInterval(id);
   }, [accountLastScrapedAt]);
-
-  useEffect(() => {
-    if (!isOwnWorkspace) return;
-    const onAdsLibUpdated = (ev: Event) => {
-      const ce = ev as CustomEvent<AdsLibraryUpdatedDetail>;
-      const incoming = normalizeDomainHostForAdsEvent(ce.detail?.domain ?? "");
-      const current = normalizeDomainHostForAdsEvent(brand.domain);
-      if (!incoming || !current || incoming !== current) return;
-      void readAccountLastScraped();
-    };
-    window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, onAdsLibUpdated);
-    return () => window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, onAdsLibUpdated);
-  }, [isOwnWorkspace, brand.domain, readAccountLastScraped]);
 
   const syncSavedCompetitorsFromAccount = useCallback(async () => {
     const localPrev = loadSidebarCompetitors();
@@ -2191,37 +2618,37 @@ function CompetitorDashboardBody({
   /** Only refetch Google when the region picker actually changes — not when refresh callback identity churns. */
   const prevGoogleRegionRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isConfirmed || !fetchGoogle) return;
+    if (!adLibraryConfirmed || !fetchGoogle) return;
     const prev = prevGoogleRegionRef.current;
     prevGoogleRegionRef.current = googleRegion;
     if (prev === null) return;
     if (prev === googleRegion) return;
     void refreshGoogleAdsRef.current();
-  }, [googleRegion, isConfirmed, fetchGoogle]);
+  }, [googleRegion, adLibraryConfirmed, fetchGoogle]);
 
   const refreshTikTokAdsRef = useRef(refreshTikTokAds);
   refreshTikTokAdsRef.current = refreshTikTokAds;
   const prevTiktokRegionRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isConfirmed || !fetchTikTok) return;
+    if (!adLibraryConfirmed || !fetchTikTok) return;
     const prev = prevTiktokRegionRef.current;
     prevTiktokRegionRef.current = tiktokRegion;
     if (prev === null) return;
     if (prev === tiktokRegion) return;
     void refreshTikTokAdsRef.current();
-  }, [tiktokRegion, isConfirmed, fetchTikTok]);
+  }, [tiktokRegion, adLibraryConfirmed, fetchTikTok]);
 
   const refreshPinterestAdsRef = useRef(refreshPinterestAds);
   refreshPinterestAdsRef.current = refreshPinterestAds;
   const prevPinterestCountryRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isConfirmed || !fetchPinterest) return;
+    if (!adLibraryConfirmed || !fetchPinterest) return;
     const prev = prevPinterestCountryRef.current;
     prevPinterestCountryRef.current = pinterestCountry;
     if (prev === null) return;
     if (prev === pinterestCountry) return;
     void refreshPinterestAdsRef.current();
-  }, [pinterestCountry, isConfirmed, fetchPinterest]);
+  }, [pinterestCountry, adLibraryConfirmed, fetchPinterest]);
 
   const metaAds = useMemo(() => adLib?.meta?.ads ?? [], [adLib?.meta?.ads]);
   const googleRows = useMemo(() => adLib?.google?.rows ?? [], [adLib?.google?.rows]);
@@ -2278,29 +2705,6 @@ function CompetitorDashboardBody({
     ]
   );
 
-  const platformActiveCounts = useMemo(
-    () => ({
-      meta: countActiveMetaAds(filteredMetaAds),
-      google: countActiveGoogleRows(filteredGoogleRows),
-      tiktok: countActiveTikTokAds(filteredTikTokAds),
-      linkedin: countActiveLinkedInAds(filteredLinkedInAds),
-      pinterest: countActivePinterestAds(filteredPinterestAds),
-      snapchat: countActiveSnapchatAds(filteredSnapchatAds),
-    }),
-    [
-      filteredMetaAds,
-      filteredGoogleRows,
-      filteredLinkedInAds,
-      filteredTikTokAds,
-      filteredPinterestAds,
-      filteredSnapchatAds,
-    ]
-  );
-
-  const inlinePreviewMetaAds = useMemo(
-    () => filteredMetaAds.filter(metaAdHasDashboardInlinePreview),
-    [filteredMetaAds]
-  );
   const inlinePreviewGoogleRows = useMemo(
     () => filteredGoogleRows.filter(googleAdRowHasDashboardInlinePreview),
     [filteredGoogleRows]
@@ -2322,7 +2726,12 @@ function CompetitorDashboardBody({
     [filteredSnapchatAds]
   );
 
-  const competitorDbIdForSaved = competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
+  const competitorDbIdForSaved = useMemo(() => {
+    if (isOwnWorkspace) {
+      return workspaceBrandCompetitorId.trim() || competitorSidebarMatch?.savedCompetitorDbId?.trim() || "";
+    }
+    return competitorSidebarMatch?.savedCompetitorDbId?.trim() ?? "";
+  }, [competitorSidebarMatch?.savedCompetitorDbId, isOwnWorkspace, workspaceBrandCompetitorId]);
 
   const loadManualRefreshStatus = useCallback(async () => {
     if (!competitorDbIdForSaved || !canManualRefresh) {
@@ -2368,8 +2777,7 @@ function CompetitorDashboardBody({
     return used;
   }, [canManualRefresh, manualRefreshStatus]);
 
-  const showPlatformClassificationDebug =
-    process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
+  const showPlatformClassificationDebug = showBrandDebugTabs;
 
   const [platformTrackingByPlatform, setPlatformTrackingByPlatform] = useState<
     Record<
@@ -2450,6 +2858,22 @@ function CompetitorDashboardBody({
     [platformTrackingByPlatform, accountLastScrapedAt],
   );
 
+  const metaScrapeAtMs = useMemo(() => {
+    const iso = lastScrapedAtForPlatform("meta");
+    if (!iso) return Date.now();
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? t : Date.now();
+  }, [lastScrapedAtForPlatform]);
+
+  const displayMetaAds = useMemo(
+    () =>
+      sortMetaAdsActiveFirst(
+        filteredMetaAds.map((ad) => hydrateMetaAdCardForLibrary(ad, metaScrapeAtMs)),
+        metaScrapeAtMs
+      ),
+    [filteredMetaAds, metaScrapeAtMs]
+  );
+
   const adsLibraryShowsCreativesOnScreen = useMemo(
     () =>
       !adLibLoading &&
@@ -2474,10 +2898,18 @@ function CompetitorDashboardBody({
   );
 
   const showAdLibraryLinkingAnalyticsShell =
-    !isOwnWorkspace &&
-    isConfirmed &&
-    sidebarSnapshot !== undefined &&
-    !competitorDbIdForSaved;
+    isOwnWorkspace
+      ? adLibraryConfirmed &&
+        adsLibraryShowsCreativesOnScreen &&
+        workspaceLibraryLinkState !== "ready" &&
+        workspaceLibraryLinkState !== "idle"
+      : !competitorDbIdForSaved && isConfirmed && sidebarSnapshot !== undefined;
+
+  const workspaceLibraryInteractive =
+    !isOwnWorkspace || workspaceLibraryLinkState === "ready";
+
+  const showAdLibraryAnalyticsPanel =
+    Boolean(competitorDbIdForSaved.trim()) && workspaceLibraryInteractive;
 
   const comparisonPayloadScrapeStamp = accountLastScrapedAt ?? "none";
   const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
@@ -2687,13 +3119,33 @@ function CompetitorDashboardBody({
     !canManualRefresh || !manualRefreshStatus?.canRefreshNow || manualRefreshBusyPlatform != null;
 
   const savedAdsLibraryItems = useMemo(() => {
+    if (activeTab !== "ads library") return [];
     const items: { platform: string; libraryItemId: string }[] = [];
-    for (const ad of filteredMetaAds) items.push({ platform: "meta", libraryItemId: ad.id });
-    for (const ad of filteredTikTokAds) items.push({ platform: "tiktok", libraryItemId: ad.id });
-    for (const ad of filteredLinkedInAds) items.push({ platform: "linkedin", libraryItemId: ad.id });
-    for (const ad of filteredPinterestAds) items.push({ platform: "pinterest", libraryItemId: ad.id });
-    for (const ad of filteredSnapchatAds) items.push({ platform: "snapchat", libraryItemId: ad.id });
-    for (const row of filteredGoogleRows) {
+    const seen = new Set<string>();
+    const pushItem = (platform: string, libraryItemId: string) => {
+      const key = `${platform}:${libraryItemId}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ platform, libraryItemId });
+    };
+    for (const ad of filteredMetaAds) {
+      for (const key of metaLibraryItemLookupKeys(ad)) {
+        pushItem("meta", key);
+      }
+    }
+    for (const ad of filteredTikTokAds.slice(0, META_ADS_INLINE_PREVIEW)) {
+      items.push({ platform: "tiktok", libraryItemId: ad.id });
+    }
+    for (const ad of filteredLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW)) {
+      items.push({ platform: "linkedin", libraryItemId: ad.id });
+    }
+    for (const ad of filteredPinterestAds.slice(0, META_ADS_INLINE_PREVIEW)) {
+      items.push({ platform: "pinterest", libraryItemId: ad.id });
+    }
+    for (const ad of filteredSnapchatAds.slice(0, META_ADS_INLINE_PREVIEW)) {
+      items.push({ platform: "snapchat", libraryItemId: ad.id });
+    }
+    for (const row of filteredGoogleRows.slice(0, META_ADS_INLINE_PREVIEW)) {
       items.push({
         platform: row.type === "youtube" ? "youtube" : "google",
         libraryItemId: row.id,
@@ -2701,6 +3153,7 @@ function CompetitorDashboardBody({
     }
     return items;
   }, [
+    activeTab,
     filteredMetaAds,
     filteredTikTokAds,
     filteredLinkedInAds,
@@ -2709,24 +3162,193 @@ function CompetitorDashboardBody({
     filteredGoogleRows,
   ]);
 
-  const { savedMap, scrapedIdForCard, toggleSave } = useSavedAdsStatus(
+  const { savedMap, scrapedIdForCard, libraryRunStatusForCard, toggleSave, refreshLibraryMappings, previewUrlForCard } =
+    useSavedAdsStatus(
     competitorDbIdForSaved,
     savedAdsLibraryItems,
     undefined,
     cacheDomainNorm,
   );
 
+  const displayMetaAdsWithPreviews = useMemo(
+    () =>
+      sortMetaAdsActiveFirst(
+        displayMetaAds.map((ad) => {
+          const lookupKeys = metaLibraryItemLookupKeys(ad);
+          const scrapedPreview = previewUrlForCard("meta", ad.id, lookupKeys)?.trim();
+          const withScrapedImg =
+            !ad.img?.trim() && scrapedPreview
+              ? { ...ad, img: scrapedPreview }
+              : ad;
+          return hydrateMetaLibraryCardForDisplay(withScrapedImg);
+        }),
+        metaScrapeAtMs,
+      ),
+    [displayMetaAds, metaScrapeAtMs, previewUrlForCard],
+  );
+
+  const openAdLibraryCard = useCallback(
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      void (async () => {
+        let cid = competitorDbIdForSaved.trim();
+        const pl = platform.trim().toLowerCase();
+        const lid = libraryItemId.trim();
+        if (!lid) return;
+
+        if (!cid && isOwnWorkspace) {
+          cid = (await ensureWorkspaceLibraryLinked())?.trim() ?? "";
+        }
+        if (!cid) {
+          toast.error("Still linking your brand library — try again in a moment.");
+          return;
+        }
+
+        const knownScrapedId = scrapedIdForCard(pl, lid, alternateIds);
+        if (knownScrapedId) {
+          openAd(knownScrapedId);
+          return;
+        }
+
+        const firstResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
+        if (firstResolve.ok) return;
+
+        try {
+          const persistRes = await fetch("/api/competitor/ads-library/ensure-persisted", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+              domain: brand.domain,
+              competitorId: cid,
+            }),
+          });
+          const persistJson = (await persistRes.json()) as { ok?: boolean; error?: string; errors?: string[] };
+          if (!persistRes.ok || persistJson.ok === false) {
+            toast.error(
+              persistJson.error ?? persistJson.errors?.[0] ?? "Ads are still syncing — try again shortly.",
+            );
+          }
+        } catch {
+          toast.error("Ads are still syncing — try again shortly.");
+        }
+
+        refreshLibraryMappings();
+        const retryResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
+        if (retryResolve.ok) return;
+
+        toast.error(
+          retryResolve.error === "Ad not found"
+            ? "Could not open this ad. Try refreshing the library."
+            : retryResolve.error || "Could not open this ad. Try refreshing the library.",
+        );
+      })();
+    },
+    [
+      brand.domain,
+      competitorDbIdForSaved,
+      ensureWorkspaceLibraryLinked,
+      isOwnWorkspace,
+      openAd,
+      refreshLibraryMappings,
+      resolveLibraryAdAndOpen,
+      scrapedIdForCard,
+    ],
+  );
+
+  const [bulkLibraryLifecycle, setBulkLibraryLifecycle] = useState<
+    Record<string, { isRunning: boolean }>
+  >({});
+
+  useEffect(() => {
+    if (activeTab !== "ads library") return;
+    const cid = competitorDbIdForSaved;
+    if (!cid) {
+      setBulkLibraryLifecycle({});
+      return;
+    }
+    let cancelled = false;
+    void fetch(`/api/competitor/library-lifecycle?competitorId=${encodeURIComponent(cid)}`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((res: { ok?: boolean; libraryLifecycle?: Record<string, { isRunning: boolean }> }) => {
+        if (cancelled || !res.ok) return;
+        setBulkLibraryLifecycle(res.libraryLifecycle ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setBulkLibraryLifecycle({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, competitorDbIdForSaved]);
+
+  const runStatusForLibraryCard = useCallback(
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      return (
+        libraryRunStatusForCard(platform, libraryItemId, alternateIds) ??
+        bulkLibraryLifecycle[`${platform.trim().toLowerCase()}:${libraryItemId.trim()}`]
+      );
+    },
+    [libraryRunStatusForCard, bulkLibraryLifecycle],
+  );
+
+  const platformActiveCounts = useMemo(
+    () => ({
+      meta: countActiveMetaAds(displayMetaAds, metaScrapeAtMs),
+      google: countActiveGoogleRowsWithLifecycle(filteredGoogleRows, runStatusForLibraryCard),
+      tiktok: countActiveTikTokAds(filteredTikTokAds),
+      linkedin: countActiveLinkedInAds(filteredLinkedInAds),
+      pinterest: countActivePinterestAds(filteredPinterestAds),
+      snapchat: countActiveSnapchatAds(filteredSnapchatAds),
+    }),
+    [
+      displayMetaAds,
+      metaScrapeAtMs,
+      filteredGoogleRows,
+      runStatusForLibraryCard,
+      filteredLinkedInAds,
+      filteredTikTokAds,
+      filteredPinterestAds,
+      filteredSnapchatAds,
+    ]
+  );
+
   const adSaveProps = useCallback(
-    (platform: string, libraryItemId: string) => {
-      const sid = scrapedIdForCard(platform, libraryItemId);
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      const sid = scrapedIdForCard(platform, libraryItemId, alternateIds);
+      const runStatus = runStatusForLibraryCard(platform, libraryItemId, alternateIds);
       return {
         scrapedAdId: sid,
         isSaved: Boolean(sid && savedMap[sid]),
-        onToggleSave: competitorDbIdForSaved ? () => void toggleSave(platform, libraryItemId) : undefined,
-        saveDisabled: !competitorDbIdForSaved,
+        onToggleSave:
+          competitorDbIdForSaved && ownBrandSavedAdsEnabled
+            ? () => void toggleSave(platform, libraryItemId)
+            : undefined,
+        saveDisabled: !competitorDbIdForSaved || !ownBrandSavedAdsEnabled,
+        ...(runStatus ? { runStatus } : {}),
+        ...(platform.trim().toLowerCase() === "meta" ? { metaScrapeAtMs } : {}),
       };
     },
-    [competitorDbIdForSaved, scrapedIdForCard, savedMap, toggleSave],
+    [competitorDbIdForSaved, ownBrandSavedAdsEnabled, scrapedIdForCard, runStatusForLibraryCard, savedMap, toggleSave, metaScrapeAtMs],
+  );
+
+  const displayTikTokAds = useMemo(() => {
+    return filteredTikTokAds.map((ad) => {
+      const run = runStatusForLibraryCard("tiktok", ad.id);
+      if (run?.isRunning) return { ...ad, flightEndMs: undefined };
+      return ad;
+    });
+  }, [filteredTikTokAds, runStatusForLibraryCard]);
+
+  const inlinePreviewMetaAdsDisplay = useMemo(
+    () => displayMetaAdsWithPreviews.filter(metaAdHasDashboardInlinePreview),
+    [displayMetaAdsWithPreviews]
+  );
+
+  const inlinePreviewTikTokAdsDisplay = useMemo(
+    () => displayTikTokAds.filter(tikTokAdHasDashboardInlinePreview),
+    [displayTikTokAds]
   );
 
   /** Skeleton grid only when there are no creatives yet; platform-only refresh keeps existing cards — spinner is on the refresh button. */
@@ -2791,19 +3413,6 @@ function CompetitorDashboardBody({
     ]
   );
 
-  /** Platforms that actually returned creatives (used as default visibility when the user has not overridden chips). */
-  const platformsWithAdsFromLibrary = useMemo((): AdsLibraryPlatform[] => {
-    if (!adLib || !isConfirmed) return [];
-    const out: AdsLibraryPlatform[] = [];
-    if (fetchMeta && (adLib.meta?.ads?.length ?? 0) > 0) out.push("meta");
-    if (fetchGoogle && (adLib.google?.rows?.length ?? 0) > 0) out.push("google");
-    if (fetchLinkedIn && (adLib.linkedin?.ads?.length ?? 0) > 0) out.push("linkedin");
-    if (fetchTikTok && (adLib.tiktok?.ads?.length ?? 0) > 0) out.push("tiktok");
-    if (fetchPinterest && (adLib.pinterest?.ads?.length ?? 0) > 0) out.push("pinterest");
-    if (fetchSnapchat && (adLib.snapchat?.ads?.length ?? 0) > 0) out.push("snapchat");
-    return out;
-  }, [adLib, isConfirmed, fetchMeta, fetchGoogle, fetchLinkedIn, fetchTikTok, fetchPinterest, fetchSnapchat]);
-
   /** Stable visual order — matches channel selection (`adsPlatforms`) so switching competitors does not reshuffle sections. */
   const platformOrder = useMemo(() => {
     type P = "meta" | "google" | "linkedin" | "tiktok" | "pinterest" | "snapchat";
@@ -2825,19 +3434,8 @@ function CompetitorDashboardBody({
     setVisibleAdPlatforms(null);
   }, [adsPlatformsKey]);
 
-  const defaultVisibleAdPlatforms = useMemo((): AdsLibraryPlatform[] => {
-    if (!isConfirmed || adLibLoading) return adsPlatforms;
-    if (!adLib) return adsPlatforms;
-    if (platformsWithAdsFromLibrary.length === 0) return adsPlatforms;
-    const order = new Map(adsPlatforms.map((plat, i) => [plat, i] as const));
-    return [...platformsWithAdsFromLibrary].sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
-  }, [
-    isConfirmed,
-    adLibLoading,
-    adLib,
-    adsPlatforms,
-    platformsWithAdsFromLibrary,
-  ]);
+  /** Keep every selected channel visible by default — empty platforms stay on-screen so users can refresh them. */
+  const defaultVisibleAdPlatforms = adsPlatforms;
 
   const effectiveVisibleAdPlatforms = visibleAdPlatforms ?? defaultVisibleAdPlatforms;
 
@@ -2857,6 +3455,10 @@ function CompetitorDashboardBody({
   );
 
   return (
+    <AdSaveVisibilityProvider
+      visible={ownBrandSavedAdsEnabled}
+      showDebugIndicator={isOwnWorkspace && showBrandDebugTabs}
+    >
     <div className="flex min-h-0 w-full flex-1 flex-col">
       {/* Top Header */}
       <div
@@ -2965,6 +3567,8 @@ function CompetitorDashboardBody({
             {pageTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               const isDisabled = tab.disabled === true;
+              const isDebugOnlyTab =
+                isOwnWorkspace && showBrandDebugTabs && isOwnBrandDebugOnlyTab(tab.id);
               const Icon = tab.icon;
               return (
                 <button
@@ -2972,7 +3576,13 @@ function CompetitorDashboardBody({
                   type="button"
                   disabled={isDisabled}
                   aria-disabled={isDisabled}
-                  title={isDisabled ? "Coming soon" : undefined}
+                  title={
+                    isDisabled
+                      ? "Coming soon"
+                      : isDebugOnlyTab
+                        ? "Hidden from users — visible only with NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION"
+                        : undefined
+                  }
                   onClick={() => {
                     if (isDisabled) return;
                     handleTabChange(tab.id);
@@ -2987,6 +3597,12 @@ function CompetitorDashboardBody({
                         : "border-transparent text-[#6b7280] hover:text-[#343434] hover:border-[#DDF1FD]"
                   }`}
                 >
+                  {isDebugOnlyTab ? (
+                    <span
+                      className="absolute right-1.5 top-2 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-white"
+                      aria-hidden
+                    />
+                  ) : null}
                   <Icon
                     className={`w-4 h-4 shrink-0 ${
                       isDisabled
@@ -3009,22 +3625,41 @@ function CompetitorDashboardBody({
           {(() => {
             const currentTab = findCompetitorTab(activeTab);
             if (!currentTab?.subTabs?.length) return null;
+            const visibleSubTabs = competitorSubTabsForView({
+              parentTab: currentTab,
+              isOwnWorkspace,
+              showDebugTabs: showBrandDebugTabs,
+            });
+            if (visibleSubTabs.length === 0) return null;
             return (
               <div className="border-b border-slate-200 bg-slate-50/50">
                 <div className="flex items-center gap-1 overflow-x-auto px-6 py-2">
-                  {currentTab.subTabs.map((st) => {
+                  {visibleSubTabs.map((st) => {
                     const isSubActive = activeSubTab === st.id;
+                    const isDebugOnlySubTab =
+                      isOwnWorkspace && showBrandDebugTabs && isOwnBrandDebugOnlySubTab(activeTab, st.id);
                     return (
                       <button
                         key={st.id}
                         type="button"
+                        title={
+                          isDebugOnlySubTab
+                            ? "Hidden from users — visible only with NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION"
+                            : undefined
+                        }
                         onClick={() => handleSubTabChange(st.id)}
-                        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
+                        className={`relative inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors ${
                           isSubActive
                             ? "bg-slate-900 text-white"
                             : "text-slate-600 hover:bg-slate-100"
                         }`}
                       >
+                        {isDebugOnlySubTab ? (
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"
+                            aria-hidden
+                          />
+                        ) : null}
                         {st.label}
                         {st.isNew ? (
                           <span
@@ -3051,6 +3686,7 @@ function CompetitorDashboardBody({
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
             <WorkspaceAdSourcesPanel
               brandId={myBrand.id}
+              brandName={myBrand.name}
               domain={myBrand.domain ?? brand.domain}
               initialSetup={myBrand.adsSetup ?? null}
               noBottomMargin
@@ -3202,7 +3838,7 @@ function CompetitorDashboardBody({
       <KeepMountedTab active={activeTab === "ads library"} className="min-h-0">
         <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <div className="px-6 sm:px-8 lg:px-10 py-8 pb-24 max-w-[1400px] mx-auto animate-in fade-in duration-200">
-            {activeSubTab === "saved" ? (
+            {activeSubTab === "saved" && ownBrandSavedAdsEnabled ? (
               <SavedAdsPanel
                 competitorId={competitorDbIdForSaved}
                 competitorLabel={competitorDisplayLabel}
@@ -3213,7 +3849,7 @@ function CompetitorDashboardBody({
               />
             ) : (
               <>
-            {competitorDbIdForSaved ? (
+            {showAdLibraryAnalyticsPanel ? (
               <FeatureSectionHeader
                 className="mb-6"
                 overline="Ad library"
@@ -3228,7 +3864,7 @@ function CompetitorDashboardBody({
                 }
               />
             ) : null}
-            {competitorDbIdForSaved ? (
+            {showAdLibraryAnalyticsPanel ? (
               <AdLibraryAnalyticsPanel
                 competitorId={competitorDbIdForSaved}
                 cacheDomainNorm={cacheDomainNorm}
@@ -3243,11 +3879,37 @@ function CompetitorDashboardBody({
               <div className="mb-6 rounded-2xl border border-[#e5e7eb]/80 bg-gradient-to-br from-[#f8fafc] to-[#eff6ff]/60 px-4 py-14 sm:px-8 flex flex-col items-center justify-center gap-3 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
                 <RivalLogoVideo size="md" className="opacity-90 shrink-0" aria-hidden />
                 <div className="space-y-1">
-                  <p className="text-[15px] font-semibold text-[#374151]">Connecting competitor to your workspace…</p>
-                  <p className="text-[13px] leading-snug text-[#64748b] max-w-[28rem] mx-auto">
-                    Analytics unlock as soon as the account link completes. Saved ads and ad detail use the same
-                    step—you can keep browsing creatives below while this finishes.
+                  <p className="text-[15px] font-semibold text-[#374151]">
+                    {workspaceLibraryLinkState === "persisting"
+                      ? "Syncing ad detail data…"
+                      : workspaceLibraryLinkState === "error"
+                        ? "Could not finish setup"
+                        : isOwnWorkspace
+                          ? "Setting up analytics & ad detail…"
+                          : "Connecting competitor to your workspace…"}
                   </p>
+                  <p className="text-[13px] leading-snug text-[#64748b] max-w-[28rem] mx-auto">
+                    {workspaceLibraryLinkState === "persisting"
+                      ? "Copying scraped ads so analytics and the ad detail drawer can open."
+                      : workspaceLibraryLinkState === "error"
+                        ? workspaceLibraryLinkError ??
+                          "Try again — your creatives below are still browsable from cache."
+                        : isOwnWorkspace
+                          ? "We register your brand in the app (same database record competitors get from the sidebar) so analytics and clicking an ad work. Ads below load separately from your scrape cache."
+                          : "Analytics unlock as soon as the account link completes. Ad detail uses the same step—you can keep browsing creatives below while this finishes."}
+                  </p>
+                  {isOwnWorkspace && workspaceLibraryLinkState === "error" ? (
+                    <button
+                      type="button"
+                      className="mt-3 rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-[13px] font-medium text-sky-900 hover:bg-sky-50"
+                      onClick={() => {
+                        workspaceLinkBootstrappedRef.current = false;
+                        void ensureWorkspaceLibraryLinked();
+                      }}
+                    >
+                      Retry setup
+                    </button>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -3362,7 +4024,7 @@ function CompetitorDashboardBody({
               </div>
             ) : null}
 
-            {isConfirmed && adsPlatforms.length > 0 && adsApiConfigured && !adLibFetchError && !adLibLoading && adLib === null ? (
+            {adLibraryConfirmed && adsPlatforms.length > 0 && adsApiConfigured && !adLibFetchError && !adLibLoading && adLib === null ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50/90 px-4 py-3 text-[14px] text-slate-800">
                 <span className="font-semibold">No saved ads for this competitor yet. </span>
                 {canManualRefresh
@@ -3463,18 +4125,18 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredMetaAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No active Meta ads loaded yet. Try Refresh Meta only below." />
-                  ) : inlinePreviewMetaAds.length === 0 ? (
+                  ) : inlinePreviewMetaAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewMetaAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewMetaAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <MetaAdCard
                           key={ad.id}
                           ad={ad}
                           viewMode="grid"
                           brand={brand}
-                          onClick={() => openAdLibraryCard("meta", ad.id)}
-                          {...adSaveProps("meta", ad.id)}
+                          onClick={() => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad))}
+                          {...adSaveProps("meta", ad.id, metaLibraryItemLookupKeys(ad))}
                         />
                       ))}
                     </div>
@@ -3484,11 +4146,11 @@ function CompetitorDashboardBody({
               <MetaAdsAllModal
                 open={metaAdsModalOpen}
                 onClose={() => setMetaAdsModalOpen(false)}
-                ads={filteredMetaAds}
+                ads={displayMetaAdsWithPreviews}
                 viewMode="grid"
                 brand={brand}
-                onAdActivate={(ad) => openAdLibraryCard("meta", ad.id)}
-                getMetaAdExtras={(ad) => adSaveProps("meta", ad.id)}
+                onAdActivate={(ad) => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad))}
+                getMetaAdExtras={(ad) => adSaveProps("meta", ad.id, metaLibraryItemLookupKeys(ad))}
               />
             </section>
             ) : null}
@@ -3772,7 +4434,7 @@ function CompetitorDashboardBody({
                       }
                       onClick={() => void handleManualPlatformRefresh("tiktok")}
                       className={platformRefreshOnlyButtonClass}
-                      title="Re-fetch TikTok only (active today, up to 300 ads)."
+                      title="Re-fetch TikTok only (last 30 days, up to 300 ads)."
                     >
                       <RefreshCw
                         className={`h-4 w-4 shrink-0 ${tiktokRefreshing || manualRefreshBusyPlatform === "tiktok" ? "motion-safe:animate-spin" : ""}`}
@@ -3803,11 +4465,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredTikTokAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No TikTok ads returned. The search uses your brand name as the advertiser query on TikTok Ads Library." />
-                  ) : inlinePreviewTikTokAds.length === 0 ? (
+                  ) : inlinePreviewTikTokAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewTikTokAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {inlinePreviewTikTokAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <TikTokAdCard
                           key={ad.id}
                           ad={ad}
@@ -3824,11 +4486,15 @@ function CompetitorDashboardBody({
                 onClose={() => setTiktokAdsModalOpen(false)}
                 title="TikTok ads"
                 logo={<TikTokLogo className="w-5 h-5" />}
-                ads={filteredTikTokAds}
+                ads={displayTikTokAds}
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
-                  <TikTokAdCard ad={ad} onClick={() => void openAdLibraryCard("tiktok", ad.id)} {...adSaveProps("tiktok", ad.id)} />
+                  <TikTokAdCard
+                    ad={ad}
+                    onClick={() => void openAdLibraryCard("tiktok", ad.id)}
+                    {...adSaveProps("tiktok", ad.id)}
+                  />
                 )}
               />
             </section>
@@ -4194,8 +4860,14 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <AdDetailDrawer adId={activeAdId} onClose={closeAd} />
+      <AdDetailDrawer
+        adId={activeAdId}
+        onClose={closeAd}
+        saveEnabled={ownBrandSavedAdsEnabled}
+        showDebugIndicator={isOwnWorkspace && showBrandDebugTabs}
+      />
     </div>
+    </AdSaveVisibilityProvider>
   );
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { isScrapedAdsUuid } from "@/lib/ad-detail/ad-id";
+import { ensureCompetitorAdsPersisted } from "@/lib/ad-library/ensure-competitor-ads-persisted";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import { extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
@@ -94,6 +95,34 @@ type AdRow = {
   ai_enrichment_status: string | null;
 };
 
+async function lookupLibraryScrapedAd(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+  competitorId: string,
+  platform: string,
+  libraryItemId: string,
+): Promise<AdRow | null> {
+  const baseQuery = () =>
+    supabase
+      .from("scraped_ads")
+      .select(scrapedAdSelect)
+      .eq("user_id", userId)
+      .eq("competitor_id", competitorId)
+      .eq("platform", platform);
+
+  const { data: byPayloadId, error: errPayload } = await baseQuery()
+    .filter("raw_payload->>id", "eq", libraryItemId)
+    .maybeSingle();
+  if (errPayload) throw new Error(errPayload.message);
+  if (byPayloadId) return byPayloadId as AdRow;
+
+  const { data: byStableKey, error: errKey } = await baseQuery()
+    .eq("stable_ad_key", libraryItemId)
+    .maybeSingle();
+  if (errKey) throw new Error(errKey.message);
+  return (byStableKey as AdRow | null) ?? null;
+}
+
 export async function GET(request: Request): Promise<NextResponse<AdDetailResponse>> {
   const supabase = await createSupabaseServerClient();
 
@@ -127,30 +156,45 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     }
     ad = data as AdRow | null;
   } else if (competitorIdParam && platformParam && libraryItemId) {
-    const baseQuery = () =>
-      supabase
-        .from("scraped_ads")
-        .select(scrapedAdSelect)
-        .eq("user_id", user.id)
-        .eq("competitor_id", competitorIdParam)
-        .eq("platform", platformParam);
-
-    const { data: byPayloadId, error: errPayload } = await baseQuery()
-      .filter("raw_payload->>id", "eq", libraryItemId)
-      .maybeSingle();
-    if (errPayload) {
-      return NextResponse.json({ ok: false, error: errPayload.message }, { status: 500 });
+    try {
+      ad = await lookupLibraryScrapedAd(
+        supabase,
+        user.id,
+        competitorIdParam,
+        platformParam,
+        libraryItemId,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "lookup_failed";
+      return NextResponse.json({ ok: false, error: message }, { status: 500 });
     }
-    ad = byPayloadId as AdRow | null;
 
     if (!ad) {
-      const { data: byStableKey, error: errKey } = await baseQuery()
-        .eq("stable_ad_key", libraryItemId)
+      const { data: compHint } = await supabase
+        .from("saved_competitors")
+        .select("brand_domain, slug")
+        .eq("id", competitorIdParam)
+        .eq("user_id", user.id)
         .maybeSingle();
-      if (errKey) {
-        return NextResponse.json({ ok: false, error: errKey.message }, { status: 500 });
+      const domainHint = compHint?.brand_domain?.trim() || compHint?.slug?.trim() || "";
+      if (domainHint) {
+        try {
+          await ensureCompetitorAdsPersisted(supabase, {
+            userId: user.id,
+            domainHint,
+            competitorId: competitorIdParam,
+          });
+          ad = await lookupLibraryScrapedAd(
+            supabase,
+            user.id,
+            competitorIdParam,
+            platformParam,
+            libraryItemId,
+          );
+        } catch {
+          /* backfill best-effort */
+        }
       }
-      ad = byStableKey as AdRow | null;
     }
   } else {
     return NextResponse.json(

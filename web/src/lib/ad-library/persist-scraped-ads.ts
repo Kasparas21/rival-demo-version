@@ -256,7 +256,10 @@ export function buildScrapedAdInsertsForPlatform(params: {
         ad_creative_url: ad.img?.trim() || ad.videoUrl?.trim() || null,
         format: ad.isVideo ? "video" : "image",
         first_seen_at: unixishToIso(ad.startedAt, nowIso),
-        last_seen_at: unixishToIso(ad.endedAt, nowIso),
+        last_seen_at:
+          ad.isActive === true
+            ? nowIso
+            : unixishToIso(ad.endedAt, nowIso),
         ai_extracted_launch_date: (() => {
           const launch = extractLaunchDate(ad, "meta");
           return launch ? launch.toISOString() : null;

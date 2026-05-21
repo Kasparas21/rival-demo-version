@@ -22,7 +22,7 @@ type SavedCompetitorPickRow = Pick<
 >;
 
 /** When `.or()` matches both `slug.eq.nike` and `brand_domain.eq.nike.com`, prefer the FQDN / exact row. */
-function pickSavedCompetitorForDomainHint(
+export function pickSavedCompetitorForDomainHint(
   rows: SavedCompetitorPickRow[] | null | undefined,
   cleaned: string
 ): SavedCompetitorPickRow | null {

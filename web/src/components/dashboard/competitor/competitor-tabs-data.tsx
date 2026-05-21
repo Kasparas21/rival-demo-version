@@ -123,3 +123,71 @@ export const WORKSPACE_MARKETING_IMPROVEMENTS_TAB: CompetitorPageTab = {
   label: "Improve marketing",
   icon: TrendingUp,
 };
+
+/** Own-brand hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
+export const OWN_BRAND_DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [
+  "insights",
+  "tests",
+  "audience-copy",
+  "alerts",
+  "workspace-marketing-improvements",
+];
+
+export function isOwnBrandDebugOnlyTab(tabId: string): tabId is (typeof OWN_BRAND_DEBUG_ONLY_TAB_IDS)[number] {
+  return OWN_BRAND_DEBUG_ONLY_TAB_IDS.includes(tabId as (typeof OWN_BRAND_DEBUG_ONLY_TAB_IDS)[number]);
+}
+
+/** Own-brand Ad Library sub-tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
+export const OWN_BRAND_DEBUG_ONLY_SUB_TABS: readonly {
+  parentTabId: CompetitorPageTabId;
+  subTabId: CompetitorSubTabId;
+}[] = [{ parentTabId: "ads library", subTabId: "saved" }];
+
+export function isOwnBrandDebugOnlySubTab(parentTabId: string, subTabId: string): boolean {
+  return OWN_BRAND_DEBUG_ONLY_SUB_TABS.some(
+    (entry) => entry.parentTabId === parentTabId && entry.subTabId === subTabId,
+  );
+}
+
+export function competitorSubTabsForView(opts: {
+  parentTab: CompetitorPageTab;
+  isOwnWorkspace: boolean;
+  showDebugTabs?: boolean;
+}): CompetitorSubTab[] {
+  const { parentTab, isOwnWorkspace, showDebugTabs = false } = opts;
+  const subTabs = parentTab.subTabs ?? [];
+  if (!isOwnWorkspace || showDebugTabs) return subTabs;
+
+  const hidden = new Set(
+    OWN_BRAND_DEBUG_ONLY_SUB_TABS.filter((entry) => entry.parentTabId === parentTab.id).map(
+      (entry) => entry.subTabId,
+    ),
+  );
+  return subTabs.filter((st) => !hidden.has(st.id));
+}
+
+export function competitorPageTabsForView(opts: {
+  isOwnWorkspace: boolean;
+  showDebugTabs?: boolean;
+}): CompetitorPageTab[] {
+  const { isOwnWorkspace, showDebugTabs = false } = opts;
+
+  let base = isOwnWorkspace
+    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison")
+    : [...COMPETITOR_PAGE_TABS];
+
+  if (isOwnWorkspace && !showDebugTabs) {
+    const hidden = new Set<string>(OWN_BRAND_DEBUG_ONLY_TAB_IDS);
+    base = base.filter((t) => !hidden.has(t.id));
+  }
+
+  if (!isOwnWorkspace) return base;
+
+  const adsIdx = base.findIndex((t) => t.id === "ads library");
+  const inserts: CompetitorPageTab[] = [WORKSPACE_ADS_TAB];
+  if (showDebugTabs) inserts.push(WORKSPACE_MARKETING_IMPROVEMENTS_TAB);
+
+  const next = [...base];
+  next.splice(adsIdx >= 0 ? adsIdx + 1 : 0, 0, ...inserts);
+  return next;
+}

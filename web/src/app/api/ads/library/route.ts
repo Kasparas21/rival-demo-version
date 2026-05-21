@@ -33,6 +33,11 @@ import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-
 import type { AdsLibraryIds } from "@/lib/ad-library/run-ads-library-parallel-scrape";
 import { runAdsLibraryParallelScrape } from "@/lib/ad-library/run-ads-library-parallel-scrape";
 import { finalizeAdsLibraryAfterFreshScrape } from "@/lib/ad-library/finalize-ads-library-scrape";
+import { repairAdsLibraryResponseMedia } from "@/lib/ad-library/repair-library-ad-media";
+import {
+  pickBestAdsCacheHitsByPlatform,
+  type AdsCachePickRow,
+} from "@/lib/ad-library/ads-cache-pick";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -47,77 +52,6 @@ function cleanDomain(d: string): string {
 
 function isCacheablePlatform(p: AdsLibraryPlatform): p is CacheablePlatform {
   return (CACHEABLE_PLATFORMS as readonly string[]).includes(p);
-}
-
-type AdsCachePickRow = {
-  platform: string;
-  ads_data: unknown;
-  competitor_domain: string;
-  scraped_at: string;
-  expires_at?: string | null;
-};
-
-function rowExpiresStillValid(expiresAt: string | null | undefined, nowIso: string): boolean {
-  if (expiresAt == null || String(expiresAt).trim() === "") return false;
-  const ex = Date.parse(String(expiresAt));
-  const now = Date.parse(nowIso);
-  if (Number.isNaN(ex) || Number.isNaN(now)) return false;
-  return ex > now;
-}
-
-/**
- * `readDomains` can return multiple DB keys (slug vs registrable domain). Without ordering, PostgREST may
- * return two rows per platform; the last iterated row used to win arbitrarily (sometimes an empty stale row).
- * Prefers cache rows whose `expires_at` is still in the future; otherwise falls back to latest `scraped_at`
- * so expired-but-present snapshots still hydrate the UI without forcing Apify.
- */
-function pickBestAdsCacheHitsByPlatform(
-  rows: AdsCachePickRow[],
-  preferredDomain: string,
-  nowIso: string
-): Map<CacheablePlatform, unknown> {
-  const pref = preferredDomain.trim().toLowerCase();
-  const bestRow = new Map<CacheablePlatform, AdsCachePickRow>();
-  for (const row of rows) {
-    const pl = row.platform;
-    if (!pl || !isCacheablePlatform(pl as AdsLibraryPlatform)) continue;
-    const cp = pl as CacheablePlatform;
-    const prev = bestRow.get(cp);
-    if (!prev) {
-      bestRow.set(cp, row);
-      continue;
-    }
-    const rDom = String(row.competitor_domain ?? "")
-      .trim()
-      .toLowerCase();
-    const pDom = String(prev.competitor_domain ?? "")
-      .trim()
-      .toLowerCase();
-    const rPref = pref.length > 0 && rDom === pref;
-    const pPref = pref.length > 0 && pDom === pref;
-    if (rPref && !pPref) {
-      bestRow.set(cp, row);
-      continue;
-    }
-    if (!rPref && pPref) continue;
-    const rFresh = rowExpiresStillValid(row.expires_at ?? null, nowIso);
-    const pFresh = rowExpiresStillValid(prev.expires_at ?? null, nowIso);
-    if (rFresh && !pFresh) {
-      bestRow.set(cp, row);
-      continue;
-    }
-    if (!rFresh && pFresh) continue;
-    const rTime = Date.parse(row.scraped_at);
-    const pTime = Date.parse(prev.scraped_at);
-    if (!Number.isNaN(rTime) && !Number.isNaN(pTime) && rTime > pTime) {
-      bestRow.set(cp, row);
-    } else if (Number.isNaN(pTime) && !Number.isNaN(rTime)) {
-      bestRow.set(cp, row);
-    }
-  }
-  const out = new Map<CacheablePlatform, unknown>();
-  for (const [p, r] of bestRow) out.set(p, r.ads_data);
-  return out;
 }
 
 /**
@@ -535,12 +469,16 @@ export async function POST(req: Request): Promise<NextResponse> {
     };
   }
 
+  const repairedOut = repairAdsLibraryResponseMedia(out);
+  Object.assign(out, repairedOut);
+
   if (userId) {
     await finalizeAdsLibraryAfterFreshScrape(supabase, {
       userId,
       resolvedCompetitorId,
       domainNorm,
       adsCacheDomain,
+      adsCacheReadDomains,
       platformsRequested,
       platformsNeedingScrape,
       out,

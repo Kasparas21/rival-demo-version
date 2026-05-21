@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   getInitialAdsCount,
   INITIAL_ADS_PER_PLATFORM,
+  WORKSPACE_RESCRAPE_ADS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
 import {
   applyInitialScrapeLimits,
+  applyWorkspaceRescrapeLimits,
   defaultScrapeRequestFields,
 } from "@/lib/ad-library/scrape-request-fields";
 
@@ -52,5 +54,26 @@ describe("applyInitialScrapeLimits", () => {
     const base = { ...defaultScrapeRequestFields(), microsoftMaxSearchResults: 24 };
     const applied = applyInitialScrapeLimits(base);
     expect(applied.microsoftMaxSearchResults).toBe(24);
+  });
+});
+
+describe("applyWorkspaceRescrapeLimits", () => {
+  it("uses small per-platform caps for workspace rescrape", () => {
+    const base = {
+      ...defaultScrapeRequestFields(),
+      metaMaxAds: 500,
+      linkedinMaxAds: 300,
+      tiktokMaxAds: 500,
+      pinterestMaxResults: 400,
+      snapchatMaxItems: 300,
+    };
+    const applied = applyWorkspaceRescrapeLimits(base);
+
+    expect(applied.metaMaxAds).toBe(WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.meta);
+    expect(applied.linkedinMaxAds).toBe(WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.linkedin);
+    expect(applied.tiktokMaxAds).toBe(WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.tiktok);
+    expect(applied.pinterestMaxResults).toBe(WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.pinterest);
+    expect(applied.snapchatMaxItems).toBe(WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.snapchat);
+    expect(WORKSPACE_RESCRAPE_ADS_PER_PLATFORM.google).toBe(25);
   });
 });

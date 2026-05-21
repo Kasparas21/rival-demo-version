@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { isMetaAdActive, isTikTokAdActive } from "@/lib/ad-library/count-active-ads";
+import { metaLibraryItemLookupKeys, metaScrapedRowMatchesLibraryItemId } from "@/lib/ad-library/meta-library-item-keys";
+import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
+import type { MetaAdCard, TikTokAdCard } from "@/lib/ad-library/normalize";
+import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview-url";
 import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
+import { isWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -38,10 +44,25 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const competitorId = parsed.competitorId;
+  const savedAdsBlocked = await isWorkspaceBrandSavedAdsBlocked(supabase, user.id, competitorId);
+
   const scrapedAdIds = [...new Set(parsed.scrapedAdIds ?? [])];
   const libraryItems = parsed.libraryItems ?? [];
 
   const resolvedToScraped: Record<string, string> = {};
+  const libraryLifecycle: Record<string, { isRunning: boolean }> = {};
+  const libraryPreviewUrls: Record<string, string> = {};
+
+  let lastScrapedAt: string | null = null;
+  if (libraryItems.length > 0) {
+    const { data: compRow } = await supabase
+      .from("saved_competitors")
+      .select("last_scraped_at")
+      .eq("id", competitorId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    lastScrapedAt = compRow?.last_scraped_at ?? null;
+  }
 
   if (libraryItems.length > 0) {
     const platformSet = new Set<string>();
@@ -56,7 +77,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (platformSet.size > 0) {
       const { data: candidates, error: candErr } = await supabase
         .from("scraped_ads")
-        .select("id, platform, raw_payload")
+        .select("id, platform, raw_payload, stable_ad_key, last_seen_at, is_active, ad_creative_url")
         .eq("user_id", user.id)
         .eq("competitor_id", competitorId)
         .in("platform", [...platformSet]);
@@ -66,11 +87,71 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
 
       for (const row of candidates ?? []) {
-        const cardId = libraryItemIdFromRawPayload(row.raw_payload);
-        if (!cardId) continue;
-        const key = libraryItemKey(String(row.platform), cardId);
-        if (wantKeys.has(key) && !resolvedToScraped[key]) {
-          resolvedToScraped[key] = row.id;
+        const payload = row.raw_payload;
+        const pl = String(row.platform).trim().toLowerCase();
+        const cardId = libraryItemIdFromRawPayload(payload);
+        const stableKey =
+          typeof row.stable_ad_key === "string" && row.stable_ad_key.trim()
+            ? row.stable_ad_key.trim()
+            : "";
+        const matchIds = new Set<string>();
+        if (cardId) matchIds.add(cardId);
+        if (stableKey) matchIds.add(stableKey);
+        if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+          for (const alias of metaLibraryItemLookupKeys(payload as MetaAdCard)) {
+            matchIds.add(alias);
+          }
+        }
+
+        const previewUrl = libraryPreviewUrlFromScrapedRow({
+          platform: String(row.platform),
+          ad_creative_url: row.ad_creative_url ?? null,
+          raw_payload: row.raw_payload,
+        });
+
+        for (const matchId of matchIds) {
+          const key = libraryItemKey(String(row.platform), matchId);
+          if (previewUrl && !libraryPreviewUrls[key]) {
+            libraryPreviewUrls[key] = previewUrl;
+          }
+          if (!wantKeys.has(key)) continue;
+          if (!resolvedToScraped[key]) {
+            resolvedToScraped[key] = row.id;
+          }
+          if (libraryLifecycle[key] == null) {
+            const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
+            const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
+            let running = false;
+            if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+              running = isMetaAdActive(payload as MetaAdCard, scrapeAtMs);
+            } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+              running = isTikTokAdActive(payload as TikTokAdCard);
+            } else {
+              running = row.is_active === true || isScrapedAdRunning(row.last_seen_at, lastScrapedAt);
+            }
+            libraryLifecycle[key] = { isRunning: running };
+          }
+        }
+
+        if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+          for (const item of libraryItems) {
+            if (item.platform.trim().toLowerCase() !== "meta") continue;
+            if (!metaScrapedRowMatchesLibraryItemId(payload as MetaAdCard, item.libraryItemId)) continue;
+            const key = libraryItemKey(item.platform, item.libraryItemId);
+            if (previewUrl && !libraryPreviewUrls[key]) {
+              libraryPreviewUrls[key] = previewUrl;
+            }
+            if (!resolvedToScraped[key]) {
+              resolvedToScraped[key] = row.id;
+            }
+            if (libraryLifecycle[key] == null) {
+              const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
+              const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
+              libraryLifecycle[key] = {
+                isRunning: isMetaAdActive(payload as MetaAdCard, scrapeAtMs),
+              };
+            }
+          }
         }
       }
     }
@@ -78,8 +159,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const allScrapedIds = [...new Set([...scrapedAdIds, ...Object.values(resolvedToScraped)])];
 
-  if (allScrapedIds.length === 0) {
-    return NextResponse.json({ ok: true, savedMap: {}, resolvedToScraped });
+  if (savedAdsBlocked || allScrapedIds.length === 0) {
+    return NextResponse.json({ ok: true, savedMap: {}, resolvedToScraped, libraryLifecycle, libraryPreviewUrls });
   }
 
   const { data: rows, error } = await supabase
@@ -99,5 +180,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ ok: true, savedMap, resolvedToScraped });
+  return NextResponse.json({ ok: true, savedMap, resolvedToScraped, libraryLifecycle, libraryPreviewUrls });
 }

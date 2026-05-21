@@ -1,4 +1,7 @@
 import type { AdsLibraryPartialJson, AdsLibraryResponse } from "./api-types";
+import { coerceAdsLibraryResponse } from "./api-types";
+import { ALL_ADS_API_PLATFORMS } from "./channels-to-platforms";
+import { countLibraryAdsForPlatform } from "./library-response-utils";
 import { mirrorToLocalStorageIfSmall, safeSetSessionStorage } from "@/lib/cache/storage-quota";
 
 export type FetchAdsLibraryResult = {
@@ -87,8 +90,15 @@ export function readAdsLibraryCacheLastKnownGood(payloadKey: string): FetchAdsLi
   }
 }
 
+function totalAdsInFetchResult(result: FetchAdsLibraryResult): number {
+  const shell = coerceAdsLibraryResponse(result.response as AdsLibraryResponse);
+  return ALL_ADS_API_PLATFORMS.reduce(
+    (sum, pl) => sum + countLibraryAdsForPlatform(pl, shell),
+    0,
+  );
+}
+
 /**
- * When the exact payload key changes (e.g. new `googleRegion` / `googleResultsLimit` fields),
  * older cache entries still live under a different key string. Find the best matching
  * stored response for this brand domain and return it so hydration still works after refresh.
  */
@@ -125,7 +135,9 @@ function scanStorageForBrandDomain(
       continue;
     }
     if (!result) continue;
-    if (!best || expires > best.expires) {
+    const totalAds = totalAdsInFetchResult(result);
+    const bestTotal = best ? totalAdsInFetchResult(best.result) : -1;
+    if (!best || totalAds > bestTotal || (totalAds === bestTotal && expires > best.expires)) {
       best = { expires, result };
     }
   }

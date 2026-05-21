@@ -37,6 +37,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const result = await ensureCompetitorAdsPersisted(supabase, {
     userId: user.id,
     domainHint,
+    competitorId: competitor.id,
   });
 
   return NextResponse.json({
