@@ -102,9 +102,10 @@ async function findSavedRowForDomain(
     .limit(8);
   if (domainQuery.error) throw domainQuery.error;
 
-  const picked = pickSavedCompetitorForDomainHint(domainQuery.data, cleaned);
+  const domainRows = (domainQuery.data ?? []) as unknown as SavedRow[];
+  const picked = pickSavedCompetitorForDomainHint(domainRows, cleaned);
   if (!picked?.id) return null;
-  const found = domainQuery.data?.find((r) => r.id === picked.id) ?? null;
+  const found = domainRows.find((r) => r.id === picked.id) ?? null;
   if (!found) return null;
   return {
     id: found.id,
@@ -184,14 +185,15 @@ export async function ensureWorkspaceBrandSavedCompetitor(
       row = await findSavedRowForDomain(supabase, userId, cleaned, columnFlags);
       if (!row) throw insertErr;
     } else {
+      const insertedRow = inserted as unknown as SavedRow;
       row = {
-        id: inserted.id,
-        last_scraped_at: inserted.last_scraped_at ?? null,
+        id: insertedRow.id,
+        last_scraped_at: insertedRow.last_scraped_at ?? null,
         ads_library_context: columnFlags.adsLibraryContext
-          ? (inserted as SavedRow).ads_library_context ?? null
+          ? insertedRow.ads_library_context ?? null
           : null,
-        brand_domain: inserted.brand_domain ?? null,
-        slug: inserted.slug,
+        brand_domain: insertedRow.brand_domain ?? null,
+        slug: insertedRow.slug,
       };
     }
   }
@@ -266,15 +268,13 @@ export async function ensureWorkspaceBrandSavedCompetitor(
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
+  const freshRow = (fresh ?? null) as unknown as Pick<SavedRow, "last_scraped_at" | "ads_library_context"> | null;
 
   return {
     id,
-    lastScrapedAt: fresh?.last_scraped_at ? String(fresh.last_scraped_at) : lastScrapedAt,
+    lastScrapedAt: freshRow?.last_scraped_at ? String(freshRow.last_scraped_at) : lastScrapedAt,
     libraryContext: columnFlags.adsLibraryContext
-      ? parseAdsLibraryContext(
-          (fresh as { ads_library_context?: unknown } | null)?.ads_library_context ??
-            row.ads_library_context,
-        )
+      ? parseAdsLibraryContext(freshRow?.ads_library_context ?? row.ads_library_context)
       : null,
     persistOk,
     ...(persistErrors?.length ? { persistErrors } : {}),

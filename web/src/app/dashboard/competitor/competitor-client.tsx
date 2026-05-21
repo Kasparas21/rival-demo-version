@@ -600,8 +600,8 @@ function GoogleYoutubeAdCard({
   const showVideoEl = Boolean(videoSrc) && !videoDead;
   const canBumpPoster = posterIdx < posterList.length - 1;
   const showRunBadge = googleRowFirstShownYmd(ad) != null;
-  const killed = isLibraryAdKilled("youtube", ad, runStatus);
-  const runDays = computeLibraryAdRunDays("youtube", ad, runStatus);
+  const killed = isLibraryAdKilled("google", ad, runStatus);
+  const runDays = computeLibraryAdRunDays("google", ad, runStatus);
 
   return (
     <article

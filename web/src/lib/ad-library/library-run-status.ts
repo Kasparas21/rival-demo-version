@@ -29,7 +29,7 @@ export function isLibraryAdKilled(
   if (runStatus != null) return !runStatus.isRunning;
   if (platform === "meta") return isMetaAdKilled(ad as MetaAdCard, scrapeAtMs, nowMs);
   if (platform === "tiktok") return isTikTokAdKilled(ad as TikTokAdCard, nowMs);
-  if (platform === "google" || platform === "youtube") {
+  if (platform === "google") {
     return isGoogleAdKilled(ad as GoogleAdRow, nowMs);
   }
   return false;
@@ -52,12 +52,12 @@ export function computeLibraryAdRunDays(
   if (runStatus?.isRunning && platform === "tiktok") {
     return computeTikTokAdRunDays({ ...(ad as TikTokAdCard), flightEndMs: undefined }, nowMs);
   }
-  if (runStatus?.isRunning && (platform === "google" || platform === "youtube")) {
+  if (runStatus?.isRunning && platform === "google") {
     return computeGoogleAdRunDays(ad as GoogleAdRow, nowMs, true);
   }
   if (platform === "meta") return computeMetaAdRunDays(ad as MetaAdCard, scrapeAtMs, nowMs);
   if (platform === "tiktok") return computeTikTokAdRunDays(ad as TikTokAdCard, nowMs);
-  if (platform === "google" || platform === "youtube") {
+  if (platform === "google") {
     return computeGoogleAdRunDays(ad as GoogleAdRow, nowMs);
   }
   return 0;

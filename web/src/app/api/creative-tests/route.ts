@@ -42,7 +42,7 @@ function hydrateCreativeTestAds(test: {
 }
 
 function testsNeedRecompute(
-  tests: { ad_ids: string[] | null; ad_count: number }[],
+  tests: { launch_date: string; platform: string; ad_ids: string[] | null; ad_count: number }[],
   adsById: Map<string, ScrapedAdRow>,
   allAds: ScrapedAdRow[]
 ): boolean {
@@ -67,6 +67,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const userId = user.id;
+
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   const force = searchParams.get("force") === "1";
@@ -79,7 +81,7 @@ export async function GET(request: Request) {
     .from("saved_competitors")
     .select("id, brand_name, brand_domain, name")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (compErr || !competitor) {
@@ -98,7 +100,7 @@ export async function GET(request: Request) {
         .select(
           "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, ai_extracted_launch_date"
         )
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("competitor_id", competitorId),
     ]);
 

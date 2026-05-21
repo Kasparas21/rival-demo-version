@@ -5,6 +5,7 @@ import { friendlySavedCompetitorsSchemaError } from "@/lib/account/saved-competi
 import {
   pickSavedCompetitorForDomainHint,
   savedCompetitorDomainOrFilter,
+  type SavedCompetitorPickRow,
 } from "@/lib/ad-library/competitor-cache-domain";
 import { probeSavedCompetitorsColumns } from "@/lib/account/saved-competitors-schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -138,19 +139,23 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    type FallbackSavedRow = SavedCompetitorPickRow & {
+      last_scraped_at?: string | null;
+      ads_library_context?: unknown;
+    };
+    const fallbackRows = (fallback.data ?? []) as unknown as FallbackSavedRow[];
+
     const row = (() => {
-      const picked = pickSavedCompetitorForDomainHint(fallback.data, slug);
-      if (picked?.id) return fallback.data?.find((r) => r.id === picked.id) ?? null;
-      return fallback.data?.[0] ?? null;
+      const picked = pickSavedCompetitorForDomainHint(fallbackRows, slug);
+      if (picked?.id) return fallbackRows.find((r) => r.id === picked.id) ?? null;
+      return fallbackRows[0] ?? null;
     })();
 
     return NextResponse.json({
       lastScrapedAt: row?.last_scraped_at ? String(row.last_scraped_at) : null,
       competitorId: row?.id ?? null,
       libraryContext: columnProbe.adsLibraryContext
-        ? parseAdsLibraryContext(
-            (row as { ads_library_context?: unknown } | null)?.ads_library_context,
-          )
+        ? parseAdsLibraryContext(row?.ads_library_context)
         : null,
       persistOk: null,
       persistErrors: null,

@@ -7,7 +7,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { buildCheckoutHref } from "@/lib/billing/checkout-url";
-import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import { hasActivePaidSubscription, type PlanTier } from "@/lib/billing/entitlements";
 
 type ProfileState = {
   full_name: string;
@@ -46,7 +46,7 @@ type BillingState = {
   hasAccess: boolean;
   isUnlimited: boolean;
   status: string;
-  planTier: string;
+  planTier: PlanTier;
   planName: string;
   polarProductId: string | null;
   trialEnd: string | null;
