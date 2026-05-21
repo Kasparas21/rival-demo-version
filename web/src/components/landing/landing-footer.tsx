@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 
 const columns = [
@@ -66,7 +67,7 @@ function SocialIcons() {
 export function LandingFooter() {
   return (
     <footer id="affiliates" className={`${landingNavAnchorScrollClasses} overflow-hidden pb-8 pt-14 sm:pt-16`}>
-      <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+      <LandingScrollReveal className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="grid grid-cols-1 gap-9 text-center sm:grid-cols-2 sm:text-left md:grid-cols-4 md:gap-10">
           {columns.map((col) => (
             <div key={col.title}>
@@ -94,7 +95,7 @@ export function LandingFooter() {
             Support: hello@rival.com
           </a>
         </div>
-      </div>
+      </LandingScrollReveal>
     </footer>
   );
 }

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Check, Plus, X } from "lucide-react";
 
 import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import {
   GoogleLogo,
@@ -85,7 +86,7 @@ export function LandingStackReplacement() {
         className="pointer-events-none absolute bottom-[6%] left-1/3 h-80 w-80 rounded-full bg-[#dbeafe]/45 blur-[110px]"
       />
 
-      <div className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
+      <LandingScrollReveal className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="text-center">
           <h2 className="text-[clamp(2rem,6.5vw,3.25rem)] font-bold lowercase leading-[1.08] tracking-tight text-[#1a1a1a]">
             replace your <LandingHeadlineHighlight>whole spy-tool stack</LandingHeadlineHighlight> with one.
@@ -214,7 +215,7 @@ export function LandingStackReplacement() {
             </article>
           </div>
         </div>
-      </div>
+      </LandingScrollReveal>
     </section>
   );
 }

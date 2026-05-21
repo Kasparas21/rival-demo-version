@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, User, Users } from "lucide-react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import type { BillingPeriod } from "@/lib/billing/config";
@@ -99,7 +100,7 @@ export function LandingPricing() {
 
   return (
     <section className="relative overflow-hidden py-16 sm:py-24">
-      <div className="relative mx-auto w-full max-w-5xl px-4 text-center sm:px-6">
+      <LandingScrollReveal className="relative mx-auto w-full max-w-5xl px-4 text-center sm:px-6">
         <h2
           id="pricing"
           className={`${landingNavAnchorScrollClasses} text-[clamp(2rem,6vw,2.75rem)] font-bold lowercase tracking-tight text-[#1a1a1a]`}
@@ -165,7 +166,7 @@ export function LandingPricing() {
         <p className="mx-auto mt-8 max-w-xl text-xs leading-relaxed text-gray-500 sm:text-sm">
           All plans start with a 7-day free trial · 1 competitor · card required · cancel anytime
         </p>
-      </div>
+      </LandingScrollReveal>
     </section>
   );
 }

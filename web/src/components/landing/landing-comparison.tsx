@@ -1,6 +1,7 @@
 import { Check, X } from "lucide-react";
 
 import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
@@ -82,7 +83,7 @@ function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[]
 export function LandingComparison() {
   return (
     <section className="relative overflow-hidden py-14 sm:py-20">
-      <div className="mx-auto w-full max-w-4xl px-4 sm:px-6">
+      <LandingScrollReveal className="mx-auto w-full max-w-4xl px-4 sm:px-6">
         <div className="text-center">
           <h2
             id="compare"
@@ -110,7 +111,7 @@ export function LandingComparison() {
           </LandingTrialCta>
           <p className="text-xs text-gray-500">The only cross-platform competitor-set OS built for weekly moves.</p>
         </div>
-      </div>
+      </LandingScrollReveal>
     </section>
   );
 }

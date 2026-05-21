@@ -1,4 +1,5 @@
 import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 
 export function LandingFinalCTA() {
@@ -18,7 +19,8 @@ export function LandingFinalCTA() {
       />
 
       <div className="relative mx-auto w-full max-w-3xl px-4 text-center sm:px-6">
-        <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/45 px-6 py-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_24px_64px_-24px_rgba(74,127,165,0.35)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-white/50 sm:rounded-[2.25rem] sm:px-10 sm:py-12">
+        <LandingScrollReveal>
+          <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-white/45 px-6 py-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_24px_64px_-24px_rgba(74,127,165,0.35)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-white/50 sm:rounded-[2.25rem] sm:px-10 sm:py-12">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/90 to-transparent"
@@ -60,7 +62,8 @@ export function LandingFinalCTA() {
 
             <p className="mt-5 text-xs text-gray-400">cancel anytime</p>
           </div>
-        </div>
+          </div>
+        </LandingScrollReveal>
       </div>
     </section>
   );

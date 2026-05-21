@@ -1,5 +1,6 @@
 "use client";
 
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import LogoLoop, { type LogoImgItem, type LogoItem } from "@/components/ui/logo-loop";
 
 const UPLOADTHING_LOGOS: LogoImgItem[] = [
@@ -67,7 +68,7 @@ export function LandingBrandMarquee() {
       className="relative isolate z-10 overflow-hidden bg-white py-6 [--landing-marquee-slide-h:52px] sm:py-7 sm:[--landing-marquee-slide-h:60px] md:[--landing-marquee-slide-h:68px]"
       aria-label="Brands and sectors Rival understands"
     >
-      <div className="relative z-[1] [&_img]:pointer-events-none">
+      <LandingScrollReveal className="relative z-[1] [&_img]:pointer-events-none">
         <div className="motion-reduce:block hidden py-2 sm:py-2.5">
           <ul className="flex flex-col items-center gap-10 px-4 sm:gap-11" role="list">
             {MARQUEE_LOGOS.map((entry) =>
@@ -128,7 +129,7 @@ export function LandingBrandMarquee() {
             }
           />
         </div>
-      </div>
+      </LandingScrollReveal>
     </section>
   );
 }

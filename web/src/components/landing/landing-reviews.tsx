@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 
 const REVIEW_GLASS_CARD_CLASS =
@@ -138,7 +139,7 @@ export function LandingReviews() {
         className="pointer-events-none absolute -right-16 top-[35%] h-64 w-64 rounded-full bg-[#95C14B]/10 blur-[90px]"
       />
 
-      <div className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
+      <LandingScrollReveal className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h2
           id="reviews"
           className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}
@@ -153,7 +154,7 @@ export function LandingReviews() {
             <ReviewCard key={review.name} review={review} />
           ))}
         </div>
-      </div>
+      </LandingScrollReveal>
     </section>
   );
 }
