@@ -2,7 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CheckoutCreate } from "@polar-sh/sdk/models/components/checkoutcreate";
 import { TrialInterval } from "@polar-sh/sdk/models/components/trialinterval";
 import { ensureUserProfile } from "@/lib/auth/profile";
-import { getAppUrl, polarProductIdForPlan, type PolarPlanSlug } from "@/lib/billing/config";
+import {
+  getAppUrl,
+  getPolarTesterDiscountId,
+  polarProductIdForPlan,
+  type PolarPlanSlug,
+} from "@/lib/billing/config";
 import { parseCheckoutPeriod } from "@/lib/billing/checkout-url";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import {
@@ -10,6 +15,12 @@ import {
   shouldPrefillPolarCustomerEmail,
 } from "@/lib/billing/polar-checkout-email";
 import { createPolarClient } from "@/lib/billing/polar";
+import {
+  getTesterInviteCodeFromRequest,
+  isTesterInviteCheckoutRequest,
+  validateTesterInviteAccess,
+} from "@/lib/billing/tester-invite";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 async function createCheckoutRedirect(request: NextRequest) {
@@ -20,7 +31,7 @@ async function createCheckoutRedirect(request: NextRequest) {
 
   if (!user) {
     const loginUrl = new URL("/login", request.nextUrl.origin);
-    loginUrl.searchParams.set("next", "/api/billing/checkout");
+    loginUrl.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -31,13 +42,15 @@ async function createCheckoutRedirect(request: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard/spy", request.nextUrl.origin));
   }
 
+  const isTesterCheckout = isTesterInviteCheckoutRequest(request);
   const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
-  const plan: PolarPlanSlug = planParam === "starter" ? "starter" : "pro";
-  const period = parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
+  const plan: PolarPlanSlug = isTesterCheckout ? "pro" : planParam === "starter" ? "starter" : "pro";
+  const period = isTesterCheckout ? "monthly" : parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
   const productId = polarProductIdForPlan(plan, period);
   const appUrl = getAppUrl();
   const polar = createPolarClient();
-  const checkoutBody: CheckoutCreate = {
+
+  let checkoutBody: CheckoutCreate = {
     products: [productId],
     externalCustomerId: user.id,
     ...(shouldPrefillPolarCustomerEmail(user.email)
@@ -56,8 +69,46 @@ async function createCheckoutRedirect(request: NextRequest) {
     trialInterval: TrialInterval.Day,
     trialIntervalCount: 7,
     successUrl: `${appUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
-    returnUrl: `${appUrl}/dashboard/settings`,
+    returnUrl: `${appUrl}/choose-plan`,
   };
+
+  if (isTesterCheckout) {
+    const inviteCode = getTesterInviteCodeFromRequest(request);
+    const admin = createSupabaseAdminClient();
+    const inviteStatus = await validateTesterInviteAccess(admin, {
+      inviteCode,
+      userId: user.id,
+    });
+
+    if (!inviteStatus.valid || !inviteStatus.inviteCode) {
+      return NextResponse.json(
+        { ok: false, error: inviteStatus.reason ?? "invalid_tester_invite" },
+        { status: 403 },
+      );
+    }
+
+    const discountId = getPolarTesterDiscountId();
+    if (!discountId) {
+      return NextResponse.json(
+        { ok: false, error: "Tester discount is not configured (POLAR_TESTER_DISCOUNT_ID)." },
+        { status: 503 },
+      );
+    }
+
+    checkoutBody = {
+      ...checkoutBody,
+      allowTrial: false,
+      allowDiscountCodes: false,
+      discountId,
+      metadata: {
+        user_id: user.id,
+        source: "rival_tester_invite",
+        invite_code: inviteStatus.inviteCode,
+        plan: "pro",
+        billing_period: "monthly",
+      },
+    };
+  }
 
   const checkout = await polar.checkouts.create(checkoutBody);
 

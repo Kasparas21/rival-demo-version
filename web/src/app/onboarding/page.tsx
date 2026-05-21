@@ -10,6 +10,7 @@ import {
 import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
+import { getTesterInviteStatusForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -56,6 +57,7 @@ export default async function OnboardingPage({
   const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard/spy";
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
   const showPlanStep = shouldShowPostOnboardingPlanPicker(billing);
+  const testerInvite = await getTesterInviteStatusForUser(user.id);
 
   if (profile?.onboarding_completed && !replayOnboarding) {
     if (showPlanStep) {
@@ -79,6 +81,7 @@ export default async function OnboardingPage({
           initialData={profile}
           postOnboardingPath={destinationAfterOnboarding}
           showPlanStep={showPlanStep}
+          testerInviteActive={testerInvite.active}
           userId={user.id}
         />
         <OnboardingDevHints showReplay={replayOnboarding} />

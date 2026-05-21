@@ -1090,6 +1090,30 @@ export type Database = {
         };
         Relationships: [];
       };
+      tester_invite_redemptions: {
+        Row: {
+          id: string;
+          invite_code: string;
+          user_id: string;
+          polar_subscription_id: string | null;
+          redeemed_at: string;
+        };
+        Insert: {
+          id?: string;
+          invite_code: string;
+          user_id: string;
+          polar_subscription_id?: string | null;
+          redeemed_at?: string;
+        };
+        Update: {
+          id?: string;
+          invite_code?: string;
+          user_id?: string;
+          polar_subscription_id?: string | null;
+          redeemed_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

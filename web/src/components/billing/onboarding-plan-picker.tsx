@@ -8,9 +8,10 @@ import { planPickerGlassClass } from "@/components/ui/glass-styles";
 
 type Props = {
   dashboardNext: string;
+  testerInviteActive?: boolean;
 };
 
-export function OnboardingPlanPicker({ dashboardNext }: Props) {
+export function OnboardingPlanPicker({ dashboardNext, testerInviteActive = false }: Props) {
   return (
     <RivalVideoShell footerTint="light">
       <div className="w-full max-w-3xl px-1 sm:px-2">
@@ -24,7 +25,11 @@ export function OnboardingPlanPicker({ dashboardNext }: Props) {
         </div>
 
         <div className={planPickerGlassClass}>
-          <PlanPickerContent dashboardNext={dashboardNext} variant="page" />
+          <PlanPickerContent
+            dashboardNext={dashboardNext}
+            variant="page"
+            testerInviteActive={testerInviteActive}
+          />
         </div>
       </div>
     </RivalVideoShell>

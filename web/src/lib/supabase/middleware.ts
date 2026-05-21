@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { applyTesterInviteCookieFromRequest } from "@/lib/billing/tester-invite";
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
 
@@ -15,6 +16,17 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
 }
 
 export async function updateSession(request: NextRequest) {
+  const testerParam = request.nextUrl.searchParams.get("tester")?.trim();
+  if (testerParam && testerParam !== "1") {
+    const inviteRedirect = await applyTesterInviteCookieFromRequest(
+      request,
+      NextResponse.next({ request }),
+    );
+    if (inviteRedirect.headers.get("location")) {
+      return inviteRedirect;
+    }
+  }
+
   let response = NextResponse.next({
     request,
   });

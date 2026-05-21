@@ -14,6 +14,7 @@ export const config = {
     "/auth/callback",
     "/auth/:path*",
     "/onboarding",
+    "/choose-plan",
     "/dashboard",
     "/dashboard/:path*",
     "/api/account/:path*",

@@ -19,6 +19,11 @@ export function buildApiBillingCheckoutHref(
   return `/api/billing/checkout?${checkoutQuery(plan, period)}`;
 }
 
+/** Tester cohort: Pro checkout with pre-applied Polar discount. */
+export function buildTesterCheckoutHref(): string {
+  return "/api/billing/checkout?plan=pro&tester=1";
+}
+
 export function parseCheckoutPeriod(raw: string | null | undefined): BillingPeriod {
   return raw?.trim().toLowerCase() === "annual" ? "annual" : "monthly";
 }

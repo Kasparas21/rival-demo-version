@@ -259,6 +259,7 @@ type Props = {
   postOnboardingPath?: string;
   /** Final onboarding step: Starter vs Pro (skipped when user already has access). */
   showPlanStep?: boolean;
+  testerInviteActive?: boolean;
   initialData: {
     company_name?: string | null;
     company_url?: string | null;
@@ -281,6 +282,7 @@ export function OnboardingForm({
   userId,
   postOnboardingPath = "/dashboard/spy",
   showPlanStep = false,
+  testerInviteActive = false,
   initialData,
 }: Props) {
   const router = useRouter();
@@ -1225,7 +1227,11 @@ export function OnboardingForm({
         ) : null}
 
         {step === STEP_CHOOSE_PLAN && showPlanStep ? (
-          <PlanPickerContent variant="onboarding" />
+          <PlanPickerContent
+            variant="onboarding"
+            dashboardNext={postOnboardingPath}
+            testerInviteActive={testerInviteActive}
+          />
         ) : null}
       </div>
     </div>

@@ -3,6 +3,9 @@ import type { Subscription } from "@polar-sh/sdk/models/components/subscription"
 import { getPolarWebhookSecret, isKnownPolarProductId } from "@/lib/billing/config";
 import { resolvePlanTier } from "@/lib/billing/entitlements";
 import {
+  recordTesterInviteRedemption,
+} from "@/lib/billing/tester-invite";
+import {
   PolarWebhookSignatureError,
   verifyPolarWebhookPayload,
 } from "@/lib/billing/polar-webhook-verify";
@@ -220,6 +223,20 @@ export async function POST(request: Request) {
     if (error) {
       console.error("[polar-webhook] billing_subscriptions upsert", error.message);
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    }
+
+    const inviteCode = stringMetadataValue(subscription.metadata?.invite_code);
+    const source = stringMetadataValue(subscription.metadata?.source);
+    if (source === "rival_tester_invite" && inviteCode) {
+      try {
+        await recordTesterInviteRedemption(admin, {
+          inviteCode,
+          userId,
+          polarSubscriptionId: subscription.id,
+        });
+      } catch (redemptionErr) {
+        console.error("[polar-webhook] tester invite redemption", redemptionErr);
+      }
     }
 
     const eventError = await recordWebhookEvent(admin, eventId, payload.type, rawPayload);

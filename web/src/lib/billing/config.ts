@@ -125,3 +125,9 @@ export function getPolarWebhookSecret(): string {
   }
   return secret;
 }
+
+/** Polar discount ID for tester cohort (100% off Pro). See POLAR_TESTER_DISCOUNT_ID in .env.example. */
+export function getPolarTesterDiscountId(): string | null {
+  const id = process.env.POLAR_TESTER_DISCOUNT_ID?.trim();
+  return id || null;
+}
