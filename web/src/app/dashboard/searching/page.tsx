@@ -15,7 +15,9 @@ import {
   loadSidebarCompetitors,
   MAX_WATCHED_COMPETITORS,
   normalizeCompetitorSlug,
+  removeSidebarCompetitor,
   upsertSidebarCompetitor,
+  WORKSPACE_BRAND_PLACEHOLDER_SLUG,
 } from "@/lib/sidebar-competitors";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
 import { saveCompetitorToAccount, saveSearchToAccount } from "@/lib/account/client";
@@ -61,6 +63,7 @@ import {
   readScrapeRequestFieldsFromStorage,
 } from "@/lib/ad-library/scrape-request-fields";
 import {
+  buildWorkspaceBrandInitialScrapeFields,
   loadWorkspaceBrandScrapeContext,
   platformIdentifierFromScrapeIds,
   WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM,
@@ -134,6 +137,7 @@ type RunScanOptions = {
   channels?: ChannelId[];
   adMarketCountryCodes?: string[] | null;
   brand?: DiscoveredBrand | null;
+  workspaceBrandInitialScrape?: boolean;
 };
 
 function SearchingContent() {
@@ -141,7 +145,7 @@ function SearchingContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaceBrandScrape = searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
-  const q = workspaceBrandScrape ? "workspace-brand" : searchParams.get("q") || "competitor";
+  const q = workspaceBrandScrape ? WORKSPACE_BRAND_PLACEHOLDER_SLUG : searchParams.get("q") || "competitor";
   const termsParam = searchParams.get("terms") ?? "";
   const channelsParam = searchParams.get("channels") ?? "";
 
@@ -321,6 +325,7 @@ function SearchingContent() {
   ]);
 
   useEffect(() => {
+    if (workspaceBrandScrape) return;
     if (phase !== "discovering") return;
     const slug = normalizeCompetitorSlug(displayName);
     const label = q.trim() || displayName;
@@ -333,9 +338,10 @@ function SearchingContent() {
       name: label,
       pending: true,
     });
-  }, [phase, displayName, q]);
+  }, [phase, displayName, q, workspaceBrandScrape]);
 
   useEffect(() => {
+    if (workspaceBrandScrape) return;
     if (phase === "discovering") return;
     const slug = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
     const brand =
@@ -362,9 +368,10 @@ function SearchingContent() {
       brand,
       pending: false,
     });
-  }, [phase, discoveredBrand, displayName]);
+  }, [phase, discoveredBrand, displayName, workspaceBrandScrape]);
 
   useEffect(() => {
+    if (workspaceBrandScrape) return;
     if (!discoveryError) return;
     const slug = normalizeCompetitorSlug(displayName);
     const label = q.trim() || displayName;
@@ -379,15 +386,16 @@ function SearchingContent() {
       name: label,
       pending: false,
     });
-  }, [discoveryError, displayName, q]);
+  }, [discoveryError, displayName, q, workspaceBrandScrape]);
 
   useEffect(() => {
+    if (workspaceBrandScrape) return;
     void saveSearchToAccount({
       query: q.trim() || displayName,
       terms: termHints ?? [],
       channels: selectedChannels,
     });
-  }, [displayName, q, selectedChannels, termHints]);
+  }, [displayName, q, selectedChannels, termHints, workspaceBrandScrape]);
 
   const runDiscovery = useCallback(async () => {
     const capSlug = normalizeCompetitorSlug(displayName);
@@ -497,6 +505,7 @@ function SearchingContent() {
 
       writeAdLibraryRegionPrefsToSession(adLibraryRegions);
 
+      const isWorkspaceInitial = options?.workspaceBrandInitialScrape === true;
       const slug = normalizeCompetitorSlug(brandForScan?.domain ?? displayName);
       const label = brandForScan?.name ?? displayName;
       const brandForSave = brandForScan
@@ -508,6 +517,7 @@ function SearchingContent() {
         logoUrl: brandForScan?.logoUrl,
         brand: brandForSave,
         pending: false,
+        ...(isWorkspaceInitial ? { isWorkspaceBrand: true } : {}),
         adsLibraryContext: {
           ids: mergedIds as Record<string, string>,
           channels: channelsForScan,
@@ -515,12 +525,13 @@ function SearchingContent() {
         },
       });
 
-      const scrape = applyInitialScrapeLimits(
-        mergeScrapeFieldsWithWorkspaceMarkets(
-          readScrapeRequestFieldsFromStorage(),
-          options?.adMarketCountryCodes ?? null,
-        ),
+      const baseScrapeFields = mergeScrapeFieldsWithWorkspaceMarkets(
+        readScrapeRequestFieldsFromStorage(),
+        options?.adMarketCountryCodes ?? null,
       );
+      const scrape = isWorkspaceInitial
+        ? buildWorkspaceBrandInitialScrapeFields(baseScrapeFields)
+        : applyInitialScrapeLimits(baseScrapeFields);
       const tiktokRegion = normalizeTikTokAdsRegion(adLibraryRegions.tiktokRegion);
       const googleRegion = normalizeGoogleAdsRegion(adLibraryRegions.googleRegion);
       const googleResultsLimit = getInitialAdsCount("google");
@@ -560,6 +571,7 @@ function SearchingContent() {
         ...(adsPlatforms.includes("tiktok") ? { tiktokRegion } : {}),
         ...(adsPlatforms.includes("google") ? { googleRegion, googleResultsLimit } : {}),
         ...(adsPlatforms.includes("pinterest") ? { pinterestCountry } : {}),
+        ...(isWorkspaceInitial ? { filterGoogleActiveToday: true } : {}),
       };
       const payloadKey = stableAdsLibraryPayloadKey(payload);
       const scanDomain = payload.brand.domain;
@@ -673,6 +685,12 @@ function SearchingContent() {
     if (!flowRehydrated || !workspaceBrandScrape || workspaceScrapeStartedRef.current) return;
     workspaceScrapeStartedRef.current = true;
 
+    for (const row of loadSidebarCompetitors()) {
+      if (normalizeCompetitorSlug(row.slug) === WORKSPACE_BRAND_PLACEHOLDER_SLUG) {
+        removeSidebarCompetitor(row);
+      }
+    }
+
     void (async () => {
       const ctx = await loadWorkspaceBrandScrapeContext();
       if (!ctx) {
@@ -700,6 +718,7 @@ function SearchingContent() {
         channels: ctx.channels,
         adMarketCountryCodes: ctx.adMarketCountryCodes,
         brand,
+        workspaceBrandInitialScrape: true,
       });
     })();
   }, [flowRehydrated, router, runScanAndNavigate, workspaceBrandScrape]);
@@ -778,11 +797,19 @@ function SearchingContent() {
         >
           {isDiscovering && "Looking up your competitor…"}
           {isManualNeeded && "Add any missing links below"}
-          {isScanning && (platformsToScan.length > 0
-            ? `Checking ${platformsToScan.length} platform${platformsToScan.length === 1 ? "" : "s"} for ads…`
-            : "Taking you to results")}
+          {isScanning &&
+            (workspaceBrandScrape
+              ? "Scraping all your brand's active ads…"
+              : platformsToScan.length > 0
+                ? `Checking ${platformsToScan.length} platform${platformsToScan.length === 1 ? "" : "s"} for ads…`
+                : "Taking you to results")}
           {isFound && (platformsToScan.length > 0 ? "All done — your competitor’s ads are ready" : "Taking you to results")}
         </h2>
+        {isScanning && workspaceBrandScrape ? (
+          <p className="text-[13px] sm:text-[14px] text-[#71717a] text-center max-w-lg mx-auto mb-8 sm:mb-10 leading-relaxed -mt-6 sm:-mt-12">
+            We&apos;re pulling every active ad from the platforms you connected during onboarding.
+          </p>
+        ) : null}
         {isManualNeeded ? (
           <p className="text-[13px] sm:text-[14px] text-[#71717a] text-center max-w-lg mx-auto mb-8 sm:mb-10 leading-relaxed">
             We pre-filled what we could. Edit a field or use Preview to verify before continuing.
@@ -901,7 +928,9 @@ function SearchingContent() {
               <div className="w-full rounded-2xl border border-[#bfdbfe] bg-[#eff6ff] px-4 py-4 shadow-sm">
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <p className="text-[14px] font-semibold text-[#374151] min-w-0">
-                    Fetching ads from selected platforms…
+                    {workspaceBrandScrape
+                      ? "This can take a few minutes — we're working on making it faster."
+                      : "Fetching ads from selected platforms…"}
                   </p>
                   <p className="text-[12px] text-[#6b7280] shrink-0 tabular-nums">
                     {scanFraction.total > 0 ? `${scanFraction.done}/${scanFraction.total}` : "In progress"}

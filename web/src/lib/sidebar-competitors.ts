@@ -319,6 +319,9 @@ function migrateV1IfNeeded(): SidebarCompetitor[] {
 /** UI fallback when plan limits are not loaded yet (Pro max per PDF). */
 export const MAX_WATCHED_COMPETITORS = 15;
 
+/** Placeholder slug used during workspace brand scrape — never a watched competitor. */
+export const WORKSPACE_BRAND_PLACEHOLDER_SLUG = "workspace-brand";
+
 const MAX_STORED = MAX_WATCHED_COMPETITORS;
 
 export type UpsertSidebarCompetitorResult =
@@ -446,6 +449,7 @@ export function isSidebarRowLikelyWorkspaceBrand(
   workspaceDomain: string | null | undefined,
 ): boolean {
   if (row.isWorkspaceBrand === true) return true;
+  if (normalizeCompetitorSlug(row.slug) === WORKSPACE_BRAND_PLACEHOLDER_SLUG) return true;
   const ws = normalizeCompetitorSlug(String(workspaceDomain ?? "").trim());
   if (!ws) return false;
   const rowHost = coerceSidebarCompetitorUrlHost(row);
@@ -461,6 +465,18 @@ export function sidebarCompetitorsWithoutWorkspaceRow(
   workspaceDomain: string | null | undefined,
 ): SidebarCompetitor[] {
   return rows.filter((r) => !isSidebarRowLikelyWorkspaceBrand(r, workspaceDomain));
+}
+
+/** Drop workspace-brand rows from local sidebar storage; returns whether anything was removed. */
+export function purgeExcludedSidebarCompetitorRows(
+  workspaceDomain: string | null | undefined,
+): boolean {
+  if (typeof window === "undefined") return false;
+  const cur = loadSidebarCompetitors();
+  const next = sidebarCompetitorsWithoutWorkspaceRow(cur, workspaceDomain);
+  if (next.length === cur.length) return false;
+  saveSidebarCompetitors(next);
+  return true;
 }
 
 /**

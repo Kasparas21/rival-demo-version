@@ -21,6 +21,7 @@ import {
   mergeAccountSidebarRowsWithLocalLibraryContext,
   MAX_WATCHED_COMPETITORS,
   normalizeCompetitorSlug,
+  purgeExcludedSidebarCompetitorRows,
   removeSidebarCompetitor,
   saveSidebarCompetitors,
   sidebarCompetitorsWithoutWorkspaceRow,
@@ -220,6 +221,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, [refreshSavedCompetitors]);
 
   useEffect(() => {
+    const ws = brands[0]?.domain?.trim() || null;
+    if (purgeExcludedSidebarCompetitorRows(ws)) {
+      refreshSavedCompetitors();
+    }
+  }, [brands, refreshSavedCompetitors]);
+
+  useEffect(() => {
     hydrateDashboardPrefs();
   }, [hydrateDashboardPrefs]);
 
@@ -375,12 +383,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
       ensureSidebarStorageBelongsToUser(uid);
 
-      const localCompetitors = loadSidebarCompetitors();
+      const workspaceDomain = brands[0]?.domain?.trim() || null;
+      purgeExcludedSidebarCompetitorRows(workspaceDomain);
+
+      const localCompetitors = sidebarCompetitorsWithoutWorkspaceRow(
+        loadSidebarCompetitors(),
+        workspaceDomain,
+      );
       const remoteCompetitors = await fetchSavedCompetitorsFromAccount();
 
       if (cancelled) return;
-
-      const workspaceDomain = brands[0]?.domain?.trim() || null;
 
       if (remoteCompetitors.length > 0) {
         const visibleRemote = sidebarCompetitorsWithoutWorkspaceRow(

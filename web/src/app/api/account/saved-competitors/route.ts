@@ -7,7 +7,7 @@ import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { collectAdsCacheDomainVariantsForSavedCompetitorRow } from "@/lib/ad-library/competitor-cache-domain";
-import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
+import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
   const ids =
@@ -181,6 +181,17 @@ type ExistingRowMeta = {
 };
 
 type ServerSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+async function deleteWorkspaceBrandPlaceholderRows(
+  supabase: ServerSupabase,
+  userId: string,
+): Promise<void> {
+  await supabase
+    .from("saved_competitors")
+    .delete()
+    .eq("user_id", userId)
+    .eq("slug", WORKSPACE_BRAND_PLACEHOLDER_SLUG);
+}
 
 async function fetchExistingSavedRows(
   supabase: ServerSupabase,
@@ -418,6 +429,7 @@ export async function POST(request: Request) {
 
   if (workspaceItems.length === 1) {
     const wsSlug = normalizeCompetitorSlug(workspaceItems[0]!.slug);
+    await deleteWorkspaceBrandPlaceholderRows(supabase, user.id);
     let delWs;
     if (workspaceBrandColumnSupported) {
       delWs = await supabase

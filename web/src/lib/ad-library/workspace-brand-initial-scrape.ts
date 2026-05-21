@@ -1,5 +1,10 @@
 import type { ChannelId } from "@/components/channel-picker-modal";
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
+import { buildManualRefreshScrapeParams } from "@/lib/ad-library/manual-refresh-date-window";
+import {
+  applyInitialScrapeLimits,
+  type ScrapeRequestFields,
+} from "@/lib/ad-library/scrape-request-fields";
 import { parseAdsProfileSetup, scrapeHintsToPlatformIds } from "@/lib/onboarding/workspace-ads-setup";
 
 export type WorkspaceBrandScrapeContext = {
@@ -87,4 +92,24 @@ export const WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM = "workspaceBrandScrape";
 
 export function buildWorkspaceBrandScrapeHref(): string {
   return `/dashboard/searching?${WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM}=1`;
+}
+
+/** Post-onboarding workspace scrape: max 500 per platform, active-only date windows (not competitor discovery). */
+export function buildWorkspaceBrandInitialScrapeFields(base: ScrapeRequestFields): ScrapeRequestFields {
+  const limits = applyInitialScrapeLimits(base);
+  const active = buildManualRefreshScrapeParams();
+  return {
+    ...limits,
+    metaStartDate: active.metaStartDate,
+    metaEndDate: active.metaEndDate,
+    linkedinDateRange: active.linkedinDateRange,
+    tiktokStartDate: active.tiktokStartDate,
+    tiktokEndDate: active.tiktokEndDate,
+    pinterestStartDate: active.pinterestStartDate,
+    pinterestEndDate: active.pinterestEndDate,
+    snapchatStartDate: active.snapchatStartDate,
+    snapchatEndDate: active.snapchatEndDate,
+    microsoftStartDate: active.microsoftStartDate,
+    microsoftEndDate: active.microsoftEndDate,
+  };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import type { SavedCompetitorPayload, SavedSearchPayload } from "./types";
-import { hoistLogoOntoRow, upsertSidebarCompetitor, type SidebarCompetitor } from "@/lib/sidebar-competitors";
+import { hoistLogoOntoRow, upsertSidebarCompetitor, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor } from "@/lib/sidebar-competitors";
 
 /** Persist DB UUIDs locally after POST so Ad Library clicks/saves/analytics unblock before layout GET merges. */
 function patchSidebarSavedCompetitorDbIds(payload: unknown) {
@@ -15,6 +15,7 @@ function patchSidebarSavedCompetitorDbIds(payload: unknown) {
     const savedCompetitorDbId =
       typeof o.savedCompetitorDbId === "string" ? o.savedCompetitorDbId.trim() : "";
     if (!slug || !savedCompetitorDbId) continue;
+    if (slug.toLowerCase().replace(/^www\./, "") === WORKSPACE_BRAND_PLACEHOLDER_SLUG) continue;
     upsertSidebarCompetitor({ slug, savedCompetitorDbId });
   }
 }
