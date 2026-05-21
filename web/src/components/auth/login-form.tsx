@@ -46,7 +46,14 @@ export function LoginForm() {
   const urlAuthError = searchParams.get("error");
   const notice = searchParams.get("notice");
   const rawNextQuery = searchParams.get("next");
-  const signupHref = rawNextQuery ? `/signup?next=${encodeURIComponent(rawNextQuery)}` : "/signup";
+  const rawTesterQuery = searchParams.get("tester");
+  const signupHref = (() => {
+    const params = new URLSearchParams();
+    if (rawNextQuery) params.set("next", rawNextQuery);
+    if (rawTesterQuery) params.set("tester", rawTesterQuery);
+    const qs = params.toString();
+    return qs ? `/signup?${qs}` : "/signup";
+  })();
   const [email, setEmail] = useState("");
   const forgotPasswordHref = useMemo(() => {
     const params = new URLSearchParams();

@@ -16,10 +16,11 @@ import {
 } from "@/lib/billing/polar-checkout-email";
 import { createPolarClient } from "@/lib/billing/polar";
 import {
-  getTesterInviteCodeFromRequest,
   isTesterInviteCheckoutRequest,
+  setTesterInviteCookie,
   validateTesterInviteAccess,
 } from "@/lib/billing/tester-invite";
+import { resolveTesterInviteCodeForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -72,11 +73,13 @@ async function createCheckoutRedirect(request: NextRequest) {
     returnUrl: `${appUrl}/choose-plan`,
   };
 
+  let testerInviteCode: string | null = null;
+
   if (isTesterCheckout) {
-    const inviteCode = getTesterInviteCodeFromRequest(request);
+    testerInviteCode = await resolveTesterInviteCodeForUser(user.id, request);
     const admin = createSupabaseAdminClient();
     const inviteStatus = await validateTesterInviteAccess(admin, {
-      inviteCode,
+      inviteCode: testerInviteCode,
       userId: user.id,
     });
 
@@ -112,7 +115,11 @@ async function createCheckoutRedirect(request: NextRequest) {
 
   const checkout = await polar.checkouts.create(checkoutBody);
 
-  return NextResponse.redirect(checkout.url);
+  const redirect = NextResponse.redirect(checkout.url);
+  if (testerInviteCode) {
+    setTesterInviteCookie(redirect, testerInviteCode);
+  }
+  return redirect;
 }
 
 export async function GET(request: NextRequest) {

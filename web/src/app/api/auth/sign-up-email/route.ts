@@ -4,9 +4,23 @@ import { buildEmailTokenCallbackUrl } from "@/lib/auth/build-email-token-callbac
 import { getResendApiKey, getResendFromEmail } from "@/lib/email/resend-config";
 import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
+import {
+  getTesterInviteCodeFromRequest,
+  matchesTesterInviteCode,
+  normalizeInviteCode,
+} from "@/lib/billing/tester-invite";
+import { persistTesterInviteToUserMetadata } from "@/lib/billing/tester-invite-user";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function resolveSignupTesterInvite(request: NextRequest, bodyTester?: string): string | null {
+  const fromBody =
+    typeof bodyTester === "string" && matchesTesterInviteCode(bodyTester)
+      ? normalizeInviteCode(bodyTester)
+      : null;
+  return fromBody ?? getTesterInviteCodeFromRequest(request);
+}
 
 export async function POST(request: NextRequest) {
   const apiKey = getResendApiKey();
@@ -14,9 +28,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Resend is not configured (RESEND_API_KEY)" }, { status: 503 });
   }
 
-  let body: { email?: string; password?: string; next?: string };
+  let body: { email?: string; password?: string; next?: string; testerInvite?: string };
   try {
-    body = (await request.json()) as { email?: string; password?: string; next?: string };
+    body = (await request.json()) as {
+      email?: string;
+      password?: string;
+      next?: string;
+      testerInvite?: string;
+    };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -34,8 +53,12 @@ export async function POST(request: NextRequest) {
   const next =
     nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
 
+  const testerInvite = resolveSignupTesterInvite(request, body.testerInvite);
+
   const origin = authLinkOriginForRequest(request);
-  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;
+  const redirectParams = new URLSearchParams({ next });
+  if (testerInvite) redirectParams.set("tester", testerInvite);
+  const redirectTo = `${origin}/auth/callback?${redirectParams.toString()}`;
 
   const admin = createSupabaseAdminClient();
 
@@ -50,8 +73,17 @@ export async function POST(request: NextRequest) {
   if (linkError || !hashedToken) {
     return NextResponse.json(
       { error: linkError?.message ?? "Could not create account or confirmation link" },
-      { status: 400 }
+      { status: 400 },
     );
+  }
+
+  const userId = linkData.user?.id;
+  if (userId && testerInvite) {
+    try {
+      await persistTesterInviteToUserMetadata(admin, userId, testerInvite);
+    } catch (err) {
+      console.error("[sign-up-email] persist tester invite metadata", err);
+    }
   }
 
   const confirmUrl = buildEmailTokenCallbackUrl({
@@ -59,6 +91,7 @@ export async function POST(request: NextRequest) {
     hashedToken,
     otpType: "signup",
     nextPath: next,
+    testerCode: testerInvite,
   });
 
   const resend = new Resend(apiKey);

@@ -4,6 +4,12 @@ import type { CookieOptions } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureUserProfile } from "@/lib/auth/profile";
 import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
+import { persistTesterInviteToUserMetadata, readTesterInviteFromUserMetadata } from "@/lib/billing/tester-invite-user";
+import {
+  getTesterInviteCodeFromRequest,
+  setTesterInviteCookie,
+} from "@/lib/billing/tester-invite";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import type { Database } from "@/lib/supabase/types";
 
@@ -159,5 +165,18 @@ export async function GET(request: NextRequest) {
     out.cookies.set(name, value, options);
   });
   out.cookies.set("rival_oauth_next", "", { maxAge: 0, path: "/" });
+
+  const inviteCode =
+    getTesterInviteCodeFromRequest(request) ?? readTesterInviteFromUserMetadata(user.user_metadata);
+  if (inviteCode) {
+    setTesterInviteCookie(out, inviteCode);
+    try {
+      const admin = createSupabaseAdminClient();
+      await persistTesterInviteToUserMetadata(admin, user.id, inviteCode);
+    } catch (err) {
+      console.error("[auth/callback] persist tester invite metadata", err);
+    }
+  }
+
   return out;
 }

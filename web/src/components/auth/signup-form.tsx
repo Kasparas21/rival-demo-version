@@ -9,6 +9,7 @@ import { glassPanelClass } from "@/components/ui/glass-styles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Google } from "@/components/icons/google-logo";
 import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
+import { buildAuthCallbackPath } from "@/lib/auth/build-email-token-callback-url";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
 
 function buildRedirectTo(path: string) {
@@ -28,13 +29,20 @@ const glassInputWrap =
 const glassInputField =
   "w-full border-none bg-transparent py-3 text-[15px] font-medium tracking-wide text-gray-900 outline-none placeholder:text-gray-600 focus:ring-0";
 
-export function SignupForm() {
+export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: string | null }) {
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const next = safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/dashboard/spy";
   const urlAuthError = searchParams.get("error");
   const rawNextQuery = searchParams.get("next");
-  const loginHref = rawNextQuery ? `/login?next=${encodeURIComponent(rawNextQuery)}` : "/login";
+  const rawTesterQuery = searchParams.get("tester");
+  const loginHref = (() => {
+    const params = new URLSearchParams();
+    if (rawNextQuery) params.set("next", rawNextQuery);
+    if (rawTesterQuery) params.set("tester", rawTesterQuery);
+    const qs = params.toString();
+    return qs ? `/login?${qs}` : "/login";
+  })();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -69,7 +77,12 @@ export function SignupForm() {
     const res = await fetch("/api/auth/sign-up-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: trimmed, password, next: effectiveNext }),
+      body: JSON.stringify({
+        email: trimmed,
+        password,
+        next: effectiveNext,
+        ...(testerInviteCode ? { testerInvite: testerInviteCode } : {}),
+      }),
     });
     let payload: { ok?: boolean; error?: string } = {};
     try {
@@ -104,7 +117,7 @@ export function SignupForm() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: buildRedirectTo(`/auth/callback?next=${encodeURIComponent(next)}`),
+        redirectTo: buildRedirectTo(buildAuthCallbackPath(next, testerInviteCode)),
         queryParams: {
           prompt: "select_account",
         },

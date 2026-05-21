@@ -2,10 +2,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { polarProductIdForPlan } from "@/lib/billing/config";
 import {
-  getTesterInviteCodeFromRequest,
   recordTesterInviteRedemption,
+  setTesterInviteCookie,
   validateTesterInviteAccess,
 } from "@/lib/billing/tester-invite";
+import { resolveTesterInviteCodeForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const inviteCode = getTesterInviteCodeFromRequest(request);
+  const inviteCode = await resolveTesterInviteCodeForUser(user.id, request);
   const admin = createSupabaseAdminClient();
   const status = await validateTesterInviteAccess(admin, {
     inviteCode,
@@ -69,5 +70,9 @@ export async function POST(request: NextRequest) {
     polarSubscriptionId: null,
   });
 
-  return NextResponse.json({ ok: true, planTier: "pro" });
+  const out = NextResponse.json({ ok: true, planTier: "pro" });
+  if (inviteCode) {
+    setTesterInviteCookie(out, inviteCode);
+  }
+  return out;
 }

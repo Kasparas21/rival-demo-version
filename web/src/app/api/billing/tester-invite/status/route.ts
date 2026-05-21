@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
-  getTesterInviteCodeFromRequest,
   validateTesterInviteAccess,
 } from "@/lib/billing/tester-invite";
+import { resolveTesterInviteCodeForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -16,7 +16,9 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const inviteCode = getTesterInviteCodeFromRequest(request);
+  const inviteCode = user
+    ? await resolveTesterInviteCodeForUser(user.id, request)
+    : null;
   const admin = createSupabaseAdminClient();
   const status = await validateTesterInviteAccess(admin, {
     inviteCode,

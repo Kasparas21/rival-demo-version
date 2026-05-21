@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { SignupForm } from "@/components/auth/signup-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
+import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
+import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function SignupPage({
@@ -35,5 +37,12 @@ export default async function SignupPage({
     redirect(safePostOnboardingPath ?? "/dashboard/spy");
   }
 
-  return <SignupForm />;
+  const testerFromQuery = firstParam(params.tester);
+  const testerFromQueryCode =
+    testerFromQuery && matchesTesterInviteCode(testerFromQuery)
+      ? normalizeInviteCode(testerFromQuery)
+      : null;
+  const testerInviteCode = (await getTesterInviteCodeFromCookies()) ?? testerFromQueryCode;
+
+  return <SignupForm testerInviteCode={testerInviteCode} />;
 }
