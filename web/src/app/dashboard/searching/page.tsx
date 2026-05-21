@@ -571,7 +571,7 @@ function SearchingContent() {
         ...(adsPlatforms.includes("tiktok") ? { tiktokRegion } : {}),
         ...(adsPlatforms.includes("google") ? { googleRegion, googleResultsLimit } : {}),
         ...(adsPlatforms.includes("pinterest") ? { pinterestCountry } : {}),
-        ...(isWorkspaceInitial ? { filterGoogleActiveToday: true } : {}),
+        ...(isWorkspaceInitial ? { filterGoogleActiveToday: true, metaWorkspaceBrandInitialScrape: true } : {}),
       };
       const payloadKey = stableAdsLibraryPayloadKey(payload);
       const scanDomain = payload.brand.domain;

@@ -107,6 +107,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     intent?: "discovery" | "manual";
     /** When true with manual refresh, post-filter Google rows to ads active today (UTC). */
     filterGoogleActiveToday?: boolean;
+    /** Post-onboarding workspace brand Meta scrape — full active page Ad Library URL. */
+    metaWorkspaceBrandInitialScrape?: boolean;
     /** When true, only read `ads_cache` — never run Apify (used right after discovery scan). */
     cacheOnly?: boolean;
     /** Channel picker ids — merged into `saved_competitors.ads_library_context`. */
@@ -252,6 +254,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const skipCache = body.skipCache === true;
   const scrapeIntent = body.intent === "manual" ? "manual" : "discovery";
   const filterGoogleActiveToday = body.filterGoogleActiveToday === true;
+  const metaWorkspaceBrandInitialScrape = body.metaWorkspaceBrandInitialScrape === true;
   const cacheOnly = body.cacheOnly === true;
   const domainNorm = domain.toLowerCase();
 
@@ -460,6 +463,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     pinterestCountry,
     pinterestConfirmedAdvertiserQuery,
     snapchatConfirmedAdvertiserQuery,
+    metaWorkspaceBrandInitialScrape,
   });
 
   if (filterGoogleActiveToday && out.google.rows.length > 0) {

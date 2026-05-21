@@ -16,6 +16,20 @@ export function buildMetaAdLibraryUrl(viewAllPageId: string): string {
   return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(id)}`;
 }
 
+/**
+ * Meta Ad Library URL for post-onboarding workspace brand scrape — active ads only, full page search params.
+ * Matches the public Ad Library share URL shape (search_type=page, sort by total impressions).
+ */
+export function buildWorkspaceBrandActiveMetaAdLibraryUrl(viewAllPageId: string): string {
+  const id = viewAllPageId.replace(/\D/g, "");
+  return (
+    "https://www.facebook.com/ads/library/?" +
+    "active_status=active&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&" +
+    "search_type=page&sort_data[direction]=desc&sort_data[mode]=total_impressions&" +
+    `view_all_page_id=${encodeURIComponent(id)}`
+  );
+}
+
 function isMetaAdsLibraryPath(low: string): boolean {
   return (
     (low.includes("facebook.com") || low.includes("fb.com") || low.includes("m.facebook.com")) &&

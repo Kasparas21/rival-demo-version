@@ -85,6 +85,8 @@ export type RunAdsLibraryParallelScrapeParams = {
   pinterestConfirmedAdvertiserQuery?: string;
   /** Set when the user provided a Snapchat gallery advertiser string — drives Unverified source vs row advertiser. */
   snapchatConfirmedAdvertiserQuery?: string;
+  /** Post-onboarding workspace brand Meta scrape — full active page Ad Library URL. */
+  metaWorkspaceBrandInitialScrape?: boolean;
 };
 
 /**
@@ -131,6 +133,7 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
     pinterestCountry,
     pinterestConfirmedAdvertiserQuery,
     snapchatConfirmedAdvertiserQuery,
+    metaWorkspaceBrandInitialScrape,
   } = params;
 
   await Promise.all([
@@ -146,6 +149,7 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
           metaStartDate,
           metaEndDate,
           scrapePageAdsSortBy: metaSortBy,
+          metaWorkspaceBrandInitialScrape,
         });
       } catch (e) {
         out.meta.error =

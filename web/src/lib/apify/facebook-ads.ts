@@ -4,7 +4,7 @@ import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
-import { buildMetaAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
+import { buildMetaAdLibraryUrl, buildWorkspaceBrandActiveMetaAdLibraryUrl, extractMetaAdsLibraryPageId } from "@/lib/ad-library/canonical-library-url";
 
 const DEFAULT_FACEBOOK_ADS_ACTOR = "curious_coder/facebook-ads-library-scraper";
 const DEFAULT_MAX_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
@@ -50,9 +50,21 @@ function buildInputUrls(
   activeStatus: "ACTIVE" | "ALL",
   country: string,
   startDateIso?: string,
-  endDateIso?: string
+  endDateIso?: string,
+  metaWorkspaceBrandInitialScrape?: boolean,
 ): Array<{ url: string }> {
   const urls = new Set<string>();
+
+  if (metaWorkspaceBrandInitialScrape) {
+    const pageId =
+      extractMetaAdsLibraryPageId(ids.metaPageUrl ?? "") ??
+      extractMetaAdsLibraryPageId(ids.meta ?? "");
+    if (pageId) {
+      urls.add(buildWorkspaceBrandActiveMetaAdLibraryUrl(pageId));
+      return [...urls].map((url) => ({ url }));
+    }
+  }
+
   const pageRaw = ids.metaPageUrl?.trim();
   const metaRaw = ids.meta?.trim();
   const pageHref = pageRaw ? normalizeFacebookHref(pageRaw) : "";
@@ -99,19 +111,32 @@ export async function scrapeFacebookAds(
     scrapePageAdsPeriod?: string;
     /** Actor `scrapePageAds.sortBy` */
     scrapePageAdsSortBy?: string;
+    /** Post-onboarding workspace brand scrape — use full active page Ad Library URL. */
+    metaWorkspaceBrandInitialScrape?: boolean;
   }
 ): Promise<MetaAdCard[]> {
   const actorId = process.env.APIFY_FACEBOOK_ADS_ACTOR?.trim() || DEFAULT_FACEBOOK_ADS_ACTOR;
+  const workspaceBrandInitial = params.metaWorkspaceBrandInitialScrape === true;
   const activeStatus = params.activeStatus === "ALL" ? "ALL" : "ACTIVE";
   const maxAds = Math.max(
     1,
     Math.min(params.maxAds ?? DEFAULT_MAX_ADS, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM)
   );
   const actorCount = Math.max(ACTOR_MINIMUM_COUNT, maxAds);
-  const country = (params.countryCode ?? "US").trim().toUpperCase() || "US";
+  const country = workspaceBrandInitial
+    ? "ALL"
+    : (params.countryCode ?? "US").trim().toUpperCase() || "US";
   const sd = params.metaStartDate?.trim();
   const ed = params.metaEndDate?.trim();
-  const urls = buildInputUrls(params.ids, params.brandName, activeStatus, country, sd, ed);
+  const urls = buildInputUrls(
+    params.ids,
+    params.brandName,
+    activeStatus,
+    country,
+    sd,
+    ed,
+    workspaceBrandInitial,
+  );
 
   if (urls.length === 0) {
     throw new Error("No valid Meta search URL or Facebook page URL was provided");
