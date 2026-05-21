@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buildApiBillingCheckoutHref, buildTesterCheckoutHref } from "@/lib/billing/checkout-url";
+import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import type { BillingPeriod } from "@/lib/billing/config";
 import {
   PLAN_OFFERS,
@@ -104,6 +105,8 @@ function TesterPlanPicker({
   const [polarLoading, setPolarLoading] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const proOffer = PLAN_OFFERS.find((offer) => offer.slug === "pro") ?? PLAN_OFFERS[1]!;
+  const isOnboarding = variant === "onboarding";
+  const showDevClaimFallback = isDebugPlatformClassificationEnabled();
 
   const titleClass =
     variant === "onboarding"
@@ -137,7 +140,7 @@ function TesterPlanPicker({
       }
       setClaimError(message);
     } catch {
-      setClaimError("Network error — try again or use Activate without payment below.");
+      setClaimError("Network error — try again.");
     } finally {
       setPolarLoading(false);
     }
@@ -166,16 +169,16 @@ function TesterPlanPicker({
   }
 
   return (
-    <>
-      <div className={variant === "onboarding" ? "mb-4 text-left" : "text-center"}>
+    <div className={isOnboarding ? "mx-auto w-full max-w-xl" : undefined}>
+      <div className={isOnboarding ? "mb-4 text-center" : variant === "page" || variant === "overlay" ? "text-center" : "mb-4 text-left"}>
         {variant !== "onboarding" ? (
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">You&apos;re all set</p>
         ) : null}
-        <h1 className={variant === "onboarding" ? titleClass : `mt-1 ${titleClass}`}>Your tester access</h1>
+        <h1 className={isOnboarding ? titleClass : `mt-1 ${titleClass}`}>Your tester access</h1>
         <p
           className={
-            variant === "onboarding"
-              ? "mt-1.5 text-[13px] text-gray-600"
+            isOnboarding
+              ? "mx-auto mt-1.5 max-w-md text-[13px] text-gray-600"
               : "mx-auto mt-2 max-w-sm text-[13px] text-gray-600"
           }
         >
@@ -184,7 +187,7 @@ function TesterPlanPicker({
       </div>
 
       <div className="mt-4 text-left">
-        <div className={`${planCardBase} ${planCardPopular} max-w-xl ${variant === "onboarding" ? "" : "mx-auto"}`}>
+        <div className={`${planCardBase} ${planCardPopular} mx-auto max-w-xl`}>
           <div className="flex items-start justify-between gap-2">
             <p className="text-lg font-semibold text-gray-900">{proOffer.name}</p>
             <span className="shrink-0 rounded-full bg-[#95C14B] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gray-900">
@@ -208,21 +211,23 @@ function TesterPlanPicker({
 
           <button
             type="button"
-            disabled={claiming}
-            onClick={() => void claimWithoutCard()}
-            className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {claiming ? "Activating…" : "Activate without payment (no card)"}
-          </button>
-
-          <button
-            type="button"
             disabled={polarLoading || claiming}
             onClick={() => void activateViaPolar()}
-            className="mt-2 w-full text-center text-[12px] font-medium text-[#1e6fa8] underline-offset-2 hover:underline disabled:opacity-50"
+            className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {polarLoading ? "Opening Polar…" : "Or activate via Polar checkout ($0)"}
+            {polarLoading ? "Opening checkout…" : "Activate without payment (no card)"}
           </button>
+
+          {showDevClaimFallback ? (
+            <button
+              type="button"
+              disabled={claiming || polarLoading}
+              onClick={() => void claimWithoutCard()}
+              className="mt-2 w-full text-center text-[12px] font-medium text-[#64748b] underline-offset-2 hover:underline disabled:opacity-50"
+            >
+              {claiming ? "Activating…" : "Dev: skip Polar and activate in-app"}
+            </button>
+          ) : null}
 
           {claimError ? (
             <p className="mt-2 text-[12px] font-medium text-[#b42318]">{claimError}</p>
@@ -240,7 +245,7 @@ function TesterPlanPicker({
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
