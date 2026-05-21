@@ -101,6 +101,7 @@ function TesterPlanPicker({
 }) {
   const router = useRouter();
   const [claiming, setClaiming] = useState(false);
+  const [polarLoading, setPolarLoading] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
   const proOffer = PLAN_OFFERS.find((offer) => offer.slug === "pro") ?? PLAN_OFFERS[1]!;
 
@@ -110,6 +111,37 @@ function TesterPlanPicker({
       : variant === "page"
         ? "text-[clamp(1.3rem,4vw,1.65rem)] font-semibold tracking-tight text-gray-900"
         : "text-[clamp(1.2rem,4vw,1.55rem)] font-bold leading-tight text-gray-900";
+
+  async function activateViaPolar() {
+    setClaimError(null);
+    setPolarLoading(true);
+    try {
+      const res = await fetch(buildTesterCheckoutHref(), {
+        method: "GET",
+        credentials: "include",
+        redirect: "manual",
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const polarUrl = res.headers.get("Location");
+        if (polarUrl) {
+          window.location.assign(polarUrl);
+          return;
+        }
+      }
+      let message = "Could not open Polar checkout.";
+      try {
+        const json = (await res.json()) as { error?: string };
+        if (json.error) message = json.error;
+      } catch {
+        /* non-JSON */
+      }
+      setClaimError(message);
+    } catch {
+      setClaimError("Network error — try again or use Activate without payment below.");
+    } finally {
+      setPolarLoading(false);
+    }
+  }
 
   async function claimWithoutCard() {
     setClaiming(true);
@@ -174,20 +206,22 @@ function TesterPlanPicker({
             Complimentary tester Pro
           </span>
 
-          <Link
-            href={buildTesterCheckoutHref()}
-            className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98]"
-          >
-            Activate Pro access
-          </Link>
-
           <button
             type="button"
             disabled={claiming}
             onClick={() => void claimWithoutCard()}
-            className="mt-2 w-full text-center text-[12px] font-medium text-[#1e6fa8] underline-offset-2 hover:underline disabled:opacity-50"
+            className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {claiming ? "Activating…" : "Activate without payment (no card)"}
+          </button>
+
+          <button
+            type="button"
+            disabled={polarLoading || claiming}
+            onClick={() => void activateViaPolar()}
+            className="mt-2 w-full text-center text-[12px] font-medium text-[#1e6fa8] underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            {polarLoading ? "Opening Polar…" : "Or activate via Polar checkout ($0)"}
           </button>
 
           {claimError ? (
