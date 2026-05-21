@@ -1,31 +1,29 @@
 import Image from "next/image";
 import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
+import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 
 type FeatureFigProps = {
   src: string;
   alt: string;
-  width: number;
-  height: number;
 };
 
-function FeatureFig({ src, alt, width, height }: FeatureFigProps) {
+function FeatureFig({ src, alt }: FeatureFigProps) {
   return (
-    <figure className="relative mx-auto w-full">
+    <figure className="relative mx-auto w-full shrink-0">
       <div
         aria-hidden
         className="pointer-events-none absolute -inset-px rounded-[1.125rem] bg-gradient-to-br from-[#4a7fa5]/20 via-transparent to-[#95C14B]/10 opacity-70 blur-xl"
       />
-      <div className="relative overflow-hidden rounded-2xl bg-white p-3 shadow-[0_28px_56px_-16px_rgba(26,26,26,0.14),0_0_0_1px_rgba(232,229,223,0.9)_inset] ring-1 ring-[#E8E6E1]">
-        <div className="overflow-hidden rounded-xl bg-[#FBFAF7] ring-1 ring-black/[0.04]">
+      <div className="relative overflow-hidden rounded-2xl bg-white p-2.5 shadow-[0_28px_56px_-16px_rgba(26,26,26,0.14),0_0_0_1px_rgba(232,229,223,0.9)_inset] ring-1 ring-[#E8E6E1] sm:p-3">
+        <div className="relative h-[clamp(260px,34vw,380px)] w-full overflow-hidden rounded-xl bg-[#FBFAF7] ring-1 ring-black/[0.04]">
           <Image
             src={src}
             alt={alt}
-            width={width}
-            height={height}
+            fill
             sizes="(max-width: 768px) 100vw, 33vw"
-            className="block h-auto w-full"
+            className="object-cover object-top"
           />
         </div>
       </div>
@@ -43,23 +41,33 @@ export function LandingFeatures() {
           <LandingHeadlineHighlight>weekly action plan in 30 seconds.</LandingHeadlineHighlight>
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">
-          Rival pulls every active ad your competitor runs across 6 platforms, decodes their funnel, and tells you the three moves to
+          Rival pulls every active ad your competitors run across 6 platforms, decodes their funnel, and tells you the three moves to
           make this week. One tool replaces six tabs.
         </p>
 
-        <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:gap-8">
+        <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:items-start md:gap-8">
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-stealable-angles.png"
-              alt="Comparison view showing stealable angles: hooks your competitor runs that your brand does not, with save and evidence actions."
-              width={1024}
-              height={684}
+              src="/landing/features/feature-ad-library.png"
+              alt="Ad Library dashboard showing ads from multiple platforms with Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat selectors and platform badges on ad tiles."
             />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Find the angles they run that you don&apos;t.</h3>
+            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Every platform they advertise on — in one view.</h3>
             <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Every week, Rival compares your competitor&apos;s library against yours and ranks the angles they use that you don&apos;t. See
-              the exact hooks, save the examples worth testing, and brief your team — without scrolling through hundreds of ads to find what
-              matters.
+              Add a competitor by domain and Rival pulls every active ad they run across Meta, Google, TikTok, LinkedIn, Pinterest, and
+              Snapchat. Foreplay shows you Meta. AdSpy stops at Google. Rival shows you all six — no more six tabs and four subscriptions.
+            </p>
+          </article>
+
+          <article className="flex flex-col">
+            <FeatureFig
+              src="/landing/features/feature-strategy-map.png"
+              alt="Strategy Map showing a competitor's platform-by-funnel grid with activity tags and an AI strategy summary."
+            />
+            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">See their whole strategy on one map.</h3>
+            <p className="mt-2 text-sm leading-relaxed text-gray-500">
+              Rival lays out each competitor&apos;s activity on a platform-by-funnel map — where they&apos;re going all-in, where they&apos;re just
+              testing, and where they&apos;re winding down — with an AI summary that reads their entire strategy in a single paragraph. It&apos;s
+              the difference between a pile of ads and an actual plan you can see.
             </p>
           </article>
 
@@ -67,8 +75,6 @@ export function LandingFeatures() {
             <FeatureFig
               src="/landing/features/feature-three-moves.png"
               alt="Three Moves dashboard with weekly tactical priorities grounded in scrape data: refresh, defend, and angle shifts with evidence."
-              width={1024}
-              height={679}
             />
             <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Get three tactical moves every week.</h3>
             <p className="mt-2 text-sm leading-relaxed text-gray-500">
@@ -77,20 +83,13 @@ export function LandingFeatures() {
               generic advice.
             </p>
           </article>
+        </div>
 
-          <article className="flex flex-col">
-            <FeatureFig
-              src="/landing/features/feature-timeline.png"
-              alt="Timeline view with ad lifespan stats, weekly launch and retirement activity, and a Gantt chart of creatives over time."
-              width={1024}
-              height={722}
-            />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Know what changed in five seconds.</h3>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Every Monday, Rival shows you exactly what your competitor did last week. New angles launched. Platform shifts. Budget
-              reallocations. No more scrolling dashboards to spot what&apos;s different — the changes are surfaced and explained automatically.
-            </p>
-          </article>
+        <div className="mt-14 flex justify-center sm:mt-16">
+          <LandingTrialCta href="/features" size="md">
+            Explore every feature
+            <span aria-hidden>→</span>
+          </LandingTrialCta>
         </div>
       </LandingScrollReveal>
     </section>
