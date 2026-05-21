@@ -1,25 +1,52 @@
 import { LandingBrandMarquee } from "@/components/landing/landing-brand-marquee";
+import { LandingComparison } from "@/components/landing/landing-comparison";
 import { LandingFAQ } from "@/components/landing/landing-faq";
 import { LandingFeatures } from "@/components/landing/landing-features";
 import { LandingFinalCTA } from "@/components/landing/landing-final-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHeader } from "@/components/landing/landing-header";
 import { LandingHero } from "@/components/landing/landing-hero";
+import {
+  LandingHeroTransition,
+  LandingMarqueeTransition,
+  LandingPageBackground,
+  LandingSectionDivider,
+} from "@/components/landing/landing-page-background";
+import { LandingPricing } from "@/components/landing/landing-pricing";
 import { LandingReviews } from "@/components/landing/landing-reviews";
+import { LandingStackReplacement } from "@/components/landing/landing-stack-replacement";
 
 export default function LandingHome() {
   return (
     <div className="w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased">
       <LandingHeader />
-      {/* Hero handles top padding under the fixed header so its video backdrop can reach the top edge */}
       <div className="w-full overflow-x-clip">
         <LandingHero />
-        <LandingBrandMarquee />
-        <LandingFeatures />
-        <LandingReviews />
-        <LandingFAQ />
-        <LandingFinalCTA />
-        <LandingFooter />
+        <LandingHeroTransition />
+
+        <div className="relative isolate">
+          <LandingPageBackground />
+
+          <div className="relative z-10">
+            <LandingBrandMarquee />
+            <LandingMarqueeTransition />
+            <LandingFeatures />
+            <LandingSectionDivider />
+            <LandingStackReplacement />
+            <LandingSectionDivider />
+            <LandingReviews />
+            <LandingSectionDivider />
+            <LandingPricing />
+            <LandingSectionDivider />
+            <LandingFAQ />
+            <LandingSectionDivider />
+            <LandingComparison />
+            <LandingSectionDivider />
+            <LandingFinalCTA />
+            <LandingSectionDivider />
+            <LandingFooter />
+          </div>
+        </div>
       </div>
     </div>
   );

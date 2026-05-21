@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 
 type FeatureFigProps = {
@@ -33,12 +34,12 @@ function FeatureFig({ src, alt, width, height }: FeatureFigProps) {
 
 export function LandingFeatures() {
   return (
-    <section className="relative z-[11] overflow-hidden bg-white py-16 text-center sm:py-24">
+    <section className="relative overflow-hidden py-16 text-center sm:py-24">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
-          From competitor ads to your
+        <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}>
+          from competitor ads to your
           <br />
-          <span className="text-[#4a7fa5]">weekly action plan in 30 seconds.</span>
+          <LandingHeadlineHighlight>weekly action plan in 30 seconds.</LandingHeadlineHighlight>
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">
           Rival pulls every active ad your competitor runs across 6 platforms, decodes their funnel, and tells you the three moves to

@@ -65,7 +65,7 @@ function SocialIcons() {
 
 export function LandingFooter() {
   return (
-    <footer id="affiliates" className={`${landingNavAnchorScrollClasses} overflow-hidden bg-[#f5f0e5] pb-8 pt-14 sm:pt-16`}>
+    <footer id="affiliates" className={`${landingNavAnchorScrollClasses} overflow-hidden pb-8 pt-14 sm:pt-16`}>
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="grid grid-cols-1 gap-9 text-center sm:grid-cols-2 sm:text-left md:grid-cols-4 md:gap-10">
           {columns.map((col) => (

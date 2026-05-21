@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 
 const faqItems = [
@@ -52,13 +53,13 @@ export function LandingFAQ() {
   return (
     <section className="overflow-hidden py-16 text-center sm:py-24">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#4a7fa5]">
-          NOT CONVINCED YET?
+        <p className="text-xs font-semibold lowercase tracking-widest text-[#4a7fa5]">
+          not convinced yet?
         </p>
-        <h2 id="faq" className={`${landingNavAnchorScrollClasses} mt-2 text-[clamp(2.5rem,11vw,3.75rem)] font-bold leading-[1.05] text-[#1a1a1a]`}>
-          Frequently asked
+        <h2 id="faq" className={`${landingNavAnchorScrollClasses} mt-2 text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}>
+          frequently asked
           <br />
-          <span className="text-[#4a7fa5]">questions.</span>
+          <LandingHeadlineHighlight>questions.</LandingHeadlineHighlight>
         </h2>
 
         <div className="mx-auto mt-10 max-w-3xl space-y-3 text-left sm:mt-16">

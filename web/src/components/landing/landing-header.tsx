@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { RivalLogoImg } from "@/components/rival-logo";
+import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
 
 const NAV_ITEMS = [
-  { label: "Product", sectionId: "solution" },
   { label: "How It Works", sectionId: "how-it-works" },
   { label: "Pricing", sectionId: "pricing" },
+  { label: "Compare", sectionId: "compare" },
   { label: "FAQ", sectionId: "faq" },
 ] as const;
 
@@ -41,13 +42,9 @@ export function LandingHeader() {
 
         <div className="hidden h-5 w-px shrink-0 self-center bg-black/[0.12] md:block" aria-hidden />
 
-        <Link
-          href="/checkout"
-          className="inline-flex shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#1a1a1a] px-3 py-1.5 text-xs font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-black hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:px-5 sm:py-2 sm:text-sm"
-        >
-          <span className="sm:hidden">Start trial</span>
-          <span className="hidden sm:inline">Start trial</span>
-        </Link>
+        <LandingTrialCta href="/checkout" size="sm">
+          Start trial
+        </LandingTrialCta>
       </div>
     </header>
   );

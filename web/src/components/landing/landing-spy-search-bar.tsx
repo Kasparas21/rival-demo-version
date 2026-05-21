@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Search } from "lucide-react";
+import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
 import {
   isPlausiblePublicHostname,
@@ -66,12 +67,9 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
           }}
           className="min-h-12 w-full min-w-0 flex-1 border-0 bg-transparent py-3 pl-9 pr-2 text-base text-[#1a1a1a] outline-none placeholder:text-gray-400 sm:pl-8"
         />
-        <button
-          type="submit"
-          className="inline-flex w-full shrink-0 items-center justify-center rounded-full border border-white/15 bg-[#1a1a1a] px-7 py-3 font-medium text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] hover:bg-black hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5] focus-visible:ring-offset-2 focus-visible:ring-offset-transparent sm:w-auto sm:py-2.5"
-        >
+        <LandingTrialCta type="submit" size="md" className="w-full shrink-0 sm:w-auto">
           Start 7-day trial →
-        </button>
+        </LandingTrialCta>
       </form>
       {error ? (
         <p className="mt-2 px-1 text-left text-sm text-red-600" role="alert">

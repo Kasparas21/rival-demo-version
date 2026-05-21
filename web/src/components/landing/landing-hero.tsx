@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import { HeroHeadline } from "@/components/landing/hero-headline";
 import { LandingSpySearchBar } from "@/components/landing/landing-spy-search-bar";
 import { RivalVideoBackdrop } from "@/components/ui/rival-video-shell";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
@@ -66,7 +66,7 @@ export function LandingHero() {
   ];
 
   return (
-    <section className="relative isolate overflow-hidden pb-20 pt-28 text-center sm:pb-28 sm:pt-[calc(5.5rem+3.75rem)]">
+    <section className="relative isolate overflow-x-clip pb-20 pt-28 text-center sm:pb-28 sm:pt-[calc(5.5rem+3.75rem)]">
       {/* Same stack as `/login` (RivalVideoShell): full-bleed, including behind the fixed header */}
       <div
         aria-hidden
@@ -75,23 +75,15 @@ export function LandingHero() {
         <RivalVideoBackdrop footerTint="light" className="h-full min-h-full" />
       </div>
 
-      {/* Soft fade into the solid white Features section */}
+      {/* Fade hero video into solid white before the page mesh transition */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 left-1/2 z-[1] h-[min(46vh,460px)] w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent via-white/[0.55] via-[45%] to-white"
+        className="pointer-events-none absolute inset-x-0 bottom-0 left-1/2 z-[1] h-[min(52vh,500px)] w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent from-[10%] via-white/75 via-[58%] to-white"
       />
 
-      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <h1
-          id="how-it-works"
-          className={`${landingNavAnchorScrollClasses} mx-auto mb-6 w-full max-w-full text-[clamp(3.25rem,16vw,7rem)] font-extrabold leading-none tracking-[-0.055em] text-[#1a1a1a] sm:mb-8 sm:tracking-[-0.04em]`}
-        >
-          <span className="block whitespace-nowrap">The only ad spy tool</span>
-          <span className="block -mt-[0.12em]">
-            that covers <span className="font-serif font-normal">all 6 platforms</span>
-          </span>
-        </h1>
+      <HeroHeadline />
 
+      <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">
           <div className="relative z-20 mx-auto w-full max-w-2xl">
             <LandingSpySearchBar inputId="brand-domain" />

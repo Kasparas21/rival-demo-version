@@ -67,12 +67,6 @@ export function LandingBrandMarquee() {
       className="relative isolate z-10 overflow-hidden bg-white py-6 [--landing-marquee-slide-h:52px] sm:py-7 sm:[--landing-marquee-slide-h:60px] md:[--landing-marquee-slide-h:68px]"
       aria-label="Brands and sectors Rival understands"
     >
-      {/* Feather top into hero’s white ramp */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 top-[-14px] left-1/2 w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent via-white/80 to-white sm:top-[-18px]"
-      />
-
       <div className="relative z-[1] [&_img]:pointer-events-none">
         <div className="motion-reduce:block hidden py-2 sm:py-2.5">
           <ul className="flex flex-col items-center gap-10 px-4 sm:gap-11" role="list">

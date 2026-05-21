@@ -23,31 +23,37 @@ export const PLAN_OFFERS: PlanOffer[] = [
   {
     slug: "starter",
     name: "Starter",
-    summary: "For solo media buyers tracking up to 5 rivals.",
+    summary: "For solo media buyers tracking their core market rivals.",
     monthlyUsd: 79,
     annualMonthlyUsd: 59,
     annualYearlyUsd: 708,
     features: [
-      "5 competitors · 15 swaps/mo",
-      "All 6 platforms · auto-refresh",
-      "Strategy Map, Three Moves, Copy Vault, Timeline",
-      "Weekly Monday digest",
-      "1 seat",
+      "5 competitors tracked",
+      "All 6 platforms — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
+      "Automatic refresh — no manual work",
+      "Full intelligence suite",
+      "Strategy Map · Activity Score · Copy Vault · Timeline · Landing Pages · Comparison",
+      "Weekly Three Moves AI report",
+      "Monday digest email",
+      "1 seat · up to 15 swaps/month",
     ],
   },
   {
     slug: "pro",
     name: "Pro",
-    summary: "For agencies and multi-client teams.",
+    summary: "For small agencies tracking competitors across multiple clients.",
     monthlyUsd: 149,
     annualMonthlyUsd: 129,
     annualYearlyUsd: 1548,
     plusLabel: "Everything in Starter, plus",
     popular: true,
     features: [
-      "15 competitors · 50 swaps/mo",
-      "Priority refresh · CSV export",
-      "2 seats · manual refresh on demand",
+      "15 competitors tracked",
+      "2 seats · up to 50 swaps/month",
+      "Priority refresh",
+      "CSV exports",
+      "Manual refresh on demand",
+      "Historical snapshots",
       "Emerging Angle Alerts",
     ],
   },
@@ -78,14 +84,14 @@ export function planPriceDisplay(
   if (billing === "monthly") {
     return {
       primary: `$${monthlyUsd}`,
-      secondary: `then $${monthlyUsd}/mo · ${PLAN_TRIAL_BADGE}`,
+      secondary: "Billed monthly",
     };
   }
 
   const pct = annualSavingsPercent(offer);
   return {
     primary: `$${annualMonthlyUsd}`,
-    secondary: `$${annualYearlyUsd}/yr billed annually · ${PLAN_TRIAL_BADGE}`,
+    secondary: `Billed annually ($${annualYearlyUsd}/year)`,
     listMonthlyUsd: monthlyUsd,
     savingsPercent: pct,
     annualYearlyUsd,
