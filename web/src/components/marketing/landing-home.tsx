@@ -8,7 +8,6 @@ import { LandingHeader } from "@/components/landing/landing-header";
 import { LandingHero } from "@/components/landing/landing-hero";
 import {
   LandingHeroTransition,
-  LandingMarqueeTransition,
   LandingPageBackground,
   LandingSectionDivider,
 } from "@/components/landing/landing-page-background";
@@ -29,7 +28,6 @@ export default function LandingHome() {
 
           <div className="relative z-10">
             <LandingBrandMarquee />
-            <LandingMarqueeTransition />
             <LandingFeatures />
             <LandingSectionDivider />
             <LandingStackReplacement />

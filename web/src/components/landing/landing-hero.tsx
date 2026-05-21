@@ -9,7 +9,7 @@ import {
   TikTokLogo,
   LinkedInLogo,
   SnapchatLogo,
-  RedditLogo,
+  PinterestLogo,
 } from "@/components/platform-logos";
 
 function PlatformIconCircle({ children }: { children: React.ReactNode }) {
@@ -60,8 +60,8 @@ export function LandingHero() {
       icon: <SnapchatLogo className="mx-auto block size-8" />,
     },
     {
-      name: "Reddit",
-      icon: <RedditLogo className="mx-auto block size-[26px]" />,
+      name: "Pinterest",
+      icon: <PinterestLogo className="mx-auto block size-[26px]" />,
     },
   ];
 
@@ -75,10 +75,10 @@ export function LandingHero() {
         <RivalVideoBackdrop footerTint="light" className="h-full min-h-full" />
       </div>
 
-      {/* Fade hero video into solid white before the page mesh transition */}
+      {/* Fade hero video into solid white before the logo marquee */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 bottom-0 left-1/2 z-[1] h-[min(52vh,500px)] w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent from-[10%] via-white/75 via-[58%] to-white"
+        className="pointer-events-none absolute inset-x-0 bottom-0 left-1/2 z-[1] h-[min(48vh,460px)] w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent from-[12%] via-white/80 via-[62%] to-white"
       />
 
       <HeroHeadline />

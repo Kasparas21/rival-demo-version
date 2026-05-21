@@ -55,6 +55,7 @@ export function HeroHeadline() {
         className={`${landingNavAnchorScrollClasses} hero-headline px-4 text-center lowercase`}
       >
         <span ref={line1Ref} className="hero-headline-line whitespace-nowrap">
+          competitor{" "}
           <span className="hero-ad-intelligence-highlight">
             ad intelligence
             <svg

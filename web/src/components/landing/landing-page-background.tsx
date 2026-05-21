@@ -1,19 +1,9 @@
-/** Solid white → mesh handoff placed directly under the hero. */
+/** Solid white bridge under the hero — marquee overlaps with its own top fade. */
 export function LandingHeroTransition() {
   return (
     <div
       aria-hidden
-      className="relative z-20 h-20 w-full shrink-0 bg-gradient-to-b from-white from-0% via-white via-[78%] to-[#f7fbff] to-[100%] sm:h-24"
-    />
-  );
-}
-
-/** Hard white → mesh switch between the logo marquee and content below. */
-export function LandingMarqueeTransition() {
-  return (
-    <div
-      aria-hidden
-      className="relative z-[5] -mt-px h-16 w-full shrink-0 bg-gradient-to-b from-white from-0% via-white via-[62%] to-[#f7fbff] to-[100%] sm:h-20"
+      className="relative z-20 h-10 w-full shrink-0 bg-white sm:h-12"
     />
   );
 }

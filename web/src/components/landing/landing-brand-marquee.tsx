@@ -58,19 +58,32 @@ const UPLOADTHING_LOGOS: LogoImgItem[] = [
 const MARQUEE_LOGOS: LogoItem[] = UPLOADTHING_LOGOS;
 
 function stripImgClass() {
-  return "!h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(92vw,720px)] object-contain [image-rendering:auto]";
+  return "!h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(72vw,420px)] object-contain opacity-80 grayscale [image-rendering:auto]";
 }
 
-/** Infinite logo strip between hero and features — React Bits-style smooth loop + edge fade. */
+/** Infinite logo strip between hero and features — soft white gradient edges, subtle logos. */
 export function LandingBrandMarquee() {
   return (
     <section
-      className="relative isolate z-10 overflow-hidden bg-white py-6 [--landing-marquee-slide-h:52px] sm:py-7 sm:[--landing-marquee-slide-h:60px] md:[--landing-marquee-slide-h:68px]"
+      className="relative isolate z-10 -mt-8 overflow-hidden pb-8 pt-10 [--landing-marquee-slide-h:24px] sm:-mt-10 sm:pb-10 sm:pt-12 sm:[--landing-marquee-slide-h:28px] md:[--landing-marquee-slide-h:32px]"
       aria-label="Brands and sectors Rival understands"
     >
-      <LandingScrollReveal className="relative z-[1] [&_img]:pointer-events-none">
-        <div className="motion-reduce:block hidden py-2 sm:py-2.5">
-          <ul className="flex flex-col items-center gap-10 px-4 sm:gap-11" role="list">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white from-0% via-white via-[38%] via-white via-[62%] to-[#f7fbff] to-100%"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-px h-14 bg-gradient-to-b from-white via-white/95 to-transparent sm:h-16"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-gradient-to-b from-transparent via-white/35 to-[#f7fbff] sm:h-24"
+      />
+
+      <LandingScrollReveal className="relative z-[1] opacity-50 [&_img]:pointer-events-none">
+        <div className="motion-reduce:block hidden py-1 sm:py-1.5">
+          <ul className="flex flex-col items-center gap-6 px-4 sm:gap-7" role="list">
             {MARQUEE_LOGOS.map((entry) =>
               "src" in entry ? (
                 <li key={entry.src} className="flex w-full justify-center">
@@ -80,15 +93,15 @@ export function LandingBrandMarquee() {
                     alt={entry.alt ?? ""}
                     width={entry.width}
                     height={entry.height}
-                    className={`${stripImgClass()} max-h-[min(220px,40vh)] w-auto max-w-full`}
+                    className={`${stripImgClass()} max-h-[min(120px,24vh)] w-auto max-w-full`}
                     loading="lazy"
                     decoding="async"
                     draggable={false}
                   />
                 </li>
               ) : (
-                <li key={entry.title ?? "wordmark"} className="flex w-full justify-center text-black">
-                  <span className="inline-flex max-h-[min(220px,40vh)] items-center">{entry.node}</span>
+                <li key={entry.title ?? "wordmark"} className="flex w-full justify-center text-black/70">
+                  <span className="inline-flex max-h-[min(120px,24vh)] items-center">{entry.node}</span>
                 </li>
               )
             )}
@@ -98,18 +111,17 @@ export function LandingBrandMarquee() {
         <div className="motion-reduce:hidden">
           <LogoLoop
             logos={MARQUEE_LOGOS}
-            speed={118}
+            speed={96}
             direction="left"
-            logoHeight={68}
-            gap={56}
+            logoHeight={32}
+            gap={44}
             hoverSpeed={12}
-            scaleOnHover
             fadeOut
             fadeOutColor="#ffffff"
             ariaLabel="Brands and sectors Rival understands"
             renderItem={(item) =>
               "node" in item ? (
-                <span className="inline-flex shrink-0 items-center text-black">{item.node}</span>
+                <span className="inline-flex shrink-0 items-center text-black/70">{item.node}</span>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element -- LogoLoop measures intrinsic img layout
                 <img

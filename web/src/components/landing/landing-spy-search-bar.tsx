@@ -59,7 +59,7 @@ export function LandingSpySearchBar({ inputId }: LandingSpySearchBarProps) {
           type="text"
           inputMode="url"
           autoComplete="url"
-          placeholder="yourbrand.com"
+          placeholder="competitor.com"
           value={value}
           onChange={(e) => {
             setValue(sanitizeCompanyUrlInput(e.target.value));
