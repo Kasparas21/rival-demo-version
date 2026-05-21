@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { syncWorkspaceBrandLibraryContextFromSetup } from "@/lib/account/sync-workspace-brand-library-context";
+import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { polarProductIdForPlan } from "@/lib/billing/config";
 import {
   recordTesterInviteRedemption,
@@ -70,7 +72,35 @@ export async function POST(request: NextRequest) {
     polarSubscriptionId: null,
   });
 
-  const out = NextResponse.json({ ok: true, planTier: "pro" });
+  const { data: brandRow } = await admin
+    .from("brands")
+    .select("name, domain, ads_profile_setup")
+    .eq("user_id", user.id)
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const adsSetup = parseAdsProfileSetup(brandRow?.ads_profile_setup ?? null);
+  const domainHint =
+    (typeof brandRow?.domain === "string" && brandRow.domain.trim()) ||
+    adsSetup?.scrape.websiteUrl.trim() ||
+    "";
+  if (adsSetup && domainHint) {
+    try {
+      await syncWorkspaceBrandLibraryContextFromSetup(
+        admin,
+        user.id,
+        domainHint,
+        adsSetup,
+        brandRow?.name,
+      );
+    } catch (syncErr) {
+      console.error("[claim-tester-access] sync workspace brand library context", syncErr);
+    }
+  }
+
+  const out = NextResponse.json({ ok: true, planTier: "pro", startWorkspaceScrape: Boolean(adsSetup) });
   if (inviteCode) {
     setTesterInviteCookie(out, inviteCode);
   }

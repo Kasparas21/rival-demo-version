@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { buildApiBillingCheckoutHref } from "@/lib/billing/checkout-url";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
+import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { BillingPeriod } from "@/lib/billing/config";
 import {
   PLAN_OFFERS,
@@ -122,12 +123,12 @@ function TesterPlanPicker({
         method: "POST",
         credentials: "include",
       });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
+      const json = (await res.json()) as { ok?: boolean; error?: string; startWorkspaceScrape?: boolean };
       if (!res.ok || !json.ok) {
         setClaimError(json.error ?? "Could not activate tester access.");
         return;
       }
-      router.push(destinationAfterActivate);
+      router.push(json.startWorkspaceScrape ? buildWorkspaceBrandScrapeHref() : destinationAfterActivate);
       router.refresh();
     } catch {
       setClaimError("Network error — try again.");

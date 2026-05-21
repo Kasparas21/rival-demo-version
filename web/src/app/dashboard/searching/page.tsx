@@ -56,8 +56,15 @@ import {
 import { inferAdLibraryRegionDefaults } from "@/lib/ad-library/infer-ad-library-regions-from-domain";
 import {
   applyInitialScrapeLimits,
+  mergeScrapeFieldsWithWorkspaceMarkets,
+  primaryWorkspaceAdMarketIso2,
   readScrapeRequestFieldsFromStorage,
 } from "@/lib/ad-library/scrape-request-fields";
+import {
+  loadWorkspaceBrandScrapeContext,
+  platformIdentifierFromScrapeIds,
+  WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM,
+} from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { markPendingStrategyRefresh } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import {
   searchingFlowStorageKey,
@@ -123,18 +130,18 @@ function channelsWithFilledIdentifiers(
 
 type DiscoveredBrand = { name: string; domain: string; logoUrl?: string };
 
-type DiscoveryInterpretation = {
-  summary: string;
-  primaryBrandName: string;
-  primaryDomain: string | null;
-  termBreakdown: { brands: number; urls: number; keywords: number };
+type RunScanOptions = {
+  channels?: ChannelId[];
+  adMarketCountryCodes?: string[] | null;
+  brand?: DiscoveredBrand | null;
 };
 
 function SearchingContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const q = searchParams.get("q") || "competitor";
+  const workspaceBrandScrape = searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
+  const q = workspaceBrandScrape ? "workspace-brand" : searchParams.get("q") || "competitor";
   const termsParam = searchParams.get("terms") ?? "";
   const channelsParam = searchParams.get("channels") ?? "";
 
@@ -153,16 +160,26 @@ function SearchingContent() {
   }, [termsParam]);
   /** Stable reference — new [] each render was breaking useCallback + useEffect and spamming /api/discover */
   const selectedChannels = useMemo((): ChannelId[] => {
+    if (workspaceBrandScrape) {
+      return CHANNELS.map((c) => c.id);
+    }
     if (!channelsParam.trim()) {
       return CHANNELS.map((c) => c.id);
     }
     return channelsParam.split(",").filter((c): c is ChannelId =>
       CHANNELS.some((ch) => ch.id === c)
     );
-  }, [channelsParam]);
+  }, [channelsParam, workspaceBrandScrape]);
+
+  type DiscoveryInterpretation = {
+    summary: string;
+    primaryBrandName: string;
+    primaryDomain: string | null;
+    termBreakdown: { brands: number; urls: number; keywords: number };
+  };
 
   type Phase = "discovering" | "manual-needed" | "scanning" | "found";
-  const [phase, setPhase] = useState<Phase>("discovering");
+  const [phase, setPhase] = useState<Phase>(() => (workspaceBrandScrape ? "scanning" : "discovering"));
   const [discoveredIds, setDiscoveredIds] = useState<Partial<PlatformIdentifier>>({});
   const [discoveredBrand, setDiscoveredBrand] = useState<DiscoveredBrand | null>(null);
   const [manualIds, setManualIds] = useState<PlatformIdentifier>({});
@@ -181,6 +198,7 @@ function SearchingContent() {
     Partial<Record<AdsLibraryPlatform, "queued" | "running" | "cached" | "done" | "error">>
   >({});
   const mergedAdsScanRef = useRef<AdsLibraryResponse | null>(null);
+  const workspaceScrapeStartedRef = useRef(false);
   /** When restoring a flow snapshot that already saved region prefs, do not overwrite with TLD inference. */
   const hadSnapshotRegionPrefsRef = useRef(false);
   const inferredDomainForRegionsRef = useRef<string | null>(null);
@@ -435,19 +453,22 @@ function SearchingContent() {
   useEffect(() => {
     if (!flowRehydrated) return;
     if (phase !== "discovering") return;
+    if (workspaceBrandScrape) return;
     runDiscovery();
-  }, [flowRehydrated, phase, runDiscovery]);
+  }, [flowRehydrated, phase, runDiscovery, workspaceBrandScrape]);
 
   const scanRunningRef = useRef(false);
 
   const runScanAndNavigate = useCallback(
-    async (mergedIds: PlatformIdentifier) => {
+    async (mergedIds: PlatformIdentifier, options?: RunScanOptions) => {
       if (scanRunningRef.current) return;
       scanRunningRef.current = true;
       setPhase("scanning");
       setScanProgress(0);
+      const channelsForScan = options?.channels ?? selectedChannels;
+      const brandForScan = options?.brand ?? discoveredBrand;
       const adsPlatforms = channelsQueryToAdsPlatforms(
-        channelsWithFilledIdentifiers(selectedChannels, mergedIds)
+        channelsWithFilledIdentifiers(channelsForScan, mergedIds)
       );
       const initialStatuses: Partial<
         Record<AdsLibraryPlatform, "queued" | "running" | "cached" | "done" | "error">
@@ -457,7 +478,7 @@ function SearchingContent() {
 
       const navigateToCompetitor = () => {
         clearSearchingFlowSnapshot(flowKey);
-        const canonicalHost = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
+        const canonicalHost = normalizeCompetitorSlug(brandForScan?.domain ?? displayName);
         const href = buildCompetitorDashboardPath(canonicalHost);
         router.prefetch(href);
         router.push(href, { scroll: false });
@@ -476,25 +497,30 @@ function SearchingContent() {
 
       writeAdLibraryRegionPrefsToSession(adLibraryRegions);
 
-      const slug = normalizeCompetitorSlug(discoveredBrand?.domain ?? displayName);
-      const label = discoveredBrand?.name ?? displayName;
-      const brandForSave = discoveredBrand
-        ? { name: discoveredBrand.name, domain: discoveredBrand.domain, logoUrl: discoveredBrand.logoUrl }
+      const slug = normalizeCompetitorSlug(brandForScan?.domain ?? displayName);
+      const label = brandForScan?.name ?? displayName;
+      const brandForSave = brandForScan
+        ? { name: brandForScan.name, domain: brandForScan.domain, logoUrl: brandForScan.logoUrl }
         : undefined;
       await saveCompetitorToAccount({
         slug,
         name: label,
-        logoUrl: discoveredBrand?.logoUrl,
+        logoUrl: brandForScan?.logoUrl,
         brand: brandForSave,
         pending: false,
         adsLibraryContext: {
           ids: mergedIds as Record<string, string>,
-          channels: selectedChannels,
+          channels: channelsForScan,
           confirmed: true,
         },
       });
 
-      const scrape = applyInitialScrapeLimits(readScrapeRequestFieldsFromStorage());
+      const scrape = applyInitialScrapeLimits(
+        mergeScrapeFieldsWithWorkspaceMarkets(
+          readScrapeRequestFieldsFromStorage(),
+          options?.adMarketCountryCodes ?? null,
+        ),
+      );
       const tiktokRegion = normalizeTikTokAdsRegion(adLibraryRegions.tiktokRegion);
       const googleRegion = normalizeGoogleAdsRegion(adLibraryRegions.googleRegion);
       const googleResultsLimit = getInitialAdsCount("google");
@@ -502,12 +528,12 @@ function SearchingContent() {
 
       const payload = {
         brand: normalizedBrandForAdsLibraryPayload({
-          name: discoveredBrand?.name ?? displayName,
-          domain: discoveredBrand?.domain ?? displayName,
-          logoUrl: discoveredBrand?.logoUrl,
+          name: brandForScan?.name ?? displayName,
+          domain: brandForScan?.domain ?? displayName,
+          logoUrl: brandForScan?.logoUrl,
         }),
         ids: mergedIds,
-        libraryChannels: selectedChannels,
+        libraryChannels: channelsForScan,
         metaStatus: "ACTIVE" as const,
         googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
         metaMaxAds: scrape.metaMaxAds,
@@ -642,6 +668,41 @@ function SearchingContent() {
     },
     [adLibraryRegions, discoveredBrand, displayName, flowKey, router, selectedChannels]
   );
+
+  useEffect(() => {
+    if (!flowRehydrated || !workspaceBrandScrape || workspaceScrapeStartedRef.current) return;
+    workspaceScrapeStartedRef.current = true;
+
+    void (async () => {
+      const ctx = await loadWorkspaceBrandScrapeContext();
+      if (!ctx) {
+        router.replace("/dashboard/spy");
+        return;
+      }
+
+      const mergedIds = platformIdentifierFromScrapeIds(ctx.ids);
+      const brand = {
+        name: ctx.brand.name,
+        domain: ctx.brand.domain,
+        logoUrl: ctx.brand.logoUrl,
+      };
+      setDiscoveredBrand(brand);
+      setDiscoveredIds(mergedIds);
+      setManualIds(mergedIds);
+
+      const regions = inferAdLibraryRegionDefaults(ctx.brand.domain);
+      const primaryMarket = primaryWorkspaceAdMarketIso2(ctx.adMarketCountryCodes);
+      setAdLibraryRegions(
+        primaryMarket ? { ...regions, metaCountry: primaryMarket } : regions,
+      );
+
+      await runScanAndNavigate(mergedIds, {
+        channels: ctx.channels,
+        adMarketCountryCodes: ctx.adMarketCountryCodes,
+        brand,
+      });
+    })();
+  }, [flowRehydrated, router, runScanAndNavigate, workspaceBrandScrape]);
 
   const handleManualSubmit = (identifiers: PlatformIdentifier) => {
     writeAdLibraryRegionPrefsToSession(adLibraryRegions);
