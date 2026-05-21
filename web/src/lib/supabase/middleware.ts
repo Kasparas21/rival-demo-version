@@ -18,13 +18,7 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
 export async function updateSession(request: NextRequest) {
   const testerParam = request.nextUrl.searchParams.get("tester")?.trim();
   if (testerParam && testerParam !== "1") {
-    const inviteRedirect = await applyTesterInviteCookieFromRequest(
-      request,
-      NextResponse.next({ request }),
-    );
-    if (inviteRedirect.headers.get("location")) {
-      return inviteRedirect;
-    }
+    return applyTesterInviteCookieFromRequest(request, NextResponse.next({ request }));
   }
 
   let response = NextResponse.next({

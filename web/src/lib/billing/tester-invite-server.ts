@@ -60,6 +60,17 @@ export async function getTesterInviteStatusForUser(
     inviteCode = await resolveTesterInviteCodeForUser(userId);
   }
 
+  if (inviteCode && !(await getTesterInviteCodeFromCookies())) {
+    const cookieStore = await cookies();
+    cookieStore.set(TESTER_INVITE_COOKIE, normalizeInviteCode(inviteCode), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
+
   const status = await validateTesterInviteAccess(admin, {
     inviteCode,
     userId: userId ?? null,
