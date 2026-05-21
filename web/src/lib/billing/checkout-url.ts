@@ -20,8 +20,10 @@ export function buildApiBillingCheckoutHref(
 }
 
 /** Tester cohort: Pro checkout with pre-applied Polar discount. */
-export function buildTesterCheckoutHref(): string {
-  return "/api/billing/checkout?plan=pro&tester=1";
+export function buildTesterCheckoutHref(options?: { intent?: "json" }): string {
+  const params = new URLSearchParams({ plan: "pro", tester: "1" });
+  if (options?.intent === "json") params.set("intent", "json");
+  return `/api/billing/checkout?${params.toString()}`;
 }
 
 export function parseCheckoutPeriod(raw: string | null | undefined): BillingPeriod {

@@ -119,26 +119,21 @@ function TesterPlanPicker({
     setClaimError(null);
     setPolarLoading(true);
     try {
-      const res = await fetch(buildTesterCheckoutHref(), {
+      const res = await fetch(buildTesterCheckoutHref({ intent: "json" }), {
         method: "GET",
         credentials: "include",
-        redirect: "manual",
       });
-      if (res.status >= 300 && res.status < 400) {
-        const polarUrl = res.headers.get("Location");
-        if (polarUrl) {
-          window.location.assign(polarUrl);
-          return;
-        }
+      const json = (await res.json()) as { ok?: boolean; url?: string; redirect?: string; error?: string };
+      if (res.ok && json.ok && json.url) {
+        window.location.assign(json.url);
+        return;
       }
-      let message = "Could not open Polar checkout.";
-      try {
-        const json = (await res.json()) as { error?: string };
-        if (json.error) message = json.error;
-      } catch {
-        /* non-JSON */
+      if (res.ok && json.ok && json.redirect) {
+        router.push(json.redirect);
+        router.refresh();
+        return;
       }
-      setClaimError(message);
+      setClaimError(json.error ?? "Could not open Polar checkout.");
     } catch {
       setClaimError("Network error — try again.");
     } finally {

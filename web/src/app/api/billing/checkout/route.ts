@@ -18,6 +18,7 @@ import { createPolarClient } from "@/lib/billing/polar";
 import {
   isTesterInviteCheckoutRequest,
   setTesterInviteCookie,
+  testerInviteUnavailableMessage,
   validateTesterInviteAccess,
 } from "@/lib/billing/tester-invite";
 import { resolveTesterInviteCodeForUser } from "@/lib/billing/tester-invite-server";
@@ -25,12 +26,16 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 async function createCheckoutRedirect(request: NextRequest) {
+  const wantsJson = request.nextUrl.searchParams.get("intent") === "json";
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
+    if (wantsJson) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/login", request.nextUrl.origin);
     loginUrl.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(loginUrl);
@@ -40,6 +45,9 @@ async function createCheckoutRedirect(request: NextRequest) {
 
   const billing = await getBillingEntitlement(supabase, user.id);
   if (billing.isUnlimited) {
+    if (wantsJson) {
+      return NextResponse.json({ ok: true, redirect: "/dashboard/spy" });
+    }
     return NextResponse.redirect(new URL("/dashboard/spy", request.nextUrl.origin));
   }
 
@@ -84,10 +92,8 @@ async function createCheckoutRedirect(request: NextRequest) {
     });
 
     if (!inviteStatus.valid || !inviteStatus.inviteCode) {
-      return NextResponse.json(
-        { ok: false, error: inviteStatus.reason ?? "invalid_tester_invite" },
-        { status: 403 },
-      );
+      const message = testerInviteUnavailableMessage(inviteStatus.reason);
+      return NextResponse.json({ ok: false, error: message }, { status: 403 });
     }
 
     const discountId = getPolarTesterDiscountId();
@@ -114,6 +120,14 @@ async function createCheckoutRedirect(request: NextRequest) {
   }
 
   const checkout = await polar.checkouts.create(checkoutBody);
+
+  if (wantsJson) {
+    const out = NextResponse.json({ ok: true, url: checkout.url });
+    if (testerInviteCode) {
+      setTesterInviteCookie(out, testerInviteCode);
+    }
+    return out;
+  }
 
   const redirect = NextResponse.redirect(checkout.url);
   if (testerInviteCode) {
