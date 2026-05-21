@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
+import { SiteGoogleAnalytics } from "@/components/analytics/google-analytics";
+import { SiteGoogleTagManager } from "@/components/analytics/google-tag-manager";
 import "./globals.css";
 
 const siteUrl = "https://spy-rival.com";
@@ -68,6 +70,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <SiteGoogleAnalytics />
+      <SiteGoogleTagManager />
       <body className={`${instrumentSerif.variable} font-sans antialiased`}>
         {children}
       </body>

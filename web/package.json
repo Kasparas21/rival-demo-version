@@ -15,6 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
     "@mendable/firecrawl-js": "^4.21.0",
+    "@next/third-parties": "^16.2.6",
     "@openrouter/sdk": "^0.12.31",
     "@polar-sh/sdk": "^0.47.1",
     "@portabletext/react": "^6.2.0",
