@@ -5,7 +5,6 @@ import { friendlySavedCompetitorsSchemaError } from "@/lib/account/saved-competi
 import {
   pickSavedCompetitorForDomainHint,
   savedCompetitorDomainOrFilter,
-  type SavedCompetitorPickRow,
 } from "@/lib/ad-library/competitor-cache-domain";
 import { probeSavedCompetitorsColumns } from "@/lib/account/saved-competitors-schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -139,8 +138,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    type FallbackSavedRow = SavedCompetitorPickRow & {
-      last_scraped_at?: string | null;
+    type FallbackSavedRow = {
+      id: string;
+      last_scraped_at: string | null;
+      brand_domain: string | null;
+      slug: string;
       ads_library_context?: unknown;
     };
     const fallbackRows = (fallback.data ?? []) as unknown as FallbackSavedRow[];

@@ -16,7 +16,7 @@ export function savedCompetitorDomainOrFilter(domainHint: string): string {
   return [...clauses].join(",");
 }
 
-export type SavedCompetitorPickRow = Pick<
+type SavedCompetitorPickRow = Pick<
   Database["public"]["Tables"]["saved_competitors"]["Row"],
   "id" | "brand_domain" | "slug"
 >;

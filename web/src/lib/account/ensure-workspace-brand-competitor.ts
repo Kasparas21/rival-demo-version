@@ -102,7 +102,16 @@ async function findSavedRowForDomain(
     .limit(8);
   if (domainQuery.error) throw domainQuery.error;
 
-  const domainRows = (domainQuery.data ?? []) as unknown as SavedRow[];
+  type DomainQueryRow = {
+    id: string;
+    last_scraped_at: string | null;
+    brand_domain: string | null;
+    slug: string;
+    ads_library_context?: unknown;
+    is_workspace_brand?: boolean;
+  };
+  const domainRows = (domainQuery.data ?? []) as unknown as DomainQueryRow[];
+
   const picked = pickSavedCompetitorForDomainHint(domainRows, cleaned);
   if (!picked?.id) return null;
   const found = domainRows.find((r) => r.id === picked.id) ?? null;
@@ -184,7 +193,7 @@ export async function ensureWorkspaceBrandSavedCompetitor(
     if (insertErr) {
       row = await findSavedRowForDomain(supabase, userId, cleaned, columnFlags);
       if (!row) throw insertErr;
-    } else {
+    } else if (inserted) {
       const insertedRow = inserted as unknown as SavedRow;
       row = {
         id: insertedRow.id,
@@ -195,8 +204,12 @@ export async function ensureWorkspaceBrandSavedCompetitor(
         brand_domain: insertedRow.brand_domain ?? null,
         slug: insertedRow.slug,
       };
+    } else {
+      row = await findSavedRowForDomain(supabase, userId, cleaned, columnFlags);
     }
   }
+
+  if (!row) return null;
 
   const id = row.id;
 
@@ -262,19 +275,22 @@ export async function ensureWorkspaceBrandSavedCompetitor(
     "last_scraped_at",
     ...(columnFlags.adsLibraryContext ? (["ads_library_context"] as const) : []),
   ].join(", ");
-  const { data: fresh } = await supabase
+  const { data: freshRaw } = await supabase
     .from("saved_competitors")
     .select(freshSelect)
     .eq("id", id)
     .eq("user_id", userId)
     .maybeSingle();
-  const freshRow = (fresh ?? null) as unknown as Pick<SavedRow, "last_scraped_at" | "ads_library_context"> | null;
+  const fresh = freshRaw as unknown as {
+    last_scraped_at?: string | null;
+    ads_library_context?: unknown;
+  } | null;
 
   return {
     id,
-    lastScrapedAt: freshRow?.last_scraped_at ? String(freshRow.last_scraped_at) : lastScrapedAt,
+    lastScrapedAt: fresh?.last_scraped_at ? String(fresh.last_scraped_at) : lastScrapedAt,
     libraryContext: columnFlags.adsLibraryContext
-      ? parseAdsLibraryContext(freshRow?.ads_library_context ?? row.ads_library_context)
+      ? parseAdsLibraryContext(fresh?.ads_library_context ?? row.ads_library_context)
       : null,
     persistOk,
     ...(persistErrors?.length ? { persistErrors } : {}),

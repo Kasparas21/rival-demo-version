@@ -15,7 +15,7 @@ type ScrapedAdRow = {
   first_seen_at: string;
   last_seen_at: string;
   format: string;
-  ai_extracted_launch_date?: string | null;
+  ai_extracted_launch_date: string | null;
 };
 
 function hydrateCreativeTestAds(test: {
@@ -66,7 +66,6 @@ export async function GET(request: Request) {
   if (authErr || !user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
-
   const userId = user.id;
 
   const { searchParams } = new URL(request.url);
@@ -118,7 +117,7 @@ export async function GET(request: Request) {
   if (force) {
     const recomputeResult = await computeCreativeTestsForCompetitor({
       supabase,
-      userId: user.id,
+      userId,
       competitorId,
     });
     if (!recomputeResult.ok) {
@@ -136,7 +135,7 @@ export async function GET(request: Request) {
   if (!force && tests.length > 0 && testsNeedRecompute(tests, adsById, allAds)) {
     const recomputeResult = await computeCreativeTestsForCompetitor({
       supabase,
-      userId: user.id,
+      userId,
       competitorId,
     });
     if (recomputeResult.ok) {

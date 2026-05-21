@@ -3,21 +3,7 @@ import { resolveCompetitorForUser } from "@/lib/ad-library/classify-competitor-p
 import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import { buildPlatformScheduleDebug } from "@/lib/ad-library/platform-tracking-schedule";
-import type { ScheduledScrapeDateWindow } from "@/lib/ad-library/scheduled-scrape-date-window";
 import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
-
-type PlatformTrackingPayload = {
-  platform: string;
-  classification: string;
-  activeAdCount: number;
-  highCoverageDemoted: boolean;
-  classifiedAt: string | null;
-  lastScrapeAt: string | null;
-  nextScrapeAt: string | null;
-  refreshIntervalDays: number;
-  adsPerRefresh: number;
-  nextScrapeWindow: ScheduledScrapeDateWindow;
-};
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -83,7 +69,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const nowMs = Date.now();
   const trackingByPlatform = new Map((rows ?? []).map((r) => [r.platform, r]));
 
-  const platformPayload: PlatformTrackingPayload[] = (rows ?? []).map((r) => {
+  const platformPayload = (rows ?? []).map((r) => {
     const platform = r.platform as InitialScrapePlatform;
     const classification = r.classification as PlatformClassification;
     const lastScrapeAt = r.last_scrape_at ?? cacheScrapedAtByPlatform.get(r.platform) ?? null;
@@ -125,9 +111,9 @@ export async function GET(req: Request): Promise<NextResponse> {
       classification: "INACTIVE",
       activeAdCount: 0,
       highCoverageDemoted: false,
-      classifiedAt: null,
+      classifiedAt: scrapedAt,
       lastScrapeAt: scrapedAt,
-      nextScrapeAt: null,
+      nextScrapeAt: schedule.nextScrapeAt,
       refreshIntervalDays: schedule.refreshIntervalDays,
       adsPerRefresh: schedule.adsPerRefresh,
       nextScrapeWindow: schedule.nextScrapeWindow,

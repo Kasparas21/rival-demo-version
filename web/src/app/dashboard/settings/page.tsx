@@ -7,7 +7,8 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { buildCheckoutHref } from "@/lib/billing/checkout-url";
-import { hasActivePaidSubscription, type PlanTier } from "@/lib/billing/entitlements";
+import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import type { PlanTier } from "@/lib/billing/plan-limits";
 
 type ProfileState = {
   full_name: string;

@@ -49,11 +49,7 @@ export function extractLaunchDate(timestamp: string): string {
 }
 
 /** YYYY-MM-DD for grouping from AI launch or first_seen. */
-export function launchDateKeyForAd(
-  ad: Pick<ScrapedAdRowForCreativeTests, "first_seen_at"> & {
-    ai_extracted_launch_date?: string | null;
-  },
-): string {
+export function launchDateKeyForAd(ad: Pick<ScrapedAdRowForCreativeTests, "ai_extracted_launch_date" | "first_seen_at">): string {
   const launchSignal = (ad.ai_extracted_launch_date?.trim() ? ad.ai_extracted_launch_date : ad.first_seen_at) || "";
   if (!launchSignal.trim()) return "";
   return extractLaunchDate(launchSignal);
