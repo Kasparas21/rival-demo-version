@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
+import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { getPolarProductIds } from "@/lib/billing/config";
 import {
   limitsForTier,
@@ -155,8 +156,9 @@ export async function getBillingEntitlement(
   const rawPayload = data?.raw_payload;
   const isUnlimited = isManualAdminUnlimited(rawPayload);
   const devPlanOverride = readDevPlanOverride(rawPayload);
-  const canUseDevPlanSwitcher = isUnlimited || isDevPlanOverrideEnabled();
-  const applyDevOverride = canUseDevPlanSwitcher;
+  const applyDevOverride = isUnlimited || isDevPlanOverrideEnabled();
+  const canUseDevPlanSwitcher =
+    isDebugPlatformClassificationEnabled() && (isUnlimited || isDevPlanOverrideEnabled());
 
   const planTier = resolvePlanTier({
     status,
