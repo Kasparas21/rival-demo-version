@@ -20,7 +20,7 @@ function readGoogleAdsMemoryMbytes(): number {
 }
 
 /** Google Transparency blocks datacenter IPs — residential avoids captcha (actor error message). */
-function readGoogleResidentialProxyGroups(): string[] {
+export function readGoogleResidentialProxyGroups(): string[] {
   const raw = process.env.APIFY_GOOGLE_USE_RESIDENTIAL?.trim().toLowerCase();
   if (raw && ["0", "false", "no", "off"].includes(raw)) return [];
   return ["RESIDENTIAL"];

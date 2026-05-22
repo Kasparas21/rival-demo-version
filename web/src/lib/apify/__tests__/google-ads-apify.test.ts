@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractGoogleApifyFailureMessage,
   isLikelyGoogleAdRow,
+  readGoogleResidentialProxyGroups,
 } from "@/lib/apify/google-ads";
 
 describe("google Apify error rows", () => {
@@ -28,5 +29,19 @@ describe("google Apify error rows", () => {
         headline: null,
       }),
     ).toBe(false);
+  });
+});
+
+describe("google residential proxy config", () => {
+  it("defaults to RESIDENTIAL unless APIFY_GOOGLE_USE_RESIDENTIAL=false", () => {
+    const prev = process.env.APIFY_GOOGLE_USE_RESIDENTIAL;
+    delete process.env.APIFY_GOOGLE_USE_RESIDENTIAL;
+    expect(readGoogleResidentialProxyGroups()).toEqual(["RESIDENTIAL"]);
+
+    process.env.APIFY_GOOGLE_USE_RESIDENTIAL = "false";
+    expect(readGoogleResidentialProxyGroups()).toEqual([]);
+
+    if (prev === undefined) delete process.env.APIFY_GOOGLE_USE_RESIDENTIAL;
+    else process.env.APIFY_GOOGLE_USE_RESIDENTIAL = prev;
   });
 });
