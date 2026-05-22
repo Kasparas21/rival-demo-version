@@ -466,7 +466,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     metaWorkspaceBrandInitialScrape,
   });
 
-  if (filterGoogleActiveToday && out.google.rows.length > 0) {
+  if (filterGoogleActiveToday && !metaWorkspaceBrandInitialScrape && out.google.rows.length > 0) {
     out.google = {
       ...out.google,
       rows: filterGoogleRowsActiveToday(out.google.rows),

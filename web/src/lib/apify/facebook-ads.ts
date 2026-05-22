@@ -17,6 +17,22 @@ function isFacebookPageUrl(value: string): boolean {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Apify `scrapePageAds.period` — workspace page URL already scopes active ads; never send ISO date ranges. */
+export function resolveScrapePageAdsPeriod(params: {
+  metaWorkspaceBrandInitialScrape?: boolean;
+  scrapePageAdsPeriod?: string;
+  metaStartDate?: string;
+  metaEndDate?: string;
+}): string {
+  if (params.metaWorkspaceBrandInitialScrape === true) return "";
+  const explicit = params.scrapePageAdsPeriod?.trim();
+  if (explicit != null && explicit !== "") return explicit;
+  const sd = params.metaStartDate?.trim();
+  const ed = params.metaEndDate?.trim();
+  if (sd && ed && ISO_DATE.test(sd) && ISO_DATE.test(ed)) return `${sd}_${ed}`;
+  return "";
+}
+
 function buildKeywordSearchUrl(
   query: string,
   activeStatus: "ACTIVE" | "ALL",
@@ -143,9 +159,12 @@ export async function scrapeFacebookAds(
   }
 
   const cc = country === "ALL" ? "ALL" : country;
-  const period =
-    params.scrapePageAdsPeriod ??
-    (sd && ed && ISO_DATE.test(sd) && ISO_DATE.test(ed) ? `${sd}_${ed}` : "");
+  const period = resolveScrapePageAdsPeriod({
+    metaWorkspaceBrandInitialScrape: workspaceBrandInitial,
+    scrapePageAdsPeriod: params.scrapePageAdsPeriod,
+    metaStartDate: sd,
+    metaEndDate: ed,
+  });
   const { items } = await runApifyActor<unknown>(
     actorId,
     {

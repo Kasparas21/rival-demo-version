@@ -41,6 +41,7 @@ import {
   type AdsLibraryResponse,
 } from "@/lib/ad-library/api-types";
 import { getInitialAdsCount } from "@/lib/ad-library/constants";
+import { platformScrapeSucceeded } from "@/lib/ad-library/library-response-utils";
 import {
   collectAdsLibraryWarmupUrls,
   preloadAdsLibraryWarmupUrls,
@@ -571,7 +572,7 @@ function SearchingContent() {
         ...(adsPlatforms.includes("tiktok") ? { tiktokRegion } : {}),
         ...(adsPlatforms.includes("google") ? { googleRegion, googleResultsLimit } : {}),
         ...(adsPlatforms.includes("pinterest") ? { pinterestCountry } : {}),
-        ...(isWorkspaceInitial ? { filterGoogleActiveToday: true, metaWorkspaceBrandInitialScrape: true } : {}),
+        ...(isWorkspaceInitial ? { metaWorkspaceBrandInitialScrape: true } : {}),
       };
       const payloadKey = stableAdsLibraryPayloadKey(payload);
       const scanDomain = payload.brand.domain;
@@ -608,10 +609,12 @@ function SearchingContent() {
               { skipCache: true }
             );
             mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
-            if (!httpOk) allHttpOk = false;
+            const normalizedPlatform = coerceAdsLibraryResponse(json);
+            const platformOk = httpOk && platformScrapeSucceeded(normalizedPlatform, p);
+            if (!platformOk) allHttpOk = false;
             setPlatformStatuses((prev) => ({
               ...prev,
-              [p]: httpOk ? "done" : "error",
+              [p]: platformOk ? "done" : "error",
             }));
           } catch {
             allHttpOk = false;
