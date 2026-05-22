@@ -156,7 +156,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   });
 
   if (!completion.ok) {
-    const status = completion.error.includes("ANTHROPIC_API_KEY") ? 500 : 502;
+    const status = completion.error.includes("OPENROUTER_API_KEY") ? 500 : 502;
     return NextResponse.json({ ok: false, error: completion.error }, { status });
   }
 

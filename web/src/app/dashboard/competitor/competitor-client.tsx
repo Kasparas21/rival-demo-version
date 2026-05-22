@@ -2946,7 +2946,8 @@ function CompetitorDashboardBody({
     validateCached: (c) =>
       c.ok === true &&
       Boolean(c.competitor?.payload?.map) &&
-      typeof c.competitor?.derivedStats?.avgAdAgeDays === "number",
+      typeof c.competitor?.derivedStats?.avgAdAgeDays === "number" &&
+      c.competitor?.recomputing !== true,
     fetcher: async () => {
       const res = await fetch(
         `/api/comparison/payload?competitorDomain=${encodeURIComponent(brand.domain)}`,

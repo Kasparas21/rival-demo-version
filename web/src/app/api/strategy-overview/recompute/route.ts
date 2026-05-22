@@ -4,6 +4,7 @@ import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billin
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import {
+  getRecomputeLockRow,
   loadSavedCompetitorForUser,
   recomputeStrategyOverviewForCompetitor,
 } from "@/lib/strategy-overview/recompute-strategy-overview";
@@ -49,14 +50,28 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  /** User-triggered rebuild: take over any stale lock and re-run OpenRouter on every ad. */
+  /** User-triggered rebuild: `force` re-enriches all ads; default skips if already running. */
+  const force = body.force === true;
+  const runningRow = await getRecomputeLockRow(supabase, meta.competitorId);
+  const running =
+    runningRow?.status === "running" &&
+    (runningRow.locked_until ? Date.parse(runningRow.locked_until) > Date.now() : false);
+
+  if (!force && running) {
+    return NextResponse.json(
+      { ok: false, error: "Recompute already in progress for this competitor" },
+      { status: 409 }
+    );
+  }
+
   const result = await recomputeStrategyOverviewForCompetitor({
     supabase,
     userId: user.id,
     competitorId: meta.competitorId,
     domainHint: domain,
-    stealLock: true,
-    refreshAdEnrichment: true,
+    stealLock: force,
+    refreshAdEnrichment: force,
+    staleLockMs: force ? 90_000 : undefined,
   });
 
   if (!result.ok) {

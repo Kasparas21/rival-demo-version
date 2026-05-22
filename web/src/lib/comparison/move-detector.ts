@@ -183,7 +183,7 @@ function moveDescriptionForNarrative(move: DetectedMove): string {
 
 export async function generateMoveNarrative(move: DetectedMove): Promise<string | null> {
   if (move.significance === "low") return null;
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) return null;
+  if (!process.env.OPENROUTER_API_KEY?.trim()) return null;
   if (move.narrative?.trim()) return move.narrative.trim();
 
   const after = move.after_state as { evidenceHook?: string | null };

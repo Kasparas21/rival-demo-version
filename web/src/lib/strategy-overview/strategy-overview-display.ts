@@ -43,7 +43,7 @@ export async function isStrategyRecomputeRunning(
   const until = row.locked_until ? Date.parse(row.locked_until) : NaN;
   if (Number.isFinite(until) && until <= Date.now()) return false;
   const started = row.locked_at ? Date.parse(row.locked_at) : NaN;
-  if (Number.isFinite(started) && Date.now() - started > 900_000) return false;
+  if (Number.isFinite(started) && Date.now() - started > 2_400_000) return false;
   return true;
 }
 

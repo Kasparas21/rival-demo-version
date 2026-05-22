@@ -48,8 +48,8 @@ export async function runMarketingImprovementLlm(params: {
 > {
   const { userBrandName, userBrandDomain, userBrandContext, evidenceText } = params;
 
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-    return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
+  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+    return { ok: false, error: "OPENROUTER_API_KEY not configured" };
   }
 
   const userBits = [

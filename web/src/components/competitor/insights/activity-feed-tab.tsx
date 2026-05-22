@@ -62,6 +62,7 @@ export function ActivityFeedTab({
   const [moves, setMoves] = useState<ComparisonMoveRow[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [earlierOpen, setEarlierOpen] = useState(false);
+  const [recomputeRunning, setRecomputeRunning] = useState(false);
 
   const [filter, setFilter] = useState<MoveFilterCategory>("all");
   const [significanceHighOnly, setSignificanceHighOnly] = useState(false);
@@ -71,22 +72,68 @@ export function ActivityFeedTab({
   const side = data?.ok ? data.competitor : null;
   const snapshotCount = side?.snapshot_count ?? 0;
   const brandName = side?.meta.name ?? competitorLabel;
-  const pipelinePending = side?.recomputing === true || comparisonPayloadLoading;
+  const waitingForSnapshots = snapshotCount < 2;
+
+  useEffect(() => {
+    void refetchComparisonPayload?.();
+  }, [competitorDomain, refetchComparisonPayload]);
+
+  useEffect(() => {
+    const d = competitorDomain.trim().toLowerCase();
+    if (!d) return;
+
+    let cancelled = false;
+    const pollStatus = async () => {
+      try {
+        const st = await fetch(
+          `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(d)}`,
+          { credentials: "include" }
+        );
+        const sj = (await st.json()) as { ok?: boolean; status?: string };
+        if (cancelled || !sj.ok) return;
+        const running = sj.status === "running";
+        setRecomputeRunning(running);
+        if (!running) {
+          void refetchComparisonPayload?.();
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    void pollStatus();
+    const id = window.setInterval(() => void pollStatus(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [competitorDomain, refetchComparisonPayload]);
 
   const bootstrapKeyRef = useRef<string | null>(null);
 
-  const triggerRecompute = useCallback(async () => {
+  const triggerRecompute = useCallback(async (opts?: { force?: boolean }) => {
     const d = competitorDomain.trim();
     if (!d) return;
-    await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(d)}&force=1`, {
-      credentials: "include",
-    });
-    await fetch("/api/strategy-overview/recompute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitorDomain: d }),
-      credentials: "include",
-    });
+    try {
+      const st = await fetch(
+        `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(d)}`,
+        { credentials: "include" }
+      );
+      const sj = (await st.json()) as { ok?: boolean; status?: string };
+      if (sj.ok && sj.status === "running" && !opts?.force) return;
+
+      await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(d)}`, {
+        credentials: "include",
+      });
+      await fetch("/api/strategy-overview/recompute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ competitorDomain: d, force: opts?.force === true }),
+        credentials: "include",
+      });
+    } catch {
+      /* polling will retry */
+    }
   }, [competitorDomain]);
 
   useEffect(() => {
@@ -94,24 +141,20 @@ export function ActivityFeedTab({
   }, [competitorDomain]);
 
   useEffect(() => {
-    if (comparisonPayloadLoading || snapshotCount >= 2) return;
+    if (comparisonPayloadLoading || !waitingForSnapshots) return;
     const key = competitorDomain.trim().toLowerCase();
     if (!key) return;
     if (bootstrapKeyRef.current === key) return;
+    if (recomputeRunning) return;
     bootstrapKeyRef.current = key;
 
     void triggerRecompute();
-    const id = window.setInterval(() => {
-      void triggerRecompute();
-      void refetchComparisonPayload?.();
-    }, 10000);
-    return () => window.clearInterval(id);
   }, [
     comparisonPayloadLoading,
-    snapshotCount,
+    waitingForSnapshots,
     competitorDomain,
     triggerRecompute,
-    refetchComparisonPayload,
+    recomputeRunning,
   ]);
 
   useEffect(() => {
@@ -177,8 +220,36 @@ export function ActivityFeedTab({
       ? Math.max(0, COOLDOWN_MS - (Date.now() - Date.parse(lastAnalyzed)))
       : 0;
 
-  if (pipelinePending || snapshotCount < 2) {
+  const showInitialLoad = comparisonPayloadLoading && !data?.ok;
+  const showRecomputeSpinner = recomputeRunning && waitingForSnapshots;
+
+  if (showInitialLoad || showRecomputeSpinner) {
     return <RivalLoadingBlock padded className="mx-auto max-w-3xl py-16" />;
+  }
+
+  if (waitingForSnapshots) {
+    return (
+      <div className="mx-auto w-full max-w-3xl px-6 py-16">
+        <FeatureSectionHeader
+          overline="Activity feed"
+          title={<>What&apos;s changed about how {competitorLabel} advertises</>}
+          description="Strategy snapshots are building — move detection needs at least two saved snapshots to compare."
+        />
+        <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
+          <p className="text-sm font-medium text-slate-800">
+            {snapshotCount === 0 ? "First snapshot pending" : "One snapshot saved"}
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            {snapshotCount === 0
+              ? "Run a strategy recompute once enrichment finishes. After a second scrape or recompute, strategic moves will appear here."
+              : "Come back after the next scrape or manual recompute — we compare snapshots to detect angle, platform, and budget shifts."}
+          </p>
+          <p className="mt-4 text-xs text-slate-500">
+            Snapshots stored: {snapshotCount} / 2 minimum
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (comparisonPayloadError) {

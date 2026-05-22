@@ -37,7 +37,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const until = row.locked_until ? Date.parse(row.locked_until) : NaN;
     const started = row.locked_at ? Date.parse(row.locked_at) : NaN;
     const lockExpired = Number.isFinite(until) && until <= Date.now();
-    const lockTooOld = Number.isFinite(started) && Date.now() - started > 900_000;
+    const lockTooOld = Number.isFinite(started) && Date.now() - started > 2_400_000;
     if (lockExpired || lockTooOld) {
       status = "idle";
     } else {

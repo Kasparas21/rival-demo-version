@@ -70,7 +70,7 @@ function parseJsonArraySalvage(text: string): unknown[] | null {
 }
 
 // Sized so batches stay well under max_tokens output. At ~120 output tokens per ad,
-// BATCH_MAX × 120 must stay below anthropicHaiku maxTokens with headroom.
+// BATCH_MAX × 120 must stay below LLM maxTokens with headroom.
 const BATCH_MAX = 15;
 
 const MIN_AD_TEXT_CHARS = 10;
@@ -226,25 +226,25 @@ Return **only** a valid JSON array (no markdown):
 [{"id":"uuid","angle":"","angle_free_text":"...","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.5,"confidence":0.5},"headline_guess":"...","body_theme":"..."},...]`;
 }
 
-async function enrichBatchWithClaude(
+async function enrichBatchWithLlm(
   items: EnrichItem[]
 ): Promise<{ rows: z.infer<typeof modelRowSchema>[] | null; costUsd: number; preZodCount: number }> {
   console.log("[enrich-trace] enrichBatch called, items=", items.length, "model=", HAIKU_MODEL);
   const userPrompt = buildEnrichmentUserPrompt(items);
 
-  console.log("[enrich-trace] sending to Anthropic");
+  console.log("[enrich-trace] sending to OpenRouter");
   const out = await anthropicHaiku({
     systemPrompt:
       "You output strict JSON only. Multilingual ads: classify funnel and angle by intent in any language. funnel_stage must be exactly TOF, MOF, or BOF. Never invent platforms or brands not in the copy.",
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 8192,
   });
-  console.log("[enrich-trace] Anthropic response ok=", out.ok, "error=", !out.ok ? out.error : "none");
+  console.log("[enrich-trace] OpenRouter response ok=", out.ok, "error=", !out.ok ? out.error : "none");
 
   const costUsd = out.ok ? out.usage.costUsd : 0;
 
   if (!out.ok) {
-    console.error("[adEnrichment] Anthropic error", out.error);
+    console.error("[adEnrichment] OpenRouter error", out.error);
     return { rows: null, costUsd: 0, preZodCount: 0 };
   }
 
@@ -311,7 +311,13 @@ export async function enrichScrapedAdsIfNeeded(
   supabase: SupabaseClient<Database>,
   userId: string,
   competitorId: string,
-  rows: ScrapedAdInput[]
+  rows: ScrapedAdInput[],
+  opts?: {
+    /** Return false to stop batching (e.g. recompute lock lost). */
+    beforeBatch?: () => Promise<boolean>;
+    /** Renew recompute lock lease after each successful batch. */
+    afterBatch?: () => Promise<void>;
+  }
 ): Promise<{
   enriched: number;
   skipped: boolean;
@@ -323,7 +329,7 @@ export async function enrichScrapedAdsIfNeeded(
   usageCostUsd: number;
 }> {
   console.log("[enrich-trace] entered, total=", rows.length);
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   const total = rows.length;
   let skippedNoText = 0;
   let failedInvalid = 0;
@@ -397,6 +403,16 @@ export async function enrichScrapedAdsIfNeeded(
   const modelLabel = HAIKU_MODEL;
   let enriched = 0;
   for (let i = 0; i < toEnrich.length; i += BATCH_MAX) {
+    if (opts?.beforeBatch) {
+      const ok = await opts.beforeBatch();
+      if (!ok) {
+        console.warn(
+          `[enrichment] stopping early competitorId=${competitorId} batch=${i} — recompute lock lost`
+        );
+        break;
+      }
+    }
+
     const batch = toEnrich.slice(i, i + BATCH_MAX);
     console.log("[enrich-trace] batch index=", i, "batch size=", batch.length);
 
@@ -414,7 +430,7 @@ export async function enrichScrapedAdsIfNeeded(
     let results: z.infer<typeof modelRowSchema>[] | null;
     let costUsd: number;
     try {
-      const batchOut = await enrichBatchWithClaude(items);
+      const batchOut = await enrichBatchWithLlm(items);
       results = batchOut.rows;
       costUsd = batchOut.costUsd;
       const batchNum = Math.floor(i / BATCH_MAX) + 1;
@@ -533,6 +549,9 @@ export async function enrichScrapedAdsIfNeeded(
     console.log(
       `[enrichment] batch complete → enriched=${batchEnriched} | failed=${batchFailed} | skipped=${batchSkippedOther}`
     );
+    if (opts?.afterBatch) {
+      await opts.afterBatch();
+    }
   }
 
   return {

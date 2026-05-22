@@ -3,7 +3,7 @@ import { z } from "zod";
 import { anthropicSonnet } from "@/lib/llm/anthropic";
 
 /** Bumps cache rows in `brand_comparison_results` when prompt/schema changes. */
-export const BRAND_COMPARISON_CACHE_MODEL_VERSION = "sonnet-4-6-v2-moves";
+export const BRAND_COMPARISON_CACHE_MODEL_VERSION = "deepseek-v4-flash-v1";
 
 function stripJsonFences(text: string): string {
   let t = text.trim();
@@ -66,8 +66,8 @@ export async function runBrandComparisonLlm(params: {
     structuredDigest,
   } = params;
 
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-    return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
+  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+    return { ok: false, error: "OPENROUTER_API_KEY not configured" };
   }
 
   const userBits = [

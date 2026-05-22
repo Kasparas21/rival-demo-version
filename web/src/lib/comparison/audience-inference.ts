@@ -77,8 +77,8 @@ export function buildAudienceInferenceInputFromPayload(
 }
 
 export async function inferAudience(input: AudienceInferenceInput): Promise<AudienceInferenceResult | null> {
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
-    console.warn("[audience-inference] ANTHROPIC_API_KEY missing");
+  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+    console.warn("[audience-inference] OPENROUTER_API_KEY missing");
     return null;
   }
 

@@ -231,17 +231,30 @@ export function StrategyOverviewApp({
 
     void (async () => {
       try {
+        const st = await fetch(
+          `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(domain)}`,
+          { credentials: "include" }
+        );
+        const sj = (await st.json()) as { ok?: boolean; status?: string };
+        if (sj.ok && sj.status === "running") {
+          void refetch();
+          return;
+        }
+
         await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(domain)}`, {
           credentials: "include",
         });
         void refetch();
-        await fetch("/api/strategy-overview/recompute", {
+
+        const rec = await fetch("/api/strategy-overview/recompute", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ competitorDomain: domain }),
           credentials: "include",
         });
-        void refetch();
+        if (rec.status !== 409) {
+          void refetch();
+        }
       } catch {
         /* status polling retries */
       }

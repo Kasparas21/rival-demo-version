@@ -24,9 +24,10 @@ import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overv
  */
 export const STRATEGY_OVERVIEW_MODEL_VERSION = "sov-15-funnel-cells-map";
 
-const LOCK_TTL_MS = 300_000;
-/** If status is still "running" after this long, treat lock as orphaned (crashed serverless, etc.). */
-const ORPHAN_LOCK_AGE_MS = 900_000;
+/** Lock lease renewed on progress; enrichment for ~225 ads can run 15–20 min locally. */
+const LOCK_TTL_MS = 1_800_000;
+/** If status is still "running" after this long without lease renewal, treat as orphaned. */
+const ORPHAN_LOCK_AGE_MS = 2_400_000;
 
 async function tryComputeCreativeTestsForCompetitor(params: {
   supabase: SupabaseClient<Database>;
@@ -156,9 +157,26 @@ async function updateLockProgress(
 ): Promise<void> {
   await supabase
     .from("strategy_recompute_locks")
-    .update(patch)
+    .update({
+      ...patch,
+      locked_until: new Date(Date.now() + LOCK_TTL_MS).toISOString(),
+    })
     .eq("competitor_id", competitorId)
     .eq("owner_token", token);
+}
+
+/** Returns false when another worker stole/replaced the lock — stop enrichment to avoid duplicate LLM spend. */
+export async function isRecomputeLockOwner(
+  supabase: SupabaseClient<Database>,
+  competitorId: string,
+  token: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("strategy_recompute_locks")
+    .select("owner_token, status")
+    .eq("competitor_id", competitorId)
+    .maybeSingle();
+  return data?.status === "running" && data.owner_token === token;
 }
 
 function rowToInput(r: Database["public"]["Tables"]["scraped_ads"]["Row"]): ScrapedAdInput {
@@ -506,7 +524,9 @@ export async function healStaleStrategyRecomputeLockIfNeeded(
   const lockExpired = Number.isFinite(until) && until <= Date.now();
   const lockTooOld = Number.isFinite(started) && Date.now() - started > ORPHAN_LOCK_AGE_MS;
 
-  if (!lockExpired && !lockTooOld) return false;
+  /** Only heal when lease expired AND lock is old — active workers extend locked_until each batch. */
+  if (!lockTooOld && !lockExpired) return false;
+  if (lockExpired && !lockTooOld) return false;
 
   const { error, data } = await supabase
     .from("strategy_recompute_locks")
@@ -716,7 +736,10 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       );
     }
 
-    const enrichStats = await enrichScrapedAdsIfNeeded(supabase, userId, competitorId, enrichInputs);
+    const enrichStats = await enrichScrapedAdsIfNeeded(supabase, userId, competitorId, enrichInputs, {
+      beforeBatch: () => isRecomputeLockOwner(supabase, competitorId, token),
+      afterBatch: () => updateLockProgress(supabase, competitorId, token, {}),
+    });
     aiCostUsdTotal += enrichStats.usageCostUsd;
     console.log(
       `[recompute] post-enrichment competitorId=${competitorId} enriched=${enrichStats.enriched} needsEnrichment=${enrichStats.needsEnrichment} skippedNoText=${enrichStats.skippedNoText} failedBatch=${enrichStats.failedBatch} costUsd=${enrichStats.usageCostUsd.toFixed(4)}`

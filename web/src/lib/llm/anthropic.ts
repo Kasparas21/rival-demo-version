@@ -1,9 +1,10 @@
-import Anthropic, { RateLimitError } from "@anthropic-ai/sdk";
+import {
+  DEFAULT_OPENROUTER_MODEL,
+  openRouterChatText,
+  type OpenRouterChatMessage,
+} from "@/lib/llm/openrouter";
 
-export type AnthropicChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
+export type AnthropicChatMessage = OpenRouterChatMessage;
 
 export type AnthropicChatTextResult =
   | {
@@ -14,126 +15,21 @@ export type AnthropicChatTextResult =
     }
   | { ok: false; error: string };
 
-export const HAIKU_MODEL = "claude-haiku-4-5";
-export const SONNET_MODEL = "claude-sonnet-4-6";
+/** Legacy names kept for call-site imports; both routes use DeepSeek via OpenRouter. */
+export const HAIKU_MODEL = DEFAULT_OPENROUTER_MODEL;
+export const SONNET_MODEL = DEFAULT_OPENROUTER_MODEL;
 
-/** USD per million tokens — adjust if Anthropic pricing changes. */
-const PRICING: Record<string, { input: number; output: number }> = {
-  [HAIKU_MODEL]: { input: 1.0, output: 5.0 },
-  [SONNET_MODEL]: { input: 3.0, output: 15.0 },
-};
-
-let cachedClient: Anthropic | null = null;
-
-function anthropicErrorStatus(err: unknown): number | null {
-  if (typeof err !== "object" || err === null || !("status" in err)) return null;
-  const status = (err as { status?: unknown }).status;
-  return typeof status === "number" ? status : null;
-}
-
-function logAnthropicAuthFailure(err: unknown): void {
-  const status = anthropicErrorStatus(err);
-  const message = err instanceof Error ? err.message : String(err);
-  const isAuthFailure =
-    status === 401 ||
-    status === 403 ||
-    /authentication_error|invalid x-api-key/i.test(message);
-
-  if (!isAuthFailure) return;
-
-  const key = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
-  console.error(
-    "[anthropic-auth-failure]",
-    JSON.stringify({
-      type: "auth_error",
-      status: status ?? null,
-      message,
-      timestamp: new Date().toISOString(),
-      key_length: key.length,
-      key_prefix: key.slice(0, 12) || "missing",
-    })
-  );
-}
-
-function getClient(): Anthropic | null {
-  if (cachedClient) return cachedClient;
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-  if (!apiKey) return null;
-  /** Default SDK timeout can be tight on cold serverless connections; enrichment batches need a healthy margin. */
-  cachedClient = new Anthropic({ apiKey, timeout: 120_000 });
-  return cachedClient;
-}
-
-function textFromResponse(response: Anthropic.Messages.Message): string {
-  const parts: string[] = [];
-  for (const b of response.content) {
-    if (b.type === "text") parts.push(b.text);
-  }
-  return parts.join("\n").trim();
-}
-
-function costForUsage(model: string, inputTokens: number, outputTokens: number): number {
-  const pricing = PRICING[model] ?? PRICING[HAIKU_MODEL];
-  return (inputTokens * pricing.input) / 1_000_000 + (outputTokens * pricing.output) / 1_000_000;
-}
-
-function messageFromResponse(model: string, response: Anthropic.Messages.Message): AnthropicChatTextResult {
-  const text = textFromResponse(response);
-  if (!text) {
-    return { ok: false, error: "No text content in Anthropic response" };
-  }
-  const inputTokens = response.usage.input_tokens;
-  const outputTokens = response.usage.output_tokens;
-  const costUsd = costForUsage(model, inputTokens, outputTokens);
-  return {
-    ok: true,
-    text,
-    model,
-    usage: { inputTokens, outputTokens, costUsd },
-  };
-}
-
-async function callAnthropic(params: {
-  model: string;
+async function callLlm(params: {
   messages: AnthropicChatMessage[];
   maxTokens: number;
   systemPrompt?: string;
 }): Promise<AnthropicChatTextResult> {
-  const client = getClient();
-  if (!client) {
-    return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
-  }
-
-  const createParams: Anthropic.Messages.MessageCreateParams = {
-    model: params.model,
-    max_tokens: params.maxTokens,
+  return openRouterChatText({
     messages: params.messages,
-  };
-  if (params.systemPrompt) {
-    createParams.system = params.systemPrompt;
-  }
-
-  try {
-    const response = await client.messages.create(createParams);
-    return messageFromResponse(params.model, response);
-  } catch (err) {
-    if (err instanceof RateLimitError) {
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        const response = await client.messages.create(createParams);
-        return messageFromResponse(params.model, response);
-      } catch (retryErr) {
-        logAnthropicAuthFailure(retryErr);
-        return {
-          ok: false,
-          error: retryErr instanceof Error ? retryErr.message : "Retry failed",
-        };
-      }
-    }
-    logAnthropicAuthFailure(err);
-    const msg = err instanceof Error ? err.message : "Anthropic request failed";
-    return { ok: false, error: msg };
-  }
+    maxTokens: params.maxTokens,
+    systemPrompt: params.systemPrompt,
+    model: DEFAULT_OPENROUTER_MODEL,
+  });
 }
 
 export async function anthropicHaiku(params: {
@@ -141,8 +37,7 @@ export async function anthropicHaiku(params: {
   maxTokens?: number;
   systemPrompt?: string;
 }): Promise<AnthropicChatTextResult> {
-  return callAnthropic({
-    model: HAIKU_MODEL,
+  return callLlm({
     messages: params.messages,
     maxTokens: params.maxTokens ?? 4096,
     systemPrompt: params.systemPrompt,
@@ -154,8 +49,7 @@ export async function anthropicSonnet(params: {
   maxTokens?: number;
   systemPrompt?: string;
 }): Promise<AnthropicChatTextResult> {
-  return callAnthropic({
-    model: SONNET_MODEL,
+  return callLlm({
     messages: params.messages,
     maxTokens: params.maxTokens ?? 4096,
     systemPrompt: params.systemPrompt,
