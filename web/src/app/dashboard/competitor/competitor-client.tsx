@@ -2193,7 +2193,7 @@ function CompetitorDashboardBody({
   const adLibraryPlatforms: AdsLibraryPlatform[] = useMemo(() => {
     if (adsPlatforms.length > 0) return adsPlatforms;
     if (isOwnWorkspace && workspaceLibraryContext?.channels?.length) {
-      return channelsQueryToAdsPlatforms(workspaceLibraryContext.channels.join(","));
+      return channelsQueryToAdsPlatforms(workspaceLibraryContext.channels);
     }
     if (isOwnWorkspace && accountLastScrapedAt?.trim()) {
       return ["meta", "google", "tiktok", "linkedin", "pinterest", "snapchat"];

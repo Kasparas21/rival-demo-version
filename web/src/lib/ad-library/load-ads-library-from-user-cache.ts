@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "@/lib/ad-library/ads-cache-pick";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
+import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 import {
   adsLibraryResponseFromAdsCacheRows,
   expandAdsCacheDomainCandidates,
@@ -20,6 +21,7 @@ export async function fetchLatestAdsLibraryFromUserCache(
 ): Promise<AdsLibraryResponse | null> {
   const trimmed = domainHint.trim();
   if (!trimmed) return null;
+  const cleaned = normalizeCompetitorSlug(trimmed).toLowerCase();
 
   const { readDomains, cacheDomain } = await resolveAdsCacheDomainForUser(supabase, userId, trimmed);
   if (readDomains.length === 0) return null;
