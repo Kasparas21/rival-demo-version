@@ -69,7 +69,13 @@ import {
   platformIdentifierFromScrapeIds,
   WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM,
 } from "@/lib/ad-library/workspace-brand-initial-scrape";
-import { markPendingStrategyRefresh } from "@/lib/strategy-overview/ads-library-strategy-bridge";
+import { buildClientAdsLibraryPayload } from "@/lib/ad-library/build-client-ads-library-payload";
+import { waitForWorkspaceBrandAdsLibraryReady } from "@/lib/ad-library/wait-for-workspace-brand-ads-ready";
+import {
+  ADS_LIBRARY_UPDATED_EVENT,
+  markPendingStrategyRefresh,
+  type AdsLibraryUpdatedDetail,
+} from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import {
   searchingFlowStorageKey,
   readSearchingFlowSnapshot,
@@ -185,6 +191,7 @@ function SearchingContent() {
 
   type Phase = "discovering" | "manual-needed" | "scanning" | "found";
   const [phase, setPhase] = useState<Phase>(() => (workspaceBrandScrape ? "scanning" : "discovering"));
+  const [isFinalizingLibrary, setIsFinalizingLibrary] = useState(false);
   const [discoveredIds, setDiscoveredIds] = useState<Partial<PlatformIdentifier>>({});
   const [discoveredBrand, setDiscoveredBrand] = useState<DiscoveredBrand | null>(null);
   const [manualIds, setManualIds] = useState<PlatformIdentifier>({});
@@ -627,14 +634,62 @@ function SearchingContent() {
         const normalized = coerceAdsLibraryResponse(mergedAdsScanRef.current);
         writeAdsLibrarySessionCache(payloadKey, { response: normalized, httpOk: allHttpOk });
 
-        try {
-          await fetch("/api/competitor/ads-library/ensure-persisted", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ domain: payload.brand.domain }),
+        let responseForNavigation = normalized;
+
+        if (isWorkspaceInitial) {
+          setIsFinalizingLibrary(true);
+          setScanProgress(100);
+
+          const clientScrapeFields = mergeScrapeFieldsWithWorkspaceMarkets(
+            readScrapeRequestFieldsFromStorage(),
+            options?.adMarketCountryCodes ?? null,
+          );
+          const clientPayload = buildClientAdsLibraryPayload({
+            brand: payload.brand,
+            ids: mergedIds,
+            adsPlatforms,
+            scrapeFields: clientScrapeFields,
+            tiktokRegion,
+            googleRegion,
+            pinterestCountry,
           });
-        } catch {
-          /* Belt-and-suspenders: copy ads_cache → scraped_ads if any platform finalize was partial */
+          const clientPayloadKey = stableAdsLibraryPayloadKey(clientPayload);
+
+          const readiness = await waitForWorkspaceBrandAdsLibraryReady({
+            domain: payload.brand.domain,
+            clientPayload,
+            scrapedResponse: normalized,
+            adsPlatforms,
+          });
+          responseForNavigation = readiness.hydratedResponse;
+          writeAdsLibrarySessionCache(clientPayloadKey, {
+            response: responseForNavigation,
+            httpOk: allHttpOk,
+          });
+          writeAdsLibrarySessionCache(payloadKey, {
+            response: responseForNavigation,
+            httpOk: allHttpOk,
+          });
+
+          try {
+            window.dispatchEvent(
+              new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+                detail: { domain: payload.brand.domain.trim() },
+              })
+            );
+          } catch {
+            /* ignore */
+          }
+        } else {
+          try {
+            await fetch("/api/competitor/ads-library/ensure-persisted", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ domain: payload.brand.domain }),
+            });
+          } catch {
+            /* Belt-and-suspenders: copy ads_cache → scraped_ads if any platform finalize was partial */
+          }
         }
 
         if (allHttpOk) {
@@ -651,7 +706,7 @@ function SearchingContent() {
         }
 
         try {
-          const warmup = collectAdsLibraryWarmupUrls(normalized);
+          const warmup = collectAdsLibraryWarmupUrls(responseForNavigation);
           await Promise.race([
             preloadAdsLibraryWarmupUrls(warmup),
             new Promise<void>((resolve) => {
@@ -663,11 +718,13 @@ function SearchingContent() {
         }
 
         markFreshDiscoveryScan(scanDomain);
+        setIsFinalizingLibrary(false);
         navigateToCompetitor();
       } catch {
         clearDiscoveryScanInProgress(scanDomain);
         setScanProgress(100);
         setScanFraction({ done: total, total });
+        setIsFinalizingLibrary(false);
         setPlatformStatuses((prev) => {
           const next = { ...prev };
           for (const pl of adsPlatforms) {
@@ -675,7 +732,9 @@ function SearchingContent() {
           }
           return next;
         });
-        navigateToCompetitor();
+        if (!isWorkspaceInitial) {
+          navigateToCompetitor();
+        }
       } finally {
         window.clearTimeout(markRunningTimer);
         scanRunningRef.current = false;
@@ -802,7 +861,9 @@ function SearchingContent() {
           {isManualNeeded && "Add any missing links below"}
           {isScanning &&
             (workspaceBrandScrape
-              ? "Scraping all your brand's active ads…"
+              ? isFinalizingLibrary
+                ? "Preparing your ad library…"
+                : "Scraping all your brand's active ads…"
               : platformsToScan.length > 0
                 ? `Checking ${platformsToScan.length} platform${platformsToScan.length === 1 ? "" : "s"} for ads…`
                 : "Taking you to results")}
@@ -810,7 +871,9 @@ function SearchingContent() {
         </h2>
         {isScanning && workspaceBrandScrape ? (
           <p className="text-[13px] sm:text-[14px] text-[#71717a] text-center max-w-lg mx-auto mb-8 sm:mb-10 leading-relaxed -mt-6 sm:-mt-12">
-            We&apos;re pulling every active ad from the platforms you connected during onboarding.
+            {isFinalizingLibrary
+              ? "Almost there — syncing your scraped ads so they appear correctly in your library."
+              : "We're pulling every active ad from the platforms you connected during onboarding."}
           </p>
         ) : null}
         {isManualNeeded ? (
