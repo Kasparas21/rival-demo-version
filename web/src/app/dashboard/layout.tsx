@@ -25,6 +25,7 @@ import {
   removeSidebarCompetitor,
   saveSidebarCompetitors,
   sidebarCompetitorsWithoutWorkspaceRow,
+  setWorkspaceDomainForCompetitorCap,
   SIDEBAR_COMPETITORS_EVENT,
   SIDEBAR_COMPETITORS_STORAGE_KEY,
   suppressSidebarUpsertAfterRemoval,
@@ -235,6 +236,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const ws = brands[0]?.domain?.trim() || null;
+    setWorkspaceDomainForCompetitorCap(ws);
     if (purgeExcludedSidebarCompetitorRows(ws)) {
       refreshSavedCompetitors();
     }

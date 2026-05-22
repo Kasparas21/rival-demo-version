@@ -323,8 +323,45 @@ export const MAX_WATCHED_COMPETITORS = 15;
 /** Placeholder slug used during workspace brand scrape — never a watched competitor. */
 export const WORKSPACE_BRAND_PLACEHOLDER_SLUG = "workspace-brand";
 
-function maxStoredSidebarCompetitors(): number {
-  return readClientMaxWatchedCompetitors(MAX_WATCHED_COMPETITORS);
+/** Absolute localStorage row cap (includes workspace brand row). Plan caps apply to watched rivals only. */
+const MAX_STORED = MAX_WATCHED_COMPETITORS;
+
+let cachedWorkspaceDomainForCap: string | null = null;
+
+/** Set from dashboard layout once workspace brand domain is known. */
+export function setWorkspaceDomainForCompetitorCap(domain: string | null | undefined): void {
+  cachedWorkspaceDomainForCap = domain?.trim() ? domain.trim() : null;
+}
+
+function resolveWorkspaceDomainForCap(explicit?: string | null): string | null | undefined {
+  if (explicit !== undefined) return explicit;
+  return cachedWorkspaceDomainForCap;
+}
+
+export function loadWatchedSidebarCompetitors(
+  workspaceDomain?: string | null,
+): SidebarCompetitor[] {
+  return sidebarCompetitorsWithoutWorkspaceRow(
+    loadSidebarCompetitors(),
+    resolveWorkspaceDomainForCap(workspaceDomain),
+  );
+}
+
+export function countWatchedSidebarCompetitors(workspaceDomain?: string | null): number {
+  return loadWatchedSidebarCompetitors(workspaceDomain).length;
+}
+
+export function wouldExceedWatchedCompetitorCap(
+  query: string,
+  cap: number,
+  workspaceDomain?: string | null,
+): boolean {
+  const trimmed = query.trim();
+  if (!trimmed || !Number.isFinite(cap) || cap < 1) return false;
+  const slug = normalizeCompetitorSlug(trimmed);
+  const watched = loadWatchedSidebarCompetitors(workspaceDomain);
+  const idx = findMatchingCompetitorIndex(watched, slug, trimmed);
+  return idx < 0 && watched.length >= cap;
 }
 
 export type UpsertSidebarCompetitorResult =
@@ -347,10 +384,10 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
     if (deduped.length !== list.length || logosHoisted) {
       safeSetLocalStorage(
         SIDEBAR_COMPETITORS_STORAGE_KEY,
-        JSON.stringify(withLogos.slice(0, maxStoredSidebarCompetitors()))
+        JSON.stringify(withLogos.slice(0, MAX_STORED))
       );
     }
-    return withLogos.slice(0, maxStoredSidebarCompetitors());
+    return withLogos.slice(0, MAX_STORED);
   } catch {
     return [];
   }
@@ -358,7 +395,7 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
 
 export function saveSidebarCompetitors(list: SidebarCompetitor[]) {
   if (typeof window === "undefined") return;
-  const cleaned = dedupeSidebarCompetitors(list).slice(0, maxStoredSidebarCompetitors()).map(hoistLogoOntoRow);
+  const cleaned = dedupeSidebarCompetitors(list).slice(0, MAX_STORED).map(hoistLogoOntoRow);
   const serialized = JSON.stringify(cleaned);
   const prev = window.localStorage.getItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
   if (prev === serialized) return;
@@ -383,7 +420,8 @@ export function upsertSidebarCompetitor(
   const list = loadSidebarCompetitors();
   const idx = findMatchingCompetitorIndex(list, slug, lookupName);
   const isNew = idx < 0;
-  if (isNew && list.length >= maxStoredSidebarCompetitors()) {
+  const cap = readClientMaxWatchedCompetitors(MAX_WATCHED_COMPETITORS);
+  if (isNew && countWatchedSidebarCompetitors() >= cap) {
     return { ok: false, reason: "max_watched_competitors" };
   }
   const prev = idx >= 0 ? list[idx] : undefined;

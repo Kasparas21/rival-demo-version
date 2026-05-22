@@ -5,15 +5,15 @@ import { useRouter } from "next/navigation";
 import { ChannelPickerModal, CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { saveSearchToAccount } from "@/lib/account/client";
+import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
 import {
   readClientMaxWatchedCompetitors,
   syncClientMaxWatchedCompetitorsFromUsage,
 } from "@/lib/billing/client-plan-cap";
 import {
-  findMatchingCompetitorIndex,
-  loadSidebarCompetitors,
-  normalizeCompetitorSlug,
+  countWatchedSidebarCompetitors,
+  wouldExceedWatchedCompetitorCap,
 } from "@/lib/sidebar-competitors";
 
 type TermType = "url" | "brand" | "keyword";
@@ -57,20 +57,26 @@ export default function SpyOnCompetitorPage() {
   const [competitorLimitError, setCompetitorLimitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
+  const activeBrand = useActiveBrand();
 
   useEffect(() => {
     void syncClientMaxWatchedCompetitorsFromUsage();
   }, []);
 
-  const wouldExceedCompetitorCap = (query: string): boolean => {
-    const trimmed = query.trim();
-    if (!trimmed) return false;
-    const cap = readClientMaxWatchedCompetitors();
-    const slug = normalizeCompetitorSlug(trimmed);
-    const list = loadSidebarCompetitors();
-    const idx = findMatchingCompetitorIndex(list, slug, trimmed);
-    return idx < 0 && list.length >= cap;
+  const reportCompetitorCapReached = () => {
+    setCompetitorLimitError(
+      competitorWatchLimitReachedMessage(
+        countWatchedSidebarCompetitors(activeBrand.domain),
+      ),
+    );
   };
+
+  const wouldExceedCompetitorCap = (query: string): boolean =>
+    wouldExceedWatchedCompetitorCap(
+      query,
+      readClientMaxWatchedCompetitors(),
+      activeBrand.domain,
+    );
 
   useLayoutEffect(() => {
     try {
@@ -141,7 +147,7 @@ export default function SpyOnCompetitorPage() {
     const query = pending ? [...termValues, pending].join(" ") : termValues.join(" ");
     if (!query.trim()) return;
     if (wouldExceedCompetitorCap(query)) {
-      setCompetitorLimitError(competitorWatchLimitReachedMessage(readClientMaxWatchedCompetitors()));
+      reportCompetitorCapReached();
       return;
     }
     setCompetitorLimitError(null);
@@ -168,7 +174,7 @@ export default function SpyOnCompetitorPage() {
     const query = allEntries.map((t) => t.value).join(" ").trim() || pending;
     if (!query.trim()) return;
     if (wouldExceedCompetitorCap(query)) {
-      setCompetitorLimitError(competitorWatchLimitReachedMessage(readClientMaxWatchedCompetitors()));
+      reportCompetitorCapReached();
       setShowChannelPicker(false);
       return;
     }

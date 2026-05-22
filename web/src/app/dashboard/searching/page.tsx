@@ -10,6 +10,7 @@ import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
+import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { saveCompetitorToAccount, saveSearchToAccount } from "@/lib/account/client";
 import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
 import {
@@ -17,11 +18,13 @@ import {
   syncClientMaxWatchedCompetitorsFromUsage,
 } from "@/lib/billing/client-plan-cap";
 import {
+  countWatchedSidebarCompetitors,
   findMatchingCompetitorIndex,
   loadSidebarCompetitors,
   normalizeCompetitorSlug,
   removeSidebarCompetitor,
   upsertSidebarCompetitor,
+  wouldExceedWatchedCompetitorCap,
   WORKSPACE_BRAND_PLACEHOLDER_SLUG,
 } from "@/lib/sidebar-competitors";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
@@ -155,6 +158,7 @@ type RunScanOptions = {
 
 function SearchingContent() {
   const router = useRouter();
+  const activeBrand = useActiveBrand();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaceBrandScrape = searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
@@ -348,16 +352,15 @@ function SearchingContent() {
     if (phase !== "discovering") return;
     const slug = normalizeCompetitorSlug(displayName);
     const label = q.trim() || displayName;
-    const list = loadSidebarCompetitors();
-    const idx = findMatchingCompetitorIndex(list, slug, label);
-    if (idx < 0 && list.length >= readClientMaxWatchedCompetitors()) return;
+    const cap = readClientMaxWatchedCompetitors();
+    if (wouldExceedWatchedCompetitorCap(label, cap, activeBrand.domain)) return;
     upsertSidebarCompetitor({ slug, name: label, pending: true });
     void saveCompetitorToAccount({
       slug,
       name: label,
       pending: true,
     });
-  }, [phase, displayName, q, workspaceBrandScrape]);
+  }, [phase, displayName, q, workspaceBrandScrape, activeBrand.domain]);
 
   useEffect(() => {
     if (workspaceBrandScrape) return;
@@ -417,13 +420,12 @@ function SearchingContent() {
   }, [displayName, q, selectedChannels, termHints, workspaceBrandScrape]);
 
   const runDiscovery = useCallback(async () => {
-    const capSlug = normalizeCompetitorSlug(displayName);
     const capLabel = q.trim() || displayName;
-    const capList = loadSidebarCompetitors();
-    const capIdx = findMatchingCompetitorIndex(capList, capSlug, capLabel);
     const cap = readClientMaxWatchedCompetitors();
-    if (capIdx < 0 && capList.length >= cap) {
-      setDiscoveryError(competitorWatchLimitReachedMessage(cap));
+    if (wouldExceedWatchedCompetitorCap(capLabel, cap, activeBrand.domain)) {
+      setDiscoveryError(
+        competitorWatchLimitReachedMessage(countWatchedSidebarCompetitors(activeBrand.domain)),
+      );
       return;
     }
 
@@ -474,7 +476,7 @@ function SearchingContent() {
     } finally {
       window.clearTimeout(timeoutId);
     }
-  }, [q, selectedChannels, termHints, displayName]);
+  }, [q, selectedChannels, termHints, displayName, activeBrand.domain]);
 
   useEffect(() => {
     if (!flowRehydrated) return;
@@ -850,7 +852,9 @@ function SearchingContent() {
       pending: false,
     });
     if (!added.ok) {
-      setDiscoveryError(competitorWatchLimitReachedMessage(readClientMaxWatchedCompetitors()));
+      setDiscoveryError(
+        competitorWatchLimitReachedMessage(countWatchedSidebarCompetitors(activeBrand.domain)),
+      );
       return;
     }
     void (async () => {
