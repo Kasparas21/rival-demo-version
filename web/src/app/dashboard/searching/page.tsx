@@ -10,17 +10,21 @@ import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
+import { saveCompetitorToAccount, saveSearchToAccount } from "@/lib/account/client";
+import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
+import {
+  readClientMaxWatchedCompetitors,
+  syncClientMaxWatchedCompetitorsFromUsage,
+} from "@/lib/billing/client-plan-cap";
 import {
   findMatchingCompetitorIndex,
   loadSidebarCompetitors,
-  MAX_WATCHED_COMPETITORS,
   normalizeCompetitorSlug,
   removeSidebarCompetitor,
   upsertSidebarCompetitor,
   WORKSPACE_BRAND_PLACEHOLDER_SLUG,
 } from "@/lib/sidebar-competitors";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
-import { saveCompetitorToAccount, saveSearchToAccount } from "@/lib/account/client";
 import {
   fetchAdsLibraryDeduplicated,
   normalizedBrandForAdsLibraryPayload,
@@ -263,6 +267,10 @@ function SearchingContent() {
 
   /** Fresh flows: Meta/Google/LinkedIn default to all countries; Pinterest/Snapchat/TikTok use TLD hints. */
   useEffect(() => {
+    void syncClientMaxWatchedCompetitorsFromUsage();
+  }, []);
+
+  useEffect(() => {
     if (!flowRehydrated) return;
     if (hadSnapshotRegionPrefsRef.current) return;
     const d = discoveredBrand?.domain?.trim();
@@ -342,7 +350,7 @@ function SearchingContent() {
     const label = q.trim() || displayName;
     const list = loadSidebarCompetitors();
     const idx = findMatchingCompetitorIndex(list, slug, label);
-    if (idx < 0 && list.length >= MAX_WATCHED_COMPETITORS) return;
+    if (idx < 0 && list.length >= readClientMaxWatchedCompetitors()) return;
     upsertSidebarCompetitor({ slug, name: label, pending: true });
     void saveCompetitorToAccount({
       slug,
@@ -413,10 +421,9 @@ function SearchingContent() {
     const capLabel = q.trim() || displayName;
     const capList = loadSidebarCompetitors();
     const capIdx = findMatchingCompetitorIndex(capList, capSlug, capLabel);
-    if (capIdx < 0 && capList.length >= MAX_WATCHED_COMPETITORS) {
-      setDiscoveryError(
-        `You can watch up to ${MAX_WATCHED_COMPETITORS} competitors. Remove one from the sidebar first.`
-      );
+    const cap = readClientMaxWatchedCompetitors();
+    if (capIdx < 0 && capList.length >= cap) {
+      setDiscoveryError(competitorWatchLimitReachedMessage(cap));
       return;
     }
 
@@ -843,9 +850,7 @@ function SearchingContent() {
       pending: false,
     });
     if (!added.ok) {
-      setDiscoveryError(
-        `You can watch up to ${MAX_WATCHED_COMPETITORS} competitors. Remove one from the sidebar first.`
-      );
+      setDiscoveryError(competitorWatchLimitReachedMessage(readClientMaxWatchedCompetitors()));
       return;
     }
     void (async () => {

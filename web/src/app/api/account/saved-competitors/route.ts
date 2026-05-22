@@ -7,6 +7,7 @@ import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { collectAdsCacheDomainVariantsForSavedCompetitorRow } from "@/lib/ad-library/competitor-cache-domain";
+import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -418,7 +419,7 @@ export async function POST(request: Request) {
   if (!entitlement.isUnlimited && slugCountIfApplied() > maxWatchedCompetitors) {
     return NextResponse.json(
       {
-        error: `You can watch at most ${maxWatchedCompetitors} competitors. Remove one to add another.`,
+        error: competitorWatchLimitReachedMessage(maxWatchedCompetitors),
       },
       { status: 400 }
     );

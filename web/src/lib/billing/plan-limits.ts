@@ -26,9 +26,9 @@ export type PlanLimits = {
   initialScrapeAdsPerPlatform: number | null;
 };
 
-/** One competitor, one initial discovery scrape, then upgrade. */
+/** Three competitors, one initial discovery scrape, then upgrade. */
 const FREE_TRIAL_LIMITS: PlanLimits = {
-  maxWatchedCompetitors: 1,
+  maxWatchedCompetitors: 3,
   maxAdsProcessedPerMonth: 15_000,
   maxTotalScrapeOperations: 1,
   maxSwapsPerMonth: 0,

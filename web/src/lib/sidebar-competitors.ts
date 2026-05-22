@@ -1,5 +1,6 @@
 /** Persisted “spied” competitors for the dashboard sidebar */
 
+import { readClientMaxWatchedCompetitors } from "@/lib/billing/client-plan-cap";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
 import { safeSetLocalStorage } from "@/lib/cache/storage-quota";
 
@@ -322,7 +323,9 @@ export const MAX_WATCHED_COMPETITORS = 15;
 /** Placeholder slug used during workspace brand scrape — never a watched competitor. */
 export const WORKSPACE_BRAND_PLACEHOLDER_SLUG = "workspace-brand";
 
-const MAX_STORED = MAX_WATCHED_COMPETITORS;
+function maxStoredSidebarCompetitors(): number {
+  return readClientMaxWatchedCompetitors(MAX_WATCHED_COMPETITORS);
+}
 
 export type UpsertSidebarCompetitorResult =
   | { ok: true }
@@ -344,10 +347,10 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
     if (deduped.length !== list.length || logosHoisted) {
       safeSetLocalStorage(
         SIDEBAR_COMPETITORS_STORAGE_KEY,
-        JSON.stringify(withLogos.slice(0, MAX_STORED))
+        JSON.stringify(withLogos.slice(0, maxStoredSidebarCompetitors()))
       );
     }
-    return withLogos.slice(0, MAX_STORED);
+    return withLogos.slice(0, maxStoredSidebarCompetitors());
   } catch {
     return [];
   }
@@ -355,7 +358,7 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
 
 export function saveSidebarCompetitors(list: SidebarCompetitor[]) {
   if (typeof window === "undefined") return;
-  const cleaned = dedupeSidebarCompetitors(list).slice(0, MAX_STORED).map(hoistLogoOntoRow);
+  const cleaned = dedupeSidebarCompetitors(list).slice(0, maxStoredSidebarCompetitors()).map(hoistLogoOntoRow);
   const serialized = JSON.stringify(cleaned);
   const prev = window.localStorage.getItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
   if (prev === serialized) return;
@@ -380,7 +383,7 @@ export function upsertSidebarCompetitor(
   const list = loadSidebarCompetitors();
   const idx = findMatchingCompetitorIndex(list, slug, lookupName);
   const isNew = idx < 0;
-  if (isNew && list.length >= MAX_STORED) {
+  if (isNew && list.length >= maxStoredSidebarCompetitors()) {
     return { ok: false, reason: "max_watched_competitors" };
   }
   const prev = idx >= 0 ? list[idx] : undefined;

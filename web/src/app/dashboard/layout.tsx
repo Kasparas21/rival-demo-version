@@ -31,6 +31,11 @@ import {
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import {
+  CLIENT_PLAN_CAP_EVENT,
+  readClientMaxWatchedCompetitors,
+  syncClientMaxWatchedCompetitorsFromUsage,
+} from "@/lib/billing/client-plan-cap";
+import {
   buildCompetitorDashboardPath,
   competitorHostFromDashboardPathname,
 } from "@/lib/competitor-dashboard-url";
@@ -191,6 +196,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     competitor: SidebarCompetitor;
     rowSlugNav: string;
   } | null>(null);
+  const [maxWatchedCompetitorsCap, setMaxWatchedCompetitorsCap] = useState(MAX_WATCHED_COMPETITORS);
 
   const refreshSavedCompetitors = useCallback(() => {
     setSavedCompetitors(loadSidebarCompetitors());
@@ -219,6 +225,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       window.removeEventListener("storage", onStorage);
     };
   }, [refreshSavedCompetitors]);
+
+  useEffect(() => {
+    void syncClientMaxWatchedCompetitorsFromUsage().then(setMaxWatchedCompetitorsCap);
+    const onCap = () => setMaxWatchedCompetitorsCap(readClientMaxWatchedCompetitors());
+    window.addEventListener(CLIENT_PLAN_CAP_EVENT, onCap);
+    return () => window.removeEventListener(CLIENT_PLAN_CAP_EVENT, onCap);
+  }, []);
 
   useEffect(() => {
     const ws = brands[0]?.domain?.trim() || null;
@@ -748,7 +761,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 Competitors
               </p>
               <span className="text-[10px] font-semibold tabular-nums shrink-0 text-[#b4b4b8]" title="Watched competitors">
-                {sidebarCompetitorRows.length}/{MAX_WATCHED_COMPETITORS}
+                {sidebarCompetitorRows.length}/{maxWatchedCompetitorsCap}
               </span>
             </div>
           )}

@@ -140,17 +140,48 @@ export function shouldShowPostOnboardingPlanPicker(
   return !hasActivePaidSubscription(billing);
 }
 
+export function isTesterInviteBillingAccount(
+  rawPayload: unknown,
+  hasTesterRedemption = false,
+): boolean {
+  if (hasTesterRedemption) return true;
+  const p = readRawPayload(rawPayload);
+  if (typeof p.tester_invite === "string" && p.tester_invite.trim()) return true;
+  const metadata = p.metadata;
+  if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+    const source = (metadata as Record<string, unknown>).source;
+    if (source === "rival_tester_invite") return true;
+  }
+  return false;
+}
+
+/** Complimentary tester Pro keeps Pro features but free-trial competitor caps. */
+export function applyTesterInvitePlanLimits(limits: PlanLimits): PlanLimits {
+  const trialLimits = limitsForTier("free_trial");
+  return {
+    ...limits,
+    maxWatchedCompetitors: trialLimits.maxWatchedCompetitors,
+    maxSwapsPerMonth: trialLimits.maxSwapsPerMonth,
+  };
+}
+
 export async function getBillingEntitlement(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<BillingEntitlement> {
-  const { data } = await supabase
-    .from("billing_subscriptions")
-    .select(
-      "status, polar_product_id, polar_product_name, polar_customer_id, trial_end, current_period_end, cancel_at_period_end, raw_payload",
-    )
-    .eq("user_id", userId)
-    .maybeSingle();
+  const [billingRes, testerRedemptionRes] = await Promise.all([
+    supabase
+      .from("billing_subscriptions")
+      .select(
+        "status, polar_product_id, polar_product_name, polar_customer_id, trial_end, current_period_end, cancel_at_period_end, raw_payload",
+      )
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase.from("tester_invite_redemptions").select("id").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  const { data } = billingRes;
+  const hasTesterRedemption = Boolean(testerRedemptionRes.data?.id);
 
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
@@ -167,7 +198,10 @@ export async function getBillingEntitlement(
     applyDevOverride,
   });
 
-  const limits = limitsForTier(planTier);
+  let limits = limitsForTier(planTier);
+  if (isTesterInviteBillingAccount(rawPayload, hasTesterRedemption)) {
+    limits = applyTesterInvitePlanLimits(limits);
+  }
   const hasAccess = hasAccessForTier(planTier, status, isUnlimited);
 
   let planName = PLAN_DISPLAY_NAMES[planTier];
