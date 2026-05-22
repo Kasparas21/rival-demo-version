@@ -1,4 +1,5 @@
 import { flattenApifyDatasetRecord, runApifyActor } from "@/lib/apify/client";
+import { APIFY_LIGHT_ACTOR_MEMORY_MBYTES, readApifyActorMemoryMbytes } from "@/lib/apify/memory";
 import { snapchatDatasetRowMediaPriority } from "@/lib/ad-library/normalize";
 
 const DEFAULT_ACTOR = "zadexinho/snapchat-ads-scraper";
@@ -210,6 +211,7 @@ export async function scrapeSnapchatEuAdsGallery(params: {
       waitSecs: POLL_WAIT_SECS,
       timeoutSecs: POLL_WAIT_SECS,
       maxItems: limitEach,
+      memoryMbytes: readApifyActorMemoryMbytes("SNAPCHAT_ADS_MEMORY_MBYTES", APIFY_LIGHT_ACTOR_MEMORY_MBYTES),
     });
     return items.flatMap((row) => {
       if (!row || typeof row !== "object" || Array.isArray(row)) return [];

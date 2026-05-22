@@ -2,6 +2,10 @@ import { flattenApifyDatasetRecord, runApifyActor } from "@/lib/apify/client";
 import { GOOGLE_ADS_LIBRARY_MAX_ITEMS } from "@/lib/ad-library/constants";
 import type { GoogleCompanyAdItem } from "@/lib/ad-library/apify-raw-types";
 import { normalizeGoogleApiItem } from "@/lib/ad-library/normalize";
+import {
+  APIFY_HEAVY_ACTOR_MEMORY_MBYTES,
+  readApifyActorMemoryMbytes,
+} from "@/lib/apify/memory";
 
 /** Default: `lurkapi/google-ads-scraper`. Override with `APIFY_GOOGLE_ADS_ACTOR`. */
 const DEFAULT_GOOGLE_ACTOR = "lurkapi/google-ads-scraper";
@@ -12,11 +16,7 @@ const MAX_TIMEOUT_SECS = 3600;
  * account memory caps. Override with `GOOGLE_ADS_MEMORY_MBYTES` (e.g. 2048, 1024).
  */
 function readGoogleAdsMemoryMbytes(): number {
-  const raw = process.env.GOOGLE_ADS_MEMORY_MBYTES?.trim();
-  if (!raw) return 2048;
-  const n = parseInt(raw, 10);
-  if (!Number.isFinite(n) || n < 256) return 2048;
-  return Math.min(n, 8192);
+  return readApifyActorMemoryMbytes("GOOGLE_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES);
 }
 
 /** Google Transparency blocks datacenter IPs — residential avoids captcha (actor error message). */

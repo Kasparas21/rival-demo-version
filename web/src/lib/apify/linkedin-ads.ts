@@ -1,4 +1,5 @@
 import { runApifyActor } from "@/lib/apify/client";
+import { APIFY_LIGHT_ACTOR_MEMORY_MBYTES, readApifyActorMemoryMbytes } from "@/lib/apify/memory";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { canonicalLinkedInAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 import type { LinkedInAdItem } from "@/lib/ad-library/apify-raw-types";
@@ -259,7 +260,7 @@ export async function scrapeLinkedInAdLibrary(params: {
       waitSecs: MAX_TIMEOUT_SECS,
       timeoutSecs: MAX_TIMEOUT_SECS,
       maxItems: maxAds,
-      memoryMbytes: 256,
+      memoryMbytes: readApifyActorMemoryMbytes("LINKEDIN_ADS_MEMORY_MBYTES", APIFY_LIGHT_ACTOR_MEMORY_MBYTES),
     }
   );
 

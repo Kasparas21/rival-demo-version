@@ -1,4 +1,5 @@
 import { runApifyActor } from "@/lib/apify/client";
+import { APIFY_LIGHT_ACTOR_MEMORY_MBYTES, readApifyActorMemoryMbytes } from "@/lib/apify/memory";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 
 const DEFAULT_ACTOR = "zadexinho/pinterest-ads-scraper";
@@ -69,6 +70,7 @@ export async function scrapePinterestAdsLibrary(params: {
     waitSecs: MAX_TIMEOUT_SECS,
     timeoutSecs: MAX_TIMEOUT_SECS,
     maxItems: maxResults,
+    memoryMbytes: readApifyActorMemoryMbytes("PINTEREST_ADS_MEMORY_MBYTES", APIFY_LIGHT_ACTOR_MEMORY_MBYTES),
   });
   return items;
 }

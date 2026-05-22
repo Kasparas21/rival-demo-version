@@ -606,36 +606,56 @@ function SearchingContent() {
       };
 
       try {
-        // Sequential scrapes so each platform gets the full server timeout and Supabase persist
-        // (`ads_cache` + `scraped_ads`) before the next Apify run — parallel 500-ad jobs often timed out.
-        for (const p of adsPlatforms) {
-          setPlatformStatuses((prev) => ({ ...prev, [p]: "running" }));
-          const platformAbort = new AbortController();
-          const platformTimer = window.setTimeout(
-            () => platformAbort.abort(),
-            PLATFORM_SCRAPE_TIMEOUT_MS
-          );
-          try {
-            const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(
-              { ...payload, platforms: [p] },
-              { skipCache: true, signal: platformAbort.signal }
+        // Parallel per-platform API requests — each gets its own server timeout; Apify runs concurrently.
+        setPlatformStatuses((prev) => {
+          const next = { ...prev };
+          for (const p of adsPlatforms) next[p] = "running";
+          return next;
+        });
+
+        type PlatformScrapeResult = {
+          platform: AdsLibraryPlatform;
+          json: AdsLibraryResponse | null;
+          platformOk: boolean;
+        };
+
+        const platformResults = await Promise.all(
+          adsPlatforms.map(async (p): Promise<PlatformScrapeResult> => {
+            const platformAbort = new AbortController();
+            const platformTimer = window.setTimeout(
+              () => platformAbort.abort(),
+              PLATFORM_SCRAPE_TIMEOUT_MS
             );
-            mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
-            const normalizedPlatform = coerceAdsLibraryResponse(json);
-            const platformOk = httpOk && platformScrapeSucceeded(normalizedPlatform, p);
-            if (!platformOk) allHttpOk = false;
-            setPlatformStatuses((prev) => ({
-              ...prev,
-              [p]: platformOk ? "done" : "error",
-            }));
-          } catch {
-            allHttpOk = false;
-            setPlatformStatuses((prev) => ({ ...prev, [p]: "error" }));
-          } finally {
-            window.clearTimeout(platformTimer);
-            bumpProgress();
+            let platformOk = false;
+            try {
+              const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(
+                { ...payload, platforms: [p] },
+                { skipCache: true, signal: platformAbort.signal }
+              );
+              const normalizedPlatform = coerceAdsLibraryResponse(json);
+              platformOk = httpOk && platformScrapeSucceeded(normalizedPlatform, p);
+              return { platform: p, json: normalizedPlatform, platformOk };
+            } catch {
+              return { platform: p, json: null, platformOk: false };
+            } finally {
+              window.clearTimeout(platformTimer);
+              bumpProgress();
+              setPlatformStatuses((prev) => ({
+                ...prev,
+                [p]: platformOk ? "done" : "error",
+              }));
+            }
+          })
+        );
+
+        let merged: AdsLibraryResponse | null = null;
+        for (const result of platformResults) {
+          if (result.json) {
+            merged = mergeAdsLibraryState(merged, result.json);
           }
+          if (!result.platformOk) allHttpOk = false;
         }
+        mergedAdsScanRef.current = merged;
 
         const normalized = coerceAdsLibraryResponse(mergedAdsScanRef.current);
         writeAdsLibrarySessionCache(payloadKey, { response: normalized, httpOk: allHttpOk });

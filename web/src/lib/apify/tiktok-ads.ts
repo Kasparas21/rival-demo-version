@@ -1,4 +1,5 @@
 import { runApifyActor } from "@/lib/apify/client";
+import { APIFY_HEAVY_ACTOR_MEMORY_MBYTES, readApifyActorMemoryMbytes } from "@/lib/apify/memory";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
@@ -118,6 +119,7 @@ export async function scrapeTikTokAdsLibrary(params: {
       waitSecs: MAX_TIMEOUT_SECS,
       timeoutSecs: MAX_TIMEOUT_SECS,
       maxItems: maxAds,
+      memoryMbytes: readApifyActorMemoryMbytes("TIKTOK_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES),
     }
   );
 

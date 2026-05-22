@@ -1,4 +1,5 @@
 import { runApifyActor } from "@/lib/apify/client";
+import { readFacebookAdsMemoryMbytes } from "@/lib/apify/memory";
 import { facebookItemToMetaCard, type MetaAdCard } from "@/lib/ad-library/normalize";
 import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
@@ -187,6 +188,7 @@ export async function scrapeFacebookAds(
       timeoutSecs: MAX_ACTOR_TIMEOUT_SECS,
       // Apify requires maxItems > 0 for pay-per-event / store actors that charge per row
       maxItems: actorCount,
+      memoryMbytes: readFacebookAdsMemoryMbytes(urls.length),
     }
   );
 
