@@ -50,6 +50,22 @@ export async function fetchLatestAdsLibraryFromUserCache(
     cacheRows = retry.data ?? [];
   }
 
+  if (cacheRows.length === 0 && cleaned) {
+    const firstLabel = cleaned.includes(".") ? (cleaned.split(".")[0] ?? "") : cleaned;
+    if (firstLabel.length >= 3) {
+      const { data, error } = await supabase
+        .from("ads_cache")
+        .select("platform, ads_data, scraped_at, expires_at, competitor_domain")
+        .eq("user_id", userId)
+        .or(`competitor_domain.eq.${firstLabel},competitor_domain.ilike.${firstLabel}.%`);
+      if (error) {
+        console.warn("[ads-cache-read] label fallback", error.message);
+      } else {
+        cacheRows = data ?? [];
+      }
+    }
+  }
+
   if (cacheRows.length === 0) return null;
 
   const latestByPlatform = pickBestAdsCacheRowMapByPlatform(

@@ -42,6 +42,36 @@ import { repairAdsLibraryResponseMedia } from "@/lib/ad-library/repair-library-a
 
 type Brand = { name: string; domain: string; logoUrl?: string };
 
+function totalAdsInResponse(response: AdsLibraryResponse | null): number {
+  if (!response) return 0;
+  return ALL_ADS_API_PLATFORMS.reduce(
+    (sum, pl) => sum + countLibraryAdsForPlatform(pl, response),
+    0
+  );
+}
+
+async function fetchHydratedAdsLibraryFromDomain(
+  domain: string,
+  signal?: AbortSignal
+): Promise<AdsLibraryResponse | null> {
+  const d = domain.trim();
+  if (!d) return null;
+  try {
+    const res = await fetch("/api/competitor/ads-library/hydrate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ domain: d }),
+      signal,
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { ok?: boolean; response?: AdsLibraryResponse };
+    if (!json.ok || !json.response) return null;
+    return coerceAdsLibraryResponse(json.response);
+  } catch {
+    return null;
+  }
+}
+
 type Ids = Partial<{
   meta: string;
   metaPageUrl: string;
@@ -266,14 +296,17 @@ export function useAdLibrary(
         }
 
         const merged = repairAdsLibraryResponseMedia(mergeAdsLibraryState(mergeBase, json));
-        setData(merged);
-        const totalAds = ALL_ADS_API_PLATFORMS.reduce(
-          (sum, pl) => sum + countLibraryAdsForPlatform(pl, coerceAdsLibraryResponse(merged)),
-          0
-        );
+        const priorTotal = totalAdsInResponse(dataRef.current);
+        const mergedTotal = totalAdsInResponse(coerceAdsLibraryResponse(merged));
+        if (isBackground && priorTotal > 0 && mergedTotal === 0) {
+          return;
+        }
+        dataRef.current = coerceAdsLibraryResponse(merged);
+        setData(dataRef.current);
+        const totalAds = totalAdsInResponse(dataRef.current);
         if (totalAds > 0 || forceFresh) {
           writeAdsLibrarySessionCache(payloadKey, {
-            response: coerceAdsLibraryResponse(merged),
+            response: dataRef.current ?? coerceAdsLibraryResponse(merged),
             httpOk,
           });
         }
@@ -334,76 +367,76 @@ export function useAdLibrary(
       setSnapchatRefreshing(false);
       return;
     }
+
     const snapshot = sessionRef.current;
-    const handoff = readWorkspaceBrandScrapeHandoff(brand.domain);
-    if (handoff) {
-      if (snapshot !== sessionRef.current) return;
-      const repaired = repairAdsLibraryResponseMedia(
-        mergeAdsLibraryState(null, handoff.response as AdsLibraryResponse)
-      );
+    const stopRefreshing = () => {
+      setLoading(false);
+      setGoogleRefreshing(false);
+      setMetaRefreshing(false);
+      setTiktokRefreshing(false);
+      setPinterestRefreshing(false);
+      setLinkedinRefreshing(false);
+      setMicrosoftRefreshing(false);
+      setSnapchatRefreshing(false);
+    };
+
+    const paintResponse = (raw: AdsLibraryResponse, httpOk: boolean) => {
+      const repaired = repairAdsLibraryResponseMedia(coerceAdsLibraryResponse(raw));
+      dataRef.current = repaired;
       setData(repaired);
       setFetchError(null);
       try {
         writeAdsLibrarySessionCache(payloadKey, {
           response: coerceAdsLibraryResponse(repaired),
-          httpOk: handoff.httpOk,
+          httpOk,
         });
       } catch {
-        /* migrate best-effort */
+        /* quota */
       }
+      if (totalAdsInResponse(repaired) > 0) {
+        clearFreshDiscoveryScan(brand.domain.trim());
+      }
+      stopRefreshing();
+    };
+
+    const handoff = readWorkspaceBrandScrapeHandoff(brand.domain);
+    if (handoff && fetchResultHasLibraryCreatives(handoff)) {
+      if (snapshot !== sessionRef.current) return;
+      paintResponse(handoff.response as AdsLibraryResponse, handoff.httpOk);
       clearWorkspaceBrandScrapeHandoff(brand.domain);
-      clearFreshDiscoveryScan(brand.domain);
-      setLoading(false);
-      setGoogleRefreshing(false);
-      setMetaRefreshing(false);
-      setTiktokRefreshing(false);
-      setPinterestRefreshing(false);
-      setLinkedinRefreshing(false);
-      setMicrosoftRefreshing(false);
-      setSnapchatRefreshing(false);
-      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
       return;
     }
+
     const exact = readAdsLibraryCacheLastKnownGood(payloadKey);
     if (exact && fetchResultHasLibraryCreatives(exact)) {
       if (snapshot !== sessionRef.current) return;
-      setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, exact.response)));
-      setFetchError(null);
-      setLoading(false);
-      setGoogleRefreshing(false);
-      setMetaRefreshing(false);
-      setTiktokRefreshing(false);
-      setPinterestRefreshing(false);
-      setLinkedinRefreshing(false);
-      setMicrosoftRefreshing(false);
-      setSnapchatRefreshing(false);
-      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
+      paintResponse(exact.response as AdsLibraryResponse, exact.httpOk);
       return;
     }
+
     const legacy = readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
     if (legacy && fetchResultHasLibraryCreatives(legacy)) {
       if (snapshot !== sessionRef.current) return;
-      setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, legacy.response)));
-      setFetchError(null);
-      try {
-        writeAdsLibrarySessionCache(payloadKey, legacy);
-      } catch {
-        /* migrate best-effort */
-      }
-      setLoading(false);
-      setGoogleRefreshing(false);
-      setMetaRefreshing(false);
-      setTiktokRefreshing(false);
-      setPinterestRefreshing(false);
-      setLinkedinRefreshing(false);
-      setMicrosoftRefreshing(false);
-      setSnapchatRefreshing(false);
-      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
+      paintResponse(legacy.response as AdsLibraryResponse, legacy.httpOk);
       return;
     }
+
     setData(null);
     setLoading(true);
-    void load({ skipCache: false });
+    setFetchError(null);
+
+    const ac = new AbortController();
+    loadAbortRef.current = ac;
+
+    void (async () => {
+      const fromDb = await fetchHydratedAdsLibraryFromDomain(brand.domain, ac.signal);
+      if (loadAbortRef.current !== ac || snapshot !== sessionRef.current) return;
+      if (fromDb && totalAdsInResponse(fromDb) > 0) {
+        paintResponse(fromDb, true);
+        return;
+      }
+      void load({ skipCache: false });
+    })();
   }, [enabled, payloadKey, brand.domain, load]);
 
   /** Rescrape / discovery writes session cache + dispatches this event — reload without a full navigation. */

@@ -484,6 +484,7 @@ function SearchingContent() {
       scanRunningRef.current = true;
       setPhase("scanning");
       setScanProgress(0);
+      setDiscoveryError(null);
       const channelsForScan = options?.channels ?? selectedChannels;
       const brandForScan = options?.brand ?? discoveredBrand;
       const adsPlatforms = channelsQueryToAdsPlatforms(
@@ -686,16 +687,6 @@ function SearchingContent() {
             httpOk: allHttpOk,
           });
 
-          if (!readiness.ready) {
-            clearDiscoveryScanInProgress(scanDomain);
-            setDiscoveryError(
-              "We saved your scraped ads but could not verify session storage. You can open your library manually below."
-            );
-            setIsFinalizingLibrary(false);
-            scanRunningRef.current = false;
-            return;
-          }
-
           responseForNavigation = readiness.hydratedResponse;
 
           try {
@@ -794,6 +785,7 @@ function SearchingContent() {
       setDiscoveredBrand(brand);
       setDiscoveredIds(mergedIds);
       setManualIds(mergedIds);
+      setDiscoveryError(null);
 
       const regions = inferAdLibraryRegionDefaults(ctx.brand.domain);
       const primaryMarket = primaryWorkspaceAdMarketIso2(ctx.adMarketCountryCodes);
@@ -904,28 +896,6 @@ function SearchingContent() {
                 ? "Almost there — syncing your scraped ads so they appear correctly in your library."
                 : "We're pulling every active ad from the platforms you connected during onboarding."}
           </p>
-        ) : null}
-        {(isScanning || isFinalizingLibrary) && discoveryError ? (
-          <div
-            role="alert"
-            className="mb-8 flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50/90 px-5 py-4 text-center"
-          >
-            <p className="text-[14px] font-medium leading-snug text-amber-950">{discoveryError}</p>
-            {workspaceBrandScrape ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const canonicalHost = normalizeCompetitorSlug(
-                    discoveredBrand?.domain ?? displayName
-                  );
-                  router.push(buildCompetitorDashboardPath(canonicalHost), { scroll: false });
-                }}
-                className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#343434] px-5 text-[14px] font-semibold text-white hover:bg-[#2a2a2a]"
-              >
-                Open ad library anyway
-              </button>
-            ) : null}
-          </div>
         ) : null}
         {isManualNeeded ? (
           <p className="text-[13px] sm:text-[14px] text-[#71717a] text-center max-w-lg mx-auto mb-8 sm:mb-10 leading-relaxed">
