@@ -60,6 +60,7 @@ type Props = {
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
   onFreshnessRescrape?: () => void;
+  fetchEnabled?: boolean;
 };
 
 export function CreativeTestsTab({
@@ -69,6 +70,7 @@ export function CreativeTestsTab({
   cacheDomainNorm,
   lastScrapedAt = null,
   onFreshnessRescrape,
+  fetchEnabled = true,
 }: Props) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
@@ -76,7 +78,7 @@ export function CreativeTestsTab({
 
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<CreativeTestsApiResponse>({
     cacheKey,
-    enabled: Boolean(competitorId && domainKey),
+    enabled: Boolean(competitorId && domainKey && fetchEnabled),
     validateCached: (c) => {
       if (!c.ok) return false;
       const rows = c.tests ?? [];

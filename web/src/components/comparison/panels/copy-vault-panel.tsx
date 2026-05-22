@@ -50,6 +50,7 @@ type Props = {
   cacheDomainNorm?: string | null;
   /** Account scrape stamp — cache key bumps when new scrape lands. */
   lastScrapedAt?: string | null;
+  fetchEnabled?: boolean;
 };
 
 const PLATFORMS: { id: string; label: string }[] = [
@@ -141,6 +142,7 @@ export function CopyVaultPanel({
   onOpenAd,
   cacheDomainNorm,
   lastScrapedAt = null,
+  fetchEnabled = true,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -172,7 +174,7 @@ export function CopyVaultPanel({
     refetch: refetchVault,
   } = useScrapeKeyedCache<VaultApiResponse>({
     cacheKey,
-    enabled: Boolean(competitorId.trim() && standaloneMode),
+    enabled: Boolean(competitorId.trim() && standaloneMode && fetchEnabled),
     validateCached: (c) => c.ok === true && Array.isArray(c.ads),
     fetcher: fetchVault,
   });

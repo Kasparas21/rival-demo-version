@@ -5,13 +5,6 @@ import {
 } from "@/lib/billing/entitlements";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Json } from "@/lib/supabase/types";
-
-function countAdsInPayload(ads_data: Json | null | undefined): number {
-  if (!ads_data || typeof ads_data !== "object" || ads_data === null) return 0;
-  const ads = (ads_data as { ads?: unknown }).ads;
-  return Array.isArray(ads) ? ads.length : 0;
-}
 
 export async function GET() {
   const supabase = await createSupabaseServerClient();
@@ -25,25 +18,26 @@ export async function GET() {
   const userId = user.id;
   const yearMonthUtc = utcYearMonth();
 
-  const [competitorsRes, cacheRes, overviewRes, billing, monthlyUsage] = await Promise.all([
+  const [competitorsRes, scrapedAdsRes, cacheRowsRes, overviewRes, billing, monthlyUsage] = await Promise.all([
     supabase
       .from("saved_competitors")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
       .eq("is_workspace_brand", false),
-    supabase.from("ads_cache").select("ads_data").eq("user_id", userId),
+    supabase
+      .from("scraped_ads")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_active", true),
+    supabase.from("ads_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
     supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
     getBillingEntitlement(supabase, userId),
     loadMonthlyUsageSnapshot(supabase, userId, yearMonthUtc),
   ]);
 
   const competitorsWatched = competitorsRes.count ?? 0;
-
-  let scrapedAdsTotal = 0;
-  const rows = cacheRes.data ?? [];
-  for (const row of rows) {
-    scrapedAdsTotal += countAdsInPayload(row.ads_data as Json);
-  }
+  const scrapedAdsTotal = scrapedAdsRes.count ?? 0;
+  const adLibraryRefreshes = cacheRowsRes.count ?? 0;
 
   const aiStrategyOverviews = overviewRes.count ?? 0;
 
@@ -55,7 +49,7 @@ export async function GET() {
       adLibraryScrapeRunsThisMonth: monthlyUsage.scrapeOperations,
       competitorsWatched,
       aiStrategyOverviews,
-      adLibraryRefreshes: rows.length,
+      adLibraryRefreshes,
       swapsThisMonth: monthlyUsage.swapCount,
       csvExportsThisMonth: monthlyUsage.csvExportCount,
       limits: billing.limits,

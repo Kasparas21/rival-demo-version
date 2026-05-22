@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "seed:strategy-overview": "tsx scripts/seed-strategy-overview.ts",
+    "check:supabase-env": "tsx scripts/check-supabase-env.ts",
     "debug:spend-footprint": "tsx scripts/debug-spend-footprint.ts",
     "dev": "next dev --webpack",
     "build": "next build --webpack",

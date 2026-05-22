@@ -86,6 +86,9 @@ export async function POST(request: Request): Promise<NextResponse> {
         return NextResponse.json({ ok: false, error: candErr.message }, { status: 500 });
       }
 
+      type CandidateRow = NonNullable<typeof candidates>[number];
+      const rowByLibraryKey = new Map<string, CandidateRow>();
+
       for (const row of candidates ?? []) {
         const payload = row.raw_payload;
         const pl = String(row.platform).trim().toLowerCase();
@@ -115,43 +118,54 @@ export async function POST(request: Request): Promise<NextResponse> {
             libraryPreviewUrls[key] = previewUrl;
           }
           if (!wantKeys.has(key)) continue;
-          if (!resolvedToScraped[key]) {
-            resolvedToScraped[key] = row.id;
-          }
-          if (libraryLifecycle[key] == null) {
-            const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
-            const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
-            let running = false;
-            if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
-              running = isMetaAdActive(payload as MetaAdCard, scrapeAtMs);
-            } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
-              running = isTikTokAdActive(payload as TikTokAdCard);
-            } else {
-              running = row.is_active === true || isScrapedAdRunning(row.last_seen_at, lastScrapedAt);
-            }
-            libraryLifecycle[key] = { isRunning: running };
+          if (!rowByLibraryKey.has(key)) {
+            rowByLibraryKey.set(key, row);
           }
         }
+      }
 
-        if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
-          for (const item of libraryItems) {
-            if (item.platform.trim().toLowerCase() !== "meta") continue;
+      for (const item of libraryItems) {
+        const pl = item.platform.trim().toLowerCase();
+        const key = libraryItemKey(item.platform, item.libraryItemId);
+        if (!wantKeys.has(key)) continue;
+
+        let row = rowByLibraryKey.get(key);
+        if (!row && pl === "meta") {
+          for (const candidate of candidates ?? []) {
+            if (String(candidate.platform).trim().toLowerCase() !== "meta") continue;
+            const payload = candidate.raw_payload;
+            if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
             if (!metaScrapedRowMatchesLibraryItemId(payload as MetaAdCard, item.libraryItemId)) continue;
-            const key = libraryItemKey(item.platform, item.libraryItemId);
-            if (previewUrl && !libraryPreviewUrls[key]) {
-              libraryPreviewUrls[key] = previewUrl;
-            }
-            if (!resolvedToScraped[key]) {
-              resolvedToScraped[key] = row.id;
-            }
-            if (libraryLifecycle[key] == null) {
-              const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
-              const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
-              libraryLifecycle[key] = {
-                isRunning: isMetaAdActive(payload as MetaAdCard, scrapeAtMs),
-              };
-            }
+            row = candidate;
+            break;
           }
+        }
+        if (!row) continue;
+
+        const payload = row.raw_payload;
+        const previewUrl = libraryPreviewUrlFromScrapedRow({
+          platform: String(row.platform),
+          ad_creative_url: row.ad_creative_url ?? null,
+          raw_payload: row.raw_payload,
+        });
+        if (previewUrl && !libraryPreviewUrls[key]) {
+          libraryPreviewUrls[key] = previewUrl;
+        }
+        if (!resolvedToScraped[key]) {
+          resolvedToScraped[key] = row.id;
+        }
+        if (libraryLifecycle[key] == null) {
+          const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
+          const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
+          let running = false;
+          if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+            running = isMetaAdActive(payload as MetaAdCard, scrapeAtMs);
+          } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+            running = isTikTokAdActive(payload as TikTokAdCard);
+          } else {
+            running = row.is_active === true || isScrapedAdRunning(row.last_seen_at, lastScrapedAt);
+          }
+          libraryLifecycle[key] = { isRunning: running };
         }
       }
     }

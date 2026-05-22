@@ -91,7 +91,10 @@ export async function GET(request: Request) {
       "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, is_active, raw_payload"
     )
     .eq("user_id", user.id)
-    .eq("competitor_id", competitorId);
+    .eq("competitor_id", competitorId)
+    .eq("is_active", true)
+    .order("last_seen_at", { ascending: false })
+    .limit(2000);
 
   if (adsErr) {
     return NextResponse.json({ ok: false, error: adsErr.message }, { status: 500 });

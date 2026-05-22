@@ -13,6 +13,7 @@ import { FeatureSectionHeader } from "@/components/dashboard/feature-section-hea
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
+import { useRecomputePoll } from "@/components/competitor/recompute-poll-context";
 
 const COOLDOWN_MS = 24 * 60 * 60 * 1000;
 
@@ -44,6 +45,8 @@ type Props = {
   comparisonPayloadLoading: boolean;
   comparisonPayloadError: string | null;
   refetchComparisonPayload?: () => void | Promise<void>;
+  /** When false, skip mount refetch (tab kept mounted but inactive). */
+  fetchEnabled?: boolean;
 };
 
 export function ActivityFeedTab({
@@ -54,6 +57,7 @@ export function ActivityFeedTab({
   comparisonPayloadLoading,
   comparisonPayloadError,
   refetchComparisonPayload,
+  fetchEnabled = true,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -62,7 +66,9 @@ export function ActivityFeedTab({
   const [moves, setMoves] = useState<ComparisonMoveRow[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [earlierOpen, setEarlierOpen] = useState(false);
-  const [recomputeRunning, setRecomputeRunning] = useState(false);
+  const [recomputeRunningLocal, setRecomputeRunningLocal] = useState(false);
+  const { recomputeRunning: liftedRecomputeRunning } = useRecomputePoll();
+  const recomputeRunning = liftedRecomputeRunning || recomputeRunningLocal;
 
   const [filter, setFilter] = useState<MoveFilterCategory>("all");
   const [significanceHighOnly, setSignificanceHighOnly] = useState(false);
@@ -75,39 +81,9 @@ export function ActivityFeedTab({
   const waitingForSnapshots = snapshotCount < 2;
 
   useEffect(() => {
+    if (!fetchEnabled) return;
     void refetchComparisonPayload?.();
-  }, [competitorDomain, refetchComparisonPayload]);
-
-  useEffect(() => {
-    const d = competitorDomain.trim().toLowerCase();
-    if (!d) return;
-
-    let cancelled = false;
-    const pollStatus = async () => {
-      try {
-        const st = await fetch(
-          `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(d)}`,
-          { credentials: "include" }
-        );
-        const sj = (await st.json()) as { ok?: boolean; status?: string };
-        if (cancelled || !sj.ok) return;
-        const running = sj.status === "running";
-        setRecomputeRunning(running);
-        if (!running) {
-          void refetchComparisonPayload?.();
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-
-    void pollStatus();
-    const id = window.setInterval(() => void pollStatus(), 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [competitorDomain, refetchComparisonPayload]);
+  }, [competitorDomain, fetchEnabled, refetchComparisonPayload]);
 
   const bootstrapKeyRef = useRef<string | null>(null);
 
@@ -141,6 +117,7 @@ export function ActivityFeedTab({
   }, [competitorDomain]);
 
   useEffect(() => {
+    if (!fetchEnabled) return;
     if (comparisonPayloadLoading || !waitingForSnapshots) return;
     const key = competitorDomain.trim().toLowerCase();
     if (!key) return;
@@ -150,6 +127,7 @@ export function ActivityFeedTab({
 
     void triggerRecompute();
   }, [
+    fetchEnabled,
     comparisonPayloadLoading,
     waitingForSnapshots,
     competitorDomain,
@@ -221,9 +199,8 @@ export function ActivityFeedTab({
       : 0;
 
   const showInitialLoad = comparisonPayloadLoading && !data?.ok;
-  const showRecomputeSpinner = recomputeRunning && waitingForSnapshots;
 
-  if (showInitialLoad || showRecomputeSpinner) {
+  if (showInitialLoad) {
     return <RivalLoadingBlock padded className="mx-auto max-w-3xl py-16" />;
   }
 
@@ -235,6 +212,11 @@ export function ActivityFeedTab({
           title={<>What&apos;s changed about how {competitorLabel} advertises</>}
           description="Strategy snapshots are building — move detection needs at least two saved snapshots to compare."
         />
+        {recomputeRunning ? (
+          <div className="mt-6 flex justify-center">
+            <RivalLoadingBlock padded className="py-8" />
+          </div>
+        ) : null}
         <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
           <p className="text-sm font-medium text-slate-800">
             {snapshotCount === 0 ? "First snapshot pending" : "One snapshot saved"}

@@ -37,6 +37,11 @@ type Props = {
   /** Account / sidebar scrape timestamp — bumps client cache key when new scrape lands. */
   lastScrapedAt?: string | null;
   onFreshnessRescrape?: () => void;
+  /** When false, skip compiled fetch (tab mounted but inactive). */
+  fetchEnabled?: boolean;
+  /** Lifted from competitor page — replaces local recompute-status polling. */
+  externalRecomputeRunning?: boolean;
+  externalRecomputeError?: string | null;
 };
 
 export function StrategyOverviewApp({
@@ -45,6 +50,9 @@ export function StrategyOverviewApp({
   competitorId,
   lastScrapedAt = null,
   onFreshnessRescrape,
+  fetchEnabled = true,
+  externalRecomputeRunning = false,
+  externalRecomputeError = null,
 }: Props) {
   const domain = brand.domain.trim();
   const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
@@ -58,20 +66,10 @@ export function StrategyOverviewApp({
   const [openCellId, setOpenCellId] = useState<FunnelCellId | null>(null);
   const [edgeTip, setEdgeTip] = useState<{ reasoning: string; confidence: number } | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
-  const [backgroundRecompute, setBackgroundRecompute] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const loadGenerationRef = useRef(0);
-
-  const clearPoll = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
 
   const { data: compiled, loading, isValidating, error: loadError, refetch } = useScrapeKeyedCache<StrategyCompiledResponse>({
     cacheKey: strategyCacheKey,
-    enabled: Boolean(domainNorm),
+    enabled: Boolean(domainNorm) && fetchEnabled,
     validateCached: (c) => {
       const p = c.payload;
       return c.ok === true && !!p && typeof p.map === "object" && p.map != null;
@@ -96,7 +94,11 @@ export function StrategyOverviewApp({
     return raw ? normalizeCompetitorStrategyOverviewPayload(raw) : null;
   }, [compiled?.payload]);
   const cached = compiled?.cached === true;
-  const displayError = loadError?.message ?? pollError;
+  const displayError = loadError?.message ?? pollError ?? externalRecomputeError;
+  const isBackgroundRefresh =
+    externalRecomputeRunning ||
+    compiled?.recomputing === true ||
+    compiled?.staleWhileRecomputing === true;
 
   useEffect(() => {
     let debounce: ReturnType<typeof setTimeout> | null = null;
@@ -131,82 +133,12 @@ export function StrategyOverviewApp({
         void refetch();
       }
     }
-    return () => {
-      clearPoll();
-    };
-  }, [clearPoll, domainNorm, refetch]);
+  }, [domainNorm, refetch]);
 
   useEffect(() => {
-    if (!compiled?.ok || !compiled.payload) {
-      clearPoll();
-      setBackgroundRecompute(false);
-      return;
-    }
-    const shouldPoll = compiled.recomputing === true || compiled.staleWhileRecomputing === true;
-    if (!shouldPoll) {
-      clearPoll();
-      setBackgroundRecompute(false);
-      return;
-    }
-
-    const myGeneration = ++loadGenerationRef.current;
-    setBackgroundRecompute(true);
-    clearPoll();
-    const triesRef = { n: 0 };
-    pollRef.current = setInterval(() => {
-      void (async () => {
-        triesRef.n += 1;
-        const maxPolls = 120;
-        let done = triesRef.n >= maxPolls;
-        let statusFailed = false;
-        let failedMessage: string | null = null;
-        try {
-          const st = await fetch(
-            `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(domain)}`
-          );
-          if (myGeneration !== loadGenerationRef.current) return;
-          const sj = (await st.json()) as {
-            ok?: boolean;
-            status?: string;
-            error?: string | null;
-          };
-          if (myGeneration !== loadGenerationRef.current) return;
-          statusFailed = sj.ok === true && sj.status === "failed";
-          failedMessage = sj.error?.trim() ?? null;
-          done = triesRef.n >= maxPolls || (sj.ok === true && (sj.status === "idle" || sj.status === "failed"));
-        } catch {
-          done = triesRef.n >= maxPolls;
-        }
-        if (!done) return;
-        if (myGeneration !== loadGenerationRef.current) return;
-
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-        setBackgroundRecompute(false);
-        if (statusFailed) {
-          setPollError(failedMessage || "Strategy recomputation failed");
-        } else {
-          setPollError(null);
-        }
-        try {
-          void refetch();
-        } catch {
-          /* refetch handles errors */
-        }
-      })();
-    }, 5000);
-
-    return () => {
-      clearPoll();
-    };
-  }, [clearPoll, compiled?.recomputing, compiled?.staleWhileRecomputing, domain, refetch]);
-
-  const pipelinePending =
-    compiled?.recomputing === true ||
-    compiled?.staleWhileRecomputing === true ||
-    backgroundRecompute;
+    if (!externalRecomputeError) return;
+    setPollError(externalRecomputeError);
+  }, [externalRecomputeError]);
 
   const emptyStrategy = useMemo(
     () =>
@@ -222,8 +154,8 @@ export function StrategyOverviewApp({
   }, [domainNorm, scrapeStamp]);
 
   useEffect(() => {
-    if (loading || !domainNorm || displayError) return;
-    const needsPipeline = !payload || emptyStrategy || pipelinePending;
+    if (loading || !domainNorm || displayError || !fetchEnabled) return;
+    const needsPipeline = !payload || emptyStrategy;
     if (!needsPipeline) return;
     const kickKey = `${domainNorm}:${scrapeStamp}`;
     if (autoKickRef.current === kickKey) return;
@@ -265,19 +197,11 @@ export function StrategyOverviewApp({
     scrapeStamp,
     domain,
     displayError,
+    fetchEnabled,
     payload,
     emptyStrategy,
-    pipelinePending,
     refetch,
   ]);
-
-  useEffect(() => {
-    if (!pipelinePending) return;
-    const id = window.setInterval(() => {
-      void refetch();
-    }, 8000);
-    return () => window.clearInterval(id);
-  }, [pipelinePending, refetch]);
 
   const mapKey = useMemo(() => {
     if (!payload?.map) return "empty";
@@ -332,14 +256,16 @@ export function StrategyOverviewApp({
     );
 
   const showInitialSpinner = loading && !payload;
-  const awaitingStrategy =
-    showInitialSpinner || pipelinePending || emptyStrategy || (!payload && !displayError && loading);
+  const awaitingStrategy = showInitialSpinner || (emptyStrategy && isBackgroundRefresh);
+  const showEmptyStrategy =
+    !awaitingStrategy && !displayError && !!payload && emptyStrategy && !isBackgroundRefresh;
   const showMap =
-    !displayError && !!payload && payload.map.activeAdCount > 0 && !pipelinePending;
+    !displayError && !!payload && payload.map.activeAdCount > 0;
+  const mapDimmed = isBackgroundRefresh && showMap;
 
   return (
     <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 sm:px-8 lg:px-10">
-      <CacheRevalidatingDot show={isValidating && !!payload && !pipelinePending} className="right-4 top-4" />
+      <CacheRevalidatingDot show={isValidating && !!payload} className="right-4 top-4" />
       {!awaitingStrategy ? (
         <FeatureSectionHeader
           className="mb-4"
@@ -355,6 +281,12 @@ export function StrategyOverviewApp({
       ) : null}
 
       {awaitingStrategy ? <RivalLoadingBlock padded className="py-20" /> : null}
+
+      {showEmptyStrategy ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-[14px] text-slate-600">
+          No active ads found for this competitor yet. Open the Ad Library tab or wait for the next spy run.
+        </div>
+      ) : null}
 
       {!awaitingStrategy && displayError ? (
         <div className="mb-4 rounded-2xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
@@ -381,7 +313,7 @@ export function StrategyOverviewApp({
             </div>
           ) : null}
 
-          <div className="flex flex-col items-start gap-6 xl:flex-row">
+          <div className={`flex flex-col items-start gap-6 xl:flex-row ${mapDimmed ? "opacity-60" : ""}`}>
             <div className="min-w-0 w-full flex-1 space-y-3">
               <StrategyMapFlow
                 mapKey={mapKey}
@@ -405,6 +337,7 @@ export function StrategyOverviewApp({
                 cacheDomainNorm={domainNorm}
                 lastScrapedAt={lastScrapedAt ?? null}
                 onFreshnessRescrape={onFreshnessRescrape}
+                activityScoreEnabled={fetchEnabled}
               />
             </aside>
           </div>

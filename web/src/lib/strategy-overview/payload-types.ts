@@ -302,6 +302,8 @@ export type CompetitorStrategyOverviewPayload = {
   insufficientEnrichedAds?: boolean;
   /** Cached per brand; invalidated with strategy model version / recompute. */
   audience_inference?: AudienceInferenceResult | null;
+  /** True when persisted from synchronous fast-path derive (not full LLM recompute). */
+  derivedFastPath?: boolean;
 };
 
 /** Keys persisted in `strategy_insights_cards` — excludes comparison-only insight augmentations. */

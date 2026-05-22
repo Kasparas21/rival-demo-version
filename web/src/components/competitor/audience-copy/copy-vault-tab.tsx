@@ -8,6 +8,7 @@ type Props = {
   onOpenAd: (adId: string) => void;
   cacheDomainNorm?: string | null;
   lastScrapedAt?: string | null;
+  fetchEnabled?: boolean;
 };
 
 export function CopyVaultTab({
@@ -16,6 +17,7 @@ export function CopyVaultTab({
   onOpenAd,
   cacheDomainNorm,
   lastScrapedAt,
+  fetchEnabled = true,
 }: Props) {
   if (!competitorId) {
     return (
@@ -34,6 +36,7 @@ export function CopyVaultTab({
         onOpenAd={onOpenAd}
         cacheDomainNorm={cacheDomainNorm}
         lastScrapedAt={lastScrapedAt}
+        fetchEnabled={fetchEnabled}
       />
     </div>
   );

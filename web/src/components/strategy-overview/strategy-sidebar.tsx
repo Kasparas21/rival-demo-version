@@ -13,6 +13,7 @@ type Props = {
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
   onFreshnessRescrape?: () => void;
+  activityScoreEnabled?: boolean;
 };
 
 const CARD =
@@ -58,6 +59,7 @@ export function StrategyOverviewSidebar({
   cacheDomainNorm,
   lastScrapedAt = null,
   onFreshnessRescrape,
+  activityScoreEnabled = true,
 }: Props) {
   const m = normalizeStrategyMapPayload(map);
   const signals = m.audienceSignals;
@@ -75,7 +77,7 @@ export function StrategyOverviewSidebar({
         <ActivityScorePanel
           competitorId={competitorId}
           cacheDomainNorm={cacheDomainNorm}
-          enabled={!dimmed}
+          enabled={activityScoreEnabled && !dimmed}
           lastScrapedAt={lastScrapedAt}
           onFreshnessRefresh={onFreshnessRescrape}
         />

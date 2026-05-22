@@ -7,7 +7,7 @@ import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/li
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
-import { derivePayloadFromActiveScrapedAds } from "@/lib/strategy-overview/derive-payload-from-active-ads";
+import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
   hydrateAudienceInferenceIfReady,
   isStrategyRecomputeRunning,
@@ -228,7 +228,7 @@ async function resolveSidePayload(params: {
 
   const [stale, derived, meta, scrapeIsNewer, running] = await Promise.all([
     getStaleStrategyOverviewPayload(supabase, userId, competitorId),
-    derivePayloadFromActiveScrapedAds({ supabase, userId, competitorId, domainHint }),
+    deriveAndPersistFastPathStrategyOverview({ supabase, userId, competitorId, domainHint }),
     loadSavedCompetitorForUser(supabase, userId, domainHint),
     scrapeIsNewerThanOverview(supabase, competitorId),
     isStrategyRecomputeRunning(supabase, competitorId),

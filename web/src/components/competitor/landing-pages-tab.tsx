@@ -109,6 +109,7 @@ export type LandingPagesTabProps = {
   onFreshnessRescrape?: () => void;
   /** Parent-owned list fetch (dedupes with Ads Library analytics). When set, skips internal list cache hook. */
   landingPagesListCache?: SharedLandingPagesListCache | null;
+  fetchEnabled?: boolean;
 };
 
 function formatDataSinceLabel(iso: string | null | undefined): string | null {
@@ -148,6 +149,7 @@ export function LandingPagesTab({
   onOpenAd,
   onFreshnessRescrape,
   landingPagesListCache = null,
+  fetchEnabled = true,
 }: LandingPagesTabProps) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
@@ -155,7 +157,7 @@ export function LandingPagesTab({
 
   const internalList = useScrapeKeyedCache<LandingPagesApiResponse>({
     cacheKey: listCacheKey,
-    enabled: landingPagesListCache == null && Boolean(competitorId && domainKey),
+    enabled: landingPagesListCache == null && Boolean(competitorId && domainKey && fetchEnabled),
     validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
     fetcher: async () => {
       const res = await fetch(

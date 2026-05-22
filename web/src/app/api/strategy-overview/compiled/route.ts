@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
-import { derivePayloadFromActiveScrapedAds } from "@/lib/strategy-overview/derive-payload-from-active-ads";
+import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
   isStrategyRecomputeRunning,
   scrapeIsNewerThanOverview,
@@ -17,6 +17,7 @@ import {
 } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { tryHydrateScrapedAdsFromAdsCache } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
+import { SCRAPED_ADS_DERIVATION_SELECT, type ScrapedAdDerivationRow } from "@/lib/strategy-overview/scraped-ads-derivation-columns";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan). Heavy work runs in `after()`. */
@@ -129,7 +130,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const { data: adsRows, error: adsErr } = await supabase
     .from("scraped_ads")
-    .select("*")
+    .select(SCRAPED_ADS_DERIVATION_SELECT)
     .eq("competitor_id", meta.competitorId)
     .eq("user_id", user.id)
     .eq("is_active", true)
@@ -141,40 +142,38 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const rows = adsRows ?? [];
   if (rows.length === 0) {
-    const result = await recomputeStrategyOverviewForCompetitor({
-      supabase,
-      userId: user.id,
-      competitorId: meta.competitorId,
-      domainHint: domain,
-      stealLock: force,
-      refreshAdEnrichment: force,
-      staleLockMs: force ? USER_STALE_LOCK_MS : undefined,
+    const [stale, running] = await Promise.all([
+      getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId),
+      isStrategyRecomputeRunning(supabase, meta.competitorId),
+    ]);
+    const empty = buildNoAdsFoundPayload({
+      name: meta.name,
+      domain: meta.brandDomain ?? meta.cacheDomain,
+      logoUrl: meta.logoUrl,
     });
+    const outPayload = normalizeCompetitorStrategyOverviewPayload(stale ?? empty);
 
-    if (!result.ok) {
-      if (result.error.includes("already in progress")) {
-        const stalePayload = await getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId);
-        const empty = buildNoAdsFoundPayload({
-          name: meta.name,
-          domain: meta.brandDomain ?? meta.cacheDomain,
-          logoUrl: meta.logoUrl,
-        });
-        const outPayload = normalizeCompetitorStrategyOverviewPayload(stalePayload ?? empty);
-        return NextResponse.json({
-          ok: true,
-          cached: false,
-          staleWhileRecomputing: true,
-          payload: outPayload,
-        });
-      }
-      return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+    if (!running) {
+      scheduleBackgroundRecompute({
+        competitorDomain: domain,
+        userId: user.id,
+        competitorId: meta.competitorId,
+        stealLock: force,
+        refreshAdEnrichment: force,
+      });
     }
 
     return NextResponse.json(
-      { ok: true, cached: false, payload: normalizeCompetitorStrategyOverviewPayload(result.payload) },
+      {
+        ok: true,
+        cached: Boolean(stale),
+        recomputing: running || !stale,
+        staleWhileRecomputing: running || !stale,
+        payload: outPayload,
+      },
       {
         headers: {
-          "Cache-Control": "private, max-age=300, stale-while-revalidate=3600",
+          "Cache-Control": "private, no-cache",
         },
       }
     );
@@ -184,21 +183,56 @@ export async function GET(req: Request): Promise<NextResponse> {
     `[compiled/fast-path] competitorId=${meta.competitorId} ads=${rows.length} → derive now, full recompute in background (force=${force})`
   );
 
-  const quickPayload = await derivePayloadFromActiveScrapedAds({
+  let quickPayload = await deriveAndPersistFastPathStrategyOverview({
     supabase,
     userId: user.id,
     competitorId: meta.competitorId,
     domainHint: domain,
+    meta,
+    adsRows: rows as ScrapedAdDerivationRow[],
   });
-
-  if (!quickPayload) {
-    return NextResponse.json({ ok: false, error: "Failed to build strategy overview" }, { status: 500 });
-  }
 
   const [scrapeIsNewer, running] = await Promise.all([
     scrapeIsNewerThanOverview(supabase, meta.competitorId),
     isStrategyRecomputeRunning(supabase, meta.competitorId),
   ]);
+
+  if (!quickPayload) {
+    const stale = await getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId);
+    if (stale) {
+      quickPayload = normalizeCompetitorStrategyOverviewPayload(stale);
+    } else {
+      const empty = buildNoAdsFoundPayload({
+        name: meta.name,
+        domain: meta.brandDomain ?? meta.cacheDomain,
+        logoUrl: meta.logoUrl,
+      });
+      quickPayload = normalizeCompetitorStrategyOverviewPayload(empty);
+    }
+    if (!running) {
+      scheduleBackgroundRecompute({
+        competitorDomain: domain,
+        userId: user.id,
+        competitorId: meta.competitorId,
+        stealLock: force,
+        refreshAdEnrichment: force,
+      });
+    }
+    return NextResponse.json(
+      {
+        ok: true,
+        cached: Boolean(stale),
+        recomputing: true,
+        staleWhileRecomputing: true,
+        payload: quickPayload,
+      },
+      {
+        headers: {
+          "Cache-Control": "private, no-cache",
+        },
+      }
+    );
+  }
 
   if (scrapeIsNewer && !running) {
     scheduleBackgroundRecompute({

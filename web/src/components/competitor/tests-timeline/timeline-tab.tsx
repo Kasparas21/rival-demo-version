@@ -41,6 +41,7 @@ type Props = {
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
   onFreshnessRescrape?: () => void;
+  fetchEnabled?: boolean;
 };
 
 function relTime(iso: string | null | undefined): string {
@@ -108,6 +109,7 @@ export function TimelineTab({
   cacheDomainNorm,
   lastScrapedAt = null,
   onFreshnessRescrape,
+  fetchEnabled = true,
 }: Props) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
@@ -115,7 +117,7 @@ export function TimelineTab({
 
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<TimelineResponseLight>({
     cacheKey,
-    enabled: Boolean(competitorId && domainKey),
+    enabled: Boolean(competitorId && domainKey && fetchEnabled),
     validateCached: (c) => c.ok === true && Array.isArray(c.ads),
     fetcher: async () => {
       const r = await fetch(`/api/timeline?competitorId=${encodeURIComponent(competitorId)}`, {

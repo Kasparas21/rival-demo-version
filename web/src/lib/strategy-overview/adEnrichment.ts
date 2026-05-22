@@ -317,6 +317,10 @@ export async function enrichScrapedAdsIfNeeded(
     beforeBatch?: () => Promise<boolean>;
     /** Renew recompute lock lease after each successful batch. */
     afterBatch?: () => Promise<void>;
+    /** Max ads to attempt enriching this invocation (cron / interactive caps). */
+    maxAdsToProcess?: number;
+    /** Max LLM batches (each BATCH_MAX ads) per invocation. */
+    maxBatches?: number;
   }
 ): Promise<{
   enriched: number;
@@ -375,34 +379,58 @@ export async function enrichScrapedAdsIfNeeded(
   }
 
   const toEnrich: ScrapedAdInput[] = [];
+  const skippedNoTextIds: string[] = [];
+  type TextCandidate = { row: ScrapedAdInput; hash: string };
+  const textCandidates: TextCandidate[] = [];
+
   for (const r of need) {
     const prepared = prepareAdTextForEnrichment(r.ad_text ?? "");
     if (prepared.length < MIN_AD_TEXT_CHARS) {
       skippedNoText += 1;
-      await supabase
-        .from("scraped_ads")
-        .update({ ai_enrichment_status: "skipped_no_text" })
-        .eq("id", r.id)
-        .eq("user_id", userId);
+      skippedNoTextIds.push(r.id);
       continue;
     }
-
-    const h = hashAdText(r.ad_text);
-    const { data: logRow } = await supabase
-      .from("ad_enrichment_log")
-      .select("id")
-      .eq("scraped_ad_id", r.id)
-      .eq("content_hash", h)
-      .maybeSingle();
-    if (logRow && r.ai_enrichment_status !== "failed") continue;
-    toEnrich.push(r);
+    textCandidates.push({ row: r, hash: hashAdText(r.ad_text) });
   }
 
-  console.log("[enrich-trace] toEnrich count=", toEnrich.length);
+  if (skippedNoTextIds.length > 0) {
+    await supabase
+      .from("scraped_ads")
+      .update({ ai_enrichment_status: "skipped_no_text" })
+      .in("id", skippedNoTextIds)
+      .eq("user_id", userId);
+  }
+
+  const logKeys = new Set<string>();
+  if (textCandidates.length > 0) {
+    const ids = textCandidates.map((c) => c.row.id);
+    const { data: logRows } = await supabase
+      .from("ad_enrichment_log")
+      .select("scraped_ad_id, content_hash")
+      .in("scraped_ad_id", ids);
+    for (const row of logRows ?? []) {
+      logKeys.add(`${row.scraped_ad_id}:${row.content_hash}`);
+    }
+  }
+
+  for (const { row, hash } of textCandidates) {
+    if (logKeys.has(`${row.id}:${hash}`) && row.ai_enrichment_status !== "failed") continue;
+    toEnrich.push(row);
+  }
+
+  let workQueue = toEnrich;
+  if (opts?.maxAdsToProcess != null && opts.maxAdsToProcess > 0) {
+    workQueue = toEnrich.slice(0, opts.maxAdsToProcess);
+  }
+
+  console.log("[enrich-trace] toEnrich count=", workQueue.length);
   console.log("[enrich-trace] starting batch loop, batchMax=", BATCH_MAX);
   const modelLabel = HAIKU_MODEL;
   let enriched = 0;
-  for (let i = 0; i < toEnrich.length; i += BATCH_MAX) {
+  const maxBatches = opts?.maxBatches;
+  for (let i = 0; i < workQueue.length; i += BATCH_MAX) {
+    const batchNum = Math.floor(i / BATCH_MAX);
+    if (maxBatches != null && batchNum >= maxBatches) break;
     if (opts?.beforeBatch) {
       const ok = await opts.beforeBatch();
       if (!ok) {
@@ -413,7 +441,7 @@ export async function enrichScrapedAdsIfNeeded(
       }
     }
 
-    const batch = toEnrich.slice(i, i + BATCH_MAX);
+    const batch = workQueue.slice(i, i + BATCH_MAX);
     console.log("[enrich-trace] batch index=", i, "batch size=", batch.length);
 
     const items: EnrichItem[] = batch.map((r) => {

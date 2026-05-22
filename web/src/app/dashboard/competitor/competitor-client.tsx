@@ -187,6 +187,10 @@ import {
   isOwnBrandDebugOnlyTab,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
+import {
+  RecomputePollProvider,
+  type RecomputePollState,
+} from "@/components/competitor/recompute-poll-context";
 import { ActivityFeedTab } from "@/components/competitor/insights/activity-feed-tab";
 import { CreativeTestsTab } from "@/components/competitor/tests-timeline/creative-tests-tab";
 import { TimelineTab } from "@/components/competitor/tests-timeline/timeline-tab";
@@ -2934,6 +2938,21 @@ function CompetitorDashboardBody({
   const comparisonPayloadScrapeStamp = accountLastScrapedAt ?? "none";
   const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
+  const comparisonPayloadFetchEnabled =
+    Boolean(cacheDomainNorm.trim()) &&
+    (activeTab === "insights" || activeTab === "audience-copy" || activeTab === "comparison");
+
+  const landingPagesFetchEnabled =
+    Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()) &&
+    activeTab === "tests" &&
+    activeSubTab === "landing-pages";
+
+  const [recomputePollState, setRecomputePollState] = useState<RecomputePollState>({
+    recomputeRunning: false,
+    recomputeStatus: "unknown",
+    recomputeError: null,
+  });
+
   const {
     data: comparisonPayloadData,
     loading: comparisonPayloadLoading,
@@ -2941,13 +2960,12 @@ function CompetitorDashboardBody({
     refetch: refetchComparisonPayload,
   } = useScrapeKeyedCache<ComparisonPayloadJson>({
     cacheKey: comparisonPayloadCacheKey,
-    enabled: Boolean(cacheDomainNorm.trim()),
+    enabled: comparisonPayloadFetchEnabled,
     persistAcrossTabs: true,
     validateCached: (c) =>
       c.ok === true &&
       Boolean(c.competitor?.payload?.map) &&
-      typeof c.competitor?.derivedStats?.avgAdAgeDays === "number" &&
-      c.competitor?.recomputing !== true,
+      typeof c.competitor?.derivedStats?.avgAdAgeDays === "number",
     fetcher: async () => {
       const res = await fetch(
         `/api/comparison/payload?competitorDomain=${encodeURIComponent(brand.domain)}`,
@@ -2970,43 +2988,94 @@ function CompetitorDashboardBody({
 
   useEffect(() => {
     if (!cacheDomainNorm.trim() || !brand.domain.trim()) return;
+    if (activeTab !== "insights" && activeTab !== "comparison") return;
 
     let cancelled = false;
-    let sawRunning = comparisonPayload?.competitor?.recomputing === true;
+    let intervalId: number | null = null;
+    const triesRef = { n: 0 };
 
-    const poll = async () => {
+    const clearPoll = () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const poll = async (): Promise<boolean> => {
+      triesRef.n += 1;
       try {
         const res = await fetch(
           `/api/strategy-overview/recompute-status?competitorDomain=${encodeURIComponent(brand.domain)}`,
           { credentials: "include" }
         );
-        const json = (await res.json()) as { ok?: boolean; status?: string };
-        if (cancelled || !json.ok) return;
+        const json = (await res.json()) as { ok?: boolean; status?: string; error?: string | null };
+        if (cancelled || !json.ok) return false;
 
-        if (json.status === "running") {
-          sawRunning = true;
-          return;
-        }
+        const statusRaw = json.status;
+        const status: RecomputePollState["recomputeStatus"] =
+          statusRaw === "running"
+            ? "running"
+            : statusRaw === "failed"
+              ? "failed"
+              : statusRaw === "idle"
+                ? "idle"
+                : "unknown";
 
-        const missingAudience = !comparisonPayload?.competitor?.payload?.audience_inference?.segments?.length;
-        if (sawRunning && json.status === "idle" && missingAudience) {
+        setRecomputePollState({
+          recomputeRunning: status === "running",
+          recomputeStatus: status,
+          recomputeError:
+            status === "failed" ? json.error?.trim() ?? "Strategy recomputation failed" : null,
+        });
+
+        const done = triesRef.n >= 120 || status === "idle" || status === "failed";
+        if (done && status === "idle") {
+          window.dispatchEvent(
+            new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+              detail: { domain: brand.domain.trim() },
+            })
+          );
           void refetchComparisonPayload();
         }
+        return !done && status === "running";
       } catch {
-        /* ignore poll errors */
+        return triesRef.n < 120;
       }
     };
 
-    void poll();
-    const id = window.setInterval(poll, 8000);
+    const startLoop = async () => {
+      const keepGoing = await poll();
+      if (cancelled || !keepGoing) return;
+      intervalId = window.setInterval(() => {
+        void poll().then((continuePolling) => {
+          if (!continuePolling) clearPoll();
+        });
+      }, 10_000);
+    };
+
+    const recomputing = comparisonPayload?.competitor?.recomputing === true;
+    if (recomputing) {
+      void startLoop();
+    } else {
+      void poll().then((keep) => {
+        if (!cancelled && keep) {
+          intervalId = window.setInterval(() => {
+            void poll().then((continuePolling) => {
+              if (!continuePolling) clearPoll();
+            });
+          }, 10_000);
+        }
+      });
+    }
+
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      clearPoll();
     };
   }, [
+    activeTab,
     brand.domain,
     cacheDomainNorm,
-    comparisonPayload?.competitor?.payload?.audience_inference,
     comparisonPayload?.competitor?.recomputing,
     refetchComparisonPayload,
   ]);
@@ -3017,7 +3086,7 @@ function CompetitorDashboardBody({
 
   const landingPagesListHook = useScrapeKeyedCache<LandingPagesApiResponse>({
     cacheKey: landingPagesListCacheKey,
-    enabled: Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()),
+    enabled: landingPagesFetchEnabled,
     validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
     fetcher: async () => {
       const res = await fetch(
@@ -3304,6 +3373,56 @@ function CompetitorDashboardBody({
     };
   }, [activeTab, competitorDbIdForSaved]);
 
+  /** Insights tabs read from `scraped_ads` — ensure ads_cache was copied before strategy/creative-tests load. */
+  useEffect(() => {
+    const needsPersistedAds =
+      (activeTab === "insights" &&
+        (activeSubTab === "strategy-map" || activeSubTab === "activity-feed")) ||
+      (activeTab === "tests" &&
+        (activeSubTab === "creative-tests" ||
+          activeSubTab === "timeline" ||
+          activeSubTab === "landing-pages")) ||
+      (activeTab === "audience-copy" &&
+        (activeSubTab === "audience" || activeSubTab === "copy-vault"));
+    if (!needsPersistedAds || !cacheDomainNorm.trim()) return;
+
+    let cancelled = false;
+    void fetch("/api/competitor/ads-library/ensure-persisted", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        domain: brand.domain,
+        ...(competitorDbIdForSaved ? { competitorId: competitorDbIdForSaved } : {}),
+      }),
+    })
+      .then(async (res) => {
+        if (cancelled) return;
+        const json = (await res.json()) as { ok?: boolean; scrapedAdsPersisted?: number };
+        if (!json.ok || !(json.scrapedAdsPersisted ?? 0)) return;
+        window.dispatchEvent(
+          new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+            detail: { domain: brand.domain.trim() },
+          }),
+        );
+        void refetchComparisonPayload();
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTab,
+    activeSubTab,
+    brand.domain,
+    cacheDomainNorm,
+    competitorDbIdForSaved,
+    refetchComparisonPayload,
+  ]);
+
   const runStatusForLibraryCard = useCallback(
     (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
       return (
@@ -3476,6 +3595,7 @@ function CompetitorDashboardBody({
   );
 
   return (
+    <RecomputePollProvider value={recomputePollState}>
     <AdSaveVisibilityProvider
       visible={ownBrandSavedAdsEnabled}
       showDebugIndicator={isOwnWorkspace && showBrandDebugTabs}
@@ -4767,6 +4887,9 @@ function CompetitorDashboardBody({
                 competitorId={competitorDbIdForSaved || undefined}
                 lastScrapedAt={accountLastScrapedAt}
                 onFreshnessRescrape={undefined}
+                fetchEnabled={activeTab === "insights"}
+                externalRecomputeRunning={recomputePollState.recomputeRunning}
+                externalRecomputeError={recomputePollState.recomputeError}
               />
             </KeepMountedTab>
             <KeepMountedTab active={activeSubTab === "activity-feed"} className="min-h-0">
@@ -4778,6 +4901,7 @@ function CompetitorDashboardBody({
                 comparisonPayloadLoading={comparisonPayloadLoading}
                 comparisonPayloadError={comparisonPayloadErrorMessage}
                 refetchComparisonPayload={refetchComparisonPayload}
+                fetchEnabled={activeSubTab === "activity-feed"}
               />
             </KeepMountedTab>
           </Suspense>
@@ -4788,33 +4912,36 @@ function CompetitorDashboardBody({
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <KeepMountedTab active={activeSubTab === "creative-tests"} className="min-h-0">
             <CreativeTestsTab
-              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
               onFreshnessRescrape={undefined}
               onOpenAd={openAd}
+              fetchEnabled={activeSubTab === "creative-tests"}
             />
           </KeepMountedTab>
           <KeepMountedTab active={activeSubTab === "timeline"} className="min-h-0">
             <TimelineTab
-              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
               onFreshnessRescrape={undefined}
               onOpenAd={openAd}
+              fetchEnabled={activeSubTab === "timeline"}
             />
           </KeepMountedTab>
           <KeepMountedTab active={activeSubTab === "landing-pages"} className="min-h-0">
             <LandingPagesTab
-              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
               onFreshnessRescrape={undefined}
               onOpenAd={openAd}
               landingPagesListCache={landingPagesListCacheForChildren}
+              fetchEnabled={activeSubTab === "landing-pages"}
             />
           </KeepMountedTab>
         </div>
@@ -4839,11 +4966,12 @@ function CompetitorDashboardBody({
           </KeepMountedTab>
           <KeepMountedTab active={activeSubTab === "copy-vault"} className="min-h-0">
             <CopyVaultTab
-              competitorId={competitorSidebarMatch?.savedCompetitorDbId ?? ""}
+              competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
               onOpenAd={openAd}
               cacheDomainNorm={cacheDomainNorm}
               lastScrapedAt={accountLastScrapedAt}
+              fetchEnabled={activeSubTab === "copy-vault"}
             />
           </KeepMountedTab>
         </div>
@@ -4889,6 +5017,7 @@ function CompetitorDashboardBody({
       />
     </div>
     </AdSaveVisibilityProvider>
+    </RecomputePollProvider>
   );
 }
 

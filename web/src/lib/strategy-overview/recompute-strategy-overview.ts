@@ -17,6 +17,10 @@ import {
 import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
 import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
+import { SCRAPED_ADS_DERIVATION_SELECT, scrapedAdDerivationRowToInput, type ScrapedAdDerivationRow } from "@/lib/strategy-overview/scraped-ads-derivation-columns";
+
+/** Cap interactive recompute enrichment; cron handles the long tail. */
+const INTERACTIVE_ENRICHMENT_MAX_ADS = 30;
 
 /**
  * Bump this string any time the spend formula, derivation logic, output schema,
@@ -696,7 +700,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     const { data: adsRows, error: adsErr } = await supabase
       .from("scraped_ads")
-      .select("*")
+      .select(SCRAPED_ADS_DERIVATION_SELECT)
       .eq("competitor_id", competitorId)
       .eq("user_id", userId)
       .eq("is_active", true)
@@ -708,10 +712,10 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       return { ok: false, error: adsErr.message };
     }
 
-    const rowList = adsRows ?? [];
+    const rowList = (adsRows ?? []) as ScrapedAdDerivationRow[];
     await updateLockProgress(supabase, competitorId, token, { total_ads: rowList.length });
 
-    let enrichInputs: ScrapedAdInput[] = rowList.map(rowToInput);
+    let enrichInputs: ScrapedAdInput[] = rowList.map(scrapedAdDerivationRowToInput);
     if (refreshAdEnrichment && rowList.length > 0) {
       const ids = rowList.map((r) => r.id);
       await supabase.from("ad_enrichment_log").delete().in("scraped_ad_id", ids);
@@ -726,7 +730,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         .in("id", ids)
         .eq("user_id", userId);
       enrichInputs = rowList.map((r) =>
-        rowToInput({
+        scrapedAdDerivationRowToInput({
           ...r,
           ai_extracted_angle: null,
           funnel_stage: null,
@@ -739,6 +743,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     const enrichStats = await enrichScrapedAdsIfNeeded(supabase, userId, competitorId, enrichInputs, {
       beforeBatch: () => isRecomputeLockOwner(supabase, competitorId, token),
       afterBatch: () => updateLockProgress(supabase, competitorId, token, {}),
+      maxAdsToProcess: INTERACTIVE_ENRICHMENT_MAX_ADS,
     });
     aiCostUsdTotal += enrichStats.usageCostUsd;
     console.log(
@@ -757,14 +762,14 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     const { data: refreshed } = await supabase
       .from("scraped_ads")
-      .select("*")
+      .select(SCRAPED_ADS_DERIVATION_SELECT)
       .eq("competitor_id", competitorId)
       .eq("user_id", userId)
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(1000);
 
-    const freshInputs = (refreshed ?? []).map(rowToInput);
+    const freshInputs = ((refreshed ?? []) as ScrapedAdDerivationRow[]).map(scrapedAdDerivationRowToInput);
     const batchId = await getLatestScrapeBatchId(supabase, competitorId);
     const totalActive = freshInputs.length;
     const enrichedDb = enrichedStatusCount ?? 0;

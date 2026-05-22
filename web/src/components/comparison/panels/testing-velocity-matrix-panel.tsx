@@ -94,8 +94,8 @@ function MiniTrend({ buckets }: { buckets: number[] | undefined }) {
   return (
     <div className="flex items-center gap-1">
       <Arrow className="h-3 w-3 shrink-0 text-slate-500" aria-hidden />
-      <div className="h-7 flex-1 min-w-[48px]">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-7 min-h-[28px] flex-1 min-w-[48px]">
+        <ResponsiveContainer width="100%" height="100%" minWidth={48} minHeight={28}>
           <LineChart data={pts} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
             <Line type="monotone" dataKey="y" stroke="#64748b" strokeWidth={1.2} dot={false} />
           </LineChart>
