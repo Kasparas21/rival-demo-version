@@ -3,8 +3,18 @@ import {
   type AdsLibraryPlatform,
   type AdsLibraryResponse,
 } from "./api-types";
-import { fetchAdsLibraryDeduplicated } from "./deduped-fetch";
+import {
+  fetchAdsLibraryDeduplicated,
+  readAdsLibraryCacheLastKnownGood,
+  stableAdsLibraryPayloadKey,
+  writeAdsLibrarySessionCache,
+} from "./deduped-fetch";
 import { countLibraryAdsForPlatform, platformScrapeSucceeded } from "./library-response-utils";
+import {
+  clearWorkspaceBrandScrapeHandoff,
+  readWorkspaceBrandScrapeHandoff,
+  writeWorkspaceBrandScrapeHandoff,
+} from "./workspace-brand-scrape-handoff";
 
 export type WorkspaceBrandAdsReadinessResult = {
   ready: boolean;
@@ -61,77 +71,133 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
+function responseNeedsCreatives(expected: Partial<Record<AdsLibraryPlatform, number>>): boolean {
+  return Object.values(expected).some((count) => count > 0);
+}
+
+function verifySessionHandoff(params: {
+  domain: string;
+  clientPayloadKey: string;
+  expected: Partial<Record<AdsLibraryPlatform, number>>;
+}): boolean {
+  const handoff = readWorkspaceBrandScrapeHandoff(params.domain);
+  const cached = readAdsLibraryCacheLastKnownGood(params.clientPayloadKey);
+  const candidate = handoff ?? cached;
+  if (!candidate) return false;
+  return isWorkspaceBrandAdsLibraryReady(
+    coerceAdsLibraryResponse(candidate.response as AdsLibraryResponse),
+    params.expected
+  );
+}
+
 /**
- * After workspace-brand initial scrape, poll server `ads_cache` until the competitor page
- * payload would hydrate with the same creatives the user just scraped.
+ * Write scraped creatives into session handoff + payload caches, verify the brand page can read them,
+ * and best-effort persist to Supabase before leaving the loading screen.
  */
-export async function waitForWorkspaceBrandAdsLibraryReady(params: {
+export async function finalizeWorkspaceBrandAdsLibraryForNavigation(params: {
   domain: string;
   clientPayload: Record<string, unknown>;
+  scrapePayload: Record<string, unknown>;
   scrapedResponse: AdsLibraryResponse;
   adsPlatforms: AdsLibraryPlatform[];
-  /** After this, polling slows but continues until ready (never navigate early). */
-  maxWaitMs?: number;
-  pollIntervalMs?: number;
+  httpOk: boolean;
   signal?: AbortSignal;
 }): Promise<WorkspaceBrandAdsReadinessResult> {
   const {
     domain,
     clientPayload,
+    scrapePayload,
     scrapedResponse,
     adsPlatforms,
-    maxWaitMs = 90_000,
-    pollIntervalMs = 2_000,
+    httpOk,
     signal,
   } = params;
 
-  const expected = expectedAdsCountsFromScrape(scrapedResponse, adsPlatforms);
-  const expectedPlatforms = Object.keys(expected) as AdsLibraryPlatform[];
+  const response = coerceAdsLibraryResponse(scrapedResponse);
+  const expected = expectedAdsCountsFromScrape(response, adsPlatforms);
+  const needsCreatives = responseNeedsCreatives(expected);
 
-  if (expectedPlatforms.length === 0) {
-    return {
-      ready: true,
-      hydratedResponse: scrapedResponse,
-      persistedOk: false,
-    };
+  if (needsCreatives && !isWorkspaceBrandAdsLibraryReady(response, expected)) {
+    return { ready: false, hydratedResponse: response, persistedOk: false };
   }
 
-  const started = Date.now();
+  const clientPayloadKey = stableAdsLibraryPayloadKey(clientPayload);
+  const scrapePayloadKey = stableAdsLibraryPayloadKey(scrapePayload);
+  const cacheEntry = { response, httpOk };
+
+  writeAdsLibrarySessionCache(clientPayloadKey, cacheEntry);
+  writeAdsLibrarySessionCache(scrapePayloadKey, cacheEntry);
+  writeWorkspaceBrandScrapeHandoff(domain, response, httpOk);
+
+  let sessionVerified = false;
+  for (let i = 0; i < 15; i++) {
+    if (signal?.aborted) break;
+    if (verifySessionHandoff({ domain, clientPayloadKey, expected })) {
+      sessionVerified = true;
+      break;
+    }
+    await sleep(100);
+  }
+
+  if (needsCreatives && !sessionVerified) {
+    clearWorkspaceBrandScrapeHandoff(domain);
+    return { ready: false, hydratedResponse: response, persistedOk: false };
+  }
+
   let persistedOk = false;
-  let lastHydrated: AdsLibraryResponse | null = null;
-  let pollMs = pollIntervalMs;
-
-  while (!signal?.aborted) {
+  const persistDeadline = Date.now() + 120_000;
+  while (!signal?.aborted && Date.now() < persistDeadline) {
     persistedOk = (await callEnsurePersisted(domain)) || persistedOk;
+    if (persistedOk || !needsCreatives) break;
+    await sleep(2_000);
+  }
 
+  const serverDeadline = Date.now() + 90_000;
+  while (!signal?.aborted && Date.now() < serverDeadline) {
     try {
-      const { response, httpOk } = await fetchAdsLibraryDeduplicated(clientPayload, {
+      const { response: serverJson, httpOk: serverOk } = await fetchAdsLibraryDeduplicated(clientPayload, {
         cacheOnly: true,
         clientSkipReadCache: true,
         signal,
       });
-      if (httpOk) {
-        const hydrated = coerceAdsLibraryResponse(response);
-        lastHydrated = hydrated;
+      if (serverOk) {
+        const hydrated = coerceAdsLibraryResponse(serverJson);
         if (isWorkspaceBrandAdsLibraryReady(hydrated, expected)) {
-          return { ready: true, hydratedResponse: hydrated, persistedOk };
+          return { ready: true, hydratedResponse: response, persistedOk };
         }
       }
     } catch (e) {
       if (signal?.aborted) break;
       if (e instanceof DOMException && e.name === "AbortError") break;
     }
-
-    if (Date.now() - started > maxWaitMs) {
-      pollMs = Math.max(pollIntervalMs, 5_000);
-    }
-    await sleep(pollMs);
+    await sleep(2_000);
   }
 
-  const fallback = lastHydrated ?? scrapedResponse;
-  return {
-    ready: isWorkspaceBrandAdsLibraryReady(fallback, expected),
-    hydratedResponse: fallback,
-    persistedOk,
-  };
+  if (sessionVerified) {
+    return { ready: true, hydratedResponse: response, persistedOk };
+  }
+
+  clearWorkspaceBrandScrapeHandoff(domain);
+  return { ready: false, hydratedResponse: response, persistedOk };
+}
+
+/** @deprecated Use {@link finalizeWorkspaceBrandAdsLibraryForNavigation}. */
+export async function waitForWorkspaceBrandAdsLibraryReady(params: {
+  domain: string;
+  clientPayload: Record<string, unknown>;
+  scrapedResponse: AdsLibraryResponse;
+  adsPlatforms: AdsLibraryPlatform[];
+  maxWaitMs?: number;
+  pollIntervalMs?: number;
+  signal?: AbortSignal;
+}): Promise<WorkspaceBrandAdsReadinessResult> {
+  return finalizeWorkspaceBrandAdsLibraryForNavigation({
+    domain: params.domain,
+    clientPayload: params.clientPayload,
+    scrapePayload: params.clientPayload,
+    scrapedResponse: params.scrapedResponse,
+    adsPlatforms: params.adsPlatforms,
+    httpOk: true,
+    signal: params.signal,
+  });
 }

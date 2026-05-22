@@ -70,7 +70,8 @@ import {
   WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM,
 } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { buildClientAdsLibraryPayload } from "@/lib/ad-library/build-client-ads-library-payload";
-import { waitForWorkspaceBrandAdsLibraryReady } from "@/lib/ad-library/wait-for-workspace-brand-ads-ready";
+import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import { finalizeWorkspaceBrandAdsLibraryForNavigation } from "@/lib/ad-library/wait-for-workspace-brand-ads-ready";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   markPendingStrategyRefresh,
@@ -585,16 +586,6 @@ function SearchingContent() {
       const scanDomain = payload.brand.domain;
       markDiscoveryScanInProgress(scanDomain);
 
-      const markRunningTimer = window.setTimeout(() => {
-        setPlatformStatuses((prev) => {
-          const next = { ...prev };
-          for (const p of adsPlatforms) {
-            if (next[p] === "queued") next[p] = "running";
-          }
-          return next;
-        });
-      }, 600);
-
       const total = adsPlatforms.length;
       let completed = 0;
       let allHttpOk = true;
@@ -610,6 +601,7 @@ function SearchingContent() {
         // Sequential scrapes so each platform gets the full server timeout and Supabase persist
         // (`ads_cache` + `scraped_ads`) before the next Apify run — parallel 500-ad jobs often timed out.
         for (const p of adsPlatforms) {
+          setPlatformStatuses((prev) => ({ ...prev, [p]: "running" }));
           try {
             const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(
               { ...payload, platforms: [p] },
@@ -640,12 +632,30 @@ function SearchingContent() {
           setIsFinalizingLibrary(true);
           setScanProgress(100);
 
-          const clientScrapeFields = mergeScrapeFieldsWithWorkspaceMarkets(
-            readScrapeRequestFieldsFromStorage(),
-            options?.adMarketCountryCodes ?? null,
+          const clientScrapeFields = buildWorkspaceBrandInitialScrapeFields(
+            mergeScrapeFieldsWithWorkspaceMarkets(
+              readScrapeRequestFieldsFromStorage(),
+              options?.adMarketCountryCodes ?? null,
+            ),
           );
+          Object.assign(clientScrapeFields, {
+            metaCountry: adLibraryRegions.metaCountry.trim().toUpperCase() || "ALL",
+            linkedinCountryCode: adLibraryRegions.linkedinCountryCode.trim(),
+            snapchatCountry: adLibraryRegions.snapchatCountry.trim().toUpperCase() || "DE",
+          });
+          const brandForClientCache = normalizedBrandForAdsLibraryPayload({
+            name:
+              effectiveCompetitorBrandLabel(
+                brandForScan?.name ?? displayName,
+                brandForScan?.domain ?? displayName
+              ) ||
+              brandForScan?.name ||
+              displayName,
+            domain: brandForScan?.domain ?? displayName,
+            logoUrl: brandForScan?.logoUrl,
+          });
           const clientPayload = buildClientAdsLibraryPayload({
-            brand: payload.brand,
+            brand: brandForClientCache,
             ids: mergedIds,
             adsPlatforms,
             scrapeFields: clientScrapeFields,
@@ -653,23 +663,27 @@ function SearchingContent() {
             googleRegion,
             pinterestCountry,
           });
-          const clientPayloadKey = stableAdsLibraryPayloadKey(clientPayload);
 
-          const readiness = await waitForWorkspaceBrandAdsLibraryReady({
+          const readiness = await finalizeWorkspaceBrandAdsLibraryForNavigation({
             domain: payload.brand.domain,
             clientPayload,
+            scrapePayload: payload,
             scrapedResponse: normalized,
             adsPlatforms,
+            httpOk: allHttpOk,
           });
+
+          if (!readiness.ready) {
+            clearDiscoveryScanInProgress(scanDomain);
+            setDiscoveryError(
+              "Your ads were scraped but we couldn't prepare your library yet. Please wait a moment and refresh this page."
+            );
+            setIsFinalizingLibrary(false);
+            scanRunningRef.current = false;
+            return;
+          }
+
           responseForNavigation = readiness.hydratedResponse;
-          writeAdsLibrarySessionCache(clientPayloadKey, {
-            response: responseForNavigation,
-            httpOk: allHttpOk,
-          });
-          writeAdsLibrarySessionCache(payloadKey, {
-            response: responseForNavigation,
-            httpOk: allHttpOk,
-          });
 
           try {
             window.dispatchEvent(
@@ -736,7 +750,6 @@ function SearchingContent() {
           navigateToCompetitor();
         }
       } finally {
-        window.clearTimeout(markRunningTimer);
         scanRunningRef.current = false;
       }
     },
@@ -1031,6 +1044,9 @@ function SearchingContent() {
               const isActiveScanning = isScanning;
               const adsApiPlatform = channelIdToAdsLibraryPlatform(platform.id);
               const runtimeStatus = adsApiPlatform ? platformStatuses[adsApiPlatform] : undefined;
+              const isPlatformScraping = isActiveScanning && runtimeStatus === "running";
+              const isPlatformWaiting =
+                isActiveScanning && (runtimeStatus === "queued" || runtimeStatus === undefined);
               const isPlatformFound =
                 runtimeStatus === "done" ||
                 (platform.status === "found" && !isActiveScanning);
@@ -1040,10 +1056,13 @@ function SearchingContent() {
               return (
                 <div
                   key={idx}
-                  className="flex items-center gap-5 sm:gap-6 bg-white/60 border border-white/60 rounded-[24px] p-5 sm:p-6 shadow-[0_4px_24px_rgba(31,38,135,0.04)] backdrop-blur-md transition-all hover:bg-white/80 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] hover:border-[#DDF1FD]/60 min-w-0"
+                  className={`flex items-center gap-5 sm:gap-6 bg-white/60 border rounded-[24px] p-5 sm:p-6 shadow-[0_4px_24px_rgba(31,38,135,0.04)] backdrop-blur-md transition-all hover:bg-white/80 hover:shadow-[0_8px_32px_rgba(31,38,135,0.07)] min-w-0
+                    ${isPlatformScraping ? "border-[#93c5fd]/80 ring-2 ring-[#bfdbfe]/60 bg-white/80" : "border-white/60 hover:border-[#DDF1FD]/60"}
+                  `}
                 >
                   <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-[18px] flex items-center justify-center ring-1 shadow-sm shrink-0 border border-white transition-all duration-500 p-2.5 overflow-hidden
-                    ${isActiveScanning ? "bg-white ring-black/5" : ""}
+                    ${isPlatformWaiting ? "bg-white ring-black/5" : ""}
+                    ${isPlatformScraping ? "bg-white ring-[#2563eb]/40" : ""}
                     ${isPlatformFound ? "bg-white ring-[#95C14B]/50" : ""}
                     ${noAdsFound ? "bg-white ring-black/5" : ""}
                   `}>
@@ -1058,20 +1077,21 @@ function SearchingContent() {
                       {platform.name}
                     </span>
                     <span className={`text-[14px] sm:text-[15px] font-medium mt-1 leading-tight whitespace-normal transition-colors
-                      ${isActiveScanning && !isPlatformFound ? "text-gray-500 opacity-80 animate-pulse" : ""}
+                      ${isPlatformWaiting ? "text-gray-500 opacity-80" : ""}
+                      ${isPlatformScraping ? "text-[#2563eb] animate-pulse" : ""}
                       ${isPlatformFound ? "text-[#95C14B]" : ""}
                       ${noAdsFound ? "text-gray-600" : ""}
                     `}>
                       {isActiveScanning
                         ? runtimeStatus === "queued"
-                          ? "Queued"
+                          ? "Checking…"
                           : runtimeStatus === "running"
-                            ? "Checking..."
+                            ? "Scraping…"
                             : runtimeStatus === "done"
                               ? "Connected"
                               : runtimeStatus === "error"
                                 ? "Failed"
-                                : "Checking..."
+                                : "Checking…"
                         : platform.status === "no ads found"
                           ? "No ads found"
                           : "Ads found"}

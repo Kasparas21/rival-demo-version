@@ -6,7 +6,6 @@ import {
 } from "@/lib/ad-library/canonical-library-url";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import { extractDomain, normalizeDiscoveredIds, parseSocialLinks } from "@/lib/discovery";
-import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { socialNetworkBucket } from "@/lib/onboarding/social-profile-utils";
 
 /** Same scrape fields as onboarding workspace flow (homepage + ad libraries). */
@@ -72,47 +71,15 @@ export function mergeWorkspaceScrapeFromSocials(
 ): WorkspaceAdsScrapeHints {
   const out = { ...row };
   if (!out.websiteUrl.trim()) out.websiteUrl = `https://${workspaceDomain}`;
-  const siteDomain = extractDomain(out.websiteUrl.trim()) || workspaceDomain.replace(/^www\./i, "");
 
   const fb = firstHrefForBucket(socials, "facebook");
   const ig = firstHrefForBucket(socials, "instagram");
   if (!out.facebookUrl.trim()) out.facebookUrl = fb;
   if (!out.instagramUrl.trim()) out.instagramUrl = ig;
-  const tt = firstHrefForBucket(socials, "tiktok");
-  if (!out.tikTokUrl.trim()) out.tikTokUrl = tt;
-  if (!out.tiktokKeyword.trim() && tt) {
-    const parsed = normalizeDiscoveredIds(parseSocialLinks([tt]));
-    if (parsed.tiktok) out.tiktokKeyword = parsed.tiktok.replace(/^@+/, "");
-  }
 
   if (!out.youTubeUrl.trim()) out.youTubeUrl = firstHrefForBucket(socials, "youtube");
 
-  const pin = firstHrefForBucket(socials, "pinterest");
-  if (!out.pinterestKeyword.trim() && pin) {
-    try {
-      const u = new URL(pin);
-      const parts = u.pathname.split("/").filter(Boolean);
-      if (parts[0]) out.pinterestKeyword = decodeURIComponent(parts[0]!);
-    } catch {
-      /* ignore */
-    }
-  }
-
-    if (!out.snapchatKeyword.trim()) {
-      const snap = firstHrefForBucket(socials, "snapchat");
-      if (snap) {
-        try {
-          const u = new URL(snap);
-          const parts = u.pathname.split("/").filter(Boolean);
-          const addIdx = parts.indexOf("add");
-          if (addIdx >= 0 && parts[addIdx + 1]) {
-            out.snapchatKeyword = decodeURIComponent(parts[addIdx + 1]!);
-          }
-        } catch {
-          /* ignore */
-        }
-      }
-    }
+  /** TikTok / Pinterest / Snapchat advertiser names are never prefilled — users enter exact library names. */
 
   return out;
 }
@@ -212,8 +179,7 @@ export function parseAdsProfileSetup(raw: unknown): AdsProfileSetup | null {
       linkedInUrl: str("linkedInUrl"),
       tiktokKeyword,
       pinterestKeyword,
-      snapchatKeyword:
-        str("snapchatKeyword") || (googleFromSite ? hostToBrandLabel(googleFromSite.replace(/^www\./i, "")) : ""),
+      snapchatKeyword: str("snapchatKeyword"),
       facebookUrl: fb,
       instagramUrl: ig,
       tikTokUrl: ttUrl,
@@ -235,10 +201,7 @@ export function scrapeHintsToPlatformIds(params: {
     scrape.facebookUrl.trim(),
     scrape.instagramUrl.trim(),
     scrape.linkedInUrl.trim(),
-    scrape.tikTokUrl.trim(),
     scrape.youTubeUrl.trim(),
-    /** Allow keyword-only pinterest as discoverable URL */
-    scrape.pinterestKeyword.trim(),
   ].filter(Boolean);
   const parsed = normalizeDiscoveredIds(parseSocialLinks(urls));
 
@@ -292,10 +255,8 @@ export function scrapeHintsToPlatformIds(params: {
   }
 
   if (channels.has("tiktok")) {
-    const fromUrl = parsed.tiktok;
     const kw = scrape.tiktokKeyword.trim();
-    if (fromUrl) put("tiktok", fromUrl);
-    else if (kw) put("tiktok", kw.startsWith("@") ? kw : `@${kw.replace(/^@+/, "")}`);
+    if (kw) put("tiktok", kw.startsWith("@") ? kw : `@${kw.replace(/^@+/, "")}`);
   }
 
   if (channels.has("linkedin")) {
@@ -321,8 +282,7 @@ export function scrapeHintsToPlatformIds(params: {
 
   if (channels.has("pinterest")) {
     const pk = scrape.pinterestKeyword.trim();
-    if (parsed.pinterest) put("pinterest", parsed.pinterest);
-    else if (pk) {
+    if (pk) {
       if (/pinterest\.com/i.test(pk)) put("pinterest", pk.startsWith("http") ? pk : `https://${pk}`);
       else put("pinterest", `https://www.pinterest.com/${pk.replace(/^@+/, "").replace(/^\/+/, "")}`);
     }

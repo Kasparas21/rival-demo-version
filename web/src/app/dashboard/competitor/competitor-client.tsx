@@ -81,6 +81,7 @@ import {
   writeAdsLibrarySessionCache,
 } from "@/lib/ad-library/deduped-fetch";
 import { buildClientAdsLibraryPayload } from "@/lib/ad-library/build-client-ads-library-payload";
+import { readAdLibraryRegionPrefsFromSession } from "@/lib/ad-library/ad-library-region-prefs";
 import {
   normalizeGoogleAdsRegion,
 } from "@/lib/ad-library/google-ads-regions";
@@ -104,6 +105,7 @@ import {
 import { hydrateMetaLibraryCardForDisplay } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import { metaLibraryItemLookupKeys } from "@/lib/ad-library/meta-library-item-keys";
 import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import { isFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
 import { resolveGoogleAdRowTransparencyHref } from "@/lib/ad-detail/resolve-ad-library-url";
 import {
   countActiveGoogleRowsWithLifecycle,
@@ -2083,13 +2085,19 @@ function CompetitorDashboardBody({
   const [scrapeFields] = useState<ScrapeRequestFields>(() => readScrapeRequestFieldsFromStorage());
 
   /** Workspace "Ad markets" (e.g. LT) must override session default scrape country for the user's own brand. */
-  const effectiveScrapeFields = useMemo(
-    () =>
-      isOwnWorkspace
-        ? mergeScrapeFieldsWithWorkspaceMarkets(scrapeFields, myBrand.adsSetup?.adMarketCountryCodes)
-        : scrapeFields,
-    [isOwnWorkspace, scrapeFields, myBrand.adsSetup?.adMarketCountryCodes]
-  );
+  const effectiveScrapeFields = useMemo(() => {
+    const base = isOwnWorkspace
+      ? mergeScrapeFieldsWithWorkspaceMarkets(scrapeFields, myBrand.adsSetup?.adMarketCountryCodes)
+      : scrapeFields;
+    if (!isOwnWorkspace) return base;
+    const prefs = readAdLibraryRegionPrefsFromSession();
+    return {
+      ...base,
+      metaCountry: prefs.metaCountry,
+      linkedinCountryCode: prefs.linkedinCountryCode,
+      snapchatCountry: prefs.snapchatCountry,
+    };
+  }, [isOwnWorkspace, scrapeFields, myBrand.adsSetup?.adMarketCountryCodes]);
 
   const workspaceScrapeFields = useMemo(
     () => mergeScrapeFieldsWithWorkspaceMarkets(scrapeFields, myBrand.adsSetup?.adMarketCountryCodes),
@@ -2299,7 +2307,8 @@ function CompetitorDashboardBody({
     return Object.keys(merged).length > 0 ? merged : effectivePlatformIds;
   }, [effectivePlatformIds, workspaceAdsSetupPlatformIds]);
 
-  const adLibraryDataEnabled = adLibraryConfirmed && activeTab === "ads library";
+  const adLibraryDataEnabled =
+    adLibraryConfirmed && activeTab === "ads library" && adsPlatforms.length > 0;
 
   const {
     data: adLib,
@@ -2894,6 +2903,24 @@ function CompetitorDashboardBody({
       filteredTikTokAds.length,
       filteredPinterestAds.length,
       filteredSnapchatAds.length,
+    ],
+  );
+
+  const freshDiscoveryAwaitingHydration = useMemo(
+    () =>
+      isOwnWorkspace &&
+      activeTab === "ads library" &&
+      activeSubTab !== "saved" &&
+      isFreshDiscoveryScan(brand.domain) &&
+      !adsLibraryShowsCreativesOnScreen &&
+      !adLibFetchError,
+    [
+      isOwnWorkspace,
+      activeTab,
+      activeSubTab,
+      brand.domain,
+      adsLibraryShowsCreativesOnScreen,
+      adLibFetchError,
     ],
   );
 
@@ -3847,6 +3874,22 @@ function CompetitorDashboardBody({
                 onFreshnessRescrape={undefined}
                 onOpenAd={openAd}
               />
+            ) : freshDiscoveryAwaitingHydration ? (
+              <div
+                className="mb-6 rounded-2xl border border-[#bfdbfe]/80 bg-gradient-to-br from-[#f8fafc] to-[#eff6ff]/70 px-4 py-16 sm:px-8 flex flex-col items-center justify-center gap-4 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]"
+                role="status"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <RivalLogoVideo size="lg" className="opacity-90 shrink-0" aria-hidden />
+                <div className="space-y-2 max-w-md">
+                  <p className="text-[16px] font-semibold text-[#374151]">Placing your scraped ads…</p>
+                  <p className="text-[14px] leading-relaxed text-[#6b7280]">
+                    We&apos;re syncing creatives from each platform into your library. This usually takes a few
+                    seconds.
+                  </p>
+                </div>
+              </div>
             ) : (
               <>
             {showAdLibraryAnalyticsPanel ? (

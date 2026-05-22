@@ -13,6 +13,7 @@ import {
 } from "@/lib/ad-library/build-client-ads-library-payload";
 import {
   fetchAdsLibraryDeduplicated,
+  fetchResultHasLibraryCreatives,
   readAdsLibraryCacheLastKnownGood,
   readAdsLibraryCacheLastKnownGoodForBrandDomain,
   stableAdsLibraryPayloadKey,
@@ -27,7 +28,11 @@ import {
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
-import { clearFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
+import { clearFreshDiscoveryScan, isFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
+import {
+  clearWorkspaceBrandScrapeHandoff,
+  readWorkspaceBrandScrapeHandoff,
+} from "@/lib/ad-library/workspace-brand-scrape-handoff";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   markPendingStrategyRefresh,
@@ -193,6 +198,40 @@ export function useAdLibrary(
         }
 
         const domain = brand.domain.trim();
+        const shellAfterFetch = coerceAdsLibraryResponse(mergeAdsLibraryState(mergeBase, json));
+        let totalAfterFetch = ALL_ADS_API_PLATFORMS.reduce(
+          (sum, pl) => sum + countLibraryAdsForPlatform(pl, shellAfterFetch),
+          0
+        );
+
+        if (cacheOnly && !forceFresh && totalAfterFetch === 0 && domain.length > 0) {
+          try {
+            const hydrateRes = await fetch("/api/competitor/ads-library/hydrate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ domain }),
+              signal: ac.signal,
+            });
+            if (hydrateRes.ok) {
+              const hydratedJson = (await hydrateRes.json()) as {
+                ok?: boolean;
+                response?: AdsLibraryResponse;
+              };
+              if (hydratedJson.ok && hydratedJson.response) {
+                json = hydratedJson.response;
+                httpOk = true;
+                totalAfterFetch = ALL_ADS_API_PLATFORMS.reduce(
+                  (sum, pl) =>
+                    sum + countLibraryAdsForPlatform(pl, coerceAdsLibraryResponse(json as AdsLibraryResponse)),
+                  0
+                );
+              }
+            }
+          } catch (e) {
+            if (e instanceof DOMException && e.name === "AbortError") return;
+          }
+        }
+
         const shouldTryPersistRecovery =
           !opts?.skipCache &&
           !partial &&
@@ -228,10 +267,17 @@ export function useAdLibrary(
 
         const merged = repairAdsLibraryResponseMedia(mergeAdsLibraryState(mergeBase, json));
         setData(merged);
-        writeAdsLibrarySessionCache(payloadKey, {
-          response: coerceAdsLibraryResponse(merged),
-          httpOk,
-        });
+        const totalAds = ALL_ADS_API_PLATFORMS.reduce(
+          (sum, pl) => sum + countLibraryAdsForPlatform(pl, coerceAdsLibraryResponse(merged)),
+          0
+        );
+        if (totalAds > 0 || forceFresh) {
+          writeAdsLibrarySessionCache(payloadKey, {
+            response: coerceAdsLibraryResponse(merged),
+            httpOk,
+          });
+        }
+        if (totalAds > 0) clearFreshDiscoveryScan(brand.domain.trim());
         if (!httpOk && "error" in json && json.error) {
           setFetchError(json.error);
         } else if (!httpOk) {
@@ -289,8 +335,37 @@ export function useAdLibrary(
       return;
     }
     const snapshot = sessionRef.current;
+    const handoff = readWorkspaceBrandScrapeHandoff(brand.domain);
+    if (handoff) {
+      if (snapshot !== sessionRef.current) return;
+      const repaired = repairAdsLibraryResponseMedia(
+        mergeAdsLibraryState(null, handoff.response as AdsLibraryResponse)
+      );
+      setData(repaired);
+      setFetchError(null);
+      try {
+        writeAdsLibrarySessionCache(payloadKey, {
+          response: coerceAdsLibraryResponse(repaired),
+          httpOk: handoff.httpOk,
+        });
+      } catch {
+        /* migrate best-effort */
+      }
+      clearWorkspaceBrandScrapeHandoff(brand.domain);
+      clearFreshDiscoveryScan(brand.domain);
+      setLoading(false);
+      setGoogleRefreshing(false);
+      setMetaRefreshing(false);
+      setTiktokRefreshing(false);
+      setPinterestRefreshing(false);
+      setLinkedinRefreshing(false);
+      setMicrosoftRefreshing(false);
+      setSnapchatRefreshing(false);
+      void load({ skipCache: false, background: true, suppressUpdatedEvent: true });
+      return;
+    }
     const exact = readAdsLibraryCacheLastKnownGood(payloadKey);
-    if (exact) {
+    if (exact && fetchResultHasLibraryCreatives(exact)) {
       if (snapshot !== sessionRef.current) return;
       setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, exact.response)));
       setFetchError(null);
@@ -306,7 +381,7 @@ export function useAdLibrary(
       return;
     }
     const legacy = readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
-    if (legacy) {
+    if (legacy && fetchResultHasLibraryCreatives(legacy)) {
       if (snapshot !== sessionRef.current) return;
       setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, legacy.response)));
       setFetchError(null);
@@ -340,12 +415,17 @@ export function useAdLibrary(
       const current = normalizeAdsLibraryEventDomain(brand.domain);
       if (!incoming || !current || incoming !== current) return;
 
+      const handoff = readWorkspaceBrandScrapeHandoff(brand.domain);
       const exact = readAdsLibraryCacheLastKnownGood(payloadKey);
-      const legacy = exact ?? readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
-      if (legacy) {
+      const legacy = handoff ?? exact ?? readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
+      if (legacy && fetchResultHasLibraryCreatives(legacy)) {
         setData(repairAdsLibraryResponseMedia(mergeAdsLibraryState(null, legacy.response)));
         setFetchError(null);
         setLoading(false);
+        if (handoff) {
+          clearWorkspaceBrandScrapeHandoff(brand.domain);
+          clearFreshDiscoveryScan(brand.domain);
+        }
         if (!exact) {
           try {
             writeAdsLibrarySessionCache(payloadKey, legacy);

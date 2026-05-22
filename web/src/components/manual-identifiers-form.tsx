@@ -135,12 +135,9 @@ function buildManualIdentifierSeed(
   delete next.pinterestAdvertiserName;
 
   for (const ch of KEYWORD_CHANNEL_IDS) {
-    if (!selectedChannels.includes(ch)) {
-      delete next[ch];
-      continue;
-    }
-    const v = keywordDisplayFromDiscovered(discoveredIds, ch);
-    next[ch] = v || undefined;
+    delete next[ch];
+    if (!selectedChannels.includes(ch)) continue;
+    /** Advertiser names / handles must be entered manually for reliable library matches. */
   }
   return next;
 }

@@ -38,6 +38,7 @@ import {
   pickBestAdsCacheHitsByPlatform,
   type AdsCachePickRow,
 } from "@/lib/ad-library/ads-cache-pick";
+import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -285,12 +286,22 @@ export async function POST(req: Request): Promise<NextResponse> {
       const platformsToCheck = [...platformsRequested].filter(isCacheablePlatform);
       if (platformsToCheck.length > 0 && adsCacheReadDomains.length > 0) {
         const nowIso = new Date().toISOString();
-        const { data: cachedRows } = await supabase
-          .from("ads_cache")
-          .select("platform, ads_data, competitor_domain, scraped_at, expires_at")
-          .eq("user_id", userId)
-          .in("competitor_domain", adsCacheReadDomains)
-          .in("platform", platformsToCheck);
+        const selectCacheRows = (domains: string[]) =>
+          supabase
+            .from("ads_cache")
+            .select("platform, ads_data, competitor_domain, scraped_at, expires_at")
+            .eq("user_id", userId)
+            .in("competitor_domain", domains)
+            .in("platform", platformsToCheck);
+
+        let { data: cachedRows } = await selectCacheRows(adsCacheReadDomains);
+        if ((cachedRows ?? []).length === 0) {
+          const expanded = expandAdsCacheDomainCandidates(adsCacheReadDomains);
+          if (expanded.length > adsCacheReadDomains.length) {
+            ({ data: cachedRows } = await selectCacheRows(expanded));
+          }
+        }
+
         const picked = pickBestAdsCacheHitsByPlatform((cachedRows ?? []) as AdsCachePickRow[], adsCacheDomain, nowIso);
         for (const [p, data] of picked) {
           platformCacheHits.set(p, data);

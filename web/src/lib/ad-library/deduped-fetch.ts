@@ -98,6 +98,11 @@ function totalAdsInFetchResult(result: FetchAdsLibraryResult): number {
   );
 }
 
+export function fetchResultHasLibraryCreatives(result: FetchAdsLibraryResult | null): boolean {
+  if (!result) return false;
+  return totalAdsInFetchResult(result) > 0;
+}
+
 /**
  * older cache entries still live under a different key string. Find the best matching
  * stored response for this brand domain and return it so hydration still works after refresh.
@@ -279,7 +284,11 @@ export function fetchAdsLibraryDeduplicated(
 
       if (!options.skipCache) {
         const ttl = options.cacheTtlMs ?? cacheTtlFor(result);
-        cache.set(storageKey, { expires: Date.now() + ttl, result });
+        const storeInMemory =
+          !options.cacheOnly || totalAdsInFetchResult(result) > 0;
+        if (storeInMemory) {
+          cache.set(storageKey, { expires: Date.now() + ttl, result });
+        }
       }
 
       return result;
