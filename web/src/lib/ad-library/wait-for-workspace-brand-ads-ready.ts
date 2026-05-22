@@ -4,12 +4,12 @@ import {
   type AdsLibraryResponse,
 } from "./api-types";
 import {
-  fetchAdsLibraryDeduplicated,
   readAdsLibraryCacheLastKnownGood,
   stableAdsLibraryPayloadKey,
   writeAdsLibrarySessionCache,
 } from "./deduped-fetch";
 import { countLibraryAdsForPlatform, platformScrapeSucceeded } from "./library-response-utils";
+import { ALL_ADS_API_PLATFORMS } from "./channels-to-platforms";
 import {
   clearWorkspaceBrandScrapeHandoff,
   readWorkspaceBrandScrapeHandoff,
@@ -50,6 +50,13 @@ export function isWorkspaceBrandAdsLibraryReady(
   return true;
 }
 
+export function totalScrapedCreatives(response: AdsLibraryResponse): number {
+  return ALL_ADS_API_PLATFORMS.reduce(
+    (sum, p) => sum + countLibraryAdsForPlatform(p, response),
+    0
+  );
+}
+
 async function callEnsurePersisted(domain: string): Promise<boolean> {
   try {
     const res = await fetch("/api/competitor/ads-library/ensure-persisted", {
@@ -71,10 +78,6 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-function responseNeedsCreatives(expected: Partial<Record<AdsLibraryPlatform, number>>): boolean {
-  return Object.values(expected).some((count) => count > 0);
-}
-
 function verifySessionHandoff(params: {
   domain: string;
   clientPayloadKey: string;
@@ -91,8 +94,8 @@ function verifySessionHandoff(params: {
 }
 
 /**
- * Write scraped creatives into session handoff + payload caches, verify the brand page can read them,
- * and best-effort persist to Supabase before leaving the loading screen.
+ * Write scraped creatives into session handoff + payload caches, then allow navigation.
+ * Never blocks more than a few seconds — persist continues in the background on the brand page.
  */
 export async function finalizeWorkspaceBrandAdsLibraryForNavigation(params: {
   domain: string;
@@ -115,10 +118,10 @@ export async function finalizeWorkspaceBrandAdsLibraryForNavigation(params: {
 
   const response = coerceAdsLibraryResponse(scrapedResponse);
   const expected = expectedAdsCountsFromScrape(response, adsPlatforms);
-  const needsCreatives = responseNeedsCreatives(expected);
+  const creativeCount = totalScrapedCreatives(response);
 
-  if (needsCreatives && !isWorkspaceBrandAdsLibraryReady(response, expected)) {
-    return { ready: false, hydratedResponse: response, persistedOk: false };
+  if (creativeCount === 0) {
+    return { ready: true, hydratedResponse: response, persistedOk: false };
   }
 
   const clientPayloadKey = stableAdsLibraryPayloadKey(clientPayload);
@@ -130,7 +133,7 @@ export async function finalizeWorkspaceBrandAdsLibraryForNavigation(params: {
   writeWorkspaceBrandScrapeHandoff(domain, response, httpOk);
 
   let sessionVerified = false;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 20; i++) {
     if (signal?.aborted) break;
     if (verifySessionHandoff({ domain, clientPayloadKey, expected })) {
       sessionVerified = true;
@@ -139,46 +142,14 @@ export async function finalizeWorkspaceBrandAdsLibraryForNavigation(params: {
     await sleep(100);
   }
 
-  if (needsCreatives && !sessionVerified) {
-    clearWorkspaceBrandScrapeHandoff(domain);
-    return { ready: false, hydratedResponse: response, persistedOk: false };
-  }
+  void callEnsurePersisted(domain);
 
-  let persistedOk = false;
-  const persistDeadline = Date.now() + 120_000;
-  while (!signal?.aborted && Date.now() < persistDeadline) {
-    persistedOk = (await callEnsurePersisted(domain)) || persistedOk;
-    if (persistedOk || !needsCreatives) break;
-    await sleep(2_000);
-  }
-
-  const serverDeadline = Date.now() + 90_000;
-  while (!signal?.aborted && Date.now() < serverDeadline) {
-    try {
-      const { response: serverJson, httpOk: serverOk } = await fetchAdsLibraryDeduplicated(clientPayload, {
-        cacheOnly: true,
-        clientSkipReadCache: true,
-        signal,
-      });
-      if (serverOk) {
-        const hydrated = coerceAdsLibraryResponse(serverJson);
-        if (isWorkspaceBrandAdsLibraryReady(hydrated, expected)) {
-          return { ready: true, hydratedResponse: response, persistedOk };
-        }
-      }
-    } catch (e) {
-      if (signal?.aborted) break;
-      if (e instanceof DOMException && e.name === "AbortError") break;
-    }
-    await sleep(2_000);
-  }
-
-  if (sessionVerified) {
-    return { ready: true, hydratedResponse: response, persistedOk };
+  if (sessionVerified || creativeCount > 0) {
+    return { ready: true, hydratedResponse: response, persistedOk: sessionVerified };
   }
 
   clearWorkspaceBrandScrapeHandoff(domain);
-  return { ready: false, hydratedResponse: response, persistedOk };
+  return { ready: false, hydratedResponse: response, persistedOk: false };
 }
 
 /** @deprecated Use {@link finalizeWorkspaceBrandAdsLibraryForNavigation}. */

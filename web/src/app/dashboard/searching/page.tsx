@@ -108,7 +108,8 @@ function channelIdToAdsLibraryPlatform(id: ChannelId): AdsLibraryPlatform | null
     id === "google" ||
     id === "linkedin" ||
     id === "tiktok" ||
-    id === "pinterest"
+    id === "pinterest" ||
+    id === "snapchat"
   ) {
     return id;
   }
@@ -193,6 +194,7 @@ function SearchingContent() {
   type Phase = "discovering" | "manual-needed" | "scanning" | "found";
   const [phase, setPhase] = useState<Phase>(() => (workspaceBrandScrape ? "scanning" : "discovering"));
   const [isFinalizingLibrary, setIsFinalizingLibrary] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [discoveredIds, setDiscoveredIds] = useState<Partial<PlatformIdentifier>>({});
   const [discoveredBrand, setDiscoveredBrand] = useState<DiscoveredBrand | null>(null);
   const [manualIds, setManualIds] = useState<PlatformIdentifier>({});
@@ -494,12 +496,17 @@ function SearchingContent() {
       setPlatformStatuses(initialStatuses);
 
       const navigateToCompetitor = () => {
+        setIsRedirecting(true);
+        setIsFinalizingLibrary(false);
         clearSearchingFlowSnapshot(flowKey);
         const canonicalHost = normalizeCompetitorSlug(brandForScan?.domain ?? displayName);
         const href = buildCompetitorDashboardPath(canonicalHost);
         router.prefetch(href);
         router.push(href, { scroll: false });
       };
+
+      /** Per-platform Apify ceiling — must stay below Vercel maxDuration but avoid infinite hangs. */
+      const PLATFORM_SCRAPE_TIMEOUT_MS = 8 * 60 * 1000;
 
       if (adsPlatforms.length === 0) {
         setScanFraction({ done: 0, total: 0 });
@@ -602,10 +609,15 @@ function SearchingContent() {
         // (`ads_cache` + `scraped_ads`) before the next Apify run — parallel 500-ad jobs often timed out.
         for (const p of adsPlatforms) {
           setPlatformStatuses((prev) => ({ ...prev, [p]: "running" }));
+          const platformAbort = new AbortController();
+          const platformTimer = window.setTimeout(
+            () => platformAbort.abort(),
+            PLATFORM_SCRAPE_TIMEOUT_MS
+          );
           try {
             const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(
               { ...payload, platforms: [p] },
-              { skipCache: true }
+              { skipCache: true, signal: platformAbort.signal }
             );
             mergedAdsScanRef.current = mergeAdsLibraryState(mergedAdsScanRef.current, json);
             const normalizedPlatform = coerceAdsLibraryResponse(json);
@@ -619,6 +631,7 @@ function SearchingContent() {
             allHttpOk = false;
             setPlatformStatuses((prev) => ({ ...prev, [p]: "error" }));
           } finally {
+            window.clearTimeout(platformTimer);
             bumpProgress();
           }
         }
@@ -676,7 +689,7 @@ function SearchingContent() {
           if (!readiness.ready) {
             clearDiscoveryScanInProgress(scanDomain);
             setDiscoveryError(
-              "Your ads were scraped but we couldn't prepare your library yet. Please wait a moment and refresh this page."
+              "We saved your scraped ads but could not verify session storage. You can open your library manually below."
             );
             setIsFinalizingLibrary(false);
             scanRunningRef.current = false;
@@ -732,7 +745,6 @@ function SearchingContent() {
         }
 
         markFreshDiscoveryScan(scanDomain);
-        setIsFinalizingLibrary(false);
         navigateToCompetitor();
       } catch {
         clearDiscoveryScanInProgress(scanDomain);
@@ -873,21 +885,47 @@ function SearchingContent() {
           {isDiscovering && "Looking up your competitor…"}
           {isManualNeeded && "Add any missing links below"}
           {isScanning &&
-            (workspaceBrandScrape
-              ? isFinalizingLibrary
-                ? "Preparing your ad library…"
-                : "Scraping all your brand's active ads…"
-              : platformsToScan.length > 0
-                ? `Checking ${platformsToScan.length} platform${platformsToScan.length === 1 ? "" : "s"} for ads…`
-                : "Taking you to results")}
+            (isRedirecting
+              ? "Redirecting to your ad library…"
+              : workspaceBrandScrape
+                ? isFinalizingLibrary
+                  ? "Preparing your ad library…"
+                  : "Scraping all your brand's active ads…"
+                : platformsToScan.length > 0
+                  ? `Checking ${platformsToScan.length} platform${platformsToScan.length === 1 ? "" : "s"} for ads…`
+                  : "Taking you to results")}
           {isFound && (platformsToScan.length > 0 ? "All done — your competitor’s ads are ready" : "Taking you to results")}
         </h2>
         {isScanning && workspaceBrandScrape ? (
           <p className="text-[13px] sm:text-[14px] text-[#71717a] text-center max-w-lg mx-auto mb-8 sm:mb-10 leading-relaxed -mt-6 sm:-mt-12">
-            {isFinalizingLibrary
-              ? "Almost there — syncing your scraped ads so they appear correctly in your library."
-              : "We're pulling every active ad from the platforms you connected during onboarding."}
+            {isRedirecting
+              ? "Your scraped ads are ready — opening your library now."
+              : isFinalizingLibrary
+                ? "Almost there — syncing your scraped ads so they appear correctly in your library."
+                : "We're pulling every active ad from the platforms you connected during onboarding."}
           </p>
+        ) : null}
+        {(isScanning || isFinalizingLibrary) && discoveryError ? (
+          <div
+            role="alert"
+            className="mb-8 flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50/90 px-5 py-4 text-center"
+          >
+            <p className="text-[14px] font-medium leading-snug text-amber-950">{discoveryError}</p>
+            {workspaceBrandScrape ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const canonicalHost = normalizeCompetitorSlug(
+                    discoveredBrand?.domain ?? displayName
+                  );
+                  router.push(buildCompetitorDashboardPath(canonicalHost), { scroll: false });
+                }}
+                className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#343434] px-5 text-[14px] font-semibold text-white hover:bg-[#2a2a2a]"
+              >
+                Open ad library anyway
+              </button>
+            ) : null}
+          </div>
         ) : null}
         {isManualNeeded ? (
           <p className="text-[13px] sm:text-[14px] text-[#71717a] text-center max-w-lg mx-auto mb-8 sm:mb-10 leading-relaxed">
