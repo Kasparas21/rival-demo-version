@@ -19,6 +19,43 @@ function readGoogleAdsMemoryMbytes(): number {
   return Math.min(n, 8192);
 }
 
+/** Google Transparency blocks datacenter IPs — residential avoids captcha (actor error message). */
+function readGoogleResidentialProxyGroups(): string[] {
+  const raw = process.env.APIFY_GOOGLE_USE_RESIDENTIAL?.trim().toLowerCase();
+  if (raw && ["0", "false", "no", "off"].includes(raw)) return [];
+  return ["RESIDENTIAL"];
+}
+
+export function extractGoogleApifyFailureMessage(row: Record<string, unknown>): string | null {
+  const status = typeof row.status === "string" ? row.status.trim() : "";
+  if (!status) return null;
+  if (
+    /^failed\b/i.test(status) ||
+    /blocked|captcha|unable to reach|proxy rotation/i.test(status)
+  ) {
+    return status;
+  }
+  return null;
+}
+
+export function isLikelyGoogleAdRow(row: Record<string, unknown>): boolean {
+  if (extractGoogleApifyFailureMessage(row)) return false;
+  const keys = [
+    "headline",
+    "description",
+    "previewUrl",
+    "creativeUrl",
+    "advertiserName",
+    "creativeId",
+    "advertiserId",
+    "adFormat",
+  ];
+  return keys.some((k) => {
+    const v = row[k];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+}
+
 /**
  * Google Ads Transparency via Apify (`lurkapi/google-ads-scraper`).
  * Pass Transparency advertiser/creative URLs or `?domain=` listing URLs in `startUrls`.
@@ -59,7 +96,7 @@ export async function scrapeGoogleAdsTransparency(params: {
     politicalAdsOnly: false,
     proxyConfig: {
       useApifyProxy: true,
-      apifyProxyGroups: [] as string[],
+      apifyProxyGroups: readGoogleResidentialProxyGroups(),
     },
     region: params.region?.trim() || "anywhere",
     shouldDownloadPreviews: false,
@@ -79,11 +116,29 @@ export async function scrapeGoogleAdsTransparency(params: {
     }
   );
 
-  return items.map((raw) => {
+  const flattened = items.map((raw) => {
     const row =
       raw && typeof raw === "object" && !Array.isArray(raw)
         ? flattenApifyDatasetRecord(raw as Record<string, unknown>)
         : {};
-    return normalizeGoogleApiItem(row) as GoogleCompanyAdItem;
+    return row;
   });
+
+  const failures = flattened
+    .map((row) => extractGoogleApifyFailureMessage(row))
+    .filter((msg): msg is string => Boolean(msg));
+
+  const adRows = flattened.filter(isLikelyGoogleAdRow);
+  const normalized = adRows.map((row) => normalizeGoogleApiItem(row) as GoogleCompanyAdItem);
+
+  if (normalized.length === 0) {
+    if (failures.length > 0) {
+      throw new Error(failures[0]);
+    }
+    if (flattened.length > 0) {
+      throw new Error("Google Ads Transparency returned no ads for this advertiser.");
+    }
+  }
+
+  return normalized;
 }
