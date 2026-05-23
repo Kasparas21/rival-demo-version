@@ -31,6 +31,7 @@ import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
+import { filterWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidates";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 export const runtime = "nodejs";
@@ -70,7 +71,7 @@ function idsFromAdsContext(
   ) as AdsLibraryIds;
 }
 
-type FollowedSavedRow = Database["public"]["Tables"]["saved_competitors"]["Row"];
+type ScheduledScrapeRow = Database["public"]["Tables"]["saved_competitors"]["Row"];
 
 function isWithinRefreshWindowUtc(now = new Date()): boolean {
   const hour = now.getUTCHours();
@@ -92,7 +93,7 @@ async function userAllowsAutoRefresh(
 
 async function runWeeklyJobForRow(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  row: FollowedSavedRow,
+  row: ScheduledScrapeRow,
   runDayYmd: string
 ): Promise<{ skipped: boolean }> {
   if (row.is_workspace_brand && !isMondayUtc()) {
@@ -425,13 +426,10 @@ export async function POST(req: Request) {
   const admin = createSupabaseAdminClient();
   const runDayYmd = msToUtcYmd(Date.now());
 
-  const { data: followedRows, error: listErr } = await admin
-    .from("saved_competitors")
-    .select("*")
-    .eq("is_followed", true);
+  const { data: savedRows, error: listErr } = await admin.from("saved_competitors").select("*");
 
-  if (listErr || !followedRows) {
-    console.error("[cron/weekly-scrape] list followers", listErr?.message ?? "unknown");
+  if (listErr || !savedRows) {
+    console.error("[cron/weekly-scrape] list saved competitors", listErr?.message ?? "unknown");
     return Response.json(
       { error: listErr?.message ?? "List failed", processed: 0, succeeded: 0, failed: 0, skipped: 0 },
       { status: 500 }
@@ -443,9 +441,11 @@ export async function POST(req: Request) {
   let failed = 0;
   let skipped = 0;
 
+  const candidateRows = filterWeeklyScrapeCandidates(savedRows);
+
   const chunkSize = 3;
-  for (let i = 0; i < followedRows.length; i += chunkSize) {
-    const chunk = followedRows.slice(i, i + chunkSize);
+  for (let i = 0; i < candidateRows.length; i += chunkSize) {
+    const chunk = candidateRows.slice(i, i + chunkSize);
     await Promise.all(
       chunk.map(async (row) => {
         processed += 1;

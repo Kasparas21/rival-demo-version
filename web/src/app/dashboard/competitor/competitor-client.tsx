@@ -288,6 +288,20 @@ function formatLastScrapedLine(iso: string | null | undefined): string {
   return `Last scraped ${formatTimeAgo(d)}`;
 }
 
+function formatNextScrapeChipLabel(nextScrapeAt: string | null | undefined, nowMs = Date.now()): string {
+  if (!nextScrapeAt) return "next —";
+  const dueMs = Date.parse(nextScrapeAt);
+  if (Number.isNaN(dueMs)) return "next —";
+  if (dueMs <= nowMs) return "Due now";
+  return `next ${new Date(nextScrapeAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+}
+
+function isNextScrapeOverdue(nextScrapeAt: string | null | undefined, nowMs = Date.now()): boolean {
+  if (!nextScrapeAt) return false;
+  const dueMs = Date.parse(nextScrapeAt);
+  return !Number.isNaN(dueMs) && dueMs <= nowMs;
+}
+
 function PlatformLastScrapedLine({
   busy,
   busyLabel,
@@ -4239,10 +4253,10 @@ function CompetitorDashboardBody({
                                   <span className="block truncate opacity-90">
                                     {trackingChip.refreshIntervalDays}d · {trackingChip.adsPerRefresh} ads
                                   </span>
-                                  <span className="block truncate opacity-80">
-                                    {trackingChip.nextScrapeAt
-                                      ? `next ${new Date(trackingChip.nextScrapeAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-                                      : "next —"}
+                                  <span
+                                    className={`block truncate opacity-80 ${isNextScrapeOverdue(trackingChip.nextScrapeAt) ? "font-semibold text-red-700" : ""}`}
+                                  >
+                                    {formatNextScrapeChipLabel(trackingChip.nextScrapeAt)}
                                   </span>
                                 </span>
                               ) : showPlatformClassificationDebug ? (
