@@ -83,15 +83,15 @@ export function planPriceDisplay(
 
   if (billing === "monthly") {
     return {
-      primary: `$${monthlyUsd}`,
+      primary: `€${monthlyUsd}`,
       secondary: "Billed monthly",
     };
   }
 
   const pct = annualSavingsPercent(offer);
   return {
-    primary: `$${annualMonthlyUsd}`,
-    secondary: `Billed annually ($${annualYearlyUsd}/year)`,
+    primary: `€${annualMonthlyUsd}`,
+    secondary: `Billed annually (€${annualYearlyUsd}/year)`,
     listMonthlyUsd: monthlyUsd,
     savingsPercent: pct,
     annualYearlyUsd,

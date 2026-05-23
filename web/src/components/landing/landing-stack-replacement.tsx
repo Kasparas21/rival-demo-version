@@ -1,6 +1,5 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
-import { Check, Plus, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
@@ -21,8 +20,8 @@ import {
   WITH_RIVAL_PLATFORMS,
 } from "@/components/landing/landing-stack-replacement-data";
 
-const stackGlassCardClass =
-  "rounded-2xl border border-white/70 bg-white/52 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_20px_56px_-24px_rgba(74,127,165,0.28)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-white/50";
+const withoutRivalGlassCardClass =
+  "rounded-[1.75rem] border border-[#ef4444]/28 bg-[#fff5f5]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_16px_48px_-20px_rgba(239,68,68,0.22)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-[#ef4444]/12";
 
 const rivalGlassCardClass =
   "rounded-[1.75rem] border-2 border-[#4a7fa5]/45 bg-white/58 shadow-[inset_0_1px_0_rgba(255,255,255,0.98),0_28px_72px_-20px_rgba(74,127,165,0.42),0_0_0_1px_rgba(255,255,255,0.6)_inset] backdrop-blur-[28px] backdrop-saturate-[1.5] ring-1 ring-[#4a7fa5]/15";
@@ -36,14 +35,98 @@ const PLATFORM_ICONS: Record<(typeof WITH_RIVAL_PLATFORMS)[number], ReactNode> =
   Reddit: <RedditLogo className="mx-auto block size-[15px]" />,
 };
 
-function StackToolRow({ name, icon: Icon, iconClass, iconBg }: (typeof WITHOUT_RIVAL_STACK)[number]) {
+function StackToolChip({ name, icon: Icon, iconClass, iconBg }: (typeof WITHOUT_RIVAL_STACK)[number]) {
   return (
-    <div className="flex items-center gap-3.5 rounded-xl border border-white/80 bg-white/72 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_4px_16px_-8px_rgba(31,38,135,0.12)] backdrop-blur-md">
+    <div className="flex items-center gap-3 rounded-xl border border-white/75 bg-white/62 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_4px_14px_-8px_rgba(239,68,68,0.12)] backdrop-blur-md sm:px-4 sm:py-3.5">
       <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
-        <Icon className={`size-5 ${iconClass}`} strokeWidth={2.25} aria-hidden />
+        <Icon className={`size-[18px] ${iconClass}`} strokeWidth={2.25} aria-hidden />
       </span>
-      <span className="text-sm font-semibold text-[#1a1a1a] sm:text-[15px]">{name}</span>
+      <span className="text-[13px] font-semibold leading-tight text-[#1a1a1a] sm:text-sm">{name}</span>
     </div>
+  );
+}
+
+function WithoutRivalCard() {
+  return (
+    <article className={`relative flex h-full flex-col overflow-hidden ${withoutRivalGlassCardClass} p-5 sm:p-7`}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#ef4444]/16 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-10 -left-10 h-28 w-28 rounded-full bg-[#fca5a5]/20 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#ef4444]/8 via-transparent to-[#ef4444]/5"
+      />
+
+      <header className="relative flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-full bg-[#ef4444]/14 ring-1 ring-[#ef4444]/28">
+            <X className="size-5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
+          </span>
+          <h3 className="text-xl font-bold text-[#1a1a1a]">Without Rival</h3>
+        </div>
+        <span className="rounded-full border border-[#ef4444]/30 bg-[#ef4444]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#b91c1c] backdrop-blur-sm">
+          The old way
+        </span>
+      </header>
+
+      <p className="relative mt-4 text-[13px] leading-relaxed text-[#7f1d1d]/90 sm:text-sm">
+        Juggling separate ad libraries, SEO tools, and spreadsheets — then stitching it all together by hand every week.
+      </p>
+
+      <div className="relative mt-6 flex flex-1 flex-col">
+        <div className="rounded-2xl border border-white/70 bg-white/45 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md sm:px-5 sm:py-5">
+          <p className="text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#b91c1c] sm:text-xs">
+            {WITHOUT_RIVAL_STACK.length} tools · {WITHOUT_RIVAL_STACK.length} logins · zero intelligence
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {WITHOUT_RIVAL_STACK.map((tool) => (
+              <StackToolChip key={tool.name} {...tool} />
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-1 flex-col rounded-2xl border border-[#ef4444]/20 bg-[#fef2f2]/45 px-4 py-4 backdrop-blur-md sm:px-5 sm:py-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#b91c1c] sm:text-xs">What you still do manually</p>
+          <ul className="mt-4 flex-1 space-y-3.5 sm:space-y-4">
+            {WITHOUT_RIVAL_PAIN_POINTS.map((point) => (
+              <li key={point} className="flex items-start gap-3 text-[13px] leading-snug text-[#7f1d1d]/90 sm:text-sm">
+                <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-[#ef4444]/10 ring-1 ring-[#ef4444]/20">
+                  <X className="size-3.5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
+                </span>
+                {point}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
+          <div className="rounded-xl border border-[#ef4444]/25 bg-[#fef2f2]/70 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-md sm:py-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#b91c1c]">What you pay today</p>
+            <p className="mt-1 text-lg font-bold text-[#dc2626] sm:text-xl">€350/mo</p>
+            <p className="mt-1.5 text-[12px] font-medium text-[#991b1b]/85 sm:text-[13px]">+ hours of manual glue work every week</p>
+            <div className="mt-3 space-y-1.5 border-t border-[#ef4444]/15 pt-3 text-[12px] leading-snug text-[#991b1b]/80 sm:text-[13px]">
+              <p>~4 hrs/week stitching tabs into one view</p>
+              <p>6 renewals · 6 passwords · no strategy map</p>
+              <p>Still guessing what to test next Monday</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#ef4444]/25 bg-[#fef2f2]/60 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-sm">
+            <p className="text-sm font-bold text-[#991b1b] sm:text-[15px]">€270+/mo more than Rival · every month</p>
+            <p className="mt-1 text-xs text-[#b91c1b]/85 sm:text-[13px]">6 logins · 6 renewals · no strategy map</p>
+          </div>
+
+          <div className="flex min-h-[52px] items-center justify-center rounded-full border border-[#ef4444]/25 bg-[#ef4444]/8 px-6 text-sm font-bold text-[#991b1b]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-sm">
+            6 tools · zero payoff
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -102,50 +185,7 @@ export function LandingStackReplacement() {
           </div>
 
           <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-8">
-            <article className={`relative flex flex-col ${stackGlassCardClass} p-5 sm:p-7`}>
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 h-24 rounded-t-2xl bg-gradient-to-b from-[#fef2f2]/80 to-transparent"
-              />
-              <header className="relative flex items-center gap-3">
-                <span className="flex size-9 items-center justify-center rounded-full bg-[#ef4444]/12 ring-1 ring-[#ef4444]/25">
-                  <X className="size-5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
-                </span>
-                <h3 className="text-xl font-bold text-[#1a1a1a]">Without Rival</h3>
-              </header>
-
-              <div className="relative mt-6 space-y-0">
-                {WITHOUT_RIVAL_STACK.map((tool, index) => (
-                  <div key={tool.name}>
-                    <StackToolRow {...tool} />
-                    {index < WITHOUT_RIVAL_STACK.length - 1 ? (
-                      <div className="flex justify-center py-2" aria-hidden>
-                        <span className="flex size-7 items-center justify-center rounded-full bg-[#ef4444]/10 text-[#ef4444] ring-1 ring-[#ef4444]/20">
-                          <Plus className="size-4" strokeWidth={3} />
-                        </span>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-
-              <ul className="relative mt-6 space-y-3 border-t border-white/60 pt-5">
-                {WITHOUT_RIVAL_PAIN_POINTS.map((point) => (
-                  <li key={point} className="flex items-start gap-3 text-sm leading-snug text-gray-600 sm:text-[15px]">
-                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-[#ef4444]">
-                      <X className="size-4" strokeWidth={2.75} aria-hidden />
-                    </span>
-                    {point}
-                  </li>
-                ))}
-              </ul>
-
-              <div className="relative mt-auto pt-5">
-                <div className="rounded-xl border border-[#fecaca]/80 bg-[#fef2f2]/75 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-sm">
-                  <p className="text-[15px] font-bold text-[#dc2626] sm:text-base">$250–400/mo + hours of manual work</p>
-                </div>
-              </div>
-            </article>
+            <WithoutRivalCard />
 
             <div className="flex justify-center lg:hidden" aria-hidden>
               <span className="inline-flex size-12 items-center justify-center rounded-full border border-white/80 bg-white/75 text-[10px] font-bold uppercase tracking-[0.18em] text-[#4a7fa5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-8px_rgba(74,127,165,0.3)] backdrop-blur-xl">
@@ -153,7 +193,7 @@ export function LandingStackReplacement() {
               </span>
             </div>
 
-            <article className={`relative flex flex-col ${rivalGlassCardClass} p-5 sm:p-7`}>
+            <article className={`relative flex h-full flex-col ${rivalGlassCardClass} p-5 sm:p-7`}>
               <div
                 aria-hidden
                 className="pointer-events-none absolute -inset-px rounded-[1.75rem] bg-gradient-to-br from-white/60 via-transparent to-[#4a7fa5]/10 opacity-80"
@@ -195,13 +235,19 @@ export function LandingStackReplacement() {
                 </ul>
 
                 <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
-                  <p className="text-center text-xl font-bold text-[#4a7fa5] sm:text-2xl">
-                    $59–79/mo <span className="font-semibold text-[#4a7fa5]/80">• zero glue work</span>
-                  </p>
+                  <div className="overflow-hidden rounded-2xl border border-[#4a7fa5]/40 bg-[#eff6ff]/85 px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_14px_44px_-16px_rgba(74,127,165,0.38)] backdrop-blur-md sm:px-6 sm:py-6">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:text-xs">
+                      One plan · all 6 platforms
+                    </p>
+                    <p className="mt-2 text-[2.75rem] font-bold leading-none tracking-tight text-[#1a1a1a] sm:text-[3rem]">
+                      €79<span className="text-2xl font-bold text-[#4a7fa5] sm:text-[2.25rem]">/mo</span>
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-[#4a7fa5] sm:text-base">Zero glue work · one login</p>
+                  </div>
 
-                  <div className="rounded-xl border border-[#bfdbfe]/80 bg-[#eff6ff]/75 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-sm">
-                    <p className="text-sm font-bold text-[#1e40af] sm:text-[15px]">Save $170+/mo vs a 6-tool stack</p>
-                    <p className="mt-1 text-xs text-[#4a7fa5]/90 sm:text-[13px]">
+                  <div className="rounded-xl border border-[#95C14B]/30 bg-[#f3f9e8]/75 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-sm">
+                    <p className="text-sm font-bold text-[#4a6b24] sm:text-[15px]">Save €270+/mo vs a 6-tool stack</p>
+                    <p className="mt-1 text-xs text-[#5a7f2e]/90 sm:text-[13px]">
                       7-day trial · 1 competitor · cancel anytime
                     </p>
                   </div>

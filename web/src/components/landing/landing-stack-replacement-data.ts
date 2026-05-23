@@ -18,9 +18,12 @@ export const WITHOUT_RIVAL_STACK: StackTool[] = [
 ];
 
 export const WITHOUT_RIVAL_PAIN_POINTS = [
-  "Cross-platform funnels — manual",
-  "Per-competitor timelines — manual",
-  "Weekly test ideas — manual",
+  "Cross-platform funnels — built manually in spreadsheets",
+  "Per-competitor timelines — one tool at a time",
+  "Weekly test ideas — guesswork, not scrape data",
+  "6 logins, 6 invoices, zero shared context",
+  "No strategy map — just a pile of ads",
+  "Monday mornings lost to tab-switching",
 ] as const;
 
 export const WITH_RIVAL_FEATURES = [

@@ -17,13 +17,13 @@ function FeatureFig({ src, alt }: FeatureFigProps) {
         className="pointer-events-none absolute -inset-px rounded-[1.125rem] bg-gradient-to-br from-[#4a7fa5]/20 via-transparent to-[#95C14B]/10 opacity-70 blur-xl"
       />
       <div className="relative overflow-hidden rounded-2xl bg-white p-2.5 shadow-[0_28px_56px_-16px_rgba(26,26,26,0.14),0_0_0_1px_rgba(232,229,223,0.9)_inset] ring-1 ring-[#E8E6E1] sm:p-3">
-        <div className="relative h-[clamp(260px,34vw,380px)] w-full overflow-hidden rounded-xl bg-[#FBFAF7] ring-1 ring-black/[0.04]">
+        <div className="relative aspect-[1024/680] w-full overflow-hidden rounded-xl bg-[#FBFAF7] ring-1 ring-black/[0.04]">
           <Image
             src={src}
             alt={alt}
             fill
             sizes="(max-width: 768px) 100vw, 33vw"
-            className="object-cover object-top"
+            className="object-contain object-center"
           />
         </div>
       </div>

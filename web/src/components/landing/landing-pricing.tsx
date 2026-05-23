@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, User, Users } from "lucide-react";
+import { Check, ShieldCheck, User, Users } from "lucide-react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
@@ -58,7 +58,7 @@ function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPer
 
       <div className="mt-5">
         {isAnnual && price.listMonthlyUsd != null ? (
-          <p className="text-sm font-medium text-gray-400 line-through">${price.listMonthlyUsd} /month</p>
+          <p className="text-sm font-medium text-gray-400 line-through">€{price.listMonthlyUsd} /month</p>
         ) : null}
         <div className="mt-1 flex flex-wrap items-baseline gap-1.5">
           <span className="text-[2.5rem] font-bold leading-none tracking-tight text-[#1a1a1a]">{price.primary}</span>
@@ -108,15 +108,38 @@ export function LandingPricing() {
           choose your plan
         </h2>
 
-        <div className="mx-auto mt-6 max-w-2xl rounded-2xl border border-[#f0e4c8]/80 bg-[#faf6ed]/75 px-5 py-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_32px_-12px_rgba(180,140,60,0.15)] backdrop-blur-xl sm:px-6 sm:text-center">
-          <p className="text-sm font-bold text-[#5c4a32]">30-day money-back guarantee</p>
-          <p className="mt-1 text-[13px] leading-relaxed text-[#7a6548] sm:text-sm">
-            Track your competitors. If within 30 days Rival hasn&apos;t shown you something worth acting on, email us for a
-            full refund. No questions asked.
-          </p>
+        <div className="relative mx-auto mt-6 max-w-2xl overflow-hidden rounded-[1.75rem] border border-[#95C14B]/30 bg-[#f3f9e8]/78 px-5 py-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_44px_-18px_rgba(149,193,75,0.28)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-[#95C14B]/15 sm:px-7 sm:py-6 sm:text-center">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#95C14B]/22 blur-3xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-[#b8d96a]/18 blur-3xl"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/45 to-transparent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#95C14B]/10 via-transparent to-[#95C14B]/6"
+          />
+
+          <div className="relative flex flex-col items-start gap-3 sm:items-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/18 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a6b24] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_4px_14px_-8px_rgba(149,193,75,0.25)] backdrop-blur-md">
+              <ShieldCheck className="size-3.5 text-[#5a7f2e]" strokeWidth={2.5} aria-hidden />
+              Risk-free
+            </span>
+            <p className="text-base font-bold tracking-tight text-[#1a1a1a] sm:text-lg">30-day money-back guarantee</p>
+            <p className="max-w-xl text-[13px] leading-relaxed text-[#4a5c3a] sm:text-sm">
+              Track your competitors. If within 30 days Rival hasn&apos;t shown you something worth acting on, email us for a
+              full refund. No questions asked.
+            </p>
+          </div>
         </div>
 
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <div className="mt-8 flex justify-center">
           <div
             role="radiogroup"
             aria-label="Billing period"
@@ -151,10 +174,6 @@ export function LandingPricing() {
               }`}
             />
           </div>
-
-          <span className="inline-flex rounded-full border border-[#95C14B]/35 bg-[#95C14B]/15 px-3 py-1 text-[11px] font-semibold text-[#3d5c1f] backdrop-blur-sm">
-            Save 2 months & get all 6 platforms
-          </span>
         </div>
 
         <div className="mt-10 grid grid-cols-1 gap-5 text-left sm:mt-12 lg:grid-cols-2 lg:gap-6">
