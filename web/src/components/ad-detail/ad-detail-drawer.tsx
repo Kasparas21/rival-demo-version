@@ -24,7 +24,7 @@ import { MessengerMark } from "@/components/icons/messenger-mark";
 import { MetaMark } from "@/components/icons/meta-mark";
 import { ThreadsMark } from "@/components/icons/threads-mark";
 import { WhatsAppMark } from "@/components/icons/whatsapp-mark";
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { AdDetailDrawerSkeleton } from "@/components/ui/feature-skeleton";
 import { AD_SAVE_DEBUG_TITLE } from "@/components/ads-library/ad-save-row";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
@@ -48,6 +48,7 @@ import { buildTikTokAdLibraryDetailRows } from "@/lib/ad-detail/tiktok-ad-detail
 import {
   drawerComparisonPlatformIconId,
   drawerPlatformChipSlug,
+  googleFamilyDrawerIsYoutubeish,
 } from "@/lib/ad-detail/google-drawer-surface";
 import { resolveDetailRunningDays } from "@/lib/ad-detail/detail-time-running";
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
@@ -385,11 +386,7 @@ export function AdDetailDrawer({
             </div>
           </div>
 
-          {loading ? (
-            <div className="flex flex-1 flex-col overflow-y-auto py-16">
-              <RivalLoadingBlock size="2xl" padded className="min-h-[280px]" />
-            </div>
-          ) : null}
+          {loading ? <AdDetailDrawerSkeleton /> : null}
 
           {error && !loading ? (
             <div className="flex flex-1 items-center justify-center p-8">
@@ -531,18 +528,49 @@ function detailCreativeMediaClasses(vertical: boolean, forVideo: boolean): strin
   return `${base} max-h-[600px]${forVideo ? " min-h-[200px]" : ""}`;
 }
 
+function DetailYoutubePlayOverlay() {
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div
+        className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600 pl-1 shadow-lg"
+        aria-hidden
+      >
+        <div className="h-0 w-0 border-b-[7px] border-b-transparent border-l-[12px] border-l-white border-t-[7px] border-t-transparent" />
+      </div>
+    </div>
+  );
+}
+
+function DetailCreativeMediaFrame({
+  showYoutubePlayOverlay,
+  children,
+}: {
+  showYoutubePlayOverlay: boolean;
+  children: ReactNode;
+}) {
+  if (!showYoutubePlayOverlay) return <>{children}</>;
+  return (
+    <div className="relative inline-block max-w-full">
+      {children}
+      <DetailYoutubePlayOverlay />
+    </div>
+  );
+}
+
 function DetailCreativeVideo({
   src,
   poster,
   vertical,
   platformKey,
   rawPayload,
+  showPlayOverlay = false,
 }: {
   src: string;
   poster?: string;
   vertical: boolean;
   platformKey: string;
   rawPayload?: unknown;
+  showPlayOverlay?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -553,16 +581,18 @@ function DetailCreativeVideo({
   if (failed) {
     if (poster) {
       return (
-        <img
-          src={poster}
-          alt=""
-          loading="lazy"
-          className={detailCreativeMediaClasses(vertical, false)}
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
-          }}
-        />
+        <DetailCreativeMediaFrame showYoutubePlayOverlay={showPlayOverlay}>
+          <img
+            src={poster}
+            alt=""
+            loading="lazy"
+            className={detailCreativeMediaClasses(vertical, false)}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = "none";
+            }}
+          />
+        </DetailCreativeMediaFrame>
       );
     }
     return (
@@ -573,7 +603,7 @@ function DetailCreativeVideo({
   }
 
   return (
-    <div className="relative inline-block max-w-full">
+    <DetailCreativeMediaFrame showYoutubePlayOverlay={showPlayOverlay}>
       <video
         controls
         playsInline
@@ -583,21 +613,14 @@ function DetailCreativeVideo({
         className={`${detailCreativeMediaClasses(vertical, true)} bg-black`}
         onError={() => setFailed(true)}
       />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-red-600 pl-1 shadow-lg"
-          aria-hidden
-        >
-          <div className="h-0 w-0 border-b-[7px] border-b-transparent border-l-[12px] border-l-white border-t-[7px] border-t-transparent" />
-        </div>
-      </div>
-    </div>
+    </DetailCreativeMediaFrame>
   );
 }
 
 function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
   const resolved = resolveAdDetailCreativeMedia(ad);
   const vertical = isMostlyVerticalCreativePlatform(ad.platform);
+  const showYoutubePlay = googleFamilyDrawerIsYoutubeish(ad.platform, ad.raw_payload);
 
   if (resolved.kind === "empty") {
     return (
@@ -609,16 +632,18 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
 
   if (resolved.kind === "image") {
     return (
-      <img
-        src={resolved.src}
-        alt=""
-        loading="lazy"
-        className={detailCreativeMediaClasses(vertical, false)}
-        referrerPolicy="no-referrer"
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = "none";
-        }}
-      />
+      <DetailCreativeMediaFrame showYoutubePlayOverlay={showYoutubePlay}>
+        <img
+          src={resolved.src}
+          alt=""
+          loading="lazy"
+          className={detailCreativeMediaClasses(vertical, false)}
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = "none";
+          }}
+        />
+      </DetailCreativeMediaFrame>
     );
   }
 
@@ -629,6 +654,7 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
       vertical={vertical}
       platformKey={ad.platform}
       rawPayload={ad.raw_payload}
+      showPlayOverlay={showYoutubePlay}
     />
   );
 }

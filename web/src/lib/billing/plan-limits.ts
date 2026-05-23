@@ -21,6 +21,10 @@ export type PlanLimits = {
   allowCsvExport: boolean;
   allowManualRefresh: boolean;
   allowAutoRefresh: boolean;
+  /** Pro/admin: custom alert rules, thresholds, and per-competitor scope. */
+  allowAlertRules: boolean;
+  /** Pro/admin: alert email notifications between scrapes. */
+  allowAlertEmail: boolean;
   /** null = unlimited */
   maxAiStrategyOverviews: number | null;
   initialScrapeAdsPerPlatform: number | null;
@@ -41,6 +45,8 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
   allowCsvExport: false,
   allowManualRefresh: false,
   allowAutoRefresh: false,
+  allowAlertRules: false,
+  allowAlertEmail: false,
   maxAiStrategyOverviews: 1,
   initialScrapeAdsPerPlatform: 200,
 };
@@ -59,6 +65,8 @@ const STARTER_LIMITS: PlanLimits = {
   allowCsvExport: false,
   allowManualRefresh: false,
   allowAutoRefresh: true,
+  allowAlertRules: false,
+  allowAlertEmail: false,
   maxAiStrategyOverviews: null,
   initialScrapeAdsPerPlatform: null,
 };
@@ -77,6 +85,8 @@ const PRO_LIMITS: PlanLimits = {
   allowCsvExport: true,
   allowManualRefresh: true,
   allowAutoRefresh: true,
+  allowAlertRules: true,
+  allowAlertEmail: true,
   maxAiStrategyOverviews: null,
   initialScrapeAdsPerPlatform: null,
 };
@@ -95,6 +105,8 @@ const ADMIN_LIMITS: PlanLimits = {
   allowCsvExport: true,
   allowManualRefresh: true,
   allowAutoRefresh: true,
+  allowAlertRules: true,
+  allowAlertEmail: true,
   maxAiStrategyOverviews: null,
   initialScrapeAdsPerPlatform: null,
 };

@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/enrich-pending",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/send-alert-emails",
+      "schedule": "0 */4 * * *"
     }
   ]
 }

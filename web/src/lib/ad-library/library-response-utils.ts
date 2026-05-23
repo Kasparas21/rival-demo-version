@@ -43,3 +43,18 @@ export function countLibraryAdsForPlatform(platform: AdsLibraryPlatform, out: Ad
       return 0;
   }
 }
+
+/** True when this platform has creatives to show (failed/empty scrapes stay off until the user enables them). */
+export function platformHasScrapedLibraryData(
+  platform: AdsLibraryPlatform,
+  out: AdsLibraryResponse | null,
+  opts?: { activeAdCount?: number },
+): boolean {
+  if (out) {
+    if (!platformScrapeSucceeded(out, platform)) return false;
+    return countLibraryAdsForPlatform(platform, out) > 0;
+  }
+
+  /** While cache hydrates, use tracking active count as a best-effort hint. */
+  return (opts?.activeAdCount ?? 0) > 0;
+}

@@ -6,7 +6,7 @@ import { metaLibraryItemLookupKeys, metaScrapedRowMatchesLibraryItemId } from "@
 import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
 import type { MetaAdCard, TikTokAdCard } from "@/lib/ad-library/normalize";
 import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview-url";
-import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
+import { libraryItemIdFromRawPayload, libraryItemKey, savedRowMatchesLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { isWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -173,24 +173,52 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const allScrapedIds = [...new Set([...scrapedAdIds, ...Object.values(resolvedToScraped)])];
 
-  if (savedAdsBlocked || allScrapedIds.length === 0) {
-    return NextResponse.json({ ok: true, savedMap: {}, resolvedToScraped, libraryLifecycle, libraryPreviewUrls });
-  }
-
-  const { data: rows, error } = await supabase
-    .from("saved_ads")
-    .select("id, source_scraped_ad_id")
-    .eq("user_id", user.id)
-    .in("source_scraped_ad_id", allScrapedIds);
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
-  }
-
   const savedMap: Record<string, string> = {};
-  for (const row of rows ?? []) {
-    if (row.source_scraped_ad_id) {
-      savedMap[row.source_scraped_ad_id] = row.id;
+
+  if (!savedAdsBlocked) {
+    if (allScrapedIds.length > 0) {
+      const { data: rows, error } = await supabase
+        .from("saved_ads")
+        .select("id, source_scraped_ad_id")
+        .eq("user_id", user.id)
+        .in("source_scraped_ad_id", allScrapedIds);
+
+      if (error) {
+        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      }
+
+      for (const row of rows ?? []) {
+        if (row.source_scraped_ad_id) {
+          savedMap[row.source_scraped_ad_id] = row.id;
+        }
+      }
+    }
+
+    if (libraryItems.length > 0) {
+      const { data: savedRows, error: savedErr } = await supabase
+        .from("saved_ads")
+        .select("id, source_scraped_ad_id, platform, raw_payload")
+        .eq("user_id", user.id)
+        .eq("competitor_id", competitorId);
+
+      if (savedErr) {
+        return NextResponse.json({ ok: false, error: savedErr.message }, { status: 500 });
+      }
+
+      for (const item of libraryItems) {
+        const key = libraryItemKey(item.platform, item.libraryItemId);
+        for (const saved of savedRows ?? []) {
+          if (!savedRowMatchesLibraryItem(saved, item)) continue;
+
+          const sid = resolvedToScraped[key]?.trim() || saved.source_scraped_ad_id?.trim();
+          if (!sid) continue;
+
+          savedMap[sid] = saved.id;
+          if (!resolvedToScraped[key]) {
+            resolvedToScraped[key] = sid;
+          }
+        }
+      }
     }
   }
 

@@ -68,6 +68,7 @@ export type CacheState<T> = {
   isValidating: boolean;
   error: Error | null;
   cacheHit: boolean;
+  lastFetchedAt: number | null;
 };
 
 export type UseScrapeKeyedCacheOptions<T> = {
@@ -85,7 +86,15 @@ type InternalCacheState<T> = CacheState<T> & { boundKey: string | null };
 
 function initialCacheState<T>(enabled: boolean, cacheKey: string): InternalCacheState<T> {
   if (!enabled) {
-    return { data: null, loading: false, isValidating: false, error: null, cacheHit: false, boundKey: null };
+    return {
+      data: null,
+      loading: false,
+      isValidating: false,
+      error: null,
+      cacheHit: false,
+      lastFetchedAt: null,
+      boundKey: null,
+    };
   }
   /** Always match SSR first paint — client cache is applied in `useLayoutEffect` before paint. */
   return {
@@ -94,16 +103,41 @@ function initialCacheState<T>(enabled: boolean, cacheKey: string): InternalCache
     isValidating: false,
     error: null,
     cacheHit: false,
+    lastFetchedAt: null,
     boundKey: cacheKey,
   };
 }
 
 function resolveCacheState<T>(enabled: boolean, cacheKey: string, state: InternalCacheState<T>): CacheState<T> {
   if (!enabled) {
-    return { data: null, loading: false, isValidating: false, error: null, cacheHit: false };
+    if (state.boundKey === cacheKey && state.data != null) {
+      return {
+        data: state.data,
+        loading: false,
+        isValidating: false,
+        error: state.error,
+        cacheHit: state.cacheHit,
+        lastFetchedAt: state.lastFetchedAt,
+      };
+    }
+    return {
+      data: null,
+      loading: false,
+      isValidating: false,
+      error: null,
+      cacheHit: false,
+      lastFetchedAt: null,
+    };
   }
   if (state.boundKey !== cacheKey) {
-    return { data: null, loading: true, isValidating: false, error: null, cacheHit: false };
+    return {
+      data: null,
+      loading: true,
+      isValidating: false,
+      error: null,
+      cacheHit: false,
+      lastFetchedAt: null,
+    };
   }
   return {
     data: state.data,
@@ -111,12 +145,17 @@ function resolveCacheState<T>(enabled: boolean, cacheKey: string, state: Interna
     isValidating: state.isValidating,
     error: state.error,
     cacheHit: state.cacheHit,
+    lastFetchedAt: state.lastFetchedAt,
   };
 }
 
 export function useScrapeKeyedCache<T>(
   opts: UseScrapeKeyedCacheOptions<T>
-): CacheState<T> & { refetch: (opts?: { force?: boolean }) => Promise<void>; invalidate: () => void } {
+): CacheState<T> & {
+  refetch: (opts?: { force?: boolean }) => Promise<void>;
+  refetchIfStale: (maxAgeMs?: number) => Promise<void>;
+  invalidate: () => void;
+} {
   const { cacheKey, fetcher, enabled = true, validateCached, persistAcrossTabs = true } = opts;
   const useLocal = persistAcrossTabs;
 
@@ -129,9 +168,11 @@ export function useScrapeKeyedCache<T>(
 
   const inFlightRef = useRef<Promise<void> | null>(null);
   const fetchGenRef = useRef(0);
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const runFetch = useCallback(
-    async (mode: { reason: "initial-miss" | "refetch"; force?: boolean }) => {
+    async (mode: { reason: "initial-miss" | "refetch" | "stale"; force?: boolean }) => {
       if (!enabled) return;
       const gen = fetchGenRef.current;
 
@@ -157,6 +198,7 @@ export function useScrapeKeyedCache<T>(
           const fresh = await fetcherRef.current({ force: mode.force === true });
           if (fetchGenRef.current !== gen) return;
 
+          const now = Date.now();
           writeCache(cacheKey, fresh, useLocal);
           setState({
             data: fresh,
@@ -164,6 +206,7 @@ export function useScrapeKeyedCache<T>(
             isValidating: false,
             error: null,
             cacheHit: false,
+            lastFetchedAt: now,
             boundKey: cacheKey,
           });
         } catch (err) {
@@ -194,20 +237,17 @@ export function useScrapeKeyedCache<T>(
   );
 
   useLayoutEffect(() => {
-    fetchGenRef.current += 1;
-    inFlightRef.current = null;
-
     if (!enabled) {
-      setState({
-        data: null,
-        loading: false,
-        isValidating: false,
-        error: null,
-        cacheHit: false,
-        boundKey: null,
-      });
       return;
     }
+
+    const current = stateRef.current;
+    if (current.boundKey === cacheKey && current.data != null) {
+      return;
+    }
+
+    fetchGenRef.current += 1;
+    inFlightRef.current = null;
 
     const cached = readValidCache<T>(cacheKey, useLocal, validateRef.current);
     const valid = cached != null;
@@ -223,6 +263,7 @@ export function useScrapeKeyedCache<T>(
         isValidating: false,
         error: null,
         cacheHit: true,
+        lastFetchedAt: Date.now(),
         boundKey: cacheKey,
       });
     } else {
@@ -232,6 +273,7 @@ export function useScrapeKeyedCache<T>(
         isValidating: false,
         error: null,
         cacheHit: false,
+        lastFetchedAt: null,
         boundKey: cacheKey,
       });
     }
@@ -239,6 +281,11 @@ export function useScrapeKeyedCache<T>(
 
   useEffect(() => {
     if (!enabled) return;
+
+    const current = stateRef.current;
+    if (current.boundKey === cacheKey && current.data != null) {
+      return;
+    }
 
     const cached = readValidCache<T>(cacheKey, useLocal, validateRef.current);
     if (cached != null) return;
@@ -254,6 +301,25 @@ export function useScrapeKeyedCache<T>(
     [cacheKey, useLocal, runFetch]
   );
 
+  const refetchIfStale = useCallback(
+    async (maxAgeMs = 5 * 60 * 1000) => {
+      if (!enabled) return;
+      const current = stateRef.current;
+      if (current.boundKey !== cacheKey) {
+        await runFetch({ reason: "initial-miss", force: false });
+        return;
+      }
+      if (current.data == null) {
+        await runFetch({ reason: "initial-miss", force: false });
+        return;
+      }
+      const age = current.lastFetchedAt != null ? Date.now() - current.lastFetchedAt : Infinity;
+      if (age < maxAgeMs) return;
+      await runFetch({ reason: "stale", force: false });
+    },
+    [cacheKey, enabled, runFetch]
+  );
+
   const invalidate = useCallback(() => {
     deleteCache(cacheKey, useLocal);
     setState((s) => ({
@@ -261,11 +327,12 @@ export function useScrapeKeyedCache<T>(
       cacheHit: false,
       data: null,
       loading: enabled,
+      lastFetchedAt: null,
       boundKey: cacheKey,
     }));
   }, [cacheKey, useLocal, enabled]);
 
   const resolved = resolveCacheState(enabled, cacheKey, state);
 
-  return { ...resolved, refetch, invalidate };
+  return { ...resolved, refetch, refetchIfStale, invalidate };
 }

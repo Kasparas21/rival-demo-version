@@ -45,6 +45,7 @@ type Props = {
   comparisonPayloadLoading: boolean;
   comparisonPayloadError: string | null;
   refetchComparisonPayload?: () => void | Promise<void>;
+  refetchComparisonPayloadIfStale?: (maxAgeMs?: number) => void | Promise<void>;
   /** When false, skip mount refetch (tab kept mounted but inactive). */
   fetchEnabled?: boolean;
 };
@@ -57,6 +58,7 @@ export function ActivityFeedTab({
   comparisonPayloadLoading,
   comparisonPayloadError,
   refetchComparisonPayload,
+  refetchComparisonPayloadIfStale,
   fetchEnabled = true,
 }: Props) {
   const pathname = usePathname();
@@ -82,8 +84,8 @@ export function ActivityFeedTab({
 
   useEffect(() => {
     if (!fetchEnabled) return;
-    void refetchComparisonPayload?.();
-  }, [competitorDomain, fetchEnabled, refetchComparisonPayload]);
+    void refetchComparisonPayloadIfStale?.(5 * 60 * 1000);
+  }, [competitorDomain, fetchEnabled, refetchComparisonPayloadIfStale]);
 
   const bootstrapKeyRef = useRef<string | null>(null);
 

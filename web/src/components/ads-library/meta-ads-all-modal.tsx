@@ -144,25 +144,24 @@ export function MetaAdsAllModal({
                 <p className="py-8 text-center text-[14px] text-[#6b7280]">No ads match the current filters.</p>
               ) : (
                 <div
-                  className={`grid items-stretch gap-6 ${viewMode === "list" ? "mx-auto w-full max-w-2xl grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}
+                  className={`grid items-start gap-6 ${viewMode === "list" ? "mx-auto w-full max-w-2xl grid-cols-1" : "grid-cols-1 sm:grid-cols-2"}`}
                 >
                   {pageAds.map((ad) => {
                     const extras = getMetaAdExtras?.(ad);
                     return (
-                      <div key={ad.id} className="flex h-full min-h-0 flex-col">
-                        <MetaAdCard
-                          ad={ad}
-                          viewMode={viewMode}
-                          brand={brand}
-                          onClick={() => onAdActivate?.(ad)}
-                          scrapedAdId={extras?.scrapedAdId}
-                          isSaved={extras?.isSaved}
-                          onToggleSave={extras?.onToggleSave}
-                          saveDisabled={extras?.saveDisabled}
-                          runStatus={extras?.runStatus}
-                          metaScrapeAtMs={extras?.metaScrapeAtMs}
-                        />
-                      </div>
+                      <MetaAdCard
+                        key={ad.id}
+                        ad={ad}
+                        viewMode={viewMode}
+                        brand={brand}
+                        onClick={() => onAdActivate?.(ad)}
+                        scrapedAdId={extras?.scrapedAdId}
+                        isSaved={extras?.isSaved}
+                        onToggleSave={extras?.onToggleSave}
+                        saveDisabled={extras?.saveDisabled}
+                        runStatus={extras?.runStatus}
+                        metaScrapeAtMs={extras?.metaScrapeAtMs}
+                      />
                     );
                   })}
                 </div>

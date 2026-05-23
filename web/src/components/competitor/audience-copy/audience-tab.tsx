@@ -1,5 +1,6 @@
 "use client";
 
+import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { AudienceInferencePanel } from "@/components/comparison/panels/audience-inference-panel";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
@@ -34,7 +35,7 @@ export function AudienceTab({
 }: Props) {
   if (comparisonPayloadLoading && !comparisonPayload?.competitor?.payload) {
     return (
-      <RivalLoadingBlock size="2xl" padded className="mx-auto max-w-5xl py-16 sm:py-20" />
+      <RivalLoadingBlock size="2xl" padded className={`${COMPETITOR_PAGE_SHELL} py-16 sm:py-20`} />
     );
   }
 
@@ -50,7 +51,7 @@ export function AudienceTab({
 
   if (!data?.ok || !data.competitor?.payload) {
     if (data?.competitor?.recomputing) {
-      return <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16" />;
+      return <RivalLoadingBlock padded className={`${COMPETITOR_PAGE_SHELL} py-16`} />;
     }
     return (
       <div className="py-12 text-center">
@@ -78,7 +79,7 @@ export function AudienceTab({
         : 0;
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-6">
+    <div className={COMPETITOR_PAGE_SHELL}>
       <AudienceInferencePanel
         workspace={{
           name: workspaceName,

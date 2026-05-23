@@ -18,6 +18,24 @@ export function isAdSaved(savedMap: SavedMap, scrapedAdId: string): boolean {
   return Boolean(scrapedAdId && savedMap[scrapedAdId]);
 }
 
+/** True when any library id alias resolves to a scraped id marked saved. */
+export function isLibraryItemSaved(
+  savedMap: SavedMap,
+  resolvedToScraped: Record<string, string>,
+  platform: string,
+  libraryItemId: string,
+  alternateIds: readonly string[] = [],
+): boolean {
+  const pl = platform.trim().toLowerCase();
+  for (const rawId of [libraryItemId, ...alternateIds]) {
+    const id = rawId.trim();
+    if (!id) continue;
+    const sid = resolvedToScraped[`${pl}:${id}`];
+    if (sid && savedMap[sid]) return true;
+  }
+  return false;
+}
+
 export function useSavedAdsStatus(
   competitorId: string,
   libraryItems: LibraryItemRef[],
@@ -56,6 +74,14 @@ export function useSavedAdsStatus(
     }
     return [...m.values()];
   }, [scrapedAdIds]);
+
+  useEffect(() => {
+    lastKeyRef.current = "";
+    setSavedMap({});
+    setResolvedToScraped({});
+    setLibraryLifecycle({});
+    setLibraryPreviewUrls({});
+  }, [competitorId]);
 
   useEffect(() => {
     const cid = competitorId.trim();
@@ -109,6 +135,10 @@ export function useSavedAdsStatus(
 
     return () => {
       cancelled = true;
+      // A cancelled in-flight request must not block the next fetch for the same key.
+      if (lastKeyRef.current === queryKey) {
+        lastKeyRef.current = "";
+      }
     };
   }, [competitorId, dedupedItems, dedupedScrapedIds, refreshToken]);
 

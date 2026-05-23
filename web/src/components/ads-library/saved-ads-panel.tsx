@@ -10,7 +10,7 @@ import type { Json } from "@/lib/supabase/types";
 import { drawerComparisonPlatformIconId } from "@/lib/ad-detail/google-drawer-surface";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { SavedAdsSkeleton } from "@/components/ui/feature-skeleton";
 
 export type SavedAdRow = {
   id: string;
@@ -114,11 +114,7 @@ export function SavedAdsPanel({
   }
 
   if (loading && !data && !displayError) {
-    return (
-      <div className="flex justify-center py-12 px-4">
-        <RivalLoadingBlock size="md" padded={false} />
-      </div>
-    );
+    return <SavedAdsSkeleton />;
   }
 
   if (displayError) {

@@ -19,6 +19,8 @@ import type {
 } from "@/lib/activity-score/types";
 import { SIGNAL_WEIGHTS as W } from "@/lib/activity-score/types";
 import type { Database, Json } from "@/lib/supabase/types";
+import { generateAlertsForCompetitor } from "@/lib/alerts/generate-alerts-for-competitor";
+import { getLatestScrapeBatchId } from "@/lib/scrape-batches/get-latest-batch-id";
 
 type Row = {
   format: string;
@@ -126,6 +128,15 @@ export async function computeActivityScore(params: {
 }): Promise<ActivityScoreResult> {
   const { userId, competitorId, supabaseAdmin, skipPersist } = params;
   const now = new Date();
+
+  const { data: priorScoreRow } = await supabaseAdmin
+    .from("competitor_activity_scores")
+    .select("score")
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .maybeSingle();
+
+  const activityScoreBefore = priorScoreRow?.score ?? null;
 
   const { data: rows, error: fetchErr } = await supabaseAdmin
     .from("scraped_ads")
@@ -364,6 +375,22 @@ export async function computeActivityScore(params: {
     );
     if (upErr) {
       console.error("[activity-score] persist failed", upErr);
+    } else {
+      void (async () => {
+        try {
+          const batchId = await getLatestScrapeBatchId(supabaseAdmin, competitorId);
+          await generateAlertsForCompetitor({
+            supabase: supabaseAdmin,
+            userId,
+            competitorId,
+            batchId,
+            activityScoreBefore,
+            activityScoreAfter: scoreInt,
+          });
+        } catch (e) {
+          console.error("[activity-score] generateAlertsForCompetitor", e);
+        }
+      })();
     }
   }
 

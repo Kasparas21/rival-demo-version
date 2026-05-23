@@ -730,6 +730,93 @@ export type Database = {
         };
         Relationships: [];
       };
+      competitor_alerts: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          alert_type: string;
+          severity: string;
+          title: string;
+          body: string | null;
+          metadata: Json;
+          detected_at: string;
+          source_scrape_batch_id: string | null;
+          is_read: boolean;
+          notified_at: string | null;
+          dedupe_key: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          alert_type: string;
+          severity?: string;
+          title: string;
+          body?: string | null;
+          metadata?: Json;
+          detected_at?: string;
+          source_scrape_batch_id?: string | null;
+          is_read?: boolean;
+          notified_at?: string | null;
+          dedupe_key: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          alert_type?: string;
+          severity?: string;
+          title?: string;
+          body?: string | null;
+          metadata?: Json;
+          detected_at?: string;
+          source_scrape_batch_id?: string | null;
+          is_read?: boolean;
+          notified_at?: string | null;
+          dedupe_key?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      alert_rules: {
+        Row: {
+          id: string;
+          user_id: string;
+          alert_type: string;
+          enabled: boolean;
+          notify_email: boolean;
+          threshold: Json;
+          competitor_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          alert_type: string;
+          enabled?: boolean;
+          notify_email?: boolean;
+          threshold?: Json;
+          competitor_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          alert_type?: string;
+          enabled?: boolean;
+          notify_email?: boolean;
+          threshold?: Json;
+          competitor_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       creative_tests: {
         Row: {
           id: string;

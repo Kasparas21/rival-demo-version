@@ -6,8 +6,9 @@ import { Beaker, ChevronDown, ChevronRight, HelpCircle, Info, Play, Skull, Troph
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { CreativeTestsSkeleton } from "@/components/ui/feature-skeleton";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
@@ -119,21 +120,19 @@ export function CreativeTestsTab({
 
   if (!competitorId) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-12 text-center text-[13px] text-slate-500">
+      <div className={`${COMPETITOR_PAGE_SHELL} py-12 text-center text-[13px] text-slate-500`}>
         Save this competitor to your spy list to load Creative Tests (requires a stored competitor id).
       </div>
     );
   }
 
   if (loading && !data && !loadErr) {
-    return (
-      <RivalLoadingBlock padded className="mx-auto max-w-5xl py-16 sm:py-24" />
-    );
+    return <CreativeTestsSkeleton />;
   }
 
   if (loadErr) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-6">
+      <div className={COMPETITOR_PAGE_SHELL}>
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
           Failed to load creative tests: {loadErr}
           <button type="button" className="mt-2 block text-[12px] font-semibold underline" onClick={() => void refetch()}>
@@ -161,7 +160,7 @@ export function CreativeTestsTab({
   }
 
   return (
-    <div className="relative mx-auto max-w-5xl px-6 py-6">
+    <div className={`relative ${COMPETITOR_PAGE_SHELL}`}>
       <CacheRevalidatingDot show={isValidating && !!data} />
       <FeatureSectionHeader
         className="mb-6"

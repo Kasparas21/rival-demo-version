@@ -2,8 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
-
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   pendingStrategyRefreshStorageKey,
@@ -12,10 +10,12 @@ import type { CompetitorStrategyOverviewPayload, FunnelCellId } from "@/lib/stra
 import { normalizeCompetitorStrategyOverviewPayload, normalizeStrategyMapPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { useStrategyOverviewUi } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyMapFlow } from "@/components/strategy-overview/strategy-map-flow";
+import { StrategyMapSkeleton } from "@/components/strategy-overview/strategy-map-skeleton";
 import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy-sidebar";
 import { FunnelCellSheet } from "@/components/strategy-overview/funnel-cell-sheet";
 import { NodeDetailSheet } from "@/components/strategy-overview/node-detail-sheet";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
@@ -264,7 +264,7 @@ export function StrategyOverviewApp({
   const mapDimmed = isBackgroundRefresh && showMap;
 
   return (
-    <div className="relative mx-auto w-full max-w-[1400px] px-6 py-8 sm:px-8 lg:px-10">
+    <div className={`relative ${COMPETITOR_PAGE_SHELL} py-8`}>
       <CacheRevalidatingDot show={isValidating && !!payload} className="right-4 top-4" />
       {!awaitingStrategy ? (
         <FeatureSectionHeader
@@ -280,7 +280,7 @@ export function StrategyOverviewApp({
         />
       ) : null}
 
-      {awaitingStrategy ? <RivalLoadingBlock padded className="py-20" /> : null}
+      {awaitingStrategy ? <StrategyMapSkeleton /> : null}
 
       {showEmptyStrategy ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-12 text-center text-[14px] text-slate-600">

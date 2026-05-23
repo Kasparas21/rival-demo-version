@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { metaScrapedRowMatchesLibraryItemId } from "@/lib/ad-library/meta-library-item-keys";
+import type { MetaAdCard } from "@/lib/ad-library/normalize";
 import type { Database } from "@/lib/supabase/types";
 
 export function libraryItemIdFromRawPayload(raw: unknown): string | null {
@@ -46,4 +48,22 @@ export async function resolveScrapedAdIdForLibraryItem(
 
 export function libraryItemKey(platform: string, libraryItemId: string): string {
   return `${platform.trim().toLowerCase()}:${libraryItemId.trim()}`;
+}
+
+/** Match a persisted saved_ads row to an ad-library card id (fallback when scraped_ads lookup misses). */
+export function savedRowMatchesLibraryItem(
+  row: { platform: string; raw_payload: unknown },
+  item: { platform: string; libraryItemId: string },
+): boolean {
+  const pl = item.platform.trim().toLowerCase();
+  const rowPl = String(row.platform).trim().toLowerCase();
+  if (pl !== rowPl) return false;
+
+  const payload = row.raw_payload;
+  if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+    return metaScrapedRowMatchesLibraryItemId(payload as MetaAdCard, item.libraryItemId);
+  }
+
+  const cardId = libraryItemIdFromRawPayload(payload);
+  return Boolean(cardId && cardId === item.libraryItemId.trim());
 }

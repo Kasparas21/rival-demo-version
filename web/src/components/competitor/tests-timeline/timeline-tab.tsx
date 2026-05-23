@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarRange, HelpCircle } from "lucide-react";
 
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
+import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import { TimelineSkeleton } from "@/components/ui/feature-skeleton";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 import { TimelineActivityHeatmap } from "./timeline-activity-heatmap";
@@ -282,23 +284,12 @@ export function TimelineTab({
   }
 
   if (loading && !data && !loadErr) {
-    return (
-      <div className="mx-auto max-w-6xl space-y-6 px-6 py-6">
-        <div className="h-8 w-48 animate-pulse rounded-lg bg-slate-200" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-28 animate-pulse rounded-xl bg-slate-200" />
-          ))}
-        </div>
-        <div className="h-36 animate-pulse rounded-2xl bg-slate-200" />
-        <div className="h-96 animate-pulse rounded-2xl bg-slate-200" />
-      </div>
-    );
+    return <TimelineSkeleton />;
   }
 
   if (loadErr) {
     return (
-      <div className="mx-auto max-w-6xl px-6 py-6">
+      <div className={COMPETITOR_PAGE_SHELL}>
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
           Failed to load timeline: {loadErr}
           <button type="button" className="mt-2 block text-[12px] font-semibold underline" onClick={() => void refetch()}>
@@ -329,7 +320,7 @@ export function TimelineTab({
   const rangeEmpty = viewWindow && windowFiltered.length === 0 && lifecycleFiltered.length > 0;
 
   return (
-    <div className="relative mx-auto w-full max-w-6xl space-y-8 px-6 py-6">
+    <div className={`relative ${COMPETITOR_PAGE_SHELL} space-y-8`}>
       <CacheRevalidatingDot show={isValidating && !!data} />
 
       <FeatureSectionHeader

@@ -15,8 +15,11 @@ import {
   tryHydrateScrapedAdsFromAdsCache,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
+import { generateAlertsForCompetitor } from "@/lib/alerts/generate-alerts-for-competitor";
 import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
+import { getLatestScrapeBatchId } from "@/lib/scrape-batches/get-latest-batch-id";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { SCRAPED_ADS_DERIVATION_SELECT, scrapedAdDerivationRowToInput, type ScrapedAdDerivationRow } from "@/lib/strategy-overview/scraped-ads-derivation-columns";
 
 /** Cap interactive recompute enrichment; cron handles the long tail. */
@@ -356,19 +359,7 @@ export function buildNoAdsFoundPayload(
   };
 }
 
-export async function getLatestScrapeBatchId(
-  supabase: SupabaseClient<Database>,
-  competitorId: string
-): Promise<string | null> {
-  const { data } = await supabase
-    .from("scrape_batches")
-    .select("id")
-    .eq("competitor_id", competitorId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data?.id ?? null;
-}
+export { getLatestScrapeBatchId } from "@/lib/scrape-batches/get-latest-batch-id";
 
 export async function loadSavedCompetitorForUser(
   supabase: SupabaseClient<Database>,
@@ -858,6 +849,46 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       sourceScrapeBatchId: batchId,
       aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
     });
+
+    void (async () => {
+      try {
+        const admin = createSupabaseAdminClient();
+        const [{ data: snapshots }, { data: priorScore }] = await Promise.all([
+          admin
+            .from("competitor_strategy_overview_snapshots")
+            .select("payload")
+            .eq("competitor_id", competitorId)
+            .eq("user_id", userId)
+            .order("computed_at", { ascending: false })
+            .limit(2),
+          admin
+            .from("competitor_activity_scores")
+            .select("score")
+            .eq("user_id", userId)
+            .eq("competitor_id", competitorId)
+            .maybeSingle(),
+        ]);
+
+        const beforeRaw = snapshots?.[1]?.payload;
+        const beforePayload =
+          beforeRaw && typeof beforeRaw === "object"
+            ? normalizeCompetitorStrategyOverviewPayload(beforeRaw as CompetitorStrategyOverviewPayload)
+            : null;
+
+        await generateAlertsForCompetitor({
+          supabase: admin,
+          userId,
+          competitorId,
+          beforePayload,
+          afterPayload: payload,
+          batchId,
+          activityScoreBefore: priorScore?.score ?? null,
+          activityScoreAfter: priorScore?.score ?? null,
+        });
+      } catch (e) {
+        console.error("[recompute] generateAlertsForCompetitor", e);
+      }
+    })();
 
     await supabase.from("funnel_flow_edges").delete().eq("competitor_id", competitorId).eq("user_id", userId);
 

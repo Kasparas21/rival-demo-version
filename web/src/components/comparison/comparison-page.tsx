@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, Download } from "lucide-react";
 
-import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
-
 import { buildComparisonDigest } from "@/lib/brand-comparison/build-comparison-digest";
 import type { BrandComparisonLlmResult } from "@/lib/brand-comparison/run-brand-comparison-llm";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
@@ -17,7 +15,9 @@ import { SideBySideStatsPanel } from "@/components/comparison/panels/side-by-sid
 import { StealableAnglesPanel } from "@/components/comparison/panels/stealable-angles-panel";
 import { TestingVelocityMatrixPanel } from "@/components/comparison/panels/testing-velocity-matrix-panel";
 import { ThreeMovesPanel } from "@/components/comparison/panels/three-moves-panel";
+import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import { ComparisonSkeleton } from "@/components/ui/feature-skeleton";
 
 export type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 
@@ -202,7 +202,7 @@ export function ComparisonPage({
 
   if (!isConfirmed) {
     return (
-      <div className="px-6 pt-8 sm:px-8 lg:px-10">
+      <div className={`${COMPETITOR_PAGE_X} pt-8`}>
         <div className="rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
           Confirm this competitor (finish discovery / sidebar sync) to load comparison data.
         </div>
@@ -212,7 +212,7 @@ export function ComparisonPage({
 
   return (
     <div className="min-h-[60vh] pb-16">
-      <div className="mx-auto w-full max-w-[1400px] px-6 pb-6 pt-8 sm:px-8 lg:px-10">
+      <div className={`${COMPETITOR_PAGE_SHELL} pb-6 pt-8`}>
         <FeatureSectionHeader
           overline="Comparison"
           title={
@@ -250,7 +250,7 @@ export function ComparisonPage({
         />
       </div>
 
-      <div className="mx-auto w-full max-w-[1400px] px-6 pb-12 pt-2 sm:px-8 lg:px-10">
+      <div className={`${COMPETITOR_PAGE_SHELL} pb-12 pt-2`}>
         {isMobile ? (
           <div className="mb-8 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             Comparison view is optimized for larger screens. Below is a mobile-friendly snapshot — open on desktop for the full
@@ -266,7 +266,7 @@ export function ComparisonPage({
         ) : null}
 
         {payloadLoading && !wsPayload && !compPayload ? (
-          <RivalLoadingBlock padded className="py-14 sm:py-16" />
+          <ComparisonSkeleton />
         ) : payloadError ? (
           <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-[14px] text-red-900">
             {payloadError}

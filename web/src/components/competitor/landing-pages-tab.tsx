@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import {
   classifyLandingPreviewEmbed,
@@ -321,7 +322,7 @@ export function LandingPagesTab({
 
   if (listLoading && !listData && !loadError) {
     return (
-      <div className="mx-auto w-full max-w-[1400px] px-6 py-6 sm:px-8 lg:px-10">
+      <div className={COMPETITOR_PAGE_SHELL}>
         <HeaderBar
           dataSince={null}
           lastScrapedAt={lastScrapedAt}
@@ -340,7 +341,7 @@ export function LandingPagesTab({
 
   if (loadError) {
     return (
-      <div className="mx-auto max-w-[1400px] px-6 py-6 sm:px-8 lg:px-10">
+      <div className={`${COMPETITOR_PAGE_X} py-6`}>
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
           Failed to load: {loadError}
           <button type="button" className="mt-2 block text-[12px] font-semibold underline" onClick={() => void refetchList()}>
@@ -353,7 +354,7 @@ export function LandingPagesTab({
 
   if (rows.length === 0) {
     return (
-      <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-center px-6 py-24 text-center sm:px-8 lg:px-10">
+      <div className={`flex w-full flex-col items-center justify-center ${COMPETITOR_PAGE_X} py-24 text-center`}>
         <Globe className="mb-4 h-12 w-12 text-slate-300" />
         <p className="max-w-md text-[14px] leading-relaxed text-slate-600">
           No landing pages detected yet. Try scraping more ads or wait for the next weekly update.
@@ -363,7 +364,7 @@ export function LandingPagesTab({
   }
 
   return (
-    <div className="relative mx-auto w-full max-w-[1400px] px-6 py-6 sm:px-8 lg:px-10">
+    <div className={`relative ${COMPETITOR_PAGE_SHELL}`}>
       <CacheRevalidatingDot show={Boolean((listValidating && listData) || (adsValidating && adsPayload))} />
       <HeaderBar
         dataSince={dataSince}
@@ -629,7 +630,7 @@ function PreviewPane({
   const viewportH = isMobile ? PREVIEW_MOBILE.outerH : desktopChromeH * desktopScale;
 
   return (
-    <div className="flex w-full max-w-[1220px] flex-col items-stretch">
+    <div className="flex w-full flex-col items-stretch">
       <div className="mb-4 flex w-full flex-wrap items-center gap-2">
         <div
           className="inline-flex shrink-0 rounded-[10px] border border-slate-200/90 bg-slate-100/95 p-0.5"
