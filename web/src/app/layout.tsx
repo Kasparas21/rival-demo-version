@@ -44,11 +44,20 @@ export const metadata: Metadata = {
     siteName: "Spy Rival",
     title: "Spy Rival | AI Competitor Ad Intelligence",
     description: siteDescription,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Spy Rival — AI Competitor Ad Intelligence",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Spy Rival | AI Competitor Ad Intelligence",
     description: siteDescription,
+    images: ["/twitter-image"],
   },
   robots: {
     index: true,
