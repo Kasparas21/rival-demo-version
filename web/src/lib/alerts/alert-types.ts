@@ -1,4 +1,4 @@
-import { platformLabel } from "@/components/competitor/tests-timeline/timeline-helpers";
+import { platformLabel } from "@/lib/platforms/platform-label";
 
 export type AlertType =
   | "new_angle"

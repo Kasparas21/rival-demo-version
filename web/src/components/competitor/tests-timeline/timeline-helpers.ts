@@ -1,4 +1,5 @@
 import { COMPARISON_PLATFORM_ORDER } from "@/components/comparison/platform-icon";
+export { PLATFORM_LABELS, platformLabel } from "@/lib/platforms/platform-label";
 
 import type { TimelineAd, TimelineSort, TimelineTick, TimelineZoom } from "./timeline-types";
 
@@ -66,20 +67,6 @@ export function barToneClasses(tone: BarTone): string {
   }
 }
 
-export const PLATFORM_LABELS: Record<string, string> = {
-  meta: "Meta",
-  google: "Google",
-  tiktok: "TikTok",
-  linkedin: "LinkedIn",
-  pinterest: "Pinterest",
-  snapchat: "Snapchat",
-  youtube: "YouTube",
-  microsoft: "Microsoft",
-};
-
-export function platformLabel(p: string): string {
-  return PLATFORM_LABELS[p] ?? p.charAt(0).toUpperCase() + p.slice(1);
-}
 
 export function platformSortIndex(p: string): number {
   const i = (ALL_PLATFORMS as readonly string[]).indexOf(p);
