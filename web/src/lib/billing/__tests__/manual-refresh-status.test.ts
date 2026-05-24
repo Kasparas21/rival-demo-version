@@ -12,6 +12,8 @@ function proBilling(): BillingEntitlement {
     planName: "Pro",
     polarProductId: null,
     polarCustomerId: null,
+    polarSubscriptionId: null,
+    hasPolarBillingRecord: false,
     trialEnd: null,
     currentPeriodEnd: null,
     cancelAtPeriodEnd: false,

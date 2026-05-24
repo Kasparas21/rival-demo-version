@@ -22,6 +22,8 @@ export type BillingEntitlement = {
   planName: string;
   polarProductId: string | null;
   polarCustomerId: string | null;
+  polarSubscriptionId: string | null;
+  hasPolarBillingRecord: boolean;
   trialEnd: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
@@ -141,7 +143,7 @@ const CANCELED_STATUSES = new Set(["canceled", "cancelled", "ended", "incomplete
 export function subscriptionStatusBadge(
   billing: Pick<
     BillingEntitlement,
-    "status" | "planTier" | "isUnlimited" | "cancelAtPeriodEnd" | "hasAccess" | "polarProductId"
+    "status" | "planTier" | "isUnlimited" | "cancelAtPeriodEnd" | "hasAccess" | "polarProductId" | "hasPolarBillingRecord"
   >,
 ): SubscriptionStatusBadge {
   if (billing.isUnlimited) {
@@ -170,7 +172,7 @@ export function subscriptionStatusBadge(
     return { label: "Past due", tone: "amber" };
   }
 
-  if (billing.planTier === "free_trial" && !billing.polarProductId) {
+  if (billing.planTier === "free_trial" && !billing.polarProductId && !billing.hasPolarBillingRecord) {
     return { label: "Free trial", tone: "sky" };
   }
 
@@ -197,9 +199,37 @@ export function subscriptionStatusBadgeClassName(tone: SubscriptionStatusBadgeTo
 }
 
 export function isBillingActivating(
-  billing: Pick<BillingEntitlement, "status" | "polarProductId" | "planTier">,
+  billing: Pick<BillingEntitlement, "status" | "polarProductId" | "planTier" | "hasPolarBillingRecord">,
 ): boolean {
-  return billing.status === "none" && !billing.polarProductId && billing.planTier === "free_trial";
+  return (
+    billing.status === "none" &&
+    !billing.polarProductId &&
+    !billing.hasPolarBillingRecord &&
+    billing.planTier === "free_trial"
+  );
+}
+
+export function hasPolarBillingRecordFromRow(row: {
+  polar_product_id?: string | null;
+  polar_customer_id?: string | null;
+  polar_subscription_id?: string | null;
+  checkout_id?: string | null;
+  status?: string | null;
+} | null | undefined): boolean {
+  if (!row) return false;
+  if (row.polar_product_id || row.polar_customer_id || row.polar_subscription_id || row.checkout_id) {
+    return true;
+  }
+  const status = row.status?.trim();
+  return Boolean(status && status !== "none");
+}
+
+/** User has or recently started a Polar subscription (incl. sync pending). */
+export function shouldUsePolarSubscriptionUi(
+  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord">,
+): boolean {
+  if (billing.isUnlimited) return false;
+  return hasActivePaidSubscription(billing) || billing.hasPolarBillingRecord;
 }
 
 /**
@@ -246,7 +276,7 @@ export async function getBillingEntitlement(
     supabase
       .from("billing_subscriptions")
       .select(
-        "status, polar_product_id, polar_product_name, polar_customer_id, trial_end, current_period_end, cancel_at_period_end, raw_payload",
+        "status, polar_product_id, polar_product_name, polar_customer_id, polar_subscription_id, checkout_id, trial_end, current_period_end, cancel_at_period_end, raw_payload",
       )
       .eq("user_id", userId)
       .maybeSingle(),
@@ -282,6 +312,8 @@ export async function getBillingEntitlement(
     planName = data?.polar_product_name?.trim() || "Complimentary (admin)";
   }
 
+  const hasPolarBillingRecord = hasPolarBillingRecordFromRow(data);
+
   return {
     hasAccess,
     status,
@@ -289,6 +321,8 @@ export async function getBillingEntitlement(
     planName,
     polarProductId: data?.polar_product_id ?? null,
     polarCustomerId: data?.polar_customer_id ?? null,
+    polarSubscriptionId: data?.polar_subscription_id ?? null,
+    hasPolarBillingRecord,
     trialEnd: data?.trial_end ?? null,
     currentPeriodEnd: data?.current_period_end ?? null,
     cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,

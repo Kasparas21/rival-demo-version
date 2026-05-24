@@ -8,10 +8,16 @@ import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competit
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import {
   buildCheckoutHref,
+  buildUpgradeToProHref,
   POLAR_BILLING_PORTAL_HREF,
-  POLAR_BILLING_UPGRADE_HREF,
 } from "@/lib/billing/checkout-url";
-import { hasActivePaidSubscription, isBillingActivating, subscriptionStatusBadge, subscriptionStatusBadgeClassName } from "@/lib/billing/entitlements";
+import {
+  hasActivePaidSubscription,
+  isBillingActivating,
+  shouldUsePolarSubscriptionUi,
+  subscriptionStatusBadge,
+  subscriptionStatusBadgeClassName,
+} from "@/lib/billing/entitlements";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 
 type ProfileState = {
@@ -53,6 +59,7 @@ type BillingState = {
   planTier: PlanTier;
   planName: string;
   polarProductId: string | null;
+  hasPolarBillingRecord: boolean;
   trialEnd: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
@@ -99,6 +106,7 @@ const emptyBilling: BillingState = {
   planTier: "free_trial",
   planName: "Free trial",
   polarProductId: null,
+  hasPolarBillingRecord: false,
   trialEnd: null,
   currentPeriodEnd: null,
   cancelAtPeriodEnd: false,
@@ -180,6 +188,7 @@ export default function SettingsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [billingSyncing, setBillingSyncing] = useState(false);
 
   const upgradeBanner = useMemo(() => {
     const status = searchParams.get("upgrade");
@@ -263,6 +272,7 @@ export default function SettingsPage() {
             planTier: u.billing.planTier ?? "free_trial",
             planName: u.billing.planName ?? "Free",
             polarProductId: u.billing.polarProductId ?? null,
+            hasPolarBillingRecord: u.billing.hasPolarBillingRecord === true,
             trialEnd: u.billing.trialEnd ?? null,
             currentPeriodEnd: u.billing.currentPeriodEnd ?? null,
             cancelAtPeriodEnd: u.billing.cancelAtPeriodEnd ?? false,
@@ -292,25 +302,47 @@ export default function SettingsPage() {
     queueMicrotask(() => void hydrate());
   }, [hydrate]);
 
-  const billingActivating = isBillingActivating(billing);
+  const billingActivating = isBillingActivating(billing) || billingSyncing;
 
   useEffect(() => {
-    if (!billingActivating || loading) return;
+    if (loading || billing.hasPolarBillingRecord || hasActivePaidSubscription(billing)) return;
 
-    let attempts = 0;
-    const maxAttempts = 10;
-    const timer = window.setInterval(() => {
-      attempts += 1;
-      void hydrate();
-      if (attempts >= maxAttempts) {
-        window.clearInterval(timer);
-      }
-    }, 3000);
+    let cancelled = false;
+    setBillingSyncing(true);
 
-    return () => window.clearInterval(timer);
-  }, [billingActivating, loading, hydrate]);
+    void fetch("/api/billing/sync-subscription", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { synced?: boolean }) => {
+        if (!cancelled && json.synced) void hydrate();
+      })
+      .catch(() => {
+        /* ignore */
+      })
+      .finally(() => {
+        if (!cancelled) setBillingSyncing(false);
+      });
 
-  const statusBadge = useMemo(() => subscriptionStatusBadge(billing), [billing]);
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, billing.hasPolarBillingRecord, billing.planTier, billing.status, billing.isUnlimited, hydrate]);
+
+  const upgradeToProHref = useMemo(
+    () =>
+      buildUpgradeToProHref({
+        planTier: billing.planTier,
+        status: billing.status,
+        isUnlimited: billing.isUnlimited,
+      }),
+    [billing.planTier, billing.status, billing.isUnlimited],
+  );
+
+  const statusBadge = useMemo(() => {
+    if (billingActivating) {
+      return { label: "Activating", tone: "amber" as const };
+    }
+    return subscriptionStatusBadge(billing);
+  }, [billing, billingActivating]);
 
   const applyDevPlan = async (plan: string | null) => {
     setDevPlanSaving(true);
@@ -451,19 +483,18 @@ export default function SettingsPage() {
       };
     }
 
-    const paidPolar = hasActivePaidSubscription(billing);
-    const hasPolarRecord = Boolean(billing.polarProductId) && billing.status !== "none";
+    const polarUi = shouldUsePolarSubscriptionUi(billing) || billingSyncing;
     const cancelScheduled = billing.cancelAtPeriodEnd && (billing.status === "active" || billing.status === "trialing");
 
     return {
-      showCheckout: !paidPolar && !hasPolarRecord,
-      showPolarPortal: paidPolar || hasPolarRecord,
-      showUpgradeToPro: paidPolar && billing.planTier === "starter",
-      showManage: paidPolar || hasPolarRecord,
-      showCancel: paidPolar && !cancelScheduled,
+      showCheckout: !polarUi,
+      showPolarPortal: polarUi,
+      showUpgradeToPro: polarUi && billing.planTier !== "pro",
+      showManage: polarUi,
+      showCancel: hasActivePaidSubscription(billing) && !cancelScheduled,
       cancelScheduled,
     };
-  }, [billing]);
+  }, [billing, billingSyncing]);
 
   return (
     <div className="mx-auto max-w-[720px] px-6 py-10 pb-16">
@@ -751,42 +782,13 @@ export default function SettingsPage() {
                   Start 7-day free trial — Starter
                 </a>
                 <a
-                  href={buildCheckoutHref("pro")}
+                  href={upgradeToProHref}
                   className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
-                >
-                  Pro
-                </a>
-              </div>
-            ) : null}
-
-            {subscriptionActions.showUpgradeToPro ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                <a
-                  href={POLAR_BILLING_UPGRADE_HREF}
-                  className="inline-flex items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
                 >
                   Upgrade to Pro
                 </a>
-                {subscriptionActions.showManage ? (
-                  <a
-                    href={POLAR_BILLING_PORTAL}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
-                  >
-                    Manage subscription
-                    <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
-                  </a>
-                ) : null}
-                {subscriptionActions.showCancel ? (
-                  <a
-                    href={POLAR_BILLING_PORTAL}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
-                  >
-                    Cancel subscription
-                    <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
-                  </a>
-                ) : null}
               </div>
-            ) : subscriptionActions.showManage && !subscriptionActions.showUpgradeToPro ? (
+            ) : subscriptionActions.showManage ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <a
                   href={POLAR_BILLING_PORTAL}
@@ -795,6 +797,14 @@ export default function SettingsPage() {
                   Manage subscription
                   <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
                 </a>
+                {subscriptionActions.showUpgradeToPro ? (
+                  <a
+                    href={upgradeToProHref}
+                    className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
+                  >
+                    Upgrade to Pro
+                  </a>
+                ) : null}
                 {subscriptionActions.showCancel ? (
                   <a
                     href={POLAR_BILLING_PORTAL}

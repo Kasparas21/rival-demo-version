@@ -74,6 +74,8 @@ export async function GET() {
       planTier: billing.planTier,
       planName: billing.planName,
       polarProductId: billing.polarProductId,
+      polarSubscriptionId: billing.polarSubscriptionId,
+      hasPolarBillingRecord: billing.hasPolarBillingRecord,
       trialEnd: billing.trialEnd,
       currentPeriodEnd: billing.currentPeriodEnd,
       cancelAtPeriodEnd: billing.cancelAtPeriodEnd,

@@ -18,6 +18,7 @@ function billing(overrides: Record<string, unknown> = {}) {
     cancelAtPeriodEnd: false,
     hasAccess: true,
     polarProductId: null,
+    hasPolarBillingRecord: false,
     ...overrides,
   };
 }
@@ -78,9 +79,21 @@ describe("subscriptionStatusBadgeClassName", () => {
 
 describe("isBillingActivating", () => {
   it("detects post-checkout activation window", () => {
-    expect(isBillingActivating(billing())).toBe(true);
     expect(
-      isBillingActivating(billing({ status: "active", planTier: "starter", polarProductId: "starter-m" })),
+      isBillingActivating({
+        status: "none",
+        polarProductId: null,
+        planTier: "free_trial",
+        hasPolarBillingRecord: false,
+      }),
+    ).toBe(true);
+    expect(
+      isBillingActivating({
+        status: "active",
+        polarProductId: "starter-m",
+        planTier: "starter",
+        hasPolarBillingRecord: true,
+      }),
     ).toBe(false);
   });
 });
