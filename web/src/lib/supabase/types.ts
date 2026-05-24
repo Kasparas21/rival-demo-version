@@ -19,6 +19,8 @@ export type Database = {
           company_url: string | null;
           company_role: string | null;
           onboarding_completed: boolean;
+          weekly_digest_opted_out: boolean;
+          last_weekly_digest_sent_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -31,6 +33,8 @@ export type Database = {
           company_url?: string | null;
           company_role?: string | null;
           onboarding_completed?: boolean;
+          weekly_digest_opted_out?: boolean;
+          last_weekly_digest_sent_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -43,6 +47,8 @@ export type Database = {
           company_url?: string | null;
           company_role?: string | null;
           onboarding_completed?: boolean;
+          weekly_digest_opted_out?: boolean;
+          last_weekly_digest_sent_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -304,6 +310,36 @@ export type Database = {
           saved_at?: string;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      weekly_digest_sends: {
+        Row: {
+          id: string;
+          user_id: string;
+          sent_at: string;
+          competitor_count: number;
+          change_count: number;
+          resend_batch_id: string | null;
+          test_send: boolean;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          sent_at?: string;
+          competitor_count?: number;
+          change_count?: number;
+          resend_batch_id?: string | null;
+          test_send?: boolean;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          sent_at?: string;
+          competitor_count?: number;
+          change_count?: number;
+          resend_batch_id?: string | null;
+          test_send?: boolean;
         };
         Relationships: [];
       };
