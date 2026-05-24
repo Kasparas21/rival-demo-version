@@ -5,6 +5,11 @@ import { z } from "zod";
 import type { Database, Json } from "@/lib/supabase/types";
 import { anthropicHaiku, HAIKU_MODEL } from "@/lib/llm/anthropic";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
+import {
+  SCRAPED_ADS_DERIVATION_SELECT,
+  scrapedAdDerivationRowToInput,
+  type ScrapedAdDerivationRow,
+} from "@/lib/strategy-overview/scraped-ads-derivation-columns";
 
 /**
  * Parse JSON that may be truncated mid-array. Returns valid leading objects.
@@ -592,4 +597,59 @@ export async function enrichScrapedAdsIfNeeded(
     failedBatch,
     usageCostUsd,
   };
+}
+
+export type EnrichScrapedAdsStats = Awaited<ReturnType<typeof enrichScrapedAdsIfNeeded>>;
+
+/** Load every pending/failed ad for a competitor and enrich in LLM batches (15 ads per batch). */
+export async function enrichAllPendingScrapedAdsForCompetitor(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  competitorId: string,
+  opts?: {
+    beforeBatch?: () => Promise<boolean>;
+    afterBatch?: () => Promise<void>;
+  },
+): Promise<EnrichScrapedAdsStats> {
+  const { data: adsRows, error: adsErr } = await supabase
+    .from("scraped_ads")
+    .select(SCRAPED_ADS_DERIVATION_SELECT)
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .eq("is_active", true)
+    .or("ai_enrichment_status.is.null,ai_enrichment_status.eq.pending,ai_enrichment_status.eq.failed")
+    .order("created_at", { ascending: true });
+
+  if (adsErr) {
+    console.error("[enrichAllPending] load scraped_ads", adsErr.message);
+    return {
+      enriched: 0,
+      skipped: true,
+      total: 0,
+      needsEnrichment: 0,
+      skippedNoText: 0,
+      failedInvalid: 0,
+      failedBatch: 0,
+      usageCostUsd: 0,
+    };
+  }
+
+  const inputs = ((adsRows ?? []) as ScrapedAdDerivationRow[]).map(scrapedAdDerivationRowToInput);
+  if (inputs.length === 0) {
+    return {
+      enriched: 0,
+      skipped: false,
+      total: 0,
+      needsEnrichment: 0,
+      skippedNoText: 0,
+      failedInvalid: 0,
+      failedBatch: 0,
+      usageCostUsd: 0,
+    };
+  }
+
+  return enrichScrapedAdsIfNeeded(supabase, userId, competitorId, inputs, {
+    beforeBatch: opts?.beforeBatch,
+    afterBatch: opts?.afterBatch,
+  });
 }

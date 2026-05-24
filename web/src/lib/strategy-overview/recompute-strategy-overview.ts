@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import type { Database, Json } from "@/lib/supabase/types";
-import { enrichScrapedAdsIfNeeded } from "@/lib/strategy-overview/adEnrichment";
+import { enrichAllPendingScrapedAdsForCompetitor } from "@/lib/strategy-overview/adEnrichment";
 import type {
   CompetitorStrategyOverviewPayload,
   DerivationQuality,
@@ -26,8 +26,7 @@ import {
 } from "@/lib/strategy-overview/active-ads-fingerprint";
 import { SCRAPED_ADS_DERIVATION_SELECT, scrapedAdDerivationRowToInput, type ScrapedAdDerivationRow } from "@/lib/strategy-overview/scraped-ads-derivation-columns";
 
-/** Cap interactive recompute enrichment; cron handles the long tail. */
-const INTERACTIVE_ENRICHMENT_MAX_ADS = 30;
+/** Post-scrape recompute enriches all pending ads in batches (no separate polling cron). */
 
 /**
  * Bump this string any time the spend formula, derivation logic, output schema,
@@ -690,7 +689,6 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     const rowList = (adsRows ?? []) as ScrapedAdDerivationRow[];
     await updateLockProgress(supabase, competitorId, token, { total_ads: rowList.length });
 
-    let enrichInputs: ScrapedAdInput[] = rowList.map(scrapedAdDerivationRowToInput);
     if (refreshAdEnrichment && rowList.length > 0) {
       const ids = rowList.map((r) => r.id);
       await supabase.from("ad_enrichment_log").delete().in("scraped_ad_id", ids);
@@ -704,21 +702,11 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         })
         .in("id", ids)
         .eq("user_id", userId);
-      enrichInputs = rowList.map((r) =>
-        scrapedAdDerivationRowToInput({
-          ...r,
-          ai_extracted_angle: null,
-          funnel_stage: null,
-          ai_extracted_voice_tone: null,
-          ai_enrichment_status: "pending",
-        })
-      );
     }
 
-    const enrichStats = await enrichScrapedAdsIfNeeded(supabase, userId, competitorId, enrichInputs, {
+    const enrichStats = await enrichAllPendingScrapedAdsForCompetitor(supabase, userId, competitorId, {
       beforeBatch: () => isRecomputeLockOwner(supabase, competitorId, token),
       afterBatch: () => updateLockProgress(supabase, competitorId, token, {}),
-      maxAdsToProcess: INTERACTIVE_ENRICHMENT_MAX_ADS,
     });
     aiCostUsdTotal += enrichStats.usageCostUsd;
     console.log(
