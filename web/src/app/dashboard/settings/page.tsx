@@ -11,7 +11,7 @@ import {
   POLAR_BILLING_PORTAL_HREF,
   POLAR_BILLING_UPGRADE_HREF,
 } from "@/lib/billing/checkout-url";
-import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import { hasActivePaidSubscription, isBillingActivating, subscriptionStatusBadge, subscriptionStatusBadgeClassName } from "@/lib/billing/entitlements";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 
 type ProfileState = {
@@ -148,7 +148,8 @@ function formatDate(value: string | null): string {
   }).format(new Date(value));
 }
 
-function labelStatus(status: string): string {
+function labelStatus(status: string, activating: boolean): string {
+  if (activating) return "Activating…";
   if (status === "none") return "No active subscription";
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -290,6 +291,26 @@ export default function SettingsPage() {
   useEffect(() => {
     queueMicrotask(() => void hydrate());
   }, [hydrate]);
+
+  const billingActivating = isBillingActivating(billing);
+
+  useEffect(() => {
+    if (!billingActivating || loading) return;
+
+    let attempts = 0;
+    const maxAttempts = 10;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      void hydrate();
+      if (attempts >= maxAttempts) {
+        window.clearInterval(timer);
+      }
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [billingActivating, loading, hydrate]);
+
+  const statusBadge = useMemo(() => subscriptionStatusBadge(billing), [billing]);
 
   const applyDevPlan = async (plan: string | null) => {
     setDevPlanSaving(true);
@@ -616,7 +637,10 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Subscription</h2>
               <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[#52525b]">
-                Status: <span className="font-semibold text-[#1a1a2e]">{labelStatus(billing.status)}</span>
+                Status:{" "}
+                <span className="font-semibold text-[#1a1a2e]">
+                  {labelStatus(billing.status, billingActivating)}
+                </span>
                 {billing.isUnlimited ? (
                   <> · Complimentary admin access — full product, no paywall.</>
                 ) : (
@@ -632,7 +656,6 @@ export default function SettingsPage() {
               </p>
               <p className="mt-2 text-[12px] text-[#71717a]">
                 Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span>
-                <span className="text-[#a1a1aa]"> ({billing.planTier})</span>
               </p>
               {!billing.isUnlimited ? (
                 <p className="mt-2 text-[11px] leading-relaxed text-[#a1a1aa]">
@@ -642,15 +665,9 @@ export default function SettingsPage() {
               ) : null}
             </div>
             <span
-              className={`w-fit rounded-full px-3 py-1 text-[11px] font-semibold ${
-                billing.isUnlimited
-                  ? "bg-sky-100 text-sky-800"
-                  : billing.hasAccess
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-amber-100 text-amber-700"
-              }`}
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ${subscriptionStatusBadgeClassName(statusBadge.tone)}`}
             >
-              {billing.isUnlimited ? "Admin access" : billing.hasAccess ? "Access enabled" : "Subscription required"}
+              {statusBadge.label}
             </span>
           </div>
 
@@ -737,7 +754,7 @@ export default function SettingsPage() {
                   href={buildCheckoutHref("pro")}
                   className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
                 >
-                  Start 7-day free trial — Pro
+                  Pro
                 </a>
               </div>
             ) : null}
@@ -818,7 +835,8 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Delete account</h2>
           <p className="mt-1 text-[13px] leading-relaxed text-[#71717a]">
-            Permanently removes your workspace and all data. Cancel your subscription first if you have one.
+            Permanently removes your workspace, billing profile, and all data. Any active subscription is canceled in
+            Polar automatically.
           </p>
           <button
             type="button"

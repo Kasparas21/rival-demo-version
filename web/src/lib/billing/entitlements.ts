@@ -129,6 +129,79 @@ export function hasActivePaidSubscription(
   );
 }
 
+export type SubscriptionStatusBadgeTone = "green" | "sky" | "amber" | "red" | "gray";
+
+export type SubscriptionStatusBadge = {
+  label: string;
+  tone: SubscriptionStatusBadgeTone;
+};
+
+const CANCELED_STATUSES = new Set(["canceled", "cancelled", "ended", "incomplete_expired", "unpaid"]);
+
+export function subscriptionStatusBadge(
+  billing: Pick<
+    BillingEntitlement,
+    "status" | "planTier" | "isUnlimited" | "cancelAtPeriodEnd" | "hasAccess" | "polarProductId"
+  >,
+): SubscriptionStatusBadge {
+  if (billing.isUnlimited) {
+    return { label: "Admin access", tone: "sky" };
+  }
+
+  if (
+    billing.cancelAtPeriodEnd &&
+    (billing.status === "active" || billing.status === "trialing")
+  ) {
+    return { label: "Canceling", tone: "amber" };
+  }
+
+  if (hasActivePaidSubscription(billing)) {
+    if (billing.status === "trialing") {
+      return { label: "Trial active", tone: "sky" };
+    }
+    return { label: "Active", tone: "green" };
+  }
+
+  if (CANCELED_STATUSES.has(billing.status)) {
+    return { label: "Canceled", tone: "red" };
+  }
+
+  if (billing.status === "past_due") {
+    return { label: "Past due", tone: "amber" };
+  }
+
+  if (billing.planTier === "free_trial" && !billing.polarProductId) {
+    return { label: "Free trial", tone: "sky" };
+  }
+
+  if (!billing.hasAccess) {
+    return { label: "Subscription required", tone: "amber" };
+  }
+
+  return { label: "Free trial", tone: "sky" };
+}
+
+export function subscriptionStatusBadgeClassName(tone: SubscriptionStatusBadgeTone): string {
+  switch (tone) {
+    case "green":
+      return "bg-emerald-100 text-emerald-800";
+    case "sky":
+      return "bg-sky-100 text-sky-800";
+    case "amber":
+      return "bg-amber-100 text-amber-800";
+    case "red":
+      return "bg-red-100 text-red-800";
+    case "gray":
+      return "bg-zinc-100 text-zinc-700";
+  }
+}
+
+export function isBillingActivating(
+  billing: Pick<BillingEntitlement, "status" | "polarProductId" | "planTier">,
+): boolean {
+  return billing.status === "none" && !billing.polarProductId && billing.planTier === "free_trial";
+}
+
 /**
  * Post-onboarding plan picker (step 6 / choose-plan).
  * Free-trial tier still has `hasAccess` for product features, but must pick Starter or Pro to subscribe.

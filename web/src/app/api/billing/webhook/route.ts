@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
 import { getPolarWebhookSecret, isKnownPolarProductId } from "@/lib/billing/config";
-import { resolvePlanTier } from "@/lib/billing/entitlements";
 import {
-  recordTesterInviteRedemption,
-} from "@/lib/billing/tester-invite";
+  jsonSafe,
+  recordTesterInviteFromSubscription,
+  resolveUserIdForSubscription,
+  upsertPolarSubscription,
+} from "@/lib/billing/sync-polar-subscription";
 import {
   PolarWebhookSignatureError,
   verifyPolarWebhookPayload,
@@ -21,16 +23,6 @@ type PolarWebhookPayload = {
   data?: unknown;
 };
 
-function jsonSafe(value: unknown): Json {
-  return JSON.parse(JSON.stringify(value)) as Json;
-}
-
-function iso(value: Date | string | null | undefined): string | null {
-  if (!value) return null;
-  if (value instanceof Date) return value.toISOString();
-  return value;
-}
-
 function stringMetadataValue(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (typeof value === "number" || typeof value === "boolean") return String(value);
@@ -40,42 +32,6 @@ function stringMetadataValue(value: unknown): string | null {
 function asSubscription(data: unknown): Subscription | null {
   if (!data || typeof data !== "object") return null;
   return data as Subscription;
-}
-
-function userIdFromSubscription(subscription: Subscription): string | null {
-  return (
-    stringMetadataValue(subscription.metadata?.user_id) ??
-    stringMetadataValue(subscription.customer?.externalId) ??
-    stringMetadataValue(subscription.customer?.metadata?.user_id)
-  );
-}
-
-async function resolveUserIdForSubscription(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  subscription: Subscription,
-): Promise<string | null> {
-  const direct = userIdFromSubscription(subscription);
-  if (direct) return direct;
-
-  if (subscription.customerId) {
-    const { data } = await admin
-      .from("billing_subscriptions")
-      .select("user_id")
-      .eq("polar_customer_id", subscription.customerId)
-      .maybeSingle();
-    if (data?.user_id) return data.user_id;
-  }
-
-  if (subscription.id) {
-    const { data } = await admin
-      .from("billing_subscriptions")
-      .select("user_id")
-      .eq("polar_subscription_id", subscription.id)
-      .maybeSingle();
-    if (data?.user_id) return data.user_id;
-  }
-
-  return null;
 }
 
 function eventIdFromRequest(headers: Headers, rawBody: string, payload: PolarWebhookPayload): string {
@@ -183,61 +139,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, ignored: true, reason: "missing_user_id" });
     }
 
-    const planTier = resolvePlanTier({
-      status: subscription.status,
-      polarProductId: subscription.productId,
-      rawPayload: subscription,
-      applyDevOverride: false,
+    const { error } = await upsertPolarSubscription(admin, subscription, userId, {
+      lastWebhookEventId: eventId,
     });
 
-    const mergedPayload = {
-      ...(typeof subscription === "object" && subscription !== null ? subscription : {}),
-      plan_tier: planTier,
-    };
-
-    const { error } = await admin.from("billing_subscriptions").upsert(
-      {
-        user_id: userId,
-        polar_customer_id: subscription.customerId,
-        polar_subscription_id: subscription.id,
-        polar_product_id: subscription.productId,
-        polar_product_name: subscription.product?.name ?? null,
-        status: subscription.status,
-        trial_start: iso(subscription.trialStart),
-        trial_end: iso(subscription.trialEnd),
-        current_period_start: iso(subscription.currentPeriodStart),
-        current_period_end: iso(subscription.currentPeriodEnd),
-        cancel_at_period_end: subscription.cancelAtPeriodEnd,
-        canceled_at: iso(subscription.canceledAt),
-        started_at: iso(subscription.startedAt),
-        ends_at: iso(subscription.endsAt),
-        ended_at: iso(subscription.endedAt),
-        checkout_id: subscription.checkoutId,
-        last_webhook_event_id: eventId,
-        raw_payload: jsonSafe(mergedPayload),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
-
     if (error) {
-      console.error("[polar-webhook] billing_subscriptions upsert", error.message);
-      return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+      console.error("[polar-webhook] billing_subscriptions upsert", error);
+      return NextResponse.json({ ok: false, error }, { status: 500 });
     }
 
-    const inviteCode = stringMetadataValue(subscription.metadata?.invite_code);
-    const source = stringMetadataValue(subscription.metadata?.source);
-    if (source === "rival_tester_invite" && inviteCode) {
-      try {
-        await recordTesterInviteRedemption(admin, {
-          inviteCode,
-          userId,
-          polarSubscriptionId: subscription.id,
-        });
-      } catch (redemptionErr) {
-        console.error("[polar-webhook] tester invite redemption", redemptionErr);
-      }
-    }
+    await recordTesterInviteFromSubscription(admin, subscription, userId);
 
     const eventError = await recordWebhookEvent(admin, eventId, payload.type, rawPayload);
     if (eventError) {

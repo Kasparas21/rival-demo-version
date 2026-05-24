@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { getBillingEntitlement, hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import { deletePolarCustomerForUser } from "@/lib/billing/delete-polar-customer";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-/** POST — permanently delete the authenticated user and cascaded workspace data. */
+/** POST — permanently delete the authenticated user, Polar customer, and cascaded workspace data. */
 export async function POST(req: Request) {
   const supabase = await createSupabaseServerClient();
   const {
@@ -28,19 +28,25 @@ export async function POST(req: Request) {
     );
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
-  if (
-    hasActivePaidSubscription(billing) &&
-    !billing.cancelAtPeriodEnd &&
-    billing.planTier !== "admin"
-  ) {
+  const { data: billingRow } = await supabase
+    .from("billing_subscriptions")
+    .select("polar_customer_id, polar_subscription_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const polarResult = await deletePolarCustomerForUser({
+    userId: user.id,
+    polarCustomerId: billingRow?.polar_customer_id,
+    polarSubscriptionId: billingRow?.polar_subscription_id,
+  });
+
+  if (!polarResult.ok) {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          "Cancel your subscription first (Manage subscription in Settings), then delete your account.",
+        error: `Could not remove billing profile: ${polarResult.error}`,
       },
-      { status: 409 },
+      { status: 502 },
     );
   }
 
