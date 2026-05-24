@@ -478,7 +478,6 @@ export default function SettingsPage() {
         showPolarPortal: false,
         showUpgradeToPro: false,
         showManage: false,
-        showCancel: false,
         cancelScheduled: false,
       };
     }
@@ -491,7 +490,6 @@ export default function SettingsPage() {
       showPolarPortal: polarUi,
       showUpgradeToPro: polarUi && billing.planTier !== "pro",
       showManage: polarUi,
-      showCancel: hasActivePaidSubscription(billing) && !cancelScheduled,
       cancelScheduled,
     };
   }, [billing, billingSyncing]);
@@ -805,15 +803,6 @@ export default function SettingsPage() {
                     Upgrade to Pro
                   </a>
                 ) : null}
-                {subscriptionActions.showCancel ? (
-                  <a
-                    href={POLAR_BILLING_PORTAL}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
-                  >
-                    Cancel subscription
-                    <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
-                  </a>
-                ) : null}
               </div>
             ) : null}
 
@@ -822,8 +811,8 @@ export default function SettingsPage() {
                 <a href={POLAR_BILLING_PORTAL} className="font-medium text-[#52525b] underline underline-offset-2 hover:text-[#1a1a2e]">
                   View invoices &amp; receipts
                 </a>
-                {" "}in Polar&apos;s billing portal. Upgrade to Pro charges only the prorated difference for the rest of
-                this billing period.
+                {" "}or cancel in Polar&apos;s billing portal via Manage subscription. Upgrade to Pro charges only the
+                prorated difference for the rest of this billing period.
               </p>
             ) : null}
           </div>
