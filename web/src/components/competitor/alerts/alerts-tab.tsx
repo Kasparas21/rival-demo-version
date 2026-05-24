@@ -29,6 +29,8 @@ import {
   type AlertType,
 } from "@/lib/alerts/alert-types";
 import type { AlertRuleRow } from "@/lib/alerts/seed-default-rules";
+import { buildUpgradeToProHref } from "@/lib/billing/checkout-url";
+import type { PlanTier } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -36,6 +38,9 @@ type Props = {
   competitorLabel?: string;
   allowAlertRules?: boolean;
   allowAlertEmail?: boolean;
+  billingPlanTier?: PlanTier;
+  billingStatus?: string;
+  billingIsUnlimited?: boolean;
   onUnreadChange?: (count: number) => void;
   fetchEnabled?: boolean;
 };
@@ -61,9 +66,21 @@ export function AlertsTab({
   competitorLabel,
   allowAlertRules = false,
   allowAlertEmail = false,
+  billingPlanTier = "free_trial",
+  billingStatus = "none",
+  billingIsUnlimited = false,
   onUnreadChange,
   fetchEnabled = true,
 }: Props) {
+  const upgradeToProHref = useMemo(
+    () =>
+      buildUpgradeToProHref({
+        planTier: billingPlanTier,
+        status: billingStatus,
+        isUnlimited: billingIsUnlimited,
+      }),
+    [billingPlanTier, billingStatus, billingIsUnlimited],
+  );
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -326,7 +343,7 @@ export function AlertsTab({
             {!allowAlertRules ? (
               <div className="border-b border-white/45 bg-amber-50/70 px-5 py-3 text-[12px] text-amber-900 backdrop-blur-sm">
                 Starter includes default alerts in your feed.{" "}
-                <Link href="/checkout" className="font-semibold underline">
+                <Link href={upgradeToProHref} className="font-semibold underline">
                   Upgrade to Pro
                 </Link>{" "}
                 to customize rules, thresholds, and email notifications.

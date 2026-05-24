@@ -14,7 +14,7 @@ type Props = {
 export function OnboardingPlanPicker({ dashboardNext, testerInviteActive = false }: Props) {
   return (
     <RivalVideoShell footerTint="light">
-      <div className="w-full max-w-3xl px-1 sm:px-2">
+      <div className="w-full max-w-5xl px-1 sm:px-2">
         <div className="mb-8 flex justify-center">
           <Link
             href="/"

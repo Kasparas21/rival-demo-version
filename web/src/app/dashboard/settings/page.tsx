@@ -1,17 +1,20 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
-import { buildCheckoutHref } from "@/lib/billing/checkout-url";
+import {
+  buildCheckoutHref,
+  POLAR_BILLING_PORTAL_HREF,
+  POLAR_BILLING_UPGRADE_HREF,
+} from "@/lib/billing/checkout-url";
 import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 
 type ProfileState = {
-  full_name: string;
   company_name: string;
   company_url: string;
   email: string;
@@ -150,12 +153,12 @@ function labelStatus(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const POLAR_BILLING_PORTAL_HREF = "/api/billing/portal";
+const POLAR_BILLING_PORTAL = POLAR_BILLING_PORTAL_HREF;
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<ProfileState>({
-    full_name: "",
     company_name: "",
     company_url: "",
     email: "",
@@ -172,6 +175,25 @@ export default function SettingsPage() {
   const [signingOut, setSigningOut] = useState(false);
   const [devPlanSaving, setDevPlanSaving] = useState(false);
   const [devPlanError, setDevPlanError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const upgradeBanner = useMemo(() => {
+    const status = searchParams.get("upgrade");
+    const message = searchParams.get("message");
+    if (status === "success") {
+      return { kind: "success" as const, text: "Upgraded to Pro. You were charged the prorated difference for the rest of this billing period." };
+    }
+    if (status === "already_pro") {
+      return { kind: "info" as const, text: "You are already on Pro." };
+    }
+    if (status === "error" && message) {
+      return { kind: "error" as const, text: message };
+    }
+    return null;
+  }, [searchParams]);
 
   const hydrate = useCallback(async () => {
     setLoading(true);
@@ -192,7 +214,6 @@ export default function SettingsPage() {
       }
       const p = profileJson.profile;
       const next: ProfileState = {
-        full_name: p.full_name ?? "",
         company_name: p.company_name ?? "",
         company_url: p.company_url ?? "",
         email: p.email ?? "",
@@ -294,8 +315,7 @@ export default function SettingsPage() {
 
   const isDirty =
     initialProfile !== null &&
-    (profile.full_name !== initialProfile.full_name ||
-      profile.company_name !== initialProfile.company_name ||
+    (profile.company_name !== initialProfile.company_name ||
       profile.company_url !== initialProfile.company_url ||
       profile.brand_context !== initialProfile.brand_context);
 
@@ -308,7 +328,6 @@ export default function SettingsPage() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          full_name: profile.full_name,
           company_name: profile.company_name,
           company_url: profile.company_url,
           brand_context: profile.brand_context,
@@ -325,7 +344,6 @@ export default function SettingsPage() {
       }
       const p = json.profile;
       const next: ProfileState = {
-        full_name: p.full_name ?? "",
         company_name: p.company_name ?? "",
         company_url: p.company_url ?? "",
         email: p.email ?? profile.email,
@@ -356,11 +374,57 @@ export default function SettingsPage() {
     window.location.assign("/login");
   };
 
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm !== "DELETE") return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string; redirect?: string };
+      if (!res.ok || !json.ok) {
+        setDeleteError(json.error ?? "Could not delete account.");
+        return;
+      }
+      clearSidebarCompetitorsStorageForSignOut();
+      try {
+        await fetch("/auth/sign-out", { method: "POST", credentials: "same-origin" });
+      } catch {
+        /* continue */
+      }
+      await createSupabaseBrowserClient().auth.signOut();
+      window.location.assign(json.redirect ?? "/login");
+    } catch {
+      setDeleteError("Network error — try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setDeleteConfirm("");
+    setDeleteError(null);
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) return;
+    setDeleteModalOpen(false);
+    setDeleteConfirm("");
+    setDeleteError(null);
+  };
+
   const subscriptionActions = useMemo(() => {
     if (billing.isUnlimited) {
       return {
         showCheckout: false,
         showPolarPortal: false,
+        showUpgradeToPro: false,
+        showManage: false,
         showCancel: false,
         cancelScheduled: false,
       };
@@ -373,6 +437,8 @@ export default function SettingsPage() {
     return {
       showCheckout: !paidPolar && !hasPolarRecord,
       showPolarPortal: paidPolar || hasPolarRecord,
+      showUpgradeToPro: paidPolar && billing.planTier === "starter",
+      showManage: paidPolar || hasPolarRecord,
       showCancel: paidPolar && !cancelScheduled,
       cancelScheduled,
     };
@@ -414,19 +480,19 @@ export default function SettingsPage() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="full_name">
-                Full name
+              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="email">
+                Email
               </label>
               <input
-                id="full_name"
-                type="text"
-                autoComplete="name"
-                disabled={loading}
-                placeholder="Jane Smith"
-                value={profile.full_name}
-                onChange={(e) => setProfile((p) => ({ ...p, full_name: e.target.value }))}
-                className="w-full rounded-xl border border-[#e4e4e7] px-3.5 py-2.5 text-[14px] text-[#18181b] placeholder:text-[#a1a1aa] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:bg-[#fafafa] disabled:text-[#a1a1aa]"
+                id="email"
+                type="email"
+                value={profile.email}
+                readOnly
+                className="w-full cursor-not-allowed rounded-xl border border-[#e4e4e7] bg-[#f4f4f5] px-3.5 py-2.5 text-[14px] text-[#3f3f46]"
               />
+              <p className="mt-1.5 text-[11px] leading-relaxed text-[#a1a1aa]">
+                Used for login and billing receipts. Contact support to change your email.
+              </p>
             </div>
 
             <div>
@@ -483,19 +549,6 @@ export default function SettingsPage() {
                 Shown to AI features as grounding for your company. Up to 12,000 characters.
               </p>
             </div>
-
-            <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="email">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={profile.email}
-                readOnly
-                className="w-full cursor-not-allowed rounded-xl border border-[#e4e4e7] bg-[#f4f4f5] px-3.5 py-2.5 text-[14px] text-[#3f3f46]"
-              />
-            </div>
           </div>
 
           {saveError ? (
@@ -513,6 +566,48 @@ export default function SettingsPage() {
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
+            Totals from your workspace mapped to your current subscription quotas. Monthly figures use the calendar
+            month in UTC. <span className="text-[#52525b]">Ad-library refreshes</span> (
+            {formatNum(usage.adLibraryRefreshes)}) count cached platform snapshots;{" "}
+            <span className="text-[#52525b]">Scrape runs (month)</span> (
+            {formatNum(usage.adLibraryScrapeRunsThisMonth)}) are fresh Apify jobs not served from cache.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Ads processed (month, UTC)</p>
+              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
+                {formatNum(usage.scrapedAdsThisMonth)}
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
+                {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
+                {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Competitors watched</p>
+              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
+                {formatNum(usage.competitorsWatched)}
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
+                {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
+                slots remaining.
+              </p>
+            </div>
+            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">AI strategy overviews</p>
+              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
+                {formatNum(usage.aiStrategyOverviews)}
+              </p>
+              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
+                Generated summaries (token cost)—good limit target alongside ads volume.
+              </p>
+            </div>
           </div>
         </section>
 
@@ -558,6 +653,20 @@ export default function SettingsPage() {
               {billing.isUnlimited ? "Admin access" : billing.hasAccess ? "Access enabled" : "Subscription required"}
             </span>
           </div>
+
+          {upgradeBanner ? (
+            <div
+              className={`mt-4 rounded-xl border px-4 py-3 text-[12px] leading-relaxed ${
+                upgradeBanner.kind === "success"
+                  ? "border-emerald-200 bg-emerald-50/80 text-emerald-950"
+                  : upgradeBanner.kind === "error"
+                    ? "border-red-200 bg-red-50/80 text-red-950"
+                    : "border-sky-200 bg-sky-50/80 text-sky-950"
+              }`}
+            >
+              {upgradeBanner.text}
+            </div>
+          ) : null}
 
           {subscriptionActions.cancelScheduled ? (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-[12px] leading-relaxed text-amber-950">
@@ -628,23 +737,50 @@ export default function SettingsPage() {
                   href={buildCheckoutHref("pro")}
                   className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
                 >
-                  Upgrade to Pro
+                  Start 7-day free trial — Pro
                 </a>
               </div>
             ) : null}
 
-            {subscriptionActions.showPolarPortal ? (
+            {subscriptionActions.showUpgradeToPro ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <a
-                  href={POLAR_BILLING_PORTAL_HREF}
+                  href={POLAR_BILLING_UPGRADE_HREF}
+                  className="inline-flex items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
+                >
+                  Upgrade to Pro
+                </a>
+                {subscriptionActions.showManage ? (
+                  <a
+                    href={POLAR_BILLING_PORTAL}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
+                  >
+                    Manage subscription
+                    <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
+                  </a>
+                ) : null}
+                {subscriptionActions.showCancel ? (
+                  <a
+                    href={POLAR_BILLING_PORTAL}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
+                  >
+                    Cancel subscription
+                    <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
+                  </a>
+                ) : null}
+              </div>
+            ) : subscriptionActions.showManage && !subscriptionActions.showUpgradeToPro ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <a
+                  href={POLAR_BILLING_PORTAL}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
                 >
-                  {billing.planTier === "starter" ? "Upgrade to Pro" : "Manage subscription"}
+                  Manage subscription
                   <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
                 </a>
                 {subscriptionActions.showCancel ? (
                   <a
-                    href={POLAR_BILLING_PORTAL_HREF}
+                    href={POLAR_BILLING_PORTAL}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
                   >
                     Cancel subscription
@@ -654,54 +790,15 @@ export default function SettingsPage() {
               </div>
             ) : null}
 
-            {subscriptionActions.showPolarPortal ? (
+            {subscriptionActions.showManage ? (
               <p className="text-[11px] leading-relaxed text-[#a1a1aa]">
-                Opens Polar&apos;s billing portal — change plan, update payment method, or cancel there. We sync status
-                automatically after you finish in Polar.
+                <a href={POLAR_BILLING_PORTAL} className="font-medium text-[#52525b] underline underline-offset-2 hover:text-[#1a1a2e]">
+                  View invoices &amp; receipts
+                </a>
+                {" "}in Polar&apos;s billing portal. Upgrade to Pro charges only the prorated difference for the rest of
+                this billing period.
               </p>
             ) : null}
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
-            Totals from your workspace mapped to your current subscription quotas. Monthly figures use the calendar
-            month in UTC. <span className="text-[#52525b]">Ad-library refreshes</span> (
-            {formatNum(usage.adLibraryRefreshes)}) count cached platform snapshots;{" "}
-            <span className="text-[#52525b]">Scrape runs (month)</span> (
-            {formatNum(usage.adLibraryScrapeRunsThisMonth)}) are fresh Apify jobs not served from cache.
-          </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Ads processed (month, UTC)</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.scrapedAdsThisMonth)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
-                {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Competitors watched</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.competitorsWatched)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
-                slots remaining.
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">AI strategy overviews</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.aiStrategyOverviews)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                Generated summaries (token cost)—good limit target alongside ads volume.
-              </p>
-            </div>
           </div>
         </section>
 
@@ -717,7 +814,79 @@ export default function SettingsPage() {
             {signingOut ? "Signing out…" : "Sign out"}
           </button>
         </section>
+
+        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Delete account</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-[#71717a]">
+            Permanently removes your workspace and all data. Cancel your subscription first if you have one.
+          </p>
+          <button
+            type="button"
+            onClick={openDeleteModal}
+            className="mt-4 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
+          >
+            Delete my account permanently
+          </button>
+        </section>
       </div>
+
+      {deleteModalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/25 p-4 backdrop-blur-sm sm:items-center"
+          role="presentation"
+          onClick={closeDeleteModal}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-title"
+            className="w-full max-w-md rounded-2xl border border-[#ececef] bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="delete-account-title" className="text-[16px] font-semibold text-[#1a1a2e]">
+              Delete account?
+            </h2>
+            <p className="mt-2 text-[13px] leading-relaxed text-[#71717a]">
+              This cannot be undone. Type{" "}
+              <span className="font-mono font-semibold text-[#991b1b]">DELETE</span> to confirm.
+            </p>
+            <input
+              id="delete_confirm"
+              type="text"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              placeholder="DELETE"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              className="mt-4 w-full rounded-xl border border-[#e4e4e7] px-3.5 py-2.5 text-[14px] text-[#18181b] placeholder:text-[#d4d4d8] outline-none transition focus:border-[#dc2626] focus:ring-2 focus:ring-[#dc2626]/15"
+            />
+            {deleteError ? (
+              <p className="mt-3 text-[13px] font-medium text-[#b42318]" role="alert">
+                {deleteError}
+              </p>
+            ) : null}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={closeDeleteModal}
+                className="rounded-xl border border-[#e4e4e7] bg-white px-4 py-2.5 text-[13px] font-medium text-[#52525b] transition hover:bg-[#fafafa] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleting || deleteConfirm !== "DELETE"}
+                onClick={() => void handleDeleteAccount()}
+                className="rounded-xl bg-[#dc2626] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                {deleting ? "Deleting…" : "Delete account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

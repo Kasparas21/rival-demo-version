@@ -36,7 +36,7 @@ export function PostOnboardingPricingOverlay() {
       aria-modal="true"
       aria-labelledby="post-onb-pricing-title"
     >
-      <div className={`pointer-events-auto relative z-10 my-auto w-full max-w-3xl ${planPickerGlassClass}`}>
+      <div className={`pointer-events-auto relative z-10 my-auto w-full max-w-5xl ${planPickerGlassClass}`}>
         <div className="mb-5 flex justify-center sm:mb-6">
           <RivalLogoImg className="h-7 w-auto max-w-[150px] object-contain sm:h-8" />
         </div>

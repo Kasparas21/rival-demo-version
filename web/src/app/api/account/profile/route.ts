@@ -6,7 +6,7 @@ import { isPlausiblePublicHostname, normalizedWorkspaceHost } from "@/lib/onboar
 
 import type { Database } from "@/lib/supabase/types";
 
-const PATCH_PROFILE_KEYS = ["full_name", "company_name", "company_url", "avatar_url"] as const;
+const PATCH_PROFILE_KEYS = ["company_name", "company_url", "avatar_url"] as const;
 const MAX_BRAND_CONTEXT_CHARS = 12_000;
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];

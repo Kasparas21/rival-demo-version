@@ -727,7 +727,7 @@ export function OnboardingForm({
         ? "max-w-md"
         : "max-w-3xl"
       : step === STEP_CHOOSE_PLAN
-        ? "max-w-xl"
+        ? "max-w-5xl"
         : step === STEP_WORKSPACE_CHANNELS
           ? "max-w-xl"
           : "max-w-[440px]";

@@ -84,7 +84,7 @@ function BillingToggle({
   );
 }
 
-const planCardBase = "flex flex-col rounded-2xl border bg-white/50 p-5 backdrop-blur-md sm:p-6";
+const planCardBase = "flex flex-col rounded-2xl border bg-white/50 p-5 backdrop-blur-md sm:p-7";
 const planCardPopular = "border-gray-900/25 ring-1 ring-gray-900/10 shadow-[0_12px_40px_rgba(17,24,39,0.08)]";
 
 type PlanPickerContentProps = {
@@ -247,7 +247,7 @@ export function PlanPickerContent({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 text-left md:grid-cols-2 md:items-stretch">
+      <div className="mt-4 grid grid-cols-1 gap-4 text-left md:grid-cols-2 md:gap-5 md:items-stretch">
         {PLAN_OFFERS.map((offer) => {
           const price = planPriceDisplay(offer, billing);
           const checkoutHref = buildApiBillingCheckoutHref(offer.slug, billing);

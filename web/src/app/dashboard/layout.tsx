@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Trash2 } from "lucide-react";
+import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandProvider, type Brand } from "./brand-context";
@@ -189,7 +189,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     email?: string | null;
     avatar_url?: string | null;
   } | null>(null);
-  const [profileAvatarFailed, setProfileAvatarFailed] = useState(false);
   const [showWelcome, setShowWelcome] = useState(false);
   const [competitorRemoveError, setCompetitorRemoveError] = useState<string | null>(null);
   const [removingCompetitorSlug, setRemovingCompetitorSlug] = useState<string | null>(null);
@@ -351,10 +350,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     window.addEventListener(RIVAL_BRANDS_UPDATED_EVENT, onBrands);
     return () => window.removeEventListener(RIVAL_BRANDS_UPDATED_EVENT, onBrands);
   }, [refreshBrands]);
-
-  useEffect(() => {
-    setProfileAvatarFailed(false);
-  }, [userProfile?.avatar_url]);
 
   useEffect(() => {
     if (brands.length === 0) return;
@@ -911,60 +906,24 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Bottom: user identity, sign out, collapse */}
+        {/* Bottom: settings, sign out, collapse */}
         <div
           className={`shrink-0 border-t border-[#e8e8e8]/90 ${collapsed ? "overflow-visible px-3 py-3" : "px-4 py-2.5"}`}
         >
           {collapsed ? (
             <div className="flex flex-col items-center gap-2.5 overflow-visible">
-              {userProfile ? (
-                <div className="group/userdock relative z-[55] flex h-10 w-10 shrink-0 justify-center overflow-hidden rounded-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => router.push("/dashboard/settings", { scroll: false })}
-                    className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden rounded-[10px] bg-[#f4f4f5] shadow-sm ring-1 ring-[#e8e8e8]/90 transition-[transform,background-color,box-shadow] duration-150 ease-out hover:bg-white hover:ring-[color:var(--rival-accent-blue)]/45 active:scale-[0.97]"
-                    title={userProfile.full_name || userProfile.email || "Account settings"}
-                  >
-                    {userProfile.avatar_url && !profileAvatarFailed ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={userProfile.avatar_url}
-                        alt=""
-                        onError={() => setProfileAvatarFailed(true)}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center bg-[#6366f1] text-[12px] font-bold text-white">
-                        {(userProfile.full_name?.[0] ?? userProfile.email?.[0] ?? "?").toUpperCase()}
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      void handleSignOut();
-                    }}
-                    className="pointer-coarse:hidden pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[10px] bg-[#1a1a2e]/78 text-white opacity-0 shadow-inner ring-1 ring-black/15 transition-opacity duration-150 outline-none backdrop-blur-[1px] focus-visible:pointer-events-auto focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/60 motion-reduce:transition-none group-hover/userdock:pointer-events-auto group-hover/userdock:opacity-100 motion-reduce:group-hover/userdock:opacity-100"
-                    title="Sign out"
-                    aria-label="Sign out"
-                  >
-                    <LogOut className="h-[18px] w-[18px] shrink-0 drop-shadow-sm" strokeWidth={2.5} aria-hidden />
-                  </button>
-                </div>
-              ) : null}
-
-              {/* Coarse pointer (touch): sign out stays visible — no hover affordance */}
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/settings", { scroll: false })}
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[#52525b] ring-1 ring-transparent shadow-sm transition-colors hover:bg-white/85 hover:text-[color:var(--rival-primary)] hover:ring-[#e8e8e8]/80 active:scale-[0.97]"
+                title="Settings"
+              >
+                <Settings className="h-[17px] w-[17px] shrink-0" strokeWidth={2.25} />
+              </button>
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
-                className={[
-                  "size-10 shrink-0 flex items-center justify-center rounded-xl text-[#52525b]",
-                  "ring-1 ring-transparent shadow-sm transition-colors hover:bg-white/85",
-                  "hover:text-[color:var(--rival-primary)] hover:ring-[#e8e8e8]/80 active:scale-[0.97]",
-                  userProfile ? "hidden pointer-coarse:flex" : "flex",
-                ].join(" ")}
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[#52525b] ring-1 ring-transparent shadow-sm transition-colors hover:bg-white/85 hover:text-[color:var(--rival-primary)] hover:ring-[#e8e8e8]/80 active:scale-[0.97]"
                 title="Sign out"
               >
                 <LogOut className="h-[17px] w-[17px] shrink-0" strokeWidth={2.25} />
@@ -980,36 +939,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           ) : (
             <div className="space-y-1">
-              {userProfile ? (
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard/settings", { scroll: false })}
-                  className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-[#f4f4f5]"
-                  title={userProfile.full_name || userProfile.email || "Account"}
-                >
-                  {userProfile.avatar_url && !profileAvatarFailed ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={userProfile.avatar_url}
-                      alt=""
-                      onError={() => setProfileAvatarFailed(true)}
-                      className="h-7 w-7 shrink-0 rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6366f1] text-[11px] font-bold text-white">
-                      {(userProfile.full_name?.[0] ?? userProfile.email?.[0] ?? "?").toUpperCase()}
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[12px] font-medium text-[#1a1a2e]">
-                      {userProfile.full_name?.trim() || userProfile.email}
-                    </p>
-                    {userProfile.company_name ? (
-                      <p className="truncate text-[11px] text-[#71717a]">{userProfile.company_name}</p>
-                    ) : null}
-                  </div>
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard/settings", { scroll: false })}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[#52525b] transition-colors hover:bg-white/75 hover:text-[color:var(--rival-primary)]"
+              >
+                <Settings className="h-[18px] w-[18px] shrink-0" />
+                <span className="text-[14px] font-medium">Settings</span>
+              </button>
               <button
                 type="button"
                 onClick={() => void handleSignOut()}

@@ -2330,6 +2330,10 @@ function CompetitorDashboardBody({
   const [billingIsUnlimited, setBillingIsUnlimited] = useState(false);
   const [billingAllowAlertRules, setBillingAllowAlertRules] = useState(false);
   const [billingAllowAlertEmail, setBillingAllowAlertEmail] = useState(false);
+  const [billingPlanTier, setBillingPlanTier] = useState<
+    "free_trial" | "starter" | "pro" | "admin"
+  >("free_trial");
+  const [billingStatus, setBillingStatus] = useState("none");
   const [alertsUnreadCount, setAlertsUnreadCount] = useState(0);
   const [manualRefreshStatus, setManualRefreshStatus] = useState<ManualRefreshStatus | null>(null);
 
@@ -2343,6 +2347,8 @@ function CompetitorDashboardBody({
         billing?: {
           limits?: { allowManualRefresh?: boolean; allowAlertRules?: boolean; allowAlertEmail?: boolean };
           isUnlimited?: boolean;
+          planTier?: "free_trial" | "starter" | "pro" | "admin";
+          status?: string;
         };
       }) => {
         if (cancelled) return;
@@ -2350,6 +2356,8 @@ function CompetitorDashboardBody({
         setBillingIsUnlimited(j.billing?.isUnlimited === true);
         setBillingAllowAlertRules(j.billing?.limits?.allowAlertRules === true);
         setBillingAllowAlertEmail(j.billing?.limits?.allowAlertEmail === true);
+        setBillingPlanTier(j.billing?.planTier ?? "free_trial");
+        setBillingStatus(j.billing?.status ?? "none");
       })
       .catch(() => {
         if (!cancelled) {
@@ -2357,6 +2365,8 @@ function CompetitorDashboardBody({
           setBillingIsUnlimited(false);
           setBillingAllowAlertRules(false);
           setBillingAllowAlertEmail(false);
+          setBillingPlanTier("free_trial");
+          setBillingStatus("none");
         }
       });
     return () => {
@@ -5202,6 +5212,9 @@ function CompetitorDashboardBody({
             competitorLabel={competitorDisplayLabel}
             allowAlertRules={billingAllowAlertRules || billingIsUnlimited}
             allowAlertEmail={billingAllowAlertEmail || billingIsUnlimited}
+            billingPlanTier={billingPlanTier}
+            billingStatus={billingStatus}
+            billingIsUnlimited={billingIsUnlimited}
             onUnreadChange={setAlertsUnreadCount}
             fetchEnabled={navTab === "alerts"}
           />

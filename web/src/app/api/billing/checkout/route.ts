@@ -9,7 +9,9 @@ import {
   type PolarPlanSlug,
 } from "@/lib/billing/config";
 import { parseCheckoutPeriod } from "@/lib/billing/checkout-url";
-import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { buildApiBillingCheckoutHref } from "@/lib/billing/checkout-url";
+import { getBillingEntitlement, hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import { shouldRedirectCheckoutToUpgrade } from "@/lib/billing/upgrade-plan";
 import {
   friendlyPolarCheckoutError,
   shouldPrefillPolarCustomerEmail,
@@ -55,6 +57,23 @@ async function createCheckoutRedirect(request: NextRequest) {
   const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
   const plan: PolarPlanSlug = isTesterCheckout ? "pro" : planParam === "starter" ? "starter" : "pro";
   const period = isTesterCheckout ? "monthly" : parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
+
+  if (
+    shouldRedirectCheckoutToUpgrade({
+      requestedPlan: plan,
+      planTier: billing.planTier,
+      hasActivePaid: hasActivePaidSubscription(billing),
+    })
+  ) {
+    const upgradeUrl = new URL("/api/billing/upgrade", request.nextUrl.origin);
+    return NextResponse.redirect(upgradeUrl);
+  }
+
+  if (hasActivePaidSubscription(billing)) {
+    const portalUrl = new URL("/api/billing/portal", request.nextUrl.origin);
+    return NextResponse.redirect(portalUrl);
+  }
+
   const productId = polarProductIdForPlan(plan, period);
   const appUrl = getAppUrl();
   const polar = createPolarClient();
