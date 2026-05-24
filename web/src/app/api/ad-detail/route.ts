@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { isScrapedAdsUuid } from "@/lib/ad-detail/ad-id";
+import { adPreviewAnalysisSchema, type AdPreviewAnalysis } from "@/lib/ad-detail/ad-ai-analysis-types";
 import { ensureCompetitorAdsPersisted } from "@/lib/ad-library/ensure-competitor-ads-persisted";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { canRunAdPreviewAnalysis, loadAdPreviewAnalysisUsage } from "@/lib/billing/usage-quotas";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import { extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
@@ -75,6 +78,13 @@ export type AdDetailResponse = {
       test_status: string;
     };
     copy_structure?: CopyStructureResult;
+    preview_analysis?: AdPreviewAnalysis;
+    preview_analysis_computed_at?: string | null;
+    preview_analysis_quota?: {
+      used: number;
+      limit: number | null;
+      remaining: number | null;
+    };
   };
 };
 
@@ -239,7 +249,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
 
   const lpUrl = extractLandingPageUrl(ad.platform, ad.raw_payload);
 
-  const [{ data: winnerTest }, { data: copyCache }] = await Promise.all([
+  const [{ data: winnerTest }, { data: copyCache }, { data: analysisCache }] = await Promise.all([
     supabase
       .from("creative_tests")
       .select("launch_date, ad_count, test_status")
@@ -252,6 +262,12 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
       .eq("ad_id", ad.id)
       .eq("user_id", user.id)
       .maybeSingle(),
+    supabase
+      .from("ad_preview_analysis_cache")
+      .select("analysis, computed_at")
+      .eq("ad_id", ad.id)
+      .eq("user_id", user.id)
+      .maybeSingle(),
   ]);
 
   let copyStructure: CopyStructureResult | undefined;
@@ -259,6 +275,22 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     const parsed = copyStructureSchema.safeParse(copyCache.structure);
     if (parsed.success) copyStructure = parsed.data;
   }
+
+  let previewAnalysis: AdPreviewAnalysis | undefined;
+  if (analysisCache?.analysis) {
+    const parsed = adPreviewAnalysisSchema.safeParse(analysisCache.analysis);
+    if (parsed.success) {
+      previewAnalysis = parsed.data;
+      if (!copyStructure) copyStructure = parsed.data.copy_structure;
+    }
+  }
+
+  const billing = await getBillingEntitlement(supabase, user.id);
+  const usedAnalyses = await loadAdPreviewAnalysisUsage(supabase, user.id);
+  const quotaCheck = canRunAdPreviewAnalysis(billing, usedAnalyses);
+  const previewAnalysisQuota = quotaCheck.ok
+    ? { used: usedAnalyses, limit: quotaCheck.limit, remaining: quotaCheck.remaining }
+    : { used: usedAnalyses, limit: billing.limits.maxAdPreviewAnalysesPerMonth, remaining: 0 };
 
   const displayName = competitor.brand_name?.trim() || competitor.name?.trim() || "Competitor";
   const logoUrl = competitor.brand_logo_url?.trim() || competitor.logo_url?.trim() || null;
@@ -300,6 +332,9 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
       is_creative_test_winner: Boolean(winnerTest),
       creative_test: winnerTest ?? undefined,
       copy_structure: copyStructure,
+      preview_analysis: previewAnalysis,
+      preview_analysis_computed_at: analysisCache?.computed_at ?? null,
+      preview_analysis_quota: previewAnalysisQuota,
     },
   });
 }

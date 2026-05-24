@@ -10,12 +10,33 @@ import {
 } from "@/components/competitor/insights/move-filters";
 import { groupMovesByRecency, MoveCard } from "@/components/competitor/insights/move-card";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
-import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
+import { ActivityFeedSkeleton } from "@/components/ui/feature-skeleton";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
+import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { useRecomputePoll } from "@/components/competitor/recompute-poll-context";
+import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
+import { ADS_LIBRARY_UPDATED_EVENT } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 
 const COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+type ActivityFeedBootstrapJson = {
+  ok?: boolean;
+  error?: string;
+  competitor?: {
+    meta: {
+      competitorId: string;
+      name: string;
+      domain: string;
+      logoUrl: string | null;
+      lastScrapedAt: string | null;
+      lastMoveDetectionAt: string | null;
+    };
+    payload: CompetitorStrategyOverviewPayload | null;
+    snapshot_count: number;
+    recent_moves: ComparisonMoveRow[];
+    recomputing: boolean;
+  };
+};
 
 function categoryForFilter(m: ComparisonMoveRow, f: MoveFilterCategory): boolean {
   if (f === "all") return true;
@@ -41,12 +62,8 @@ type Props = {
   competitorLabel: string;
   competitorDomain: string;
   competitorId: string;
-  comparisonPayload: ComparisonPayloadJson | null;
-  comparisonPayloadLoading: boolean;
-  comparisonPayloadError: string | null;
-  refetchComparisonPayload?: () => void | Promise<void>;
-  refetchComparisonPayloadIfStale?: (maxAgeMs?: number) => void | Promise<void>;
-  /** When false, skip mount refetch (tab kept mounted but inactive). */
+  cacheDomainNorm: string;
+  lastScrapedAt?: string | null;
   fetchEnabled?: boolean;
 };
 
@@ -54,42 +71,72 @@ export function ActivityFeedTab({
   competitorLabel,
   competitorDomain,
   competitorId,
-  comparisonPayload,
-  comparisonPayloadLoading,
-  comparisonPayloadError,
-  refetchComparisonPayload,
-  refetchComparisonPayloadIfStale,
+  cacheDomainNorm,
+  lastScrapedAt = null,
   fetchEnabled = true,
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const searchParamsString = searchParams.toString();
 
+  const stamp = lastScrapedAt ?? "none";
+  const dom = cacheDomainNorm.trim().toLowerCase();
+  const cacheKey = `${dom}:activity-feed-bootstrap:v1:${stamp}`;
+
+  const { data, loading, error, refetch } = useScrapeKeyedCache<ActivityFeedBootstrapJson>({
+    cacheKey,
+    enabled: Boolean(dom && competitorDomain.trim() && fetchEnabled),
+    validateCached: (c) => c.ok === true && Boolean(c.competitor?.meta),
+    fetcher: async () => {
+      const res = await fetch(
+        `/api/competitor/activity-feed/bootstrap?competitorDomain=${encodeURIComponent(competitorDomain)}`,
+        { credentials: "include" }
+      );
+      const json = (await res.json()) as ActivityFeedBootstrapJson;
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error ?? `activity-feed bootstrap failed (${res.status})`);
+      }
+      return json;
+    },
+  });
+
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const handler: EventListener = (ev) => {
+      const detail = (ev as CustomEvent<{ domain?: string }>).detail;
+      const d = detail?.domain?.trim().toLowerCase() ?? "";
+      if (!d || d !== dom) return;
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        void refetch({ force: true });
+      }, 350);
+    };
+    window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, handler);
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, handler);
+    };
+  }, [dom, refetch]);
+
   const [moves, setMoves] = useState<ComparisonMoveRow[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [earlierOpen, setEarlierOpen] = useState(false);
-  const [recomputeRunningLocal, setRecomputeRunningLocal] = useState(false);
   const { recomputeRunning: liftedRecomputeRunning } = useRecomputePoll();
-  const recomputeRunning = liftedRecomputeRunning || recomputeRunningLocal;
 
   const [filter, setFilter] = useState<MoveFilterCategory>("all");
   const [significanceHighOnly, setSignificanceHighOnly] = useState(false);
   const [hideBrandBids, setHideBrandBids] = useState(true);
 
-  const data = comparisonPayload;
   const side = data?.ok ? data.competitor : null;
   const snapshotCount = side?.snapshot_count ?? 0;
   const brandName = side?.meta.name ?? competitorLabel;
   const waitingForSnapshots = snapshotCount < 2;
-
-  useEffect(() => {
-    if (!fetchEnabled) return;
-    void refetchComparisonPayloadIfStale?.(5 * 60 * 1000);
-  }, [competitorDomain, fetchEnabled, refetchComparisonPayloadIfStale]);
+  const recomputeRunning = liftedRecomputeRunning || side?.recomputing === true;
 
   const bootstrapKeyRef = useRef<string | null>(null);
 
-  const triggerRecompute = useCallback(async (opts?: { force?: boolean }) => {
+  const triggerRecompute = useCallback(async () => {
     const d = competitorDomain.trim();
     if (!d) return;
     try {
@@ -98,15 +145,12 @@ export function ActivityFeedTab({
         { credentials: "include" }
       );
       const sj = (await st.json()) as { ok?: boolean; status?: string };
-      if (sj.ok && sj.status === "running" && !opts?.force) return;
+      if (sj.ok && sj.status === "running") return;
 
-      await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(d)}`, {
-        credentials: "include",
-      });
       await fetch("/api/strategy-overview/recompute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitorDomain: d, force: opts?.force === true }),
+        body: JSON.stringify({ competitorDomain: d }),
         credentials: "include",
       });
     } catch {
@@ -119,23 +163,14 @@ export function ActivityFeedTab({
   }, [competitorDomain]);
 
   useEffect(() => {
-    if (!fetchEnabled) return;
-    if (comparisonPayloadLoading || !waitingForSnapshots) return;
+    if (!fetchEnabled || loading || !waitingForSnapshots) return;
     const key = competitorDomain.trim().toLowerCase();
     if (!key) return;
     if (bootstrapKeyRef.current === key) return;
     if (recomputeRunning) return;
     bootstrapKeyRef.current = key;
-
     void triggerRecompute();
-  }, [
-    fetchEnabled,
-    comparisonPayloadLoading,
-    waitingForSnapshots,
-    competitorDomain,
-    triggerRecompute,
-    recomputeRunning,
-  ]);
+  }, [fetchEnabled, loading, waitingForSnapshots, competitorDomain, triggerRecompute, recomputeRunning]);
 
   useEffect(() => {
     if (side?.recent_moves) {
@@ -200,10 +235,16 @@ export function ActivityFeedTab({
       ? Math.max(0, COOLDOWN_MS - (Date.now() - Date.parse(lastAnalyzed)))
       : 0;
 
-  const showInitialLoad = comparisonPayloadLoading && !data?.ok;
+  if (loading && !data?.ok) {
+    return <ActivityFeedSkeleton />;
+  }
 
-  if (showInitialLoad) {
-    return <RivalLoadingBlock padded className="mx-auto max-w-3xl py-16" />;
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12 px-6">
+        <div className="text-center text-[13px] text-red-700">{error.message}</div>
+      </div>
+    );
   }
 
   if (waitingForSnapshots) {
@@ -215,8 +256,18 @@ export function ActivityFeedTab({
           description="Strategy snapshots are building — move detection needs at least two saved snapshots to compare."
         />
         {recomputeRunning ? (
-          <div className="mt-6 flex justify-center">
-            <RivalLoadingBlock padded className="py-8" />
+          <div className="mt-6 space-y-3">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 animate-pulse"
+                aria-hidden
+              >
+                <div className="h-4 w-24 rounded-lg bg-slate-200/75" />
+                <div className="mt-3 h-5 w-full max-w-md rounded-lg bg-slate-200/75" />
+                <div className="mt-2 h-4 w-full rounded-lg bg-slate-200/75" />
+              </div>
+            ))}
           </div>
         ) : null}
         <div className="mt-8 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-10 text-center">
@@ -232,14 +283,6 @@ export function ActivityFeedTab({
             Snapshots stored: {snapshotCount} / 2 minimum
           </p>
         </div>
-      </div>
-    );
-  }
-
-  if (comparisonPayloadError) {
-    return (
-      <div className="flex items-center justify-center py-12 px-6">
-        <div className="text-center text-[13px] text-red-700">{comparisonPayloadError}</div>
       </div>
     );
   }

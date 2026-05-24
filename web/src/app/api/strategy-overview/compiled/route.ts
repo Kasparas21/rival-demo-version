@@ -81,15 +81,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  const hydrateResult = await tryHydrateScrapedAdsFromAdsCache(supabase, {
-    userId: user.id,
-    competitorId: meta.competitorId,
-    domainHint: domain,
-  });
-  if (!hydrateResult.ok) {
-    console.error("[compiled] hydrate_from_ads_cache", hydrateResult);
-  }
-
   if (!force) {
     const cached = await getCachedStrategyOverview(supabase, user.id, meta.competitorId, domain);
     if (cached) {
@@ -102,6 +93,36 @@ export async function GET(req: Request): Promise<NextResponse> {
         }
       );
     }
+  }
+
+  const staleEarly = !force
+    ? await getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId)
+    : null;
+  if (staleEarly) {
+    const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
+    return NextResponse.json(
+      {
+        ok: true,
+        cached: true,
+        recomputing: running,
+        staleWhileRecomputing: running,
+        payload: normalizeCompetitorStrategyOverviewPayload(staleEarly),
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=60, stale-while-revalidate=600",
+        },
+      }
+    );
+  }
+
+  const hydrateResult = await tryHydrateScrapedAdsFromAdsCache(supabase, {
+    userId: user.id,
+    competitorId: meta.competitorId,
+    domainHint: domain,
+  });
+  if (!hydrateResult.ok) {
+    console.error("[compiled] hydrate_from_ads_cache", hydrateResult);
   }
 
   if (force) {

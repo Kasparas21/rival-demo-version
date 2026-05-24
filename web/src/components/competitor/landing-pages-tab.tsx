@@ -17,7 +17,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { toast } from "sonner";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
-import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import {
@@ -113,6 +113,12 @@ export type LandingPagesTabProps = {
   fetchEnabled?: boolean;
 };
 
+function previewIframeSrc(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 function formatDataSinceLabel(iso: string | null | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -199,13 +205,14 @@ export function LandingPagesTab({
 
   const { data: adsPayload, isValidating: adsValidating } = useScrapeKeyedCache<AdsForUrlResponse>({
     cacheKey: adsCacheKey,
-    enabled: Boolean(competitorId && domainKey && selectedUrl && previewState !== "loading"),
+    enabled: Boolean(competitorId && domainKey && selectedUrl),
     validateCached: (c) => c.ok === true && Array.isArray(c.ads),
     fetcher: async () => {
       const res = await fetch(
         `/api/landing-pages/ads-for-url?competitorId=${encodeURIComponent(competitorId)}&url=${encodeURIComponent(
           selectedUrl!
-        )}&limit=${pageAdsLimit}`
+        )}&limit=${pageAdsLimit}`,
+        { credentials: "include" }
       );
       return (await res.json()) as AdsForUrlResponse;
     },
@@ -220,8 +227,14 @@ export function LandingPagesTab({
 
 
   useEffect(() => {
-    if (rows.length !== 1) return;
-    setSelectedUrl(rows[0]!.url);
+    if (rows.length === 0) {
+      setSelectedUrl(null);
+      return;
+    }
+    setSelectedUrl((prev) => {
+      if (prev && rows.some((r) => r.url === prev)) return prev;
+      return rows[0]!.url;
+    });
   }, [rows]);
 
   const filteredRows = useMemo(() => {
@@ -325,8 +338,6 @@ export function LandingPagesTab({
       <div className={COMPETITOR_PAGE_SHELL}>
         <HeaderBar
           dataSince={null}
-          lastScrapedAt={lastScrapedAt}
-          onFreshnessRescrape={onFreshnessRescrape}
           title="Landing Pages"
           subtitle={competitorLabel}
         />
@@ -368,8 +379,6 @@ export function LandingPagesTab({
       <CacheRevalidatingDot show={Boolean((listValidating && listData) || (adsValidating && adsPayload))} />
       <HeaderBar
         dataSince={dataSince}
-        lastScrapedAt={lastScrapedAt}
-        onFreshnessRescrape={onFreshnessRescrape}
         title="Landing Pages"
         subtitle={competitorLabel}
       />
@@ -422,7 +431,7 @@ export function LandingPagesTab({
                 onCopy={() => copyUrl(selectedUrl)}
               />
 
-              {previewState !== "loading" && selectedRow ? (
+              {selectedRow ? (
                 <AdsForPageSection
                   ads={pageAds}
                   total={pageAdsTotal}
@@ -446,14 +455,10 @@ function HeaderBar({
   title,
   subtitle,
   dataSince,
-  lastScrapedAt,
-  onFreshnessRescrape,
 }: {
   title: string;
   subtitle: string;
   dataSince: string | null;
-  lastScrapedAt: string | null;
-  onFreshnessRescrape?: () => void;
 }) {
   return (
     <div className="border-b border-slate-100 pb-4">
@@ -471,7 +476,6 @@ function HeaderBar({
             ) : null}
           </>
         }
-        titleTrailing={<DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />}
       />
     </div>
   );
@@ -733,7 +737,7 @@ function PreviewPane({
                 ref={iframeRef}
                 key={url}
                 title="Landing page preview"
-                src={url}
+                src={previewIframeSrc(url)}
                 className={`block border-0 bg-white ${PREVIEW_IFRAME_TRANSITION} ${
                   isMobile ? "rounded-[20px]" : "rounded-xl"
                 } ${previewState === "loading" ? "opacity-0" : "opacity-100"}`}

@@ -14,7 +14,7 @@ import { StrategyMapSkeleton } from "@/components/strategy-overview/strategy-map
 import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy-sidebar";
 import { FunnelCellSheet } from "@/components/strategy-overview/funnel-cell-sheet";
 import { NodeDetailSheet } from "@/components/strategy-overview/node-detail-sheet";
-import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
@@ -173,10 +173,7 @@ export function StrategyOverviewApp({
           return;
         }
 
-        await fetch(`/api/strategy-overview/compiled?competitorDomain=${encodeURIComponent(domain)}`, {
-          credentials: "include",
-        });
-        void refetch();
+        if (externalRecomputeRunning) return;
 
         const rec = await fetch("/api/strategy-overview/recompute", {
           method: "POST",
@@ -201,6 +198,7 @@ export function StrategyOverviewApp({
     payload,
     emptyStrategy,
     refetch,
+    externalRecomputeRunning,
   ]);
 
   const mapKey = useMemo(() => {
@@ -272,11 +270,6 @@ export function StrategyOverviewApp({
           overline="Strategy map"
           title={mapHeadline}
           description={strategyDescription}
-          titleTrailing={
-            !displayError && payload && payload.map.activeAdCount > 0 ? (
-              <DataFreshnessBadge lastScrapedAt={lastScrapedAt ?? null} onRefresh={onFreshnessRescrape} />
-            ) : undefined
-          }
         />
       ) : null}
 

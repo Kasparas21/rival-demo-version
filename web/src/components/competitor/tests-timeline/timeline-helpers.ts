@@ -1,11 +1,21 @@
-import { COMPARISON_PLATFORM_ORDER } from "@/components/comparison/platform-icon";
+import { ALL_COMPARISON_PLATFORMS } from "@/lib/platforms/comparison-platform-order";
 export { PLATFORM_LABELS, platformLabel } from "@/lib/platforms/platform-label";
 
-import type { TimelineAd, TimelineSort, TimelineTick, TimelineZoom } from "./timeline-types";
+import type {
+  TimelineAd,
+  TimelineBarGeometry,
+  TimelineDatePreset,
+  TimelineDayColumn,
+  TimelineGanttRow,
+  TimelineMonthSpan,
+  TimelineSort,
+  TimelineTick,
+  TimelineZoom,
+} from "./timeline-types";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
-const ALL_PLATFORMS = [...COMPARISON_PLATFORM_ORDER, "youtube", "microsoft"] as const;
+const ALL_PLATFORMS = ALL_COMPARISON_PLATFORMS;
 
 export function isBrandBidAngle(angle: string | null | undefined): boolean {
   const a = (angle ?? "").toLowerCase();
@@ -67,6 +77,194 @@ export function barToneClasses(tone: BarTone): string {
   }
 }
 
+
+export function startOfLocalDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+export function endOfLocalDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+export function resolveDateWindow(
+  preset: TimelineDatePreset,
+  customStart: number | null,
+  customEnd: number | null,
+  dateRange: { earliest: string; latest: string } | undefined,
+): { start: number; end: number } | null {
+  if (!dateRange) return null;
+  const latest = new Date(dateRange.latest).getTime();
+  const earliest = new Date(dateRange.earliest).getTime();
+  if (!Number.isFinite(latest) || !Number.isFinite(earliest)) return null;
+
+  if (preset === "custom" && customStart != null && customEnd != null) {
+    return {
+      start: startOfLocalDay(Math.min(customStart, customEnd)),
+      end: endOfLocalDay(Math.max(customStart, customEnd)),
+    };
+  }
+  if (preset === "all") {
+    return { start: startOfLocalDay(earliest), end: endOfLocalDay(latest) };
+  }
+
+  const presetDays: Record<Exclude<TimelineDatePreset, "all" | "custom">, number> = {
+    "7d": 7,
+    "14d": 14,
+    "30d": 30,
+    "90d": 90,
+    "365d": 365,
+  };
+  const days = presetDays[preset as Exclude<TimelineDatePreset, "all" | "custom">] ?? 90;
+  return { start: startOfLocalDay(latest - days * DAY_MS), end: endOfLocalDay(latest) };
+}
+
+export function buildDayColumns(viewStart: number, viewEnd: number): TimelineDayColumn[] {
+  const start = startOfLocalDay(viewStart);
+  const end = startOfLocalDay(viewEnd);
+  if (end < start) return [];
+
+  const cols: TimelineDayColumn[] = [];
+  let i = 0;
+  for (let t = start; t <= end; t += DAY_MS, i++) {
+    const d = new Date(t);
+    const monthKey = `${d.getFullYear()}-${d.getMonth()}`;
+    cols.push({
+      dayStartMs: t,
+      dayIndex: i,
+      dayOfMonth: d.getDate(),
+      monthKey,
+      monthLabel: d.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+      isMonthStart: d.getDate() === 1,
+    });
+  }
+  return cols;
+}
+
+export function buildMonthSpans(columns: TimelineDayColumn[]): TimelineMonthSpan[] {
+  if (!columns.length) return [];
+  const spans: TimelineMonthSpan[] = [];
+  let cur: TimelineMonthSpan | null = null;
+  for (const col of columns) {
+    if (!cur || cur.monthKey !== col.monthKey) {
+      cur = { monthKey: col.monthKey, monthLabel: col.monthLabel, startIndex: col.dayIndex, dayCount: 1 };
+      spans.push(cur);
+    } else {
+      cur.dayCount += 1;
+    }
+  }
+  return spans;
+}
+
+export function computeBarGeometry(
+  ad: TimelineAd,
+  viewStart: number,
+  viewEnd: number,
+  dayColWidth: number,
+  nowMs: number,
+): TimelineBarGeometry | null {
+  const viewStartDay = startOfLocalDay(viewStart);
+  const viewEndDay = startOfLocalDay(viewEnd);
+  const adStartDay = startOfLocalDay(new Date(ad.first_seen_at).getTime());
+  const adEndDay = startOfLocalDay(effectiveBarEndMs(ad, viewEnd, nowMs));
+
+  const visibleStart = Math.max(adStartDay, viewStartDay);
+  const visibleEnd = Math.min(adEndDay, viewEndDay);
+  if (visibleEnd < visibleStart) return null;
+
+  const leftDays = (visibleStart - viewStartDay) / DAY_MS;
+  const spanDays = Math.max(1, (visibleEnd - visibleStart) / DAY_MS + 1);
+
+  return {
+    leftPx: leftDays * dayColWidth,
+    widthPx: spanDays * dayColWidth,
+    lifespanDays: displayLifespanDays(ad, nowMs),
+  };
+}
+
+export function searchMatchesAd(ad: TimelineAd, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    headlineForAd(ad).toLowerCase().includes(q) ||
+    (ad.ad_text ?? "").toLowerCase().includes(q) ||
+    (ad.ai_extracted_angle ?? "").toLowerCase().includes(q) ||
+    ad.id.toLowerCase().includes(q) ||
+    ad.platform.toLowerCase().includes(q)
+  );
+}
+
+export function isVideoFormat(format: string | null | undefined): boolean {
+  const f = (format ?? "").toLowerCase();
+  return f.includes("video") || f === "reels" || f === "story";
+}
+
+export function duplicateGroupKey(ad: TimelineAd): string | null {
+  const platform = ad.platform.toLowerCase();
+  if (platform !== "meta" && platform !== "facebook" && platform !== "instagram") return null;
+  const url = (ad.ad_creative_url ?? "").trim();
+  if (!url) return null;
+  return `meta:${url}`;
+}
+
+export function groupDuplicateAds(ads: TimelineAd[], enabled: boolean): TimelineGanttRow[] {
+  if (!enabled) return ads.map((ad) => ({ type: "ad", ad }));
+
+  const groups = new Map<string, TimelineAd[]>();
+  const singles: TimelineAd[] = [];
+
+  for (const ad of ads) {
+    const key = duplicateGroupKey(ad);
+    if (!key) {
+      singles.push(ad);
+      continue;
+    }
+    const bucket = groups.get(key) ?? [];
+    bucket.push(ad);
+    groups.set(key, bucket);
+  }
+
+  const rows: TimelineGanttRow[] = singles.map((ad) => ({ type: "ad", ad }));
+
+  for (const [key, groupAds] of groups) {
+    if (groupAds.length === 1) {
+      rows.push({ type: "ad", ad: groupAds[0]! });
+      continue;
+    }
+    const representative = groupAds.reduce((best, candidate) =>
+      computeLifespanDays(candidate.first_seen_at, candidate.last_seen_at) >
+      computeLifespanDays(best.first_seen_at, best.last_seen_at)
+        ? candidate
+        : best,
+    );
+    rows.push({ type: "duplicate-group", key, ads: groupAds, representative });
+  }
+
+  return rows;
+}
+
+export function datePresetLabel(preset: TimelineDatePreset): string {
+  switch (preset) {
+    case "7d":
+      return "Last 7 days";
+    case "14d":
+      return "Last 14 days";
+    case "30d":
+      return "Last 30 days";
+    case "90d":
+      return "Last 90 days";
+    case "365d":
+      return "Last 365 days";
+    case "custom":
+      return "Custom range";
+    case "all":
+    default:
+      return "All time";
+  }
+}
 
 export function platformSortIndex(p: string): number {
   const i = (ALL_PLATFORMS as readonly string[]).indexOf(p);
@@ -253,21 +451,13 @@ export function median(values: number[]): number {
 export function sortTimelineAds(ads: TimelineAd[], sort: TimelineSort): TimelineAd[] {
   const out = [...ads];
   switch (sort) {
+    case "oldest":
+      return out.sort((a, b) => new Date(a.first_seen_at).getTime() - new Date(b.first_seen_at).getTime());
     case "longest":
       return out.sort(
         (a, b) =>
           computeLifespanDays(b.first_seen_at, b.last_seen_at) -
           computeLifespanDays(a.first_seen_at, a.last_seen_at),
-      );
-    case "recently_killed":
-      return out
-        .filter((a) => a.is_killed)
-        .sort((a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime());
-    case "platform":
-      return out.sort(
-        (a, b) =>
-          platformSortIndex(a.platform) - platformSortIndex(b.platform) ||
-          new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime(),
       );
     case "newest":
     default:

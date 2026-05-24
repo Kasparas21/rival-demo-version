@@ -211,7 +211,7 @@ function metaFromSavedRow(
 }
 
 /**
- * Serve the best available payload immediately. Background recompute only when scrape is newer than cache.
+ * Serve the best available payload immediately. Derivation runs in background on cache miss.
  */
 async function resolveSidePayload(params: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
@@ -226,15 +226,14 @@ async function resolveSidePayload(params: {
     return { payload: fresh, recomputing: false };
   }
 
-  const [stale, derived, meta, scrapeIsNewer, running] = await Promise.all([
+  const [stale, meta, scrapeIsNewer, running] = await Promise.all([
     getStaleStrategyOverviewPayload(supabase, userId, competitorId),
-    deriveAndPersistFastPathStrategyOverview({ supabase, userId, competitorId, domainHint }),
     loadSavedCompetitorForUser(supabase, userId, domainHint),
     scrapeIsNewerThanOverview(supabase, competitorId),
     isStrategyRecomputeRunning(supabase, competitorId),
   ]);
 
-  let payload = derived ?? stale;
+  let payload = stale;
   if (payload) {
     payload = mergeAudienceInference(payload, stale);
     if (meta) {
@@ -245,21 +244,92 @@ async function resolveSidePayload(params: {
     }
   }
 
+  const needsDerive = !payload && !running;
   const needsBackgroundRecompute = scrapeIsNewer && !running;
-  if (needsBackgroundRecompute) {
-    scheduleBackgroundRecompute({
-      competitorDomain: domainHint,
-      userId,
-      competitorId,
-      stealLock: false,
-      refreshAdEnrichment: false,
+
+  if (needsDerive || needsBackgroundRecompute) {
+    after(async () => {
+      try {
+        const sb = await createSupabaseServerClient();
+        const {
+          data: { user: u2 },
+        } = await sb.auth.getUser();
+        if (!u2 || u2.id !== userId) return;
+        if (needsDerive) {
+          await deriveAndPersistFastPathStrategyOverview({
+            supabase: sb,
+            userId,
+            competitorId,
+            domainHint,
+          });
+        }
+        if (needsBackgroundRecompute) {
+          const r = await recomputeStrategyOverviewForCompetitor({
+            supabase: sb,
+            userId,
+            competitorId,
+            domainHint,
+            stealLock: false,
+            refreshAdEnrichment: false,
+          });
+          if (!r.ok) console.warn("[comparison/payload] background recompute:", r.error);
+        }
+      } catch (e) {
+        console.error("[comparison/payload] background derive/recompute failed", e);
+      }
     });
   }
 
   return {
     payload,
-    recomputing: running || needsBackgroundRecompute,
+    recomputing: running || needsDerive || needsBackgroundRecompute,
   };
+}
+
+function derivedStatsFromStrategyPayload(
+  p: CompetitorStrategyOverviewPayload | null
+): ComparisonDerivedStats | null {
+  if (!p?.insights) return null;
+
+  const angles = p.insights.angle_clustering?.angles ?? [];
+  const velocity = p.insights.testing_velocity_by_platform ?? [];
+  const formats = p.insights.ad_format_mix?.formats ?? [];
+
+  let newIn30 = 0;
+  let lifespanSum = 0;
+  let lifespanN = 0;
+  for (const v of velocity) {
+    newIn30 += v.newIn30 ?? 0;
+    if (typeof v.avgLifespanDays === "number") {
+      lifespanSum += v.avgLifespanDays;
+      lifespanN += 1;
+    }
+  }
+
+  let videoCount = 0;
+  let formatTotal = 0;
+  for (const f of formats) {
+    formatTotal += f.count ?? 0;
+    if (/video/i.test(f.format ?? "")) videoCount += f.count ?? 0;
+  }
+
+  return {
+    avgAdAgeDays: lifespanN > 0 ? Math.round(lifespanSum / lifespanN) : 0,
+    newAdsLast30d: newIn30,
+    videoPercent: formatTotal > 0 ? Math.round((videoCount / formatTotal) * 100) : 0,
+    uniqueAnglesCount: angles.filter((a) => (a.angle ?? "").trim()).length,
+  };
+}
+
+async function resolveDerivedStats(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+  competitorId: string,
+  payload: CompetitorStrategyOverviewPayload | null
+): Promise<ComparisonDerivedStats> {
+  const fromPayload = derivedStatsFromStrategyPayload(payload);
+  if (fromPayload) return fromPayload;
+  return computeScrapedAdsDerivedStats(supabase, userId, competitorId);
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -342,8 +412,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     loadRecentMoves(supabase, user.id, rivalMeta.competitorId),
     countStrategySnapshots(supabase, user.id, wsRow.id),
     countStrategySnapshots(supabase, user.id, rivalMeta.competitorId),
-    computeScrapedAdsDerivedStats(supabase, user.id, wsRow.id),
-    computeScrapedAdsDerivedStats(supabase, user.id, rivalMeta.competitorId),
+    resolveDerivedStats(supabase, user.id, wsRow.id, wsResolved.payload),
+    resolveDerivedStats(supabase, user.id, rivalMeta.competitorId, rivalResolved.payload),
     loadAudienceHistory(supabase, user.id, wsRow.id),
     loadAudienceHistory(supabase, user.id, rivalMeta.competitorId),
   ]);
@@ -373,5 +443,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     ok: true,
     workspace,
     competitor,
+  }, {
+    headers: {
+      "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+    },
   });
 }

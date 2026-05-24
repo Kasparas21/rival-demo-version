@@ -336,3 +336,23 @@ export function useScrapeKeyedCache<T>(
 
   return { ...resolved, refetch, refetchIfStale, invalidate };
 }
+
+/** Warm session/local cache before a tab mounts — skips network if cache is already valid. */
+export async function prefetchScrapeKeyedCache<T>(opts: {
+  cacheKey: string;
+  fetcher: () => Promise<T>;
+  validateCached?: (cached: T) => boolean;
+  persistAcrossTabs?: boolean;
+}): Promise<void> {
+  if (typeof window === "undefined") return;
+  const useLocal = opts.persistAcrossTabs ?? true;
+  const existing = readValidCache<T>(opts.cacheKey, useLocal, opts.validateCached);
+  if (existing != null) return;
+  try {
+    const fresh = await opts.fetcher();
+    if (opts.validateCached && !opts.validateCached(fresh)) return;
+    writeCache(opts.cacheKey, fresh, useLocal);
+  } catch {
+    /* prefetch is best-effort */
+  }
+}

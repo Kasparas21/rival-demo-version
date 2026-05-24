@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarRange, HelpCircle } from "lucide-react";
 
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
@@ -10,7 +10,6 @@ import { TimelineSkeleton } from "@/components/ui/feature-skeleton";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 import { TimelineActivityHeatmap } from "./timeline-activity-heatmap";
-import { TimelineFiltersBar } from "./timeline-filters";
 import { TimelineGantt } from "./timeline-gantt";
 import type { TimelineStatSnapshot } from "./timeline-stats-cards";
 import { TimelineStatsCards } from "./timeline-stats-cards";
@@ -20,12 +19,16 @@ import {
   DAY_MS,
   headlineForAd,
   isBrandBidAngle,
+  isVideoFormat,
   median,
   platformLabel,
   platformSortIndex,
+  resolveDateWindow,
+  searchMatchesAd,
   sortTimelineAds,
 } from "./timeline-helpers";
-import type { TimelineAd, TimelineSort, TimelineZoom } from "./timeline-types";
+import { TimelineToolbar, type TimelineToolbarState } from "./timeline-toolbar";
+import type { TimelineAd } from "./timeline-types";
 
 type TimelineResponseLight = {
   ok: boolean;
@@ -46,15 +49,11 @@ type Props = {
   fetchEnabled?: boolean;
 };
 
-function relTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return "—";
-  const days = Math.max(0, Math.round((Date.now() - t) / DAY_MS));
-  if (days === 0) return "today";
-  if (days === 1) return "1 day ago";
-  return `${days} days ago`;
-}
+const DEFAULT_VIEW_FIELDS: TimelineToolbarState["viewFields"] = {
+  brandDetails: true,
+  adCopy: false,
+  headlineCta: true,
+};
 
 function buildStats(ads: TimelineAd[]): TimelineStatSnapshot {
   const now = Date.now();
@@ -104,6 +103,11 @@ function buildStats(ads: TimelineAd[]): TimelineStatSnapshot {
   };
 }
 
+function effectiveBarEndForFilter(ad: TimelineAd, viewEnd: number): number {
+  if (!ad.is_killed) return Math.min(viewEnd, Date.now());
+  return new Date(ad.last_seen_at).getTime();
+}
+
 export function TimelineTab({
   competitorId,
   competitorLabel,
@@ -134,30 +138,28 @@ export function TimelineTab({
   });
 
   const loadErr = hookError?.message ?? null;
-
-  const [zoom, setZoom] = useState<TimelineZoom>("90d");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Set<string>>(new Set());
-  const [showActive, setShowActive] = useState(true);
-  const [showRetired, setShowRetired] = useState(true);
-  const [showBrandBids, setShowBrandBids] = useState(false);
-  const [sort, setSort] = useState<TimelineSort>("newest");
-  const [heatmapWeek, setHeatmapWeek] = useState<number | null>(null);
-  const [renderCount, setRenderCount] = useState(30);
-
   const rawAds = data?.ads ?? [];
 
-  const brandBidCount = useMemo(() => rawAds.filter((a) => isBrandBidAngle(a.ai_extracted_angle)).length, [rawAds]);
+  const [toolbar, setToolbar] = useState<TimelineToolbarState>({
+    search: "",
+    datePreset: "90d",
+    customRangeStart: null,
+    customRangeEnd: null,
+    sort: "newest",
+    statusFilter: "all",
+    formatFilter: "all",
+    selectedPlatforms: new Set(),
+    groupDuplicates: false,
+    showBrandBids: false,
+    viewFields: DEFAULT_VIEW_FIELDS,
+  });
 
-  const brandFiltered = useMemo(() => {
-    if (showBrandBids) return rawAds;
-    return rawAds.filter((a) => !isBrandBidAngle(a.ai_extracted_angle));
-  }, [rawAds, showBrandBids]);
+  const [heatmapWeek, setHeatmapWeek] = useState<number | null>(null);
+  const [renderCount, setRenderCount] = useState(40);
 
-  useEffect(() => {
-    if (!showActive && !showRetired) {
-      setShowRetired(true);
-    }
-  }, [showActive, showRetired]);
+  const patchToolbar = useCallback((patch: Partial<TimelineToolbarState>) => {
+    setToolbar((prev) => ({ ...prev, ...patch }));
+  }, []);
 
   useEffect(() => {
     if (!data?.platformCounts) return;
@@ -165,8 +167,18 @@ export function TimelineTab({
     const withData = Object.keys(counts)
       .filter((p) => (counts[p] ?? 0) > 0)
       .sort((a, b) => platformSortIndex(a) - platformSortIndex(b) || a.localeCompare(b));
-    setSelectedPlatforms(new Set(withData));
+    setToolbar((prev) => ({
+      ...prev,
+      selectedPlatforms: prev.selectedPlatforms.size ? prev.selectedPlatforms : new Set(withData),
+    }));
   }, [data]);
+
+  const brandBidCount = useMemo(() => rawAds.filter((a) => isBrandBidAngle(a.ai_extracted_angle)).length, [rawAds]);
+
+  const brandFiltered = useMemo(() => {
+    if (toolbar.showBrandBids) return rawAds;
+    return rawAds.filter((a) => !isBrandBidAngle(a.ai_extracted_angle));
+  }, [rawAds, toolbar.showBrandBids]);
 
   const platformChips = useMemo(() => {
     const m = new Map<string, number>();
@@ -178,72 +190,56 @@ export function TimelineTab({
       .sort((a, b) => platformSortIndex(a.id) - platformSortIndex(b.id));
   }, [brandFiltered]);
 
-  const viewWindow = useMemo(() => {
-    if (!data?.dateRange) return null;
-    const latest = new Date(data.dateRange.latest).getTime();
-    if (zoom === "all") {
-      const earliest = new Date(data.dateRange.earliest).getTime();
-      return { start: earliest, end: latest };
-    }
-    let windowMs: number;
-    switch (zoom) {
-      case "30d":
-        windowMs = 30 * DAY_MS;
-        break;
-      case "90d":
-        windowMs = 90 * DAY_MS;
-        break;
-      case "6mo":
-        windowMs = 180 * DAY_MS;
-        break;
-      case "1y":
-        windowMs = 365 * DAY_MS;
-        break;
-      default:
-        windowMs = 90 * DAY_MS;
-    }
-    return { start: latest - windowMs, end: latest };
-  }, [data, zoom]);
+  const viewWindow = useMemo(
+    () =>
+      resolveDateWindow(
+        toolbar.datePreset,
+        toolbar.customRangeStart,
+        toolbar.customRangeEnd,
+        data?.dateRange,
+      ),
+    [toolbar.datePreset, toolbar.customRangeStart, toolbar.customRangeEnd, data?.dateRange],
+  );
+
+  const dateRangeEarliest = data?.dateRange ? Date.parse(data.dateRange.earliest) : null;
+  const dateRangeLatest = data?.dateRange ? Date.parse(data.dateRange.latest) : null;
 
   const stats = useMemo(() => buildStats(brandFiltered), [brandFiltered]);
-
   const heatBuckets = useMemo(() => aggregateWeekActivity(brandFiltered), [brandFiltered]);
 
-  const lifecycleFiltered = useMemo(() => {
+  const filteredAds = useMemo(() => {
     return brandFiltered.filter((ad) => {
-      if (showActive && !ad.is_killed) return true;
-      if (showRetired && ad.is_killed) return true;
-      return false;
-    });
-  }, [brandFiltered, showActive, showRetired]);
+      if (!searchMatchesAd(ad, toolbar.search)) return false;
 
-  const windowFiltered = useMemo(() => {
-    if (!viewWindow) return [];
-    return lifecycleFiltered.filter((ad) => {
-      if (!selectedPlatforms.has(ad.platform)) return false;
-      const adEnd = effectiveBarEndForFilter(ad, viewWindow.end);
-      const adStart = new Date(ad.first_seen_at).getTime();
-      return adEnd >= viewWindow.start && adStart <= viewWindow.end;
-    });
-  }, [lifecycleFiltered, selectedPlatforms, viewWindow]);
+      if (toolbar.statusFilter === "active" && ad.is_killed) return false;
+      if (toolbar.statusFilter === "retired" && !ad.is_killed) return false;
 
-  function effectiveBarEndForFilter(ad: TimelineAd, viewEnd: number): number {
-    if (!ad.is_killed) return Math.min(viewEnd, Date.now());
-    return new Date(ad.last_seen_at).getTime();
-  }
+      if (toolbar.formatFilter === "video" && !isVideoFormat(ad.format)) return false;
+      if (toolbar.formatFilter === "image" && isVideoFormat(ad.format)) return false;
+
+      if (toolbar.selectedPlatforms.size > 0 && !toolbar.selectedPlatforms.has(ad.platform)) return false;
+
+      if (viewWindow) {
+        const adEnd = effectiveBarEndForFilter(ad, viewWindow.end);
+        const adStart = new Date(ad.first_seen_at).getTime();
+        if (adEnd < viewWindow.start || adStart > viewWindow.end) return false;
+      }
+
+      return true;
+    });
+  }, [brandFiltered, toolbar, viewWindow]);
 
   const afterHeatFiltered = useMemo(() => {
-    if (heatmapWeek == null) return windowFiltered;
-    return windowFiltered.filter((ad) => adMatchesWeekFilter(ad, heatmapWeek));
-  }, [windowFiltered, heatmapWeek]);
+    if (heatmapWeek == null) return filteredAds;
+    return filteredAds.filter((ad) => adMatchesWeekFilter(ad, heatmapWeek));
+  }, [filteredAds, heatmapWeek]);
 
-  const sortedAds = useMemo(() => sortTimelineAds(afterHeatFiltered, sort), [afterHeatFiltered, sort]);
-
+  const sortedAds = useMemo(() => sortTimelineAds(afterHeatFiltered, toolbar.sort), [afterHeatFiltered, toolbar.sort]);
   const displayAds = useMemo(() => sortedAds.slice(0, renderCount), [sortedAds, renderCount]);
 
   useEffect(() => {
-    setRenderCount(30);
-  }, [zoom, selectedPlatforms, showActive, showRetired, showBrandBids, sort, heatmapWeek, competitorId]);
+    setRenderCount(40);
+  }, [toolbar, heatmapWeek, competitorId]);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -253,26 +249,35 @@ export function TimelineTab({
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {
-          setRenderCount((n) => Math.min(n + 30, sortedAds.length));
+          setRenderCount((n) => Math.min(n + 40, sortedAds.length));
         }
       },
-      { root: null, rootMargin: "200px", threshold: 0 },
+      { root: null, rootMargin: "240px", threshold: 0 },
     );
     obs.observe(el);
     return () => obs.disconnect();
   }, [displayAds.length, sortedAds.length]);
 
-  const togglePlatform = (platform: string) => {
-    setSelectedPlatforms((prev) => {
-      const next = new Set(prev);
-      if (next.has(platform)) next.delete(platform);
-      else next.add(platform);
-      return next;
-    });
-  };
-
   const activeInView = sortedAds.filter((a) => !a.is_killed).length;
   const retiredInView = sortedAds.filter((a) => a.is_killed).length;
+
+  const clearFilters = () => {
+    const allPlatforms = platformChips.map((p) => p.id);
+    setToolbar({
+      search: "",
+      datePreset: "all",
+      customRangeStart: null,
+      customRangeEnd: null,
+      sort: "newest",
+      statusFilter: "all",
+      formatFilter: "all",
+      selectedPlatforms: new Set(allPlatforms),
+      groupDuplicates: false,
+      showBrandBids: true,
+      viewFields: DEFAULT_VIEW_FIELDS,
+    });
+    setHeatmapWeek(null);
+  };
 
   if (!competitorId) {
     return (
@@ -315,12 +320,12 @@ export function TimelineTab({
   }
 
   const onlyBrandBidsFiltered =
-    !showBrandBids && brandFiltered.length === 0 && brandBidCount > 0 && rawAds.length > 0;
+    !toolbar.showBrandBids && brandFiltered.length === 0 && brandBidCount > 0 && rawAds.length > 0;
 
-  const rangeEmpty = viewWindow && windowFiltered.length === 0 && lifecycleFiltered.length > 0;
+  const rangeEmpty = viewWindow && filteredAds.length === 0 && brandFiltered.length > 0;
 
   return (
-    <div className={`relative ${COMPETITOR_PAGE_SHELL} space-y-8`}>
+    <div className={`relative ${COMPETITOR_PAGE_SHELL} space-y-6`}>
       <CacheRevalidatingDot show={isValidating && !!data} />
 
       <FeatureSectionHeader
@@ -330,8 +335,7 @@ export function TimelineTab({
         title={<>How {competitorLabel} has rolled out, run, and retired ads</>}
         description={
           <>
-            Last scrape: {relTime(lastScrapedAt)} · {sortedAds.length} ads in view · {activeInView} active, {retiredInView}{" "}
-            retired
+            {sortedAds.length} ads in view · {activeInView} active, {retiredInView} retired
             {heatmapWeek != null ? " · week filter on" : null}
           </>
         }
@@ -339,7 +343,7 @@ export function TimelineTab({
           <>
             <button
               type="button"
-              title="One row per ad. Bar length reflects lifespan in the selected range. Colors track status."
+              title="Day grid timeline. Bars reflect exact run dates. Scroll horizontally; view starts at the most recent dates."
               className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-50"
             >
               <HelpCircle className="h-4 w-4" />
@@ -357,21 +361,13 @@ export function TimelineTab({
         }
       />
 
-      <TimelineFiltersBar
-        zoom={zoom}
-        onZoom={setZoom}
+      <TimelineToolbar
         platforms={platformChips}
-        selectedPlatforms={selectedPlatforms}
-        onTogglePlatform={togglePlatform}
-        showActive={showActive}
-        showRetired={showRetired}
-        onShowActive={setShowActive}
-        onShowRetired={setShowRetired}
-        showBrandBids={showBrandBids}
-        onShowBrandBids={setShowBrandBids}
-        hiddenBrandBidCount={!showBrandBids ? brandBidCount : 0}
-        sort={sort}
-        onSort={setSort}
+        state={toolbar}
+        onChange={patchToolbar}
+        dateRangeEarliest={dateRangeEarliest}
+        dateRangeLatest={dateRangeLatest}
+        hiddenBrandBidCount={!toolbar.showBrandBids ? brandBidCount : 0}
       />
 
       <TimelineStatsCards stats={stats} />
@@ -386,58 +382,46 @@ export function TimelineTab({
           <button
             type="button"
             className="mt-2 text-sm font-semibold underline"
-            onClick={() => setShowBrandBids(true)}
+            onClick={() => patchToolbar({ showBrandBids: true })}
           >
             Show brand bids
           </button>
         </div>
       ) : null}
 
-      {!onlyBrandBidsFiltered &&
-        (sort === "recently_killed" && sortedAds.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
-            No retired ads in this view. Try enabling <strong>Retired</strong>, showing brand bids, or widening the
-            range.
-          </div>
-        ) : rangeEmpty ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
-            No ads were active during this range.{" "}
-            <button type="button" className="font-semibold text-slate-900 underline" onClick={() => setZoom("all")}>
-              Expand to All time
-            </button>
-          </div>
-        ) : sortedAds.length === 0 ? (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
-            No ads match these filters.{" "}
-            <button
-              type="button"
-              className="font-semibold text-slate-900 underline"
-              onClick={() => {
-                setShowBrandBids(true);
-                setShowActive(true);
-                setShowRetired(true);
-                setHeatmapWeek(null);
-                setZoom("all");
-              }}
-            >
-              Clear filters
-            </button>
-          </div>
-        ) : viewWindow ? (
-          <TimelineGantt
-            ads={displayAds}
-            viewStart={viewWindow.start}
-            viewEnd={viewWindow.end}
-            zoom={zoom}
-            sort={sort}
-            onOpenAd={onOpenAd}
-            sentinelRef={sentinelRef}
-          />
-        ) : null)}
+      {!onlyBrandBidsFiltered && rangeEmpty ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
+          No ads were active during this range.{" "}
+          <button type="button" className="font-semibold text-slate-900 underline" onClick={() => patchToolbar({ datePreset: "all" })}>
+            Expand to All time
+          </button>
+        </div>
+      ) : null}
+
+      {!onlyBrandBidsFiltered && !rangeEmpty && sortedAds.length === 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-600">
+          No ads match these filters.{" "}
+          <button type="button" className="font-semibold text-slate-900 underline" onClick={clearFilters}>
+            Clear filters
+          </button>
+        </div>
+      ) : null}
+
+      {!onlyBrandBidsFiltered && !rangeEmpty && sortedAds.length > 0 && viewWindow ? (
+        <TimelineGantt
+          ads={displayAds}
+          viewStart={viewWindow.start}
+          viewEnd={viewWindow.end}
+          groupDuplicates={toolbar.groupDuplicates}
+          viewFields={toolbar.viewFields}
+          onOpenAd={onOpenAd}
+          sentinelRef={sentinelRef}
+        />
+      ) : null}
 
       {!onlyBrandBidsFiltered && sortedAds.length > displayAds.length ? (
         <p className="text-center text-xs text-slate-500">
-          Showing {displayAds.length} of {sortedAds.length} — scroll to load more
+          Showing {displayAds.length} of {sortedAds.length} — scroll down to load more
         </p>
       ) : null}
     </div>

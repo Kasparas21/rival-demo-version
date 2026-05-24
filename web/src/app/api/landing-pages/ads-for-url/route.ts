@@ -81,7 +81,10 @@ export async function GET(request: Request) {
     .from("scraped_ads")
     .select("id, platform, format, ad_text, ad_creative_url, first_seen_at, ai_extracted_angle, raw_payload")
     .eq("user_id", user.id)
-    .eq("competitor_id", competitorId);
+    .eq("competitor_id", competitorId)
+    .eq("is_active", true)
+    .order("first_seen_at", { ascending: false })
+    .limit(800);
 
   if (adsErr) {
     return NextResponse.json({ ok: false, error: adsErr.message }, { status: 500 });

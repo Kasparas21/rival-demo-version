@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Json } from "@/lib/supabase/types";
 import type { Database } from "@/lib/supabase/types";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { computeActiveAdsFingerprint } from "@/lib/strategy-overview/active-ads-fingerprint";
 import {
   STRATEGY_OVERVIEW_MODEL_VERSION,
   getLatestScrapeBatchId,
@@ -57,6 +58,8 @@ export async function persistFastPathStrategyOverview(params: {
     sourceScrapeBatchId: batchId,
   };
 
+  const adsFingerprint = await computeActiveAdsFingerprint(supabase, userId, competitorId);
+
   const { error } = await supabase.from("competitor_strategy_overview").upsert(
     {
       user_id: userId,
@@ -64,12 +67,15 @@ export async function persistFastPathStrategyOverview(params: {
       payload: stamped as unknown as Json,
       source_scrape_batch_id: batchId,
       ai_model_version: STRATEGY_OVERVIEW_MODEL_VERSION,
+      ads_fingerprint: adsFingerprint,
       computed_at: new Date().toISOString(),
     },
     { onConflict: "competitor_id" }
   );
 
   if (error) {
-    console.warn("[fast-path] persist competitor_strategy_overview", error.message);
+    console.error(
+      `[fast-path-persist-FAILED] competitorId=${competitorId} userId=${userId} error=${error.message}`
+    );
   }
 }

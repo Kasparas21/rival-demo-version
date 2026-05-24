@@ -52,7 +52,8 @@ export async function GET(request: Request) {
     .select("id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format")
     .eq("user_id", user.id)
     .eq("competitor_id", competitorId)
-    .order("first_seen_at", { ascending: true });
+    .order("first_seen_at", { ascending: false })
+    .limit(2500);
 
   if (adsErr) {
     return NextResponse.json({ ok: false, error: adsErr.message }, { status: 500 });
@@ -75,7 +76,8 @@ export async function GET(request: Request) {
     : Date.now();
   const killedThreshold = lastScrapedAt - 24 * 60 * 60 * 1000;
 
-  const hydrated: TimelineAdDto[] = (ads ?? []).map((ad) => ({
+  const rows = (ads ?? []).slice().reverse();
+  const hydrated: TimelineAdDto[] = rows.map((ad) => ({
     id: ad.id,
     platform: ad.platform,
     ad_creative_url: ad.ad_creative_url,

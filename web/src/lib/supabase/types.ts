@@ -534,6 +534,7 @@ export type Database = {
           payload: Json;
           source_scrape_batch_id: string | null;
           ai_model_version: string;
+          ads_fingerprint: string | null;
           computed_at: string;
         };
         Insert: {
@@ -543,6 +544,7 @@ export type Database = {
           payload?: Json;
           source_scrape_batch_id?: string | null;
           ai_model_version?: string;
+          ads_fingerprint?: string | null;
           computed_at?: string;
         };
         Update: {
@@ -552,6 +554,7 @@ export type Database = {
           payload?: Json;
           source_scrape_batch_id?: string | null;
           ai_model_version?: string;
+          ads_fingerprint?: string | null;
           computed_at?: string;
         };
         Relationships: [];
@@ -577,6 +580,51 @@ export type Database = {
           structure?: Json;
           computed_at?: string;
           ai_model_version?: string;
+        };
+        Relationships: [];
+      };
+      ad_preview_analysis_cache: {
+        Row: {
+          ad_id: string;
+          user_id: string;
+          analysis: Json;
+          computed_at: string;
+          ai_model_version: string;
+        };
+        Insert: {
+          ad_id: string;
+          user_id: string;
+          analysis: Json;
+          computed_at?: string;
+          ai_model_version: string;
+        };
+        Update: {
+          ad_id?: string;
+          user_id?: string;
+          analysis?: Json;
+          computed_at?: string;
+          ai_model_version?: string;
+        };
+        Relationships: [];
+      };
+      ad_preview_analysis_usage: {
+        Row: {
+          user_id: string;
+          year_month: string;
+          analysis_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          year_month: string;
+          analysis_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          year_month?: string;
+          analysis_count?: number;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -1209,6 +1257,10 @@ export type Database = {
         Returns: undefined;
       };
       increment_competitor_swap_usage: {
+        Args: Record<string, never>;
+        Returns: undefined;
+      };
+      increment_ad_preview_analysis_usage: {
         Args: Record<string, never>;
         Returns: undefined;
       };

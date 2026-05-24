@@ -4,6 +4,15 @@ import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { isScrapedAdsUuid } from "@/lib/ad-detail/ad-id";
+import {
+  prefetchAdDetail,
+  putAdDetailSeed,
+  setCachedAdDetail,
+  type AdDetailOpenSeed,
+} from "@/lib/ad-detail/ad-detail-cache";
+import type { AdDetailDrawerPayload } from "@/lib/ad-detail/ad-detail-types";
+
+export type { AdDetailOpenSeed };
 
 export type ResolveLibraryAdResult =
   | { ok: true; adId: string }
@@ -21,9 +30,11 @@ export function useAdDetailState() {
   const activeAdId = searchParams.get("ad");
 
   const openAd = useCallback(
-    (adUuid: string) => {
+    (adUuid: string, seed?: AdDetailOpenSeed) => {
       const id = adUuid.trim();
       if (!id || !isScrapedAdsUuid(id)) return;
+      if (seed) putAdDetailSeed({ ...seed, adId: id });
+      prefetchAdDetail(id);
       const params = new URLSearchParams(searchParams.toString());
       params.set("ad", id);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -54,8 +65,9 @@ export function useAdDetailState() {
       });
       try {
         const res = await fetch(`/api/ad-detail?${q.toString()}`, { credentials: "include" });
-        const json = (await res.json()) as { ok?: boolean; ad?: { id: string }; error?: string };
+        const json = (await res.json()) as AdDetailDrawerPayload & { ad?: { id: string }; error?: string };
         if (json.ok && json.ad?.id && isScrapedAdsUuid(json.ad.id)) {
+          setCachedAdDetail(json.ad.id, json);
           const params = new URLSearchParams(searchParams.toString());
           params.set("ad", json.ad.id);
           router.replace(`${pathname}?${params.toString()}`, { scroll: false });

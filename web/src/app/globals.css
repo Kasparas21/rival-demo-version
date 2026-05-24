@@ -447,3 +447,114 @@ html:has([data-dashboard-app]) body {
     transform: none;
   }
 }
+
+/** Ad preview AI analysis — radar expand + skeleton shimmer + section reveal */
+@keyframes ai-radar-expand {
+  from {
+    opacity: 0;
+    transform: scale(0.08);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ai-analysis-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes ai-analysis-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-radar-expand {
+  transform-origin: center center;
+  animation: ai-radar-expand 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ai-sk-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(226, 232, 240, 0.55) 0%,
+    rgba(255, 255, 255, 0.92) 45%,
+    rgba(221, 241, 253, 0.75) 55%,
+    rgba(226, 232, 240, 0.55) 100%
+  );
+  background-size: 200% 100%;
+  animation: ai-analysis-shimmer 1.85s ease-in-out infinite;
+}
+
+.ai-analysis-reveal {
+  opacity: 0;
+  animation: ai-analysis-reveal 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-radar-expand {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .ai-sk-shimmer {
+    animation: none;
+    background: rgba(226, 232, 240, 0.65);
+  }
+
+  .ai-analysis-reveal {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/** Ad detail drawer — smooth slide from right */
+@keyframes ad-detail-slide-in {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes ad-detail-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ad-detail-drawer-panel {
+  animation: ad-detail-slide-in 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform;
+}
+
+.ad-detail-drawer-backdrop {
+  animation: ad-detail-backdrop-in 240ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-detail-drawer-panel {
+    animation: none;
+  }
+
+  .ad-detail-drawer-backdrop {
+    animation: none;
+  }
+}

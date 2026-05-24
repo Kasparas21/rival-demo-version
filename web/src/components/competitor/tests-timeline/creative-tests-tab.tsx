@@ -2,15 +2,16 @@
 
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { Beaker, ChevronDown, ChevronRight, HelpCircle, Info, Play, Skull, Trophy } from "lucide-react";
+import { Beaker, ChevronDown, ChevronUp, HelpCircle, Info, Lightbulb, Pin, Play, Skull, Trophy } from "lucide-react";
 
-import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
-import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { CreativeTestsSkeleton } from "@/components/ui/feature-skeleton";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
-import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+
+import { DurationAdRow } from "./duration-lifespan-bar";
+import { computeLifespanDays, DAY_MS } from "./timeline-helpers";
 
 type CreativeTestAd = {
   id: string;
@@ -166,7 +167,6 @@ export function CreativeTestsTab({
         className="mb-6"
         overline="Creative tests"
         title="Creative Tests"
-        titleTrailing={<DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />}
         description={
           <>
             Ads {competitorLabel} launched together on the same day. Winners appear when one ad outlives the group median
@@ -281,6 +281,12 @@ type TestRowProps = {
   onOpenAd: (adId: string) => void;
 };
 
+function isAdRunning(ad: CreativeTestAd): boolean {
+  const last = new Date(ad.last_seen_at).getTime();
+  if (!Number.isFinite(last)) return false;
+  return (Date.now() - last) / DAY_MS <= 2;
+}
+
 function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
   const launchDate = new Date(`${test.launch_date}T12:00:00.000Z`).toLocaleDateString("en-US", {
     month: "short",
@@ -291,120 +297,96 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
   const isGoogleDataLimited =
     test.platform === "google" && test.median_lifespan_days === 0 && test.max_lifespan_days === 0;
 
+  const runningCount = test.ads.filter(isAdRunning).length;
+  const maxDays = Math.max(test.max_lifespan_days, 1);
+  const headerDotActive = test.test_status === "running" || runningCount > 0;
+
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/50"
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-slate-50/60"
       >
-        <div className="text-slate-400">{expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</div>
+        <span
+          className={`h-2 w-2 shrink-0 rounded-full ${headerDotActive ? "bg-[#34a853]" : "bg-slate-300"}`}
+          aria-hidden
+        />
+        <Pin className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
 
-        <ComparisonPlatformIcon platform={test.platform as StrategyPlatform} className="h-4 w-4" />
+        <span className="min-w-0 flex-1 text-[14px] font-medium text-slate-900">{launchDate}</span>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[14px] font-semibold text-slate-900">{launchDate}</span>
-            <span className="text-[11px] text-slate-500">·</span>
-            <span className="text-[12px] text-slate-600">{test.ad_count} ads</span>
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {test.test_status === "running" && runningCount > 0 ? (
+            <span className="inline-flex items-center rounded-full border border-[#b7dfc0] bg-[#e6f4ea] px-2.5 py-0.5 text-[11px] font-semibold text-[#137333]">
+              {runningCount}/{test.ad_count} Ads Running
+            </span>
+          ) : null}
+          <StatusBadge
+            status={test.test_status}
+            winnerDays={test.winner_lifespan_days}
+            isGoogleDataLimited={isGoogleDataLimited}
+          />
         </div>
 
-        <StatusBadge
-          status={test.test_status}
-          winnerDays={test.winner_lifespan_days}
-          isGoogleDataLimited={isGoogleDataLimited}
-        />
+        <span className="ml-1 shrink-0 text-slate-400" aria-hidden>
+          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </span>
       </button>
 
       {expanded ? (
-        <div className="border-t border-slate-100 bg-slate-50/30 px-4 py-3">
-          <div className="flex flex-col gap-2">
-            {test.ads.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-[12px] text-slate-500">
-                Could not load ads for this test. Refresh competitor data or open Creative Tests again after the next
-                scrape.
-              </p>
-            ) : null}
-            {test.ads.map((ad) => {
-              const isWinner = ad.id === test.winner_ad_id;
-              const start = new Date(ad.first_seen_at).getTime();
-              const end = new Date(ad.last_seen_at).getTime();
-              const lifespanDays = Math.max(0, Math.floor((end - start) / (24 * 60 * 60 * 1000)));
-              const maxDays = test.max_lifespan_days || 1;
-              const widthPct = Math.min(100, (lifespanDays / maxDays) * 100);
+        <div className="border-t border-slate-100 px-1 py-1">
+          {test.ads.length === 0 ? (
+            <p className="mx-3 my-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-4 text-center text-[12px] text-slate-500">
+              Could not load ads for this test. Refresh competitor data or open Creative Tests again after the next
+              scrape.
+            </p>
+          ) : null}
+          {test.ads.map((ad) => {
+            const isWinner = ad.id === test.winner_ad_id;
+            const lifespanDays = computeLifespanDays(ad.first_seen_at, ad.last_seen_at);
+            const isActive = isAdRunning(ad);
 
+            if (ad.platform === "google" && lifespanDays === 0) {
               return (
-                <div
-                  key={ad.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenAd(ad.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onOpenAd(ad.id);
-                    }
-                  }}
-                  className={`flex cursor-pointer items-center gap-3 rounded-lg border p-2 transition-shadow hover:ring-2 hover:ring-slate-200 ${
-                    isWinner ? "border-amber-200 bg-amber-50/50" : "border-slate-200 bg-white"
-                  }`}
-                >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-slate-100">
-                    {ad.ad_creative_url ? (
-                      <img
-                        src={ad.ad_creative_url}
-                        alt=""
-                        loading="lazy"
-                        className="h-full w-full object-cover"
-                        referrerPolicy="no-referrer"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-5 w-5 opacity-40" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      {ad.ai_extracted_angle ? (
-                        <span className="truncate text-[10px] font-medium text-slate-600">{ad.ai_extracted_angle}</span>
-                      ) : null}
-                      {isWinner ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-700">
-                          <Trophy className="h-2.5 w-2.5" />
-                          WINNER
-                        </span>
-                      ) : null}
-                    </div>
-                    {ad.platform === "google" && lifespanDays === 0 ? (
-                      <div className="relative flex h-5 items-center overflow-hidden rounded-full border border-dashed border-slate-200 bg-slate-50 px-3">
-                        <span className="text-[10px] italic text-slate-500">
-                          Lifespan tracking unavailable for Google search ads
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="relative h-5 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={`absolute inset-y-0 left-0 rounded-full ${isWinner ? "bg-amber-500" : "bg-slate-400"}`}
-                          style={{ width: `${widthPct}%` }}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-end pr-2">
-                          <span className="text-[10px] font-bold text-slate-900">{lifespanDays}d</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                <div key={ad.id} className="px-3 py-2">
+                  <DurationAdRow
+                    creativeUrl={ad.ad_creative_url}
+                    platform={ad.platform}
+                    format={ad.format}
+                    lifespanDays={0}
+                    maxDays={maxDays}
+                    isActive={false}
+                    onOpen={() => onOpenAd(ad.id)}
+                  />
+                  <p className="ml-[52px] mt-0.5 text-[10px] italic text-slate-500">
+                    Lifespan tracking unavailable for Google search ads
+                  </p>
                 </div>
               );
-            })}
-          </div>
+            }
+
+            return (
+              <DurationAdRow
+                key={ad.id}
+                creativeUrl={ad.ad_creative_url}
+                platform={ad.platform}
+                format={ad.format}
+                lifespanDays={lifespanDays}
+                maxDays={maxDays}
+                isActive={isActive || isWinner}
+                onOpen={() => onOpenAd(ad.id)}
+                trailing={
+                  isWinner ? (
+                    <span className="inline-flex shrink-0 items-center gap-0.5 text-[10px] font-bold text-[#e37400]">
+                      <Trophy className="h-3 w-3" aria-hidden />
+                      Winner
+                    </span>
+                  ) : null
+                }
+              />
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -417,7 +399,7 @@ type StatusBadgeProps = {
   isGoogleDataLimited?: boolean;
 };
 
-function StatusBadge({ status, winnerDays, isGoogleDataLimited }: StatusBadgeProps) {
+function StatusBadge({ status, isGoogleDataLimited }: StatusBadgeProps) {
   if (isGoogleDataLimited) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-600">
@@ -429,14 +411,14 @@ function StatusBadge({ status, winnerDays, isGoogleDataLimited }: StatusBadgePro
 
   const config = {
     winner_identified: {
-      label: winnerDays != null ? `Winner (${winnerDays}d)` : "Winner identified",
-      classes: "border-amber-200 bg-amber-50 text-amber-700",
-      icon: <Trophy className="h-3 w-3" />,
+      label: "Winner Identified",
+      classes: "border-[#fdd663] bg-[#fef7e0] text-[#b06000]",
+      icon: <Lightbulb className="h-3 w-3" aria-hidden />,
     },
     running: {
       label: "Running",
-      classes: "border-green-200 bg-green-50 text-green-700",
-      icon: <Play className="h-3 w-3" />,
+      classes: "border-[#b7dfc0] bg-[#e6f4ea] text-[#137333]",
+      icon: <Play className="h-3 w-3" aria-hidden />,
     },
     all_killed_fast: {
       label: "All killed fast",

@@ -12,6 +12,7 @@ export type MonthlyUsageSnapshot = {
   swapCount: number;
   csvExportCount: number;
   csvAdsExported: number;
+  adPreviewAnalyses: number;
 };
 
 export async function loadMonthlyUsageSnapshot(
@@ -19,7 +20,7 @@ export async function loadMonthlyUsageSnapshot(
   userId: string,
   yearMonth = utcYearMonth(),
 ): Promise<MonthlyUsageSnapshot> {
-  const [scrapeRes, swapRes, csvRes] = await Promise.all([
+  const [scrapeRes, swapRes, csvRes, analysisRes] = await Promise.all([
     supabase
       .from("monthly_scrape_usage")
       .select("ads_scraped, scrape_operations")
@@ -38,6 +39,12 @@ export async function loadMonthlyUsageSnapshot(
       .eq("user_id", userId)
       .eq("year_month", yearMonth)
       .maybeSingle(),
+    supabase
+      .from("ad_preview_analysis_usage")
+      .select("analysis_count")
+      .eq("user_id", userId)
+      .eq("year_month", yearMonth)
+      .maybeSingle(),
   ]);
 
   return {
@@ -46,6 +53,7 @@ export async function loadMonthlyUsageSnapshot(
     swapCount: swapRes.data?.swap_count ?? 0,
     csvExportCount: csvRes.data?.export_count ?? 0,
     csvAdsExported: csvRes.data?.ads_exported ?? 0,
+    adPreviewAnalyses: analysisRes.data?.analysis_count ?? 0,
   };
 }
 
@@ -177,4 +185,51 @@ export function canPerformManualRefresh(
     }
   }
   return { ok: true };
+}
+
+export async function loadAdPreviewAnalysisUsage(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  yearMonth = utcYearMonth(),
+): Promise<number> {
+  const { data } = await supabase
+    .from("ad_preview_analysis_usage")
+    .select("analysis_count")
+    .eq("user_id", userId)
+    .eq("year_month", yearMonth)
+    .maybeSingle();
+
+  return data?.analysis_count ?? 0;
+}
+
+export function canRunAdPreviewAnalysis(
+  billing: BillingEntitlement,
+  usedThisMonth: number,
+): { ok: true; limit: number | null; remaining: number | null } | { ok: false; error: string; status: number } {
+  if (billing.isUnlimited) {
+    return { ok: true, limit: null, remaining: null };
+  }
+
+  const limit = billing.limits.maxAdPreviewAnalysesPerMonth;
+  if (limit == null) {
+    return { ok: true, limit: null, remaining: null };
+  }
+
+  if (limit <= 0) {
+    return {
+      ok: false,
+      status: 402,
+      error: "Ad preview AI analysis is available on Starter and Pro plans.",
+    };
+  }
+
+  if (usedThisMonth >= limit) {
+    return {
+      ok: false,
+      status: 402,
+      error: `Monthly AI analysis limit reached (${usedThisMonth}/${limit}). Resets next UTC month.`,
+    };
+  }
+
+  return { ok: true, limit, remaining: limit - usedThisMonth };
 }

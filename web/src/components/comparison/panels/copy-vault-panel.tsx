@@ -156,11 +156,15 @@ export function CopyVaultPanel({
     const u = new URL("/api/comparison/vault-ads", window.location.origin);
     u.searchParams.set("competitorId", competitorId);
     u.searchParams.set("vault", "1");
-    u.searchParams.set("limit", "1500");
+    u.searchParams.set("limit", "400");
     u.searchParams.set("offset", "0");
     u.searchParams.set("sort", "lifespan_desc");
     const res = await fetch(u.toString(), { credentials: "include" });
-    const json = (await res.json()) as VaultApiResponse;
+    const json = (await res.json()) as VaultApiResponse & { checkoutUrl?: string };
+    if (res.status === 402) {
+      const msg = json.error ?? "Subscription required for Copy Vault.";
+      throw new Error(json.checkoutUrl ? `${msg} Upgrade at ${json.checkoutUrl}` : msg);
+    }
     if (!res.ok || !json.ok) {
       throw new Error(json.error ?? "Failed to load copy vault");
     }
@@ -230,16 +234,6 @@ export function CopyVaultPanel({
     setVisibleCount(20);
   }, [urlPlatform, urlFunnel, urlAngleExact, urlAnglePick, urlAngleQ, urlAngleCat, sortSafe, savedOnly, competitorId]);
 
-  const scrapedIds = useMemo(() => (rawAds ?? []).map((a) => a.id), [rawAds]);
-  const { savedMap, saveAd, unsaveAd, loading: savedLoading } = useSavedAdsStatus(
-    competitorId,
-    [],
-    scrapedIds,
-    cacheDomainNorm ?? null
-  );
-
-  const savedCount = useMemo(() => Object.keys(savedMap).filter((k) => savedMap[k] !== PENDING_SAVED_AD_ID).length, [savedMap]);
-
   const filterPlatform = urlPlatform === "all" ? null : urlPlatform;
   const filterFunnel = urlFunnel === "ALL" || urlFunnel === "all" ? null : urlFunnel;
 
@@ -255,7 +249,7 @@ export function CopyVaultPanel({
 
   const topAngles = useMemo(() => angleCounts.slice(0, 8), [angleCounts]);
 
-  const filteredAds = useMemo(() => {
+  const filteredAdsBase = useMemo(() => {
     if (!rawAds) return [];
     let rows = rawAds;
     if (filterPlatform) {
@@ -283,12 +277,30 @@ export function CopyVaultPanel({
     if (urlAngleCat) {
       rows = rows.filter((a) => classifyAngleCategory(a.ai_extracted_angle ?? "") === urlAngleCat);
     }
-    rows = sortAds(rows, sortSafe);
-    if (savedOnly) {
-      rows = rows.filter((a) => isAdSaved(savedMap, a.id));
-    }
-    return rows;
-  }, [rawAds, filterPlatform, filterFunnel, urlAngleExact, urlAnglePick, urlAngleQ, urlAngleCat, sortSafe, savedOnly, savedMap]);
+    return sortAds(rows, sortSafe);
+  }, [rawAds, filterPlatform, filterFunnel, urlAngleExact, urlAnglePick, urlAngleQ, urlAngleCat, sortSafe]);
+
+  const savedCheckIds = useMemo(() => {
+    const cap = savedOnly ? Math.min(filteredAdsBase.length, 120) : visibleCount + 20;
+    return filteredAdsBase.slice(0, cap).map((a) => a.id);
+  }, [filteredAdsBase, savedOnly, visibleCount]);
+
+  const { savedMap, saveAd, unsaveAd, loading: savedLoading } = useSavedAdsStatus(
+    competitorId,
+    [],
+    savedCheckIds,
+    cacheDomainNorm ?? null
+  );
+
+  const savedCount = useMemo(
+    () => Object.keys(savedMap).filter((k) => savedMap[k] !== PENDING_SAVED_AD_ID).length,
+    [savedMap]
+  );
+
+  const filteredAds = useMemo(() => {
+    if (!savedOnly) return filteredAdsBase;
+    return filteredAdsBase.filter((a) => isAdSaved(savedMap, a.id));
+  }, [filteredAdsBase, savedOnly, savedMap]);
 
   const visibleAds = useMemo(() => filteredAds.slice(0, visibleCount), [filteredAds, visibleCount]);
 

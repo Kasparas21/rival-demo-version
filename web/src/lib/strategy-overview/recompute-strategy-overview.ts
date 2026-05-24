@@ -20,6 +20,10 @@ import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { getLatestScrapeBatchId } from "@/lib/scrape-batches/get-latest-batch-id";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  computeActiveAdsFingerprint,
+  EMPTY_ACTIVE_ADS_FINGERPRINT,
+} from "@/lib/strategy-overview/active-ads-fingerprint";
 import { SCRAPED_ADS_DERIVATION_SELECT, scrapedAdDerivationRowToInput, type ScrapedAdDerivationRow } from "@/lib/strategy-overview/scraped-ads-derivation-columns";
 
 /** Cap interactive recompute enrichment; cron handles the long tail. */
@@ -411,44 +415,22 @@ export async function getCachedStrategyOverview(
   /** When set, empty cached overviews are invalidated if ads still live only in `ads_cache`. */
   domainHint?: string
 ): Promise<CompetitorStrategyOverviewPayload | null> {
-  const [{ data }, { data: savedMeta }, { data: latestBatchRow }] = await Promise.all([
+  const [{ data }, liveFingerprint] = await Promise.all([
     supabase
       .from("competitor_strategy_overview")
-      .select("payload, ai_model_version, source_scrape_batch_id, computed_at")
+      .select("payload, ai_model_version, ads_fingerprint")
       .eq("competitor_id", competitorId)
       .eq("user_id", userId)
       .maybeSingle(),
-    supabase
-      .from("saved_competitors")
-      .select("last_scraped_at")
-      .eq("id", competitorId)
-      .eq("user_id", userId)
-      .maybeSingle(),
-    supabase
-      .from("scrape_batches")
-      .select("id")
-      .eq("competitor_id", competitorId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    computeActiveAdsFingerprint(supabase, userId, competitorId),
   ]);
 
   if (!data?.payload || typeof data.payload !== "object") return null;
 
   if (data.ai_model_version !== STRATEGY_OVERVIEW_MODEL_VERSION) return null;
 
-  const lastScrapedMs = savedMeta?.last_scraped_at ? Date.parse(savedMeta.last_scraped_at) : NaN;
-  const computedMs = data.computed_at ? Date.parse(data.computed_at) : NaN;
-  if (
-    Number.isFinite(lastScrapedMs) &&
-    Number.isFinite(computedMs) &&
-    lastScrapedMs > computedMs
-  ) {
-    return null;
-  }
-
-  const latestBatch = latestBatchRow?.id ?? null;
-  if (latestBatch !== data.source_scrape_batch_id) return null;
+  const storedFingerprint = data.ads_fingerprint?.trim() || null;
+  if (!storedFingerprint || storedFingerprint !== liveFingerprint) return null;
 
   const payload = data.payload as CompetitorStrategyOverviewPayload;
   if (strategyPayloadLooksEmpty(payload)) {
@@ -631,6 +613,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
           payload: emptyPayload as unknown as Json,
           source_scrape_batch_id: null,
           ai_model_version: STRATEGY_OVERVIEW_MODEL_VERSION,
+          ads_fingerprint: EMPTY_ACTIVE_ADS_FINGERPRINT,
           computed_at: new Date().toISOString(),
         },
         { onConflict: "competitor_id" }
@@ -660,13 +643,15 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         logoUrl: meta.logoUrl,
       });
       await markLockReleased({ enrichedAds: 0, totalAds: 0 });
+      const emptyBatchId = await getLatestScrapeBatchId(supabase, competitorId);
       const { error: upOverviewErr } = await supabase.from("competitor_strategy_overview").upsert(
         {
           user_id: userId,
           competitor_id: competitorId,
           payload: emptyPayload as unknown as Json,
-          source_scrape_batch_id: await getLatestScrapeBatchId(supabase, competitorId),
+          source_scrape_batch_id: emptyBatchId,
           ai_model_version: STRATEGY_OVERVIEW_MODEL_VERSION,
+          ads_fingerprint: EMPTY_ACTIVE_ADS_FINGERPRINT,
           computed_at: new Date().toISOString(),
         },
         { onConflict: "competitor_id" }
@@ -674,13 +659,12 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
       if (upOverviewErr) {
         return { ok: false, error: upOverviewErr.message };
       }
-      const batchIdForEmpty = await getLatestScrapeBatchId(supabase, competitorId);
       await recordStrategyOverviewSnapshot({
         supabase,
         userId,
         competitorId,
         payload: emptyPayload,
-        sourceScrapeBatchId: batchIdForEmpty,
+        sourceScrapeBatchId: emptyBatchId,
         aiModelVersion: STRATEGY_OVERVIEW_MODEL_VERSION,
       });
 
@@ -823,6 +807,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
     );
 
     const payloadJson = payload as unknown as Json;
+    const adsFingerprint = await computeActiveAdsFingerprint(supabase, userId, competitorId);
 
     const { error: upOverviewErr } = await supabase.from("competitor_strategy_overview").upsert(
       {
@@ -831,6 +816,7 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         payload: payloadJson,
         source_scrape_batch_id: batchId,
         ai_model_version: STRATEGY_OVERVIEW_MODEL_VERSION,
+        ads_fingerprint: adsFingerprint,
         computed_at: new Date().toISOString(),
       },
       { onConflict: "competitor_id" }

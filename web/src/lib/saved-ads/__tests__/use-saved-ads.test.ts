@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PENDING_SAVED_AD_ID, isAdSaved, isLibraryItemSaved } from "@/lib/saved-ads/use-saved-ads";
+import { PENDING_SAVED_AD_ID, buildSavedAdsCheckQueryKey, isAdSaved, isLibraryItemSaved } from "@/lib/saved-ads/use-saved-ads";
 import { libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
 
 describe("use-saved-ads helpers", () => {
@@ -23,6 +23,34 @@ describe("use-saved-ads helpers", () => {
       true,
     );
     expect(isLibraryItemSaved({}, resolved, "meta", "card-id", ["archive-id"])).toBe(false);
+  });
+});
+
+describe("buildSavedAdsCheckQueryKey", () => {
+  it("is stable regardless of library item order", () => {
+    const a = buildSavedAdsCheckQueryKey(
+      "cid-1",
+      [
+        { platform: "meta", libraryItemId: "b" },
+        { platform: "tiktok", libraryItemId: "a" },
+      ],
+      ["z", "y"],
+    );
+    const b = buildSavedAdsCheckQueryKey(
+      "cid-1",
+      [
+        { platform: "tiktok", libraryItemId: "a" },
+        { platform: "meta", libraryItemId: "b" },
+      ],
+      ["y", "z"],
+    );
+    expect(a).toBe(b);
+  });
+
+  it("changes when visible ad ids change", () => {
+    const base = buildSavedAdsCheckQueryKey("cid-1", [{ platform: "meta", libraryItemId: "1" }]);
+    const next = buildSavedAdsCheckQueryKey("cid-1", [{ platform: "meta", libraryItemId: "2" }]);
+    expect(base).not.toBe(next);
   });
 });
 

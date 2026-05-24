@@ -6,6 +6,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bell, Settings2, X } from "lucide-react";
 
 import {
+  alertGlassButtonClass,
+  alertGlassChipActiveClass,
+  alertGlassChipBaseClass,
+  alertGlassChipInactiveClass,
+  alertGlassPanelClass,
+} from "@/components/competitor/alerts/alert-ui-styles";
+import {
   AlertCard,
   alertDeepLinkPath,
   type AlertFeedRow,
@@ -30,6 +37,7 @@ type Props = {
   allowAlertRules?: boolean;
   allowAlertEmail?: boolean;
   onUnreadChange?: (count: number) => void;
+  fetchEnabled?: boolean;
 };
 
 type FeedResponse = {
@@ -54,6 +62,7 @@ export function AlertsTab({
   allowAlertRules = false,
   allowAlertEmail = false,
   onUnreadChange,
+  fetchEnabled = true,
 }: Props) {
   const router = useRouter();
   const pathname = usePathname();
@@ -119,12 +128,14 @@ export function AlertsTab({
   }, []);
 
   useEffect(() => {
+    if (!fetchEnabled) return;
     void fetchFeed();
-  }, [fetchFeed]);
+  }, [fetchFeed, fetchEnabled]);
 
   useEffect(() => {
+    if (!fetchEnabled) return;
     void fetchUnread();
-  }, [fetchUnread, alerts]);
+  }, [fetchUnread, fetchEnabled, alerts]);
 
   useEffect(() => {
     if (settingsOpen) void fetchRules();
@@ -223,7 +234,7 @@ export function AlertsTab({
             <button
               type="button"
               onClick={() => void markAllRead()}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50"
+              className={alertGlassButtonClass}
             >
               Mark all read
             </button>
@@ -231,7 +242,7 @@ export function AlertsTab({
           <button
             type="button"
             onClick={() => setSettingsOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50"
+            className={`inline-flex items-center gap-1.5 ${alertGlassButtonClass}`}
           >
             <Settings2 className="h-3.5 w-3.5" />
             Manage alerts
@@ -270,11 +281,13 @@ export function AlertsTab({
           <SkListRows count={6} />
         </div>
       ) : error ? (
-        <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</div>
+        <div className={`rounded-xl px-4 py-3 text-[13px] text-red-800 ${alertGlassPanelClass} border-red-200/40 bg-red-50/40`}>
+          {error}
+        </div>
       ) : alerts.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
-            <Bell className="h-7 w-7 text-slate-400" />
+        <div className={`flex flex-col items-center justify-center px-6 py-16 text-center ${alertGlassPanelClass}`}>
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/70 bg-white/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md">
+            <Bell className="h-7 w-7 text-indigo-400/80" />
           </div>
           <h3 className="text-[15px] font-semibold text-slate-900">No alerts yet</h3>
           <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-600">
@@ -283,7 +296,7 @@ export function AlertsTab({
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {alerts.map((alert) => (
             <AlertCard key={alert.id} alert={alert} onClick={() => handleAlertClick(alert)} />
           ))}
@@ -291,9 +304,9 @@ export function AlertsTab({
       )}
 
       {settingsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
-            <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-5 py-4">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/25 p-4 backdrop-blur-sm sm:items-center">
+          <div className={`max-h-[85vh] w-full max-w-lg overflow-y-auto ${alertGlassPanelClass}`}>
+            <div className="sticky top-0 flex items-center justify-between border-b border-white/50 bg-white/55 px-5 py-4 backdrop-blur-xl">
               <div>
                 <h2 className="text-[16px] font-semibold text-slate-900">Alert settings</h2>
                 <p className="mt-1 text-[12px] text-slate-500">
@@ -303,7 +316,7 @@ export function AlertsTab({
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
-                className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-white/50"
                 aria-label="Close settings"
               >
                 <X className="h-5 w-5" />
@@ -311,7 +324,7 @@ export function AlertsTab({
             </div>
 
             {!allowAlertRules ? (
-              <div className="border-b border-slate-100 bg-amber-50 px-5 py-3 text-[12px] text-amber-900">
+              <div className="border-b border-white/45 bg-amber-50/70 px-5 py-3 text-[12px] text-amber-900 backdrop-blur-sm">
                 Starter includes default alerts in your feed.{" "}
                 <Link href="/checkout" className="font-semibold underline">
                   Upgrade to Pro
@@ -332,7 +345,10 @@ export function AlertsTab({
                   const emailDisabled = !allowAlertEmail || disabled;
 
                   return (
-                    <div key={alertType} className="rounded-xl border border-slate-200 p-4">
+                    <div
+                      key={alertType}
+                      className="rounded-xl border border-white/65 bg-white/40 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-md"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="text-[14px] font-semibold text-slate-900">{cfg.label}</div>
@@ -383,7 +399,7 @@ export function AlertsTab({
                                   },
                                 });
                               }}
-                              className="w-16 rounded border border-slate-200 px-2 py-1 text-[12px]"
+                              className="w-16 rounded-lg border border-white/70 bg-white/50 px-2 py-1 text-[12px] shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-sm"
                             />
                           </label>
                         ) : null}
@@ -421,10 +437,8 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full px-3 py-1 text-[11px] font-medium border transition-all duration-150",
-        active
-          ? "bg-slate-900 text-white border-slate-900"
-          : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+        alertGlassChipBaseClass,
+        active ? alertGlassChipActiveClass : alertGlassChipInactiveClass
       )}
     >
       {children}

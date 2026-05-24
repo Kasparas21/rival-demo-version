@@ -27,6 +27,8 @@ export type PlanLimits = {
   allowAlertEmail: boolean;
   /** null = unlimited */
   maxAiStrategyOverviews: number | null;
+  /** Ad preview AI analyses per UTC month (null = unlimited). */
+  maxAdPreviewAnalysesPerMonth: number | null;
   initialScrapeAdsPerPlatform: number | null;
 };
 
@@ -48,6 +50,7 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
   allowAlertRules: false,
   allowAlertEmail: false,
   maxAiStrategyOverviews: 1,
+  maxAdPreviewAnalysesPerMonth: 0,
   initialScrapeAdsPerPlatform: 200,
 };
 
@@ -68,6 +71,7 @@ const STARTER_LIMITS: PlanLimits = {
   allowAlertRules: false,
   allowAlertEmail: false,
   maxAiStrategyOverviews: null,
+  maxAdPreviewAnalysesPerMonth: 10,
   initialScrapeAdsPerPlatform: null,
 };
 
@@ -88,6 +92,7 @@ const PRO_LIMITS: PlanLimits = {
   allowAlertRules: true,
   allowAlertEmail: true,
   maxAiStrategyOverviews: null,
+  maxAdPreviewAnalysesPerMonth: 20,
   initialScrapeAdsPerPlatform: null,
 };
 
@@ -108,6 +113,7 @@ const ADMIN_LIMITS: PlanLimits = {
   allowAlertRules: true,
   allowAlertEmail: true,
   maxAiStrategyOverviews: null,
+  maxAdPreviewAnalysesPerMonth: null,
   initialScrapeAdsPerPlatform: null,
 };
 

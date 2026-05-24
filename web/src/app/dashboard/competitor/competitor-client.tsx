@@ -40,6 +40,8 @@ import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-modal";
 import { MetaAdsAllModal } from "@/components/ads-library/meta-ads-all-modal";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
+import { buildLibraryCardDetailSeed } from "@/lib/ad-detail/library-ad-seed";
+import type { AdDetailOpenSeed } from "@/lib/ad-detail/ad-detail-cache";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
 import { AdSaveRow, AdSaveVisibilityProvider } from "@/components/ads-library/ad-save-row";
 import { AdLibraryRunStatusBadge } from "@/components/ads-library/ad-library-run-status-badge";
@@ -156,6 +158,11 @@ import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields
 import { ComparisonPage } from "@/components/comparison/comparison-page";
 import { buildAdEvidenceText, buildDualBrandAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
+import {
+  markEnsurePersistedSuccess,
+  prefetchCompetitorFeatureCaches,
+  shouldSkipEnsurePersisted,
+} from "@/lib/cache/prefetch-competitor-features";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 import { normalizeComparisonPayloadJson } from "@/lib/comparison/normalize-comparison-payload-json";
 import {
@@ -205,6 +212,7 @@ import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-ove
 import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
 import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
+import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-styles";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   type AdsLibraryUpdatedDetail,
@@ -2004,12 +2012,25 @@ function CompetitorDashboardBody({
     deriveSubFromParams(searchParams, deriveTabFromParams(searchParams)),
   );
 
+  /** While the user picks a tab, ignore stale `tab`/`sub` in the URL until the router catches up. */
+  const userNavIntentRef = useRef<{ tab: string; sub: string | null } | null>(null);
+  const urlTabParam = (searchParams.get("tab") ?? "").trim();
+  const urlSubParam = (searchParams.get("sub") ?? "").trim();
+
   useEffect(() => {
     const tab = deriveTabFromParams(searchParams);
     const sub = deriveSubFromParams(searchParams, tab);
+    const intent = userNavIntentRef.current;
+    if (intent) {
+      if (tab === intent.tab && sub === intent.sub) {
+        userNavIntentRef.current = null;
+      } else {
+        return;
+      }
+    }
     setNavTab((prev) => (prev === tab ? prev : tab));
     setNavSub((prev) => (prev === sub ? prev : sub));
-  }, [searchParams, deriveTabFromParams, deriveSubFromParams]);
+  }, [urlTabParam, urlSubParam, deriveTabFromParams, deriveSubFromParams, searchParams]);
 
   const syncNavToUrl = useCallback(
     (tab: string, sub: string | null, opts?: { deleteView?: boolean }) => {
@@ -2041,10 +2062,8 @@ function CompetitorDashboardBody({
     const def = findCompetitorTab(navTab);
     if (!def?.subTabs?.length || !def.defaultSubTab) return;
     if (navSub && def.subTabs.some((s) => s.id === navSub)) return;
-    const sub = def.defaultSubTab;
-    setNavSub(sub);
-    syncNavToUrl(navTab, sub, { deleteView: navTab === "insights" });
-  }, [navTab, navSub, syncNavToUrl]);
+    setNavSub(def.defaultSubTab);
+  }, [navTab, navSub]);
 
   useEffect(() => {
     if (!isOwnWorkspace || navTab !== "comparison") return;
@@ -2088,6 +2107,7 @@ function CompetitorDashboardBody({
     (tabId: string) => {
       const tab = findCompetitorTab(tabId);
       const sub = tab?.defaultSubTab ?? null;
+      userNavIntentRef.current = { tab: tabId, sub };
       setNavTab(tabId);
       setNavSub(sub);
       startTransition(() => {
@@ -2112,9 +2132,11 @@ function CompetitorDashboardBody({
 
   const handleSubTabChange = useCallback(
     (subTabId: string) => {
+      userNavIntentRef.current = { tab: navTab, sub: subTabId };
       setNavSub(subTabId);
       startTransition(() => {
         const params = new URLSearchParams(searchParams.toString());
+        params.set("tab", navTab);
         params.set("sub", subTabId);
         if (navTab === "insights") {
           params.delete("view");
@@ -2126,6 +2148,7 @@ function CompetitorDashboardBody({
   );
 
   const navigateToLandingPagesExplorer = useCallback(() => {
+    userNavIntentRef.current = { tab: "tests", sub: "landing-pages" };
     setNavTab("tests");
     setNavSub("landing-pages");
     startTransition(() => {
@@ -2276,8 +2299,17 @@ function CompetitorDashboardBody({
   }, [sidebarSnapshot, canonicalHost]);
 
   const { activeAdId, openAd, closeAd, resolveLibraryAdAndOpen } = useAdDetailState();
+  const [pendingOpenSeed, setPendingOpenSeed] = useState<AdDetailOpenSeed | null>(null);
 
-  const [serverScrapedAdTotal, setServerScrapedAdTotal] = useState<number | null>(null);
+  const closeAdDetail = useCallback(() => {
+    setPendingOpenSeed(null);
+    closeAd();
+  }, [closeAd]);
+
+  useEffect(() => {
+    if (activeAdId) setPendingOpenSeed(null);
+  }, [activeAdId]);
+
   const [manualRefreshBusyPlatform, setManualRefreshBusyPlatform] =
     useState<AdsLibraryPlatform | null>(null);
   const [billingAllowManualRefresh, setBillingAllowManualRefresh] = useState(false);
@@ -2871,8 +2903,9 @@ function CompetitorDashboardBody({
   }, [competitorDbIdForSaved, canManualRefresh]);
 
   useEffect(() => {
+    if (navTab !== "ads library") return;
     void loadManualRefreshStatus();
-  }, [loadManualRefreshStatus]);
+  }, [loadManualRefreshStatus, navTab]);
 
   const manualRefreshQuotaHint = useMemo(() => {
     if (!canManualRefresh || !manualRefreshStatus) return null;
@@ -2958,8 +2991,9 @@ function CompetitorDashboardBody({
   }, [competitorDbIdForSaved]);
 
   useEffect(() => {
+    if (navTab !== "ads library") return;
     void loadPlatformTracking();
-  }, [loadPlatformTracking]);
+  }, [loadPlatformTracking, navTab]);
 
   const lastScrapedAtForPlatform = useCallback(
     (platform: AdsLibraryPlatform): string | null =>
@@ -3024,8 +3058,7 @@ function CompetitorDashboardBody({
   const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
   const comparisonPayloadFetchEnabled =
-    Boolean(cacheDomainNorm.trim()) &&
-    (navTab === "insights" || navTab === "audience-copy" || navTab === "comparison");
+    Boolean(cacheDomainNorm.trim()) && navTab === "comparison";
 
   const landingPagesFetchEnabled =
     Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()) &&
@@ -3074,7 +3107,7 @@ function CompetitorDashboardBody({
 
   useEffect(() => {
     if (!cacheDomainNorm.trim() || !brand.domain.trim()) return;
-    if (navTab !== "insights" && navTab !== "comparison") return;
+    if (navTab !== "insights" && navTab !== "comparison" && navTab !== "audience-copy") return;
 
     let cancelled = false;
     let intervalId: number | null = null;
@@ -3203,32 +3236,6 @@ function CompetitorDashboardBody({
     landingPagesListHook.error,
     landingPagesListHook.refetch,
   ]);
-
-  useEffect(() => {
-    const id = competitorDbIdForSaved;
-    if (!id || isOwnWorkspace) {
-      setServerScrapedAdTotal(null);
-      return;
-    }
-    let cancelled = false;
-    void fetch(`/api/competitor/velocity?competitorId=${encodeURIComponent(id)}`)
-      .then((r) => r.json())
-      .then((j: { ok?: boolean; velocities?: { total_count?: number }[] }) => {
-        if (cancelled) return;
-        if (!j.ok || !Array.isArray(j.velocities)) {
-          setServerScrapedAdTotal(null);
-          return;
-        }
-        const t = j.velocities.reduce((s, v) => s + (v.total_count ?? 0), 0);
-        setServerScrapedAdTotal(t);
-      })
-      .catch(() => {
-        if (!cancelled) setServerScrapedAdTotal(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [competitorDbIdForSaved, isOwnWorkspace]);
 
   const ensureManualRefreshAllowed = useCallback((): boolean => {
     if (!canManualRefresh) {
@@ -3364,7 +3371,7 @@ function CompetitorDashboardBody({
   );
 
   const openAdLibraryCard = useCallback(
-    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+    (platform: string, libraryItemId: string, alternateIds: string[] = [], rawAd?: unknown) => {
       void (async () => {
         let cid = competitorDbIdForSaved.trim();
         const pl = platform.trim().toLowerCase();
@@ -3379,10 +3386,24 @@ function CompetitorDashboardBody({
           return;
         }
 
+        const seedCompetitor = {
+          id: cid,
+          name: competitorDisplayLabel,
+          domain: brand.domain,
+          logo_url: brand.logoUrl ?? null,
+        };
+
         const knownScrapedId = scrapedIdForCard(pl, lid, alternateIds);
         if (knownScrapedId) {
-          openAd(knownScrapedId);
+          const seed = rawAd
+            ? buildLibraryCardDetailSeed(pl, knownScrapedId, rawAd, seedCompetitor)
+            : undefined;
+          openAd(knownScrapedId, seed);
           return;
+        }
+
+        if (rawAd) {
+          setPendingOpenSeed(buildLibraryCardDetailSeed(pl, lid, rawAd, seedCompetitor));
         }
 
         const firstResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
@@ -3412,6 +3433,7 @@ function CompetitorDashboardBody({
         const retryResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
         if (retryResolve.ok) return;
 
+        setPendingOpenSeed(null);
         toast.error(
           retryResolve.error === "Ad not found"
             ? "Could not open this ad. Try refreshing the library."
@@ -3421,7 +3443,9 @@ function CompetitorDashboardBody({
     },
     [
       brand.domain,
+      brand.logoUrl,
       competitorDbIdForSaved,
+      competitorDisplayLabel,
       ensureWorkspaceLibraryLinked,
       isOwnWorkspace,
       openAd,
@@ -3459,6 +3483,19 @@ function CompetitorDashboardBody({
     };
   }, [navTab, competitorDbIdForSaved]);
 
+  useEffect(() => {
+    const id = competitorDbIdForSaved;
+    if (!id || isOwnWorkspace) return;
+    if (navTab !== "insights" && navTab !== "audience-copy" && navTab !== "tests") return;
+
+    prefetchCompetitorFeatureCaches({
+      cacheDomainNorm,
+      competitorDomain: brand.domain,
+      competitorId: id,
+      scrapeStamp: accountLastScrapedAt ?? "none",
+    });
+  }, [navTab, competitorDbIdForSaved, cacheDomainNorm, brand.domain, accountLastScrapedAt, isOwnWorkspace]);
+
   /** Insights tabs read from `scraped_ads` — ensure ads_cache was copied before strategy/creative-tests load. */
   useEffect(() => {
     const needsPersistedAds =
@@ -3471,6 +3508,12 @@ function CompetitorDashboardBody({
       (navTab === "audience-copy" &&
         (navSub === "audience" || navSub === "copy-vault"));
     if (!needsPersistedAds || !cacheDomainNorm.trim()) return;
+    if (
+      competitorDbIdForSaved &&
+      shouldSkipEnsurePersisted(brand.domain, competitorDbIdForSaved)
+    ) {
+      return;
+    }
 
     let cancelled = false;
     void fetch("/api/competitor/ads-library/ensure-persisted", {
@@ -3486,12 +3529,20 @@ function CompetitorDashboardBody({
         if (cancelled) return;
         const json = (await res.json()) as { ok?: boolean; scrapedAdsPersisted?: number };
         if (!json.ok || !(json.scrapedAdsPersisted ?? 0)) return;
+        if (competitorDbIdForSaved) {
+          markEnsurePersistedSuccess(brand.domain, competitorDbIdForSaved);
+        }
+        prefetchCompetitorFeatureCaches({
+          cacheDomainNorm,
+          competitorDomain: brand.domain,
+          competitorId: competitorDbIdForSaved,
+          scrapeStamp: accountLastScrapedAt ?? "none",
+        });
         window.dispatchEvent(
           new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
             detail: { domain: brand.domain.trim() },
           }),
         );
-        void refetchComparisonPayload();
       })
       .catch(() => {
         /* non-blocking */
@@ -3506,7 +3557,7 @@ function CompetitorDashboardBody({
     brand.domain,
     cacheDomainNorm,
     competitorDbIdForSaved,
-    refetchComparisonPayload,
+    accountLastScrapedAt,
   ]);
 
   const runStatusForLibraryCard = useCallback(
@@ -3848,19 +3899,15 @@ function CompetitorDashboardBody({
                       isDisabled
                         ? "text-[#b8beca]"
                         : isActive
-                          ? tab.id === "alerts"
-                            ? "text-amber-500"
-                            : isOwnWorkspace
-                              ? "text-sky-700"
-                              : "text-[#343434]"
+                          ? isOwnWorkspace
+                            ? "text-sky-700"
+                            : "text-[#343434]"
                           : "text-[#9ca3af]"
                     }`}
                   />
                   {tab.label}
                   {tab.id === "alerts" && alertsUnreadCount > 0 ? (
-                    <span className="ml-1 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                      {alertsUnreadCount > 99 ? "99+" : alertsUnreadCount}
-                    </span>
+                    <AlertUnreadCountBadge count={alertsUnreadCount} className="ml-0.5" />
                   ) : null}
                   {isDisabled ? <Lock className="h-3.5 w-3.5 shrink-0 text-[#b8beca]" aria-hidden /> : null}
                 </button>
@@ -4397,7 +4444,7 @@ function CompetitorDashboardBody({
                           ad={ad}
                           viewMode="grid"
                           brand={brand}
-                          onClick={() => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad))}
+                          onClick={() => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad), ad)}
                           {...adSaveProps("meta", ad.id, metaLibraryItemLookupKeys(ad))}
                         />
                       ))}
@@ -4411,7 +4458,7 @@ function CompetitorDashboardBody({
                 ads={displayMetaAdsWithPreviews}
                 viewMode="grid"
                 brand={brand}
-                onAdActivate={(ad) => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad))}
+                onAdActivate={(ad) => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad), ad)}
                 getMetaAdExtras={(ad) => adSaveProps("meta", ad.id, metaLibraryItemLookupKeys(ad))}
               />
             </section>
@@ -4504,7 +4551,7 @@ function CompetitorDashboardBody({
                           ad={ad}
                           brand={brand}
                           onOpenDetail={() =>
-                            void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id)
+                            void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id, [], ad)
                           }
                           {...adSaveProps(ad.type === "youtube" ? "youtube" : "google", ad.id)}
                         />
@@ -4531,7 +4578,7 @@ function CompetitorDashboardBody({
                     ad={ad}
                     brand={brand}
                     onOpenDetail={() =>
-                      void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id)
+                      void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id, [], ad)
                     }
                     {...adSaveProps(ad.type === "youtube" ? "youtube" : "google", ad.id)}
                   />
@@ -4625,7 +4672,7 @@ function CompetitorDashboardBody({
                           key={ad.id}
                           ad={ad}
                           brand={brand}
-                          onOpenDetail={() => void openAdLibraryCard("linkedin", ad.id)}
+                          onOpenDetail={() => void openAdLibraryCard("linkedin", ad.id, [], ad)}
                           {...adSaveProps("linkedin", ad.id)}
                         />
                       ))}
@@ -4645,7 +4692,7 @@ function CompetitorDashboardBody({
                   <LinkedInFeedAdCard
                     ad={ad}
                     brand={brand}
-                    onOpenDetail={() => void openAdLibraryCard("linkedin", ad.id)}
+                    onOpenDetail={() => void openAdLibraryCard("linkedin", ad.id, [], ad)}
                     {...adSaveProps("linkedin", ad.id)}
                   />
                 )}
@@ -4735,7 +4782,7 @@ function CompetitorDashboardBody({
                         <TikTokAdCard
                           key={ad.id}
                           ad={ad}
-                          onClick={() => void openAdLibraryCard("tiktok", ad.id)}
+                          onClick={() => void openAdLibraryCard("tiktok", ad.id, [], ad)}
                           {...adSaveProps("tiktok", ad.id)}
                         />
                       ))}
@@ -4754,7 +4801,7 @@ function CompetitorDashboardBody({
                 renderItem={(ad) => (
                   <TikTokAdCard
                     ad={ad}
-                    onClick={() => void openAdLibraryCard("tiktok", ad.id)}
+                    onClick={() => void openAdLibraryCard("tiktok", ad.id, [], ad)}
                     {...adSaveProps("tiktok", ad.id)}
                   />
                 )}
@@ -4856,7 +4903,7 @@ function CompetitorDashboardBody({
                         <PinterestAdCard
                           key={ad.id}
                           ad={ad}
-                          onClick={() => void openAdLibraryCard("pinterest", ad.id)}
+                          onClick={() => void openAdLibraryCard("pinterest", ad.id, [], ad)}
                           {...adSaveProps("pinterest", ad.id)}
                         />
                       ))}
@@ -4873,7 +4920,7 @@ function CompetitorDashboardBody({
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
-                  <PinterestAdCard ad={ad} onClick={() => void openAdLibraryCard("pinterest", ad.id)} {...adSaveProps("pinterest", ad.id)} />
+                  <PinterestAdCard ad={ad} onClick={() => void openAdLibraryCard("pinterest", ad.id, [], ad)} {...adSaveProps("pinterest", ad.id)} />
                 )}
               />
             </section>
@@ -4963,7 +5010,7 @@ function CompetitorDashboardBody({
                           <SnapchatAdCard
                             key={ad.id}
                             ad={ad}
-                            onClick={() => void openAdLibraryCard("snapchat", ad.id)}
+                            onClick={() => void openAdLibraryCard("snapchat", ad.id, [], ad)}
                             {...adSaveProps("snapchat", ad.id)}
                           />
                         ))}
@@ -4980,7 +5027,7 @@ function CompetitorDashboardBody({
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
-                  <SnapchatAdCard ad={ad} onClick={() => void openAdLibraryCard("snapchat", ad.id)} {...adSaveProps("snapchat", ad.id)} />
+                  <SnapchatAdCard ad={ad} onClick={() => void openAdLibraryCard("snapchat", ad.id, [], ad)} {...adSaveProps("snapchat", ad.id)} />
                 )}
               />
               </section>
@@ -5008,7 +5055,7 @@ function CompetitorDashboardBody({
                 competitorId={competitorDbIdForSaved || undefined}
                 lastScrapedAt={accountLastScrapedAt}
                 onFreshnessRescrape={undefined}
-                fetchEnabled={navTab === "insights"}
+                fetchEnabled={navTab === "insights" && navSub === "strategy-map"}
                 externalRecomputeRunning={recomputePollState.recomputeRunning}
                 externalRecomputeError={recomputePollState.recomputeError}
               />
@@ -5018,11 +5065,8 @@ function CompetitorDashboardBody({
                 competitorDomain={brand.domain}
                 competitorLabel={competitorDisplayLabel}
                 competitorId={competitorDbIdForSaved}
-                comparisonPayload={comparisonPayload}
-                comparisonPayloadLoading={comparisonPayloadLoading}
-                comparisonPayloadError={comparisonPayloadErrorMessage}
-                refetchComparisonPayload={refetchComparisonPayload}
-                refetchComparisonPayloadIfStale={refetchComparisonPayloadIfStale}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
                 fetchEnabled={navSub === "activity-feed"}
               />
             </KeepMountedTab>
@@ -5070,7 +5114,7 @@ function CompetitorDashboardBody({
       </KeepMountedTab>
 
       <KeepMountedTab active={navTab === "audience-copy"} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <KeepMountedTab active={navSub === "audience"} className="min-h-0">
             <AudienceTab
               competitorDomain={brand.domain}
@@ -5081,9 +5125,10 @@ function CompetitorDashboardBody({
               workspaceBadge={myBrand.badge ?? undefined}
               competitorLabel={competitorDisplayLabel}
               competitorLogoUrl={brand.logoUrl}
-              comparisonPayload={comparisonPayload}
-              comparisonPayloadLoading={comparisonPayloadLoading}
-              comparisonPayloadError={comparisonPayloadErrorMessage}
+              cacheDomainNorm={cacheDomainNorm}
+              lastScrapedAt={accountLastScrapedAt}
+              fetchEnabled={navSub === "audience"}
+              externalRecomputeRunning={recomputePollState.recomputeRunning}
             />
           </KeepMountedTab>
           <KeepMountedTab active={navSub === "copy-vault"} className="min-h-0">
@@ -5100,7 +5145,7 @@ function CompetitorDashboardBody({
       </KeepMountedTab>
 
       <KeepMountedTab active={navTab === "comparison" && !isOwnWorkspace} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <div className="animate-in fade-in duration-200">
             <ComparisonPage
               isConfirmed={isConfirmed}
@@ -5126,20 +5171,22 @@ function CompetitorDashboardBody({
       </KeepMountedTab>
 
       <KeepMountedTab active={navTab === "alerts"} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <AlertsTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorLabel={competitorDisplayLabel}
             allowAlertRules={billingAllowAlertRules || billingIsUnlimited}
             allowAlertEmail={billingAllowAlertEmail || billingIsUnlimited}
             onUnreadChange={setAlertsUnreadCount}
+            fetchEnabled={navTab === "alerts"}
           />
         </div>
       </KeepMountedTab>
 
       <AdDetailDrawer
         adId={activeAdId}
-        onClose={closeAd}
+        openSeed={pendingOpenSeed}
+        onClose={closeAdDetail}
         saveEnabled={ownBrandSavedAdsEnabled}
         showDebugIndicator={isOwnWorkspace && showBrandDebugTabs}
       />
@@ -5181,7 +5228,13 @@ export function CompetitorContent({ pathDomainCanonical }: { pathDomainCanonical
     const bulky =
       searchParams.has("brand") || searchParams.has("ids") || searchParams.has("url");
     if (!bulky) return;
-    router.replace(buildCompetitorDashboardPath(canonicalHost), { scroll: false });
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("brand");
+    params.delete("ids");
+    params.delete("url");
+    const qs = params.toString();
+    const base = buildCompetitorDashboardPath(canonicalHost);
+    router.replace(qs ? `${base}?${qs}` : base, { scroll: false });
   }, [pathDomainCanonical, canonicalHost, router, searchParams]);
 
   return (

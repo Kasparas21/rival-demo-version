@@ -3,7 +3,10 @@ import type { AdsLibraryPlatform } from "./api-types";
 import { resolveAdsCacheDomainForUser } from "./competitor-cache-domain";
 import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "./ads-cache-pick";
 import { countLibraryAdsForPlatform, platformScrapeSucceeded } from "./library-response-utils";
-import { persistScrapedAdsFromAdsLibraryResponse } from "./persist-scraped-ads";
+import {
+  libraryPlatformHasActiveScrapedRows,
+  persistScrapedAdsFromAdsLibraryResponse,
+} from "./persist-scraped-ads";
 import {
   adsLibraryResponseFromAdsCacheRows,
   expandAdsCacheDomainCandidates,
@@ -79,10 +82,24 @@ export async function ensureCompetitorAdsPersisted(
   );
   const deduped = [...latestByPlatform.values()];
   const out = adsLibraryResponseFromAdsCacheRows(deduped);
+
+  const { data: existingRows } = await supabase
+    .from("scraped_ads")
+    .select("platform")
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .eq("is_active", true);
+
+  const existingActivePlatforms = new Set((existingRows ?? []).map((r) => r.platform));
+
   const platformsToPersist = new Set<AdsLibraryPlatform>();
   for (const row of deduped) {
     const p = row.platform as AdsLibraryPlatform;
-    if (platformScrapeSucceeded(out, p) && countLibraryAdsForPlatform(p, out) > 0) {
+    if (
+      platformScrapeSucceeded(out, p) &&
+      countLibraryAdsForPlatform(p, out) > 0 &&
+      !libraryPlatformHasActiveScrapedRows(p, existingActivePlatforms)
+    ) {
       platformsToPersist.add(p);
     }
   }

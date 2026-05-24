@@ -8,7 +8,7 @@ import {
   countLibraryAdsForPlatform,
   platformScrapeSucceeded,
 } from "@/lib/ad-library/library-response-utils";
-import { persistScrapedAdsFromAdsLibraryResponse } from "@/lib/ad-library/persist-scraped-ads";
+import { persistScrapedAdsFromAdsLibraryResponse, libraryPlatformHasActiveScrapedRows } from "@/lib/ad-library/persist-scraped-ads";
 import type { Database } from "@/lib/supabase/types";
 
 function emptyResponse(): AdsLibraryResponse {
@@ -130,21 +130,24 @@ export async function tryHydrateScrapedAdsFromAdsCache(
 
   console.error("[hydration:enter]", trace);
 
-  const { count, error: cErr } = await supabase
+  const { data: existingRows, error: existingErr } = await supabase
     .from("scraped_ads")
-    .select("id", { count: "exact", head: true })
+    .select("platform")
     .eq("user_id", userId)
     .eq("competitor_id", competitorId)
     .eq("is_active", true);
 
-  if (cErr) {
-    console.error("[hydration:check_active_failed]", { ...trace, error: cErr.message });
-    return none("check_active_failed", [cErr.message]);
+  if (existingErr) {
+    console.error("[hydration:check_active_failed]", { ...trace, error: existingErr.message });
+    return none("check_active_failed", [existingErr.message]);
   }
-  if ((count ?? 0) > 0) {
-    console.error("[hydration:skip_existing_active_scraped]", { ...trace, activeCount: count ?? 0 });
-    return none("skip_existing_active_scraped");
-  }
+
+  const existingActivePlatforms = new Set((existingRows ?? []).map((r) => r.platform));
+  console.error("[hydration:existing_active_platforms]", {
+    ...trace,
+    platforms: [...existingActivePlatforms],
+    count: existingActivePlatforms.size,
+  });
 
   const { cacheDomain, readDomains } = await resolveAdsCacheDomainForUser(supabase, userId, domainHint);
   console.error("[hydration:resolved_domains]", { ...trace, cacheDomain, readDomains });
@@ -239,21 +242,28 @@ export async function tryHydrateScrapedAdsFromAdsCache(
                   ? out.pinterest.error
                   : out.snapchat.error;
     const included = scrapeOk && adCount > 0;
+    const missingFromDb = included && !libraryPlatformHasActiveScrapedRows(p, existingActivePlatforms);
     platformReport.push({
       platform: p,
       scrapeOk,
       count: adCount,
       error: errVal ?? null,
-      included,
+      included: missingFromDb,
     });
-    if (included) platformsToPersist.add(p);
+    if (missingFromDb) platformsToPersist.add(p);
   }
 
   console.error("[hydration:platform_report]", { ...trace, platformReport });
 
   if (platformsToPersist.size === 0) {
-    console.error("[hydration:no_platforms_to_persist]", trace);
-    return none("no_platforms_to_persist");
+    console.error("[hydration:all_platforms_already_hydrated]", trace);
+    return {
+      ok: true,
+      reason: "all_platforms_already_hydrated",
+      persistedPlatforms: [],
+      errors: [],
+      rowsInserted: 0,
+    };
   }
 
   const nowIso = new Date().toISOString();

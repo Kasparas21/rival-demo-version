@@ -10,7 +10,7 @@ import type { AngleCardCategory } from "@/lib/comparison/stealable-angle-present
 import type { AudienceInferenceResult, AudienceInferenceSegment } from "@/lib/strategy-overview/payload-types";
 import { ComparisonInsufficient, ComparisonPanelShell } from "@/components/comparison/panel-shell";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { AudienceSkeleton } from "@/components/ui/feature-skeleton";
 
 type Side = {
   name: string;
@@ -461,7 +461,7 @@ export function AudienceInferencePanel({
   if (standaloneMode) {
     if (!competitor.audience) {
       if (competitorRecomputing) {
-        return <RivalLoadingBlock padded className="py-16" />;
+        return <AudienceSkeleton />;
       }
       return (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">

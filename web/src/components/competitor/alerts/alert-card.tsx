@@ -1,6 +1,11 @@
 "use client";
 
 import { platformLabel } from "@/components/competitor/tests-timeline/timeline-helpers";
+import {
+  AlertAccentBadge,
+  alertGlassCardClass,
+  alertGlassCardUnreadClass,
+} from "@/components/competitor/alerts/alert-ui-styles";
 import { cn } from "@/lib/utils";
 
 export type AlertFeedRow = {
@@ -46,31 +51,27 @@ export function AlertCard({ alert, onClick }: Props) {
       type="button"
       onClick={onClick}
       className={cn(
-        "w-full rounded-xl border px-4 py-3 text-left transition-colors hover:bg-slate-50/80",
-        alert.is_read ? "border-slate-200 bg-white" : "border-indigo-100 bg-indigo-50/40"
+        "w-full px-4 py-3.5 text-left",
+        alert.is_read ? alertGlassCardClass : alertGlassCardUnreadClass
       )}
     >
       <div className="flex items-start gap-3">
         <span
-          className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", severityDotClass(alert.severity))}
+          className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full shadow-sm", severityDotClass(alert.severity))}
           aria-hidden
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-semibold text-slate-900">{alert.title}</span>
-            {!alert.is_read ? (
-              <span className="rounded-full bg-indigo-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                New
-              </span>
-            ) : null}
+            {!alert.is_read ? <AlertAccentBadge>NEW</AlertAccentBadge> : null}
           </div>
           {alert.body ? (
-            <p className="mt-1 text-[13px] leading-relaxed text-slate-600">{alert.body}</p>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-slate-600/95">{alert.body}</p>
           ) : null}
-          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span>{alert.competitorName}</span>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+            <span className="font-medium text-slate-600">{alert.competitorName}</span>
             {platform ? (
-              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-medium text-slate-600">
+              <span className="rounded-full border border-white/75 bg-white/55 px-2 py-0.5 font-semibold text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-sm">
                 {platformLabel(platform)}
               </span>
             ) : null}

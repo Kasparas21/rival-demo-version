@@ -9,13 +9,13 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Code2,
   ExternalLink,
-  Share2,
-  Sparkles,
   Trophy,
   X,
 } from "lucide-react";
+
+import { AdPreviewAnalysisPanel, type AdPreviewAnalysisQuota } from "@/components/ad-detail/ad-preview-analysis-panel";
+import { AdPreviewDownloadBar } from "@/components/ad-detail/ad-preview-download-bar";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { FacebookLogo } from "@/components/icons/facebook-logo";
@@ -27,8 +27,14 @@ import { WhatsAppMark } from "@/components/icons/whatsapp-mark";
 import { AdDetailDrawerSkeleton } from "@/components/ui/feature-skeleton";
 import { AD_SAVE_DEBUG_TITLE } from "@/components/ads-library/ad-save-row";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
-import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
-import type { Json } from "@/lib/supabase/types";
+import type { AdPreviewAnalysis } from "@/lib/ad-detail/ad-ai-analysis-types";
+import type { AdDetailOpenSeed } from "@/lib/ad-detail/ad-detail-cache";
+import { fetchAdDetailPayload } from "@/lib/ad-detail/ad-detail-cache";
+import { readAdDetailDisplaySnapshot } from "@/lib/ad-detail/ad-detail-snapshot";
+import { isFullAdDetailPayload } from "@/lib/ad-detail/ad-detail-from-seed";
+import type { AdDetailData } from "@/lib/ad-detail/ad-detail-types";
+
+export type { AdDetailDrawerPayload } from "@/lib/ad-detail/ad-detail-types";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 import {
   adLibraryLinkLabel,
@@ -114,58 +120,9 @@ function MetaPublisherPlatformsDetailValue({ rows }: { rows: MetaPublisherDetail
   );
 }
 
-export type AdDetailDrawerPayload = {
-  ok: boolean;
-  error?: string;
-  ad?: {
-    id: string;
-    display_label: string;
-    platform: string;
-    format: string;
-    ad_creative_url: string | null;
-    ad_text: string;
-    cta: string | null;
-    first_seen_at: string;
-    last_seen_at: string;
-    is_killed: boolean;
-    lifespan_days: number;
-    raw_payload: Json;
-  };
-  competitor?: {
-    id: string;
-    name: string;
-    domain: string;
-    logo_url: string | null;
-    brand_context: string | null;
-  };
-  ai?: {
-    angle: string | null;
-    funnel_stage: string | null;
-    voice_tone: unknown;
-    launch_date: string | null;
-    enrichment_status: string;
-  };
-  context?: {
-    landing_page_url: string | null;
-    landing_page_display: string | null;
-    is_creative_test_winner: boolean;
-    creative_test?: { launch_date: string; ad_count: number; test_status: string };
-    copy_structure?: CopyStructureResult;
-  };
-};
-
-type AdDetailData = NonNullable<
-  Omit<AdDetailDrawerPayload, "ok" | "error"> & {
-    ok: true;
-    ad: NonNullable<AdDetailDrawerPayload["ad"]>;
-    competitor: NonNullable<AdDetailDrawerPayload["competitor"]>;
-    ai: NonNullable<AdDetailDrawerPayload["ai"]>;
-    context: NonNullable<AdDetailDrawerPayload["context"]>;
-  }
->;
-
 export function AdDetailDrawer({
   adId,
+  openSeed = null,
   onClose,
   onPrev,
   onNext,
@@ -173,60 +130,89 @@ export function AdDetailDrawer({
   showDebugIndicator = false,
 }: {
   adId: string | null;
+  openSeed?: AdDetailOpenSeed | null;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
   saveEnabled?: boolean;
   showDebugIndicator?: boolean;
 }) {
-  const [data, setData] = useState<AdDetailData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const snapshot = readAdDetailDisplaySnapshot(adId, openSeed);
+  const [data, setData] = useState<AdDetailData | null>(() => snapshot?.data ?? null);
+  const [loading, setLoading] = useState(() => !snapshot && Boolean(adId || openSeed));
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"details" | "ai">("details");
-  const [generatingStructure, setGeneratingStructure] = useState(false);
   const [savedRowId, setSavedRowId] = useState<string | null>(null);
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [hydrating, setHydrating] = useState(() => snapshot?.hydrating ?? false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    if (!adId) {
+    const nextSnapshot = readAdDetailDisplaySnapshot(adId, openSeed);
+    if (nextSnapshot) {
+      setData(nextSnapshot.data);
+      setLoading(false);
+      setHydrating(nextSnapshot.hydrating);
+      setError(null);
+    } else if (!adId && !openSeed) {
       setData(null);
-      return;
+      setLoading(false);
+      setHydrating(false);
+      setError(null);
+    } else {
+      setData(null);
+      setLoading(true);
+      setHydrating(false);
+      setError(null);
     }
+    setActiveTab("details");
+  }, [adId, openSeed]);
+
+  useEffect(() => {
+    if (!adId) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setActiveTab("details");
 
-    void fetch(`/api/ad-detail?adId=${encodeURIComponent(adId)}`, { credentials: "include" })
-      .then((r) => r.json())
-      .then((res: AdDetailDrawerPayload) => {
-        if (cancelled) return;
-        if (!res.ok || !res.ad || !res.competitor || !res.ai || !res.context) {
-          setError(res.error ?? "Failed to load");
-          setData(null);
-        } else {
-          setData({ ok: true, ad: res.ad, competitor: res.competitor, ai: res.ai, context: res.context });
-          setError(null);
+    void fetchAdDetailPayload(adId)
+      .then((res) => {
+        if (cancelled || !res) return;
+        if (!isFullAdDetailPayload(res)) {
+          if (!readAdDetailDisplaySnapshot(adId, openSeed)) {
+            setError(res.error ?? "Failed to load");
+            setData(null);
+            setLoading(false);
+          }
+          setHydrating(false);
+          return;
         }
+        setData({
+          ok: true,
+          ad: res.ad!,
+          competitor: res.competitor!,
+          ai: res.ai!,
+          context: res.context!,
+        });
+        setError(null);
         setLoading(false);
+        setHydrating(false);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
+        if (cancelled) return;
+        if (!readAdDetailDisplaySnapshot(adId, openSeed)) {
           setError(err instanceof Error ? err.message : "Network error");
           setLoading(false);
         }
+        setHydrating(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [adId]);
+  }, [adId, openSeed]);
 
   useEffect(() => {
     if (!saveEnabled || !data?.ad.id || !data?.competitor.id) {
@@ -297,39 +283,38 @@ export function AdDetailDrawer({
     return () => window.removeEventListener("keydown", handler);
   }, [adId, onClose, onPrev, onNext]);
 
-  const handleGenerateStructure = useCallback(async () => {
-    if (!adId || generatingStructure) return;
-    setGeneratingStructure(true);
-    try {
-      const res = await fetch("/api/comparison/copy-structure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ adId }),
-      });
-      const json = (await res.json()) as { ok?: boolean; structure?: CopyStructureResult; error?: string };
-      if (json.ok && json.structure) {
-        setData((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            context: { ...prev.context, copy_structure: json.structure },
-          };
-        });
-      }
-    } finally {
-      setGeneratingStructure(false);
-    }
-  }, [adId, generatingStructure]);
+  const handleAnalysisSaved = useCallback((analysis: AdPreviewAnalysis, quota: AdPreviewAnalysisQuota) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        context: {
+          ...prev.context,
+          preview_analysis: analysis,
+          preview_analysis_computed_at: new Date().toISOString(),
+          preview_analysis_quota: quota,
+          copy_structure: analysis.copy_structure,
+        },
+      };
+    });
+  }, []);
 
-  if (!adId) return null;
+  if (!adId && !openSeed) return null;
   if (!mounted) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[150] flex justify-end" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label="Close" onClick={onClose} />
+      <button
+        type="button"
+        className="ad-detail-drawer-backdrop absolute inset-0 bg-black/40"
+        aria-label="Close"
+        onClick={onClose}
+      />
 
-      <div className="relative flex h-full w-full max-w-[1080px] animate-in border-l border-slate-200 bg-white shadow-2xl slide-in-from-right duration-200">
+      <div
+        key={adId ?? openSeed?.adId ?? "preview"}
+        className="ad-detail-drawer-panel relative flex h-full w-full max-w-[1080px] border-l border-slate-200 bg-white shadow-2xl"
+      >
         <div className="flex w-full flex-shrink-0 flex-col">
           <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3">
             <div className="flex items-center gap-3">
@@ -343,7 +328,7 @@ export function AdDetailDrawer({
                 <ChevronLeft className="h-4 w-4 text-slate-600" />
               </button>
               <div className="max-w-[400px] truncate text-[13px] font-medium text-slate-700">
-                {data?.ad.display_label ?? "Loading…"}
+                {data?.ad.display_label ?? (loading ? "Loading…" : "Ad preview")}
               </div>
               <button
                 type="button"
@@ -359,24 +344,6 @@ export function AdDetailDrawer({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled
-                title="Coming soon"
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 cursor-not-allowed"
-              >
-                <Code2 className="h-3 w-3" />
-                Embed
-              </button>
-              <button
-                type="button"
-                disabled
-                title="Coming soon"
-                className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-[11px] font-medium text-slate-400 cursor-not-allowed"
-              >
-                <Share2 className="h-3 w-3" />
-                Share
-              </button>
-              <button
-                type="button"
                 onClick={onClose}
                 className="rounded-md p-1.5 transition-colors hover:bg-slate-100"
                 aria-label="Close"
@@ -388,7 +355,7 @@ export function AdDetailDrawer({
 
           {loading ? <AdDetailDrawerSkeleton /> : null}
 
-          {error && !loading ? (
+          {error && !loading && !data ? (
             <div className="flex flex-1 items-center justify-center p-8">
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">
                 {error}
@@ -396,13 +363,18 @@ export function AdDetailDrawer({
             </div>
           ) : null}
 
-          {data && !loading && !error ? (
+          {data && !loading ? (
             <div className="flex min-h-0 flex-1 overflow-hidden">
               <div className="flex flex-1 items-start justify-center overflow-y-auto bg-slate-50 p-6 sm:p-8">
                 <AdCreativePreview ad={data.ad} competitor={data.competitor} context={data.context} />
               </div>
 
               <div className="flex w-[min(100%,400px)] flex-shrink-0 flex-col border-l border-slate-200">
+                {hydrating ? (
+                  <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-2 text-[10px] font-medium text-slate-500">
+                    Syncing full ad details…
+                  </div>
+                ) : null}
                 {saveEnabled ? (
                   <div className="border-b border-slate-100 p-4">
                     <button
@@ -455,23 +427,31 @@ export function AdDetailDrawer({
                   <button
                     type="button"
                     onClick={() => setActiveTab("ai")}
-                    className={`border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors ${
+                    className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-[12px] font-semibold transition-colors ${
                       activeTab === "ai"
                         ? "border-slate-900 text-slate-900"
                         : "border-transparent text-slate-500 hover:text-slate-700"
                     }`}
                   >
                     AI Analysis
+                    {!data.context.preview_analysis ? (
+                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-800">
+                        New
+                      </span>
+                    ) : null}
                   </button>
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   {activeTab === "details" ? <DetailsTab data={data} /> : null}
-                  {activeTab === "ai" ? (
-                    <AIAnalysisTab
-                      generating={generatingStructure}
-                      onGenerateStructure={handleGenerateStructure}
-                      data={data}
+                  {activeTab === "ai" && data ? (
+                    <AdPreviewAnalysisPanel
+                      key={data.ad.id}
+                      adId={data.ad.id}
+                      initialAnalysis={data.context.preview_analysis ?? null}
+                      initialComputedAt={data.context.preview_analysis_computed_at ?? null}
+                      initialQuota={data.context.preview_analysis_quota ?? null}
+                      onAnalysisSaved={handleAnalysisSaved}
                     />
                   ) : null}
                 </div>
@@ -585,7 +565,9 @@ function DetailCreativeVideo({
           <img
             src={poster}
             alt=""
-            loading="lazy"
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
             className={detailCreativeMediaClasses(vertical, false)}
             referrerPolicy="no-referrer"
             onError={(e) => {
@@ -636,7 +618,9 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
         <img
           src={resolved.src}
           alt=""
-          loading="lazy"
+          loading="eager"
+          fetchPriority="high"
+          decoding="async"
           className={detailCreativeMediaClasses(vertical, false)}
           referrerPolicy="no-referrer"
           onError={(e) => {
@@ -1006,6 +990,7 @@ function AdCreativePreview({
           </div>
         ) : null}
       </div>
+      <AdPreviewDownloadBar ad={ad} />
     </div>
   );
 }
@@ -1537,125 +1522,6 @@ function DetailsTab({ data }: { data: AdDetailData }) {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function AIAnalysisTab({
-  data,
-  generating,
-  onGenerateStructure,
-}: {
-  data: AdDetailData;
-  generating: boolean;
-  onGenerateStructure: () => void;
-}) {
-  const { ai, context } = data;
-  const voice =
-    ai.voice_tone && typeof ai.voice_tone === "object"
-      ? (ai.voice_tone as Record<string, unknown>)
-      : null;
-  const formal = typeof voice?.formal === "number" ? voice.formal : null;
-  const emotional = typeof voice?.emotional === "number" ? voice.emotional : null;
-
-  return (
-    <div className="space-y-5 p-4">
-      {ai.angle ? (
-        <div>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Angle</p>
-          <p className="text-[13px] leading-relaxed text-slate-900">{ai.angle}</p>
-        </div>
-      ) : null}
-
-      {ai.funnel_stage ? (
-        <div>
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Funnel Stage</p>
-          <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-slate-800">
-            {ai.funnel_stage}
-          </span>
-        </div>
-      ) : null}
-
-      {formal != null && emotional != null ? (
-        <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Voice &amp; Tone</p>
-          <div className="grid grid-cols-2 gap-2">
-            <VoiceMeter label="Formal" value={formal} />
-            <VoiceMeter label="Emotional" value={emotional} />
-          </div>
-        </div>
-      ) : null}
-
-      <div className="border-t border-slate-100 pt-4">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Copy Structure</p>
-          {!context.copy_structure && !generating ? (
-            <button
-              type="button"
-              onClick={onGenerateStructure}
-              className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-2.5 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-slate-800"
-            >
-              <Sparkles className="h-3 w-3" />
-              Extract
-            </button>
-          ) : null}
-        </div>
-
-        {generating ? <div className="text-[11px] italic text-slate-500">Analyzing structure…</div> : null}
-
-        {context.copy_structure ? (
-          <div className="space-y-3 text-[12px]">
-            <div>
-              <p className="mb-0.5 text-[10px] uppercase tracking-wider text-slate-500">Hook</p>
-              <p className="text-slate-900">{context.copy_structure.hook}</p>
-            </div>
-            <div>
-              <p className="mb-0.5 text-[10px] uppercase tracking-wider text-slate-500">Body Framework</p>
-              <ul className="space-y-1 text-slate-900">
-                {context.copy_structure.body_framework.map((bullet, i) => (
-                  <li key={i} className="flex gap-2">
-                    <span className="text-slate-400">•</span>
-                    <span>{bullet}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <p className="mb-0.5 text-[10px] uppercase tracking-wider text-slate-500">CTA Pattern</p>
-              <p className="text-slate-900">{context.copy_structure.cta_pattern}</p>
-            </div>
-            <div>
-              <p className="mb-0.5 text-[10px] uppercase tracking-wider text-slate-500">Emotional Register</p>
-              <p className="text-slate-900">{context.copy_structure.emotional_register}</p>
-            </div>
-            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-blue-700">
-                Adapt for your brand
-              </p>
-              <p className="text-[12px] leading-relaxed text-blue-900">{context.copy_structure.adapt_for_your_brand}</p>
-            </div>
-          </div>
-        ) : null}
-
-        {!context.copy_structure && !generating ? (
-          <p className="text-[11px] italic text-slate-400">
-            Click <strong>Extract</strong> to generate hook, body framework, CTA pattern, and adaptation suggestion.
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function VoiceMeter({ label, value }: { label: string; value: number }) {
-  const pct = Math.max(0, Math.min(100, value * 100));
-  return (
-    <div className="rounded-lg border border-slate-200 p-2">
-      <p className="mb-1 text-[10px] text-slate-500">{label}</p>
-      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full bg-slate-900" style={{ width: `${pct}%` }} />
-      </div>
-      <p className="mt-1 font-mono text-[10px] text-slate-700">{value.toFixed(2)}</p>
     </div>
   );
 }

@@ -105,3 +105,62 @@ export function isMostlyVerticalCreativePlatform(platform: string): boolean {
   const p = platform.toLowerCase();
   return p === "tiktok" || p === "snapchat" || p === "pinterest";
 }
+
+export type AdDetailDownloadKind = "thumbnail" | "video" | "image";
+
+export type AdDetailDownloadTargets = {
+  isVideoAd: boolean;
+  thumbnail: string | null;
+  video: string | null;
+  image: string | null;
+};
+
+/** Resolve downloadable URLs for ad preview creative assets. */
+export function resolveAdDetailDownloadTargets(ad: {
+  platform: string;
+  format: string;
+  ad_creative_url: string | null;
+  raw_payload: unknown;
+}): AdDetailDownloadTargets {
+  const resolved = resolveAdDetailCreativeMedia(ad);
+
+  if (resolved.kind === "video") {
+    const creative = ad.ad_creative_url?.trim() ?? "";
+    const posterFromCreative =
+      creative && !looksLikePlayableVideoUrl(creative) ? creative : null;
+    return {
+      isVideoAd: true,
+      video: resolved.src,
+      thumbnail: resolved.poster ?? posterFromCreative,
+      image: null,
+    };
+  }
+
+  if (resolved.kind === "image") {
+    return {
+      isVideoAd: false,
+      video: null,
+      thumbnail: null,
+      image: resolved.src,
+    };
+  }
+
+  return {
+    isVideoAd: false,
+    video: null,
+    thumbnail: null,
+    image: null,
+  };
+}
+
+export function adDetailDownloadFilename(
+  kind: AdDetailDownloadKind,
+  platform: string,
+  adId: string,
+): string {
+  const ext = kind === "video" ? "mp4" : "jpg";
+  const slug = platform.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "ad";
+  const shortId = adId.slice(0, 8);
+  const label = kind === "thumbnail" ? "thumbnail" : kind === "video" ? "video" : "image";
+  return `rival-${slug}-${shortId}-${label}.${ext}`;
+}

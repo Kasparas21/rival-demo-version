@@ -194,12 +194,25 @@ describe("deriveFunnelCells", () => {
     expect(byId.get("google:BOF")?.adCount).toBe(1);
   });
 
-  it("produces no cells when all ads are unclassified", () => {
+  it("produces no cells when platform has no live ads", () => {
+    expect(deriveFunnelCells(new Map(), 1.2)).toEqual([]);
+  });
+
+  it("places wholly unclassified platform ads in the platform default stage (Google → BOF)", () => {
     const now = new Date().toISOString();
     const byPlatformLive = new Map<StrategyPlatform, ScrapedAdInput[]>([
-      ["meta", [ad({ id: "x", platform: "meta", first_seen_at: now, funnel_stage: null })]],
+      [
+        "google",
+        [
+          ad({ id: "g1", platform: "google", first_seen_at: now, funnel_stage: null }),
+          ad({ id: "g2", platform: "google", first_seen_at: now, funnel_stage: null }),
+        ],
+      ],
     ]);
-    expect(deriveFunnelCells(byPlatformLive, 1.2)).toEqual([]);
+    const cells = deriveFunnelCells(byPlatformLive, 1.2);
+    expect(cells).toHaveLength(1);
+    expect(cells[0]?.id).toBe("google:BOF");
+    expect(cells[0]?.adCount).toBe(2);
   });
 });
 

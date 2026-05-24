@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export type SavedMap = Record<string, string>;
 
@@ -13,6 +13,37 @@ export type LibraryItemRef = { platform: string; libraryItemId: string };
 
 /** Stable default for optional scraped id lists (`[]` default would be a fresh array each render). */
 const EMPTY_SCRAPED_IDS: readonly string[] = [];
+
+type SavedAdsCheckResult = {
+  savedMap: SavedMap;
+  resolvedToScraped: Record<string, string>;
+  libraryLifecycle: Record<string, { isRunning: boolean }>;
+  libraryPreviewUrls: Record<string, string>;
+};
+
+/** In-memory cache keyed by {@link buildSavedAdsCheckQueryKey} — survives re-renders within the session. */
+const savedAdsCheckSessionCache = new Map<string, SavedAdsCheckResult>();
+
+export function buildSavedAdsCheckQueryKey(
+  competitorId: string,
+  libraryItems: readonly LibraryItemRef[],
+  scrapedAdIds: readonly string[] = EMPTY_SCRAPED_IDS,
+): string {
+  const cid = competitorId.trim();
+  const libKeys = new Set<string>();
+  for (const it of libraryItems) {
+    const pl = it.platform.trim().toLowerCase();
+    const lid = it.libraryItemId.trim();
+    if (!pl || !lid) continue;
+    libKeys.add(`${pl}:${lid}`);
+  }
+  const scrapedKeys = new Set<string>();
+  for (const id of scrapedAdIds) {
+    const u = id.trim();
+    if (u) scrapedKeys.add(u);
+  }
+  return `${cid}|lib:${[...libKeys].sort().join(",")}|s:${[...scrapedKeys].sort().join(",")}`;
+}
 
 export function isAdSaved(savedMap: SavedMap, scrapedAdId: string): boolean {
   return Boolean(scrapedAdId && savedMap[scrapedAdId]);
@@ -42,17 +73,10 @@ export function useSavedAdsStatus(
   scrapedAdIds: readonly string[] | undefined = undefined,
   cacheDomainNorm?: string | null
 ) {
-  const [savedMap, setSavedMap] = useState<SavedMap>({});
-  const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
-  const [libraryLifecycle, setLibraryLifecycle] = useState<Record<string, { isRunning: boolean }>>({});
-  const [libraryPreviewUrls, setLibraryPreviewUrls] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const [refreshToken, setRefreshToken] = useState(0);
-  const lastKeyRef = useRef("");
-  const savedMapRef = useRef<SavedMap>({});
-  const saveAbortByScrapedRef = useRef(new Map<string, AbortController>());
-
-  savedMapRef.current = savedMap;
+  const checkQueryKey = useMemo(
+    () => buildSavedAdsCheckQueryKey(competitorId, libraryItems, scrapedAdIds ?? EMPTY_SCRAPED_IDS),
+    [competitorId, libraryItems, scrapedAdIds],
+  );
 
   const dedupedItems = useMemo(() => {
     const m = new Map<string, LibraryItemRef>();
@@ -75,39 +99,92 @@ export function useSavedAdsStatus(
     return [...m.values()];
   }, [scrapedAdIds]);
 
+  const dedupedItemsRef = useRef(dedupedItems);
+  const dedupedScrapedIdsRef = useRef(dedupedScrapedIds);
+  dedupedItemsRef.current = dedupedItems;
+  dedupedScrapedIdsRef.current = dedupedScrapedIds;
+
+  const emptyCheckQueryKey = useMemo(
+    () => buildSavedAdsCheckQueryKey(competitorId, [], []),
+    [competitorId],
+  );
+
+  const [savedMap, setSavedMap] = useState<SavedMap>({});
+  const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
+  const [libraryLifecycle, setLibraryLifecycle] = useState<Record<string, { isRunning: boolean }>>({});
+  const [libraryPreviewUrls, setLibraryPreviewUrls] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  const savedMapRef = useRef<SavedMap>({});
+  const saveAbortByScrapedRef = useRef(new Map<string, AbortController>());
+  /** Last query key we successfully fetched — prevents re-fetch loops on parent re-renders. */
+  const lastFetchedKeyRef = useRef("");
+  const inFlightKeyRef = useRef<string | null>(null);
+
+  savedMapRef.current = savedMap;
+
+  const applyCheckResult = useCallback((res: SavedAdsCheckResult) => {
+    setSavedMap(res.savedMap);
+    setResolvedToScraped(res.resolvedToScraped);
+    setLibraryLifecycle(res.libraryLifecycle);
+    setLibraryPreviewUrls(res.libraryPreviewUrls);
+  }, []);
+
   useEffect(() => {
-    lastKeyRef.current = "";
+    lastFetchedKeyRef.current = "";
+    inFlightKeyRef.current = null;
     setSavedMap({});
     setResolvedToScraped({});
     setLibraryLifecycle({});
     setLibraryPreviewUrls({});
   }, [competitorId]);
 
+  useLayoutEffect(() => {
+    const cached = savedAdsCheckSessionCache.get(checkQueryKey);
+    if (cached) {
+      applyCheckResult(cached);
+      lastFetchedKeyRef.current = checkQueryKey;
+      setLoading(false);
+    }
+  }, [checkQueryKey, applyCheckResult]);
+
   useEffect(() => {
     const cid = competitorId.trim();
-    if (!cid || (dedupedItems.length === 0 && dedupedScrapedIds.length === 0)) {
+
+    if (!cid || checkQueryKey === emptyCheckQueryKey) {
       setSavedMap((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setResolvedToScraped((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setLibraryLifecycle((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setLibraryPreviewUrls((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-      lastKeyRef.current = "";
+      lastFetchedKeyRef.current = "";
+      inFlightKeyRef.current = null;
       return;
     }
 
-    const queryKey = `${cid}|lib:${dedupedItems.map((i) => `${i.platform}:${i.libraryItemId}`).sort().join(",")}|s:${[...dedupedScrapedIds].sort().join(",")}`;
-    if (queryKey === lastKeyRef.current) return;
-    lastKeyRef.current = queryKey;
+    if (checkQueryKey === lastFetchedKeyRef.current) return;
+    if (checkQueryKey === inFlightKeyRef.current) return;
 
+    const sessionHit = savedAdsCheckSessionCache.get(checkQueryKey);
+    if (sessionHit) {
+      applyCheckResult(sessionHit);
+      lastFetchedKeyRef.current = checkQueryKey;
+      setLoading(false);
+      return;
+    }
+
+    inFlightKeyRef.current = checkQueryKey;
     let cancelled = false;
     setLoading(true);
+
     void fetch("/api/saved-ads/check", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
         competitorId: cid,
-        libraryItems: dedupedItems,
-        scrapedAdIds: dedupedScrapedIds,
+        libraryItems: dedupedItemsRef.current,
+        scrapedAdIds: dedupedScrapedIdsRef.current,
       }),
     })
       .then((r) => r.json())
@@ -121,31 +198,42 @@ export function useSavedAdsStatus(
         }) => {
           if (cancelled) return;
           if (res.ok) {
-            setSavedMap(res.savedMap ?? {});
-            setResolvedToScraped(res.resolvedToScraped ?? {});
-            setLibraryLifecycle(res.libraryLifecycle ?? {});
-            setLibraryPreviewUrls(res.libraryPreviewUrls ?? {});
+            const payload: SavedAdsCheckResult = {
+              savedMap: res.savedMap ?? {},
+              resolvedToScraped: res.resolvedToScraped ?? {},
+              libraryLifecycle: res.libraryLifecycle ?? {},
+              libraryPreviewUrls: res.libraryPreviewUrls ?? {},
+            };
+            savedAdsCheckSessionCache.set(checkQueryKey, payload);
+            applyCheckResult(payload);
+            lastFetchedKeyRef.current = checkQueryKey;
           }
           setLoading(false);
+          if (inFlightKeyRef.current === checkQueryKey) {
+            inFlightKeyRef.current = null;
+          }
         },
         () => {
           if (!cancelled) setLoading(false);
+          if (inFlightKeyRef.current === checkQueryKey) {
+            inFlightKeyRef.current = null;
+          }
         },
       );
 
     return () => {
       cancelled = true;
-      // A cancelled in-flight request must not block the next fetch for the same key.
-      if (lastKeyRef.current === queryKey) {
-        lastKeyRef.current = "";
-      }
     };
-  }, [competitorId, dedupedItems, dedupedScrapedIds, refreshToken]);
+  }, [checkQueryKey, emptyCheckQueryKey, competitorId, refreshToken, applyCheckResult]);
 
   const refreshLibraryMappings = useCallback(() => {
-    lastKeyRef.current = "";
+    savedAdsCheckSessionCache.delete(
+      buildSavedAdsCheckQueryKey(competitorId, libraryItems, scrapedAdIds ?? EMPTY_SCRAPED_IDS),
+    );
+    lastFetchedKeyRef.current = "";
+    inFlightKeyRef.current = null;
     setRefreshToken((n) => n + 1);
-  }, []);
+  }, [competitorId, libraryItems, scrapedAdIds]);
 
   const previewUrlForCard = useCallback(
     (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
@@ -187,6 +275,20 @@ export function useSavedAdsStatus(
       return undefined;
     },
     [libraryLifecycle],
+  );
+
+  const patchSessionSavedMap = useCallback(
+    (mutator: (prev: SavedMap) => SavedMap) => {
+      setSavedMap((prev) => {
+        const next = mutator(prev);
+        const cached = savedAdsCheckSessionCache.get(checkQueryKey);
+        if (cached) {
+          savedAdsCheckSessionCache.set(checkQueryKey, { ...cached, savedMap: next });
+        }
+        return next;
+      });
+    },
+    [checkQueryKey],
   );
 
   const bumpSavedAdsListCache = useCallback(() => {
@@ -234,11 +336,11 @@ export function useSavedAdsStatus(
       const sid = args.scrapedAdId?.trim();
       if (id && sid) {
         bumpSavedAdsListCache();
-        setSavedMap((prev) => ({ ...prev, [sid]: id }));
+        patchSessionSavedMap((prev) => ({ ...prev, [sid]: id }));
       }
       return id;
     },
-    [postSaveAd, bumpSavedAdsListCache],
+    [postSaveAd, bumpSavedAdsListCache, patchSessionSavedMap],
   );
 
   const unsaveAd = useCallback(async (scrapedAdId: string) => {
@@ -248,7 +350,7 @@ export function useSavedAdsStatus(
     const json = (await res.json()) as { ok?: boolean };
     if (json.ok) {
       bumpSavedAdsListCache();
-      setSavedMap((prev) => {
+      patchSessionSavedMap((prev) => {
         const next = { ...prev };
         delete next[scrapedAdId];
         return next;
@@ -256,7 +358,7 @@ export function useSavedAdsStatus(
       return true;
     }
     return false;
-  }, [bumpSavedAdsListCache]);
+  }, [bumpSavedAdsListCache, patchSessionSavedMap]);
 
   const toggleSave = useCallback(
     async (platform: string, libraryItemId: string, notes?: string | null) => {
@@ -288,7 +390,7 @@ export function useSavedAdsStatus(
         if (current === PENDING_SAVED_AD_ID) {
           saveAbortByScrapedRef.current.get(sid)?.abort();
           saveAbortByScrapedRef.current.delete(sid);
-          setSavedMap((prev) => {
+          patchSessionSavedMap((prev) => {
             const next = { ...prev };
             delete next[sid];
             return next;
@@ -297,7 +399,7 @@ export function useSavedAdsStatus(
         }
 
         const savedAdId = current;
-        setSavedMap((prev) => {
+        patchSessionSavedMap((prev) => {
           const next = { ...prev };
           delete next[sid];
           return next;
@@ -307,18 +409,18 @@ export function useSavedAdsStatus(
             const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
             const json = (await res.json()) as { ok?: boolean };
             if (!json.ok) {
-              setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+              patchSessionSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
             } else {
               bumpSavedAdsListCache();
             }
           } catch {
-            setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+            patchSessionSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
           }
         })();
         return;
       }
 
-      setSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
+      patchSessionSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
       const ac = new AbortController();
       saveAbortByScrapedRef.current.set(sid, ac);
 
@@ -328,9 +430,9 @@ export function useSavedAdsStatus(
           if (ac.signal.aborted) return;
           if (id) {
             bumpSavedAdsListCache();
-            setSavedMap((prev) => ({ ...prev, [sid]: id }));
+            patchSessionSavedMap((prev) => ({ ...prev, [sid]: id }));
           } else {
-            setSavedMap((prev) => {
+            patchSessionSavedMap((prev) => {
               const next = { ...prev };
               if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
               return next;
@@ -338,7 +440,7 @@ export function useSavedAdsStatus(
           }
         } catch {
           if (ac.signal.aborted) return;
-          setSavedMap((prev) => {
+          patchSessionSavedMap((prev) => {
             const next = { ...prev };
             if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
             return next;
@@ -348,7 +450,7 @@ export function useSavedAdsStatus(
         }
       })();
     },
-    [competitorId, scrapedIdForCard, postSaveAd, bumpSavedAdsListCache],
+    [competitorId, scrapedIdForCard, postSaveAd, bumpSavedAdsListCache, patchSessionSavedMap],
   );
 
   return {

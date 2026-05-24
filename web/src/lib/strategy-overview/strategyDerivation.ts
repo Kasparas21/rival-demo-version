@@ -158,7 +158,7 @@ const PLATFORM_LABEL: Record<string, string> = {
 };
 
 /** Fallback funnel stage by platform when >80% of ads on that platform are unclassified. */
-const DEFAULT_STAGE: Record<string, FunnelStage> = {
+export const PLATFORM_DEFAULT_FUNNEL_STAGE: Record<string, FunnelStage> = {
   tiktok: "TOF",
   pinterest: "TOF",
   snapchat: "TOF",
@@ -166,6 +166,9 @@ const DEFAULT_STAGE: Record<string, FunnelStage> = {
   linkedin: "MOF",
   google: "BOF",
 };
+
+/** @deprecated use PLATFORM_DEFAULT_FUNNEL_STAGE */
+const DEFAULT_STAGE = PLATFORM_DEFAULT_FUNNEL_STAGE;
 
 export function parseStage(raw: string | null | undefined): FunnelStage | null {
   if (!raw?.trim()) return null;
@@ -191,9 +194,48 @@ function layoutFunnelCells(cells: FunnelCellNodePayload[]): FunnelCellNodePayloa
   return applyFunnelCellLayout(cells);
 }
 
+function resolvePlatformDefaultStage(
+  platform: StrategyPlatform,
+  allAds: ScrapedAdInput[],
+  unclassified: ScrapedAdInput[],
+): FunnelStage {
+  const unclassifiedRatio = unclassified.length / Math.max(1, allAds.length);
+  if (unclassifiedRatio > 0.8) {
+    return PLATFORM_DEFAULT_FUNNEL_STAGE[platform] ?? "MOF";
+  }
+  return PLATFORM_DEFAULT_FUNNEL_STAGE[platform] ?? "MOF";
+}
+
+/** Bucket live ads into funnel stages; unclassified ads use the platform default stage. */
+export function bucketAdsByFunnelStage(
+  platform: StrategyPlatform,
+  ads: ScrapedAdInput[],
+): Map<FunnelStage, ScrapedAdInput[]> {
+  const byStage = new Map<FunnelStage, ScrapedAdInput[]>();
+  const unclassified: ScrapedAdInput[] = [];
+
+  for (const ad of ads) {
+    const stage = parseStage(ad.funnel_stage);
+    if (stage == null) {
+      unclassified.push(ad);
+      continue;
+    }
+    if (!byStage.has(stage)) byStage.set(stage, []);
+    byStage.get(stage)!.push(ad);
+  }
+
+  if (unclassified.length > 0) {
+    const defaultStage = resolvePlatformDefaultStage(platform, ads, unclassified);
+    if (!byStage.has(defaultStage)) byStage.set(defaultStage, []);
+    byStage.get(defaultStage)!.push(...unclassified);
+  }
+
+  return byStage;
+}
+
 /**
- * One node per (platform × funnel stage) for the Strategy Map. Unclassified ads are omitted;
- * platforms with only unclassified creatives produce no cells.
+ * One node per (platform × funnel stage) for the Strategy Map.
+ * Unclassified ads are placed in each platform's default funnel stage so every scraped platform appears.
  */
 export function deriveFunnelCells(
   byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>,
@@ -203,14 +245,9 @@ export function deriveFunnelCells(
   const cells: FunnelCellNodePayload[] = [];
 
   for (const [platform, liveList] of byPlatformLive) {
-    const byStage = new Map<FunnelStage, ScrapedAdInput[]>();
+    if (liveList.length === 0) continue;
 
-    for (const ad of liveList) {
-      const stage = parseStage(ad.funnel_stage);
-      if (stage == null) continue;
-      if (!byStage.has(stage)) byStage.set(stage, []);
-      byStage.get(stage)!.push(ad);
-    }
+    const byStage = bucketAdsByFunnelStage(platform, liveList);
 
     for (const [stage, ads] of byStage) {
       if (ads.length === 0) continue;
@@ -771,7 +808,7 @@ export function deriveStrategyOverviewPayload(
   for (const [pl, list] of byPlatform) {
     const groups = liveGroupsMap.get(pl) ?? [];
     if (groups.length === 0) {
-      byPlatformLive.set(pl, []);
+      byPlatformLive.set(pl, list.length > 0 ? list : []);
       continue;
     }
     byPlatformLive.set(
@@ -884,8 +921,7 @@ export function deriveStrategyOverviewPayload(
 
   /**
    * Spend v2 is per-platform only today. Split each platform's modeled band across
-   * funnel cells proportionally by classified live ad counts so cell ranges are mutually
-   * exclusive and sum to the platform total (unclassified ads are excluded from cells).
+   * funnel cells proportionally by bucketed live ad counts.
    */
   let spendV2ByPlatformStage: Map<string, { low: number; mid: number; high: number }> | undefined;
   if (spendEstimateV2) {
@@ -893,16 +929,11 @@ export function deriveStrategyOverviewPayload(
     for (const [pl, liveList] of byPlatformLive) {
       const row = spendEstimateV2.perPlatform.find((x) => x.platform === pl);
       if (!row) continue;
-      const byStageCount = new Map<FunnelStage, number>();
-      for (const ad of liveList) {
-        const st = parseStage(ad.funnel_stage);
-        if (!st) continue;
-        byStageCount.set(st, (byStageCount.get(st) ?? 0) + 1);
-      }
-      const sum = [...byStageCount.values()].reduce((a, b) => a + b, 0);
+      const buckets = bucketAdsByFunnelStage(pl, liveList);
+      const sum = [...buckets.values()].reduce((acc, ads) => acc + ads.length, 0);
       if (sum === 0) continue;
-      for (const [stage, n] of byStageCount) {
-        const f = n / sum;
+      for (const [stage, ads] of buckets) {
+        const f = ads.length / sum;
         spendV2ByPlatformStage.set(`${pl}:${stage}`, {
           low: Math.round(row.low * f),
           mid: Math.round(row.mid * f),

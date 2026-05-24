@@ -140,7 +140,7 @@ async function vaultListing(params: {
 }): Promise<NextResponse> {
   const { supabase, userId, competitorId, url } = params;
 
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
+  const limit = Math.min(1500, Math.max(1, Number(url.searchParams.get("limit") ?? "500") || 500));
   const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
   const sort = (url.searchParams.get("sort") ?? "lifespan_desc").trim() as VaultSort;
   const sortSafe: VaultSort =

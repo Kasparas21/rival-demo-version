@@ -1,6 +1,6 @@
 "use client";
 
-import type { HTMLAttributes, ReactNode } from "react";
+import { useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 
 export function KeepMountedTab({
   active,
@@ -12,6 +12,12 @@ export function KeepMountedTab({
   /** Extra classes on the outer wrapper (e.g. overflow). */
   className?: string;
 }) {
+  const [hasMounted, setHasMounted] = useState(active);
+
+  useEffect(() => {
+    if (active) setHasMounted(true);
+  }, [active]);
+
   return (
     <div
       style={{ display: active ? "flex" : "none" }}
@@ -19,7 +25,7 @@ export function KeepMountedTab({
       aria-hidden={!active}
       {...(!active ? ({ inert: true } as unknown as HTMLAttributes<HTMLDivElement>) : {})}
     >
-      {children}
+      {hasMounted ? children : null}
     </div>
   );
 }

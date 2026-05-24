@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import {
@@ -100,7 +101,9 @@ export async function GET(request: Request) {
           "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, ai_extracted_launch_date"
         )
         .eq("user_id", userId)
-        .eq("competitor_id", competitorId),
+        .eq("competitor_id", competitorId)
+        .eq("is_active", true)
+        .limit(1500),
     ]);
 
     if (testsErr) return { error: testsErr.message as string };
@@ -133,19 +136,13 @@ export async function GET(request: Request) {
   let { tests, allAds, adsById } = loaded;
 
   if (!force && tests.length > 0 && testsNeedRecompute(tests, adsById, allAds)) {
-    const recomputeResult = await computeCreativeTestsForCompetitor({
-      supabase,
-      userId,
-      competitorId,
-    });
-    if (recomputeResult.ok) {
-      loaded = await loadTestsAndAds();
-      if (!("error" in loaded)) {
-        tests = loaded.tests;
-        allAds = loaded.allAds;
-        adsById = loaded.adsById;
+    after(async () => {
+      try {
+        await computeCreativeTestsForCompetitor({ supabase, userId, competitorId });
+      } catch (e) {
+        console.warn("[creative-tests] background recompute failed", e);
       }
-    }
+    });
   }
 
   const hydratedTests = tests.map((test) => {

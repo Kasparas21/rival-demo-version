@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Bookmark, StickyNote, Trash2 } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
-import { CacheRevalidatingDot, DataFreshnessBadge } from "@/components/competitor/data-freshness-badge";
+import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import type { Json } from "@/lib/supabase/types";
 import { drawerComparisonPlatformIconId } from "@/lib/ad-detail/google-drawer-surface";
@@ -147,7 +147,6 @@ export function SavedAdsPanel({
         className="mb-6"
         overline="Saved ads"
         title={<>Saved ads from {competitorLabel}</>}
-        titleTrailing={<DataFreshnessBadge lastScrapedAt={lastScrapedAt} onRefresh={onFreshnessRescrape} />}
         description={<>{savedAds.length} saved — preserved even if removed from the source</>}
       />
 

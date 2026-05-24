@@ -107,6 +107,85 @@ export function ComparisonSkeleton() {
   );
 }
 
+export function ActivityFeedSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn("mx-auto w-full max-w-3xl px-6 py-8", className)}
+      aria-busy="true"
+      aria-label="Loading activity feed"
+    >
+      <SkSectionHeader className="mb-2" />
+      <SkBar className="mb-6 h-4 w-full max-w-2xl" />
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4">
+        <SkPillRow count={5} />
+        <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-slate-100 pt-4">
+          <SkBar className="h-4 w-20" />
+          <SkBar className="h-8 w-28 rounded-full" />
+          <SkBar className="h-8 w-24 rounded-full" />
+          <SkBar className="ml-auto h-8 w-44 rounded-lg" />
+        </div>
+      </div>
+      <div className="mt-10 space-y-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4"
+            aria-hidden
+          >
+            <div className="flex items-start justify-between gap-3">
+              <SkBar className="h-4 w-24 rounded-full" />
+              <SkBar className="h-3.5 w-16" />
+            </div>
+            <SkBar className="mt-3 h-5 w-full max-w-md" />
+            <SkBar className="mt-2 h-4 w-full" />
+            <SkBar className="mt-2 h-4 w-4/5" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function AudienceSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={cn("space-y-8", className)} aria-busy="true" aria-label="Loading audience profile">
+      <SkSectionHeader />
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <SkBar className="h-3 w-32" />
+          <div className="space-y-1 text-right">
+            <SkBar className="ml-auto h-5 w-10" />
+            <SkBar className="ml-auto h-2.5 w-16" />
+          </div>
+        </div>
+        <SkBar className="mt-4 h-3 w-24" />
+        <SkBar className="mt-3 h-8 w-full max-w-xl" />
+        <SkBar className="mt-3 h-4 w-full" />
+        <SkBar className="mt-2 h-4 w-[88%]" />
+        <SkBar className="mt-4 h-2 w-full rounded-full" />
+        <div className="mt-6 space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/80 p-4">
+          <SkBar className="h-3 w-44" />
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex gap-3">
+              <SkBar className="h-4 w-4 shrink-0 rounded" />
+              <SkBar className={cn("h-4 flex-1", i === 2 ? "w-3/4" : "w-full")} />
+            </div>
+          ))}
+        </div>
+        <SkBar className="mt-6 h-3 w-36" />
+        <SkBar className="mt-2 h-10 w-56 rounded-lg" />
+      </div>
+      <div>
+        <SkBar className="h-6 w-36" />
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <SkPanel className="h-44" />
+          <SkPanel className="h-44" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SkSavedAdCard() {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white" aria-hidden>

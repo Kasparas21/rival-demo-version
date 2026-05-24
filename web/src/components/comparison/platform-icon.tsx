@@ -1,6 +1,10 @@
 "use client";
 
-import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import {
+  COMPARISON_PLATFORM_ORDER,
+  type ComparisonPlatformIconId,
+} from "@/lib/platforms/comparison-platform-order";
+export { COMPARISON_PLATFORM_ORDER, type ComparisonPlatformIconId } from "@/lib/platforms/comparison-platform-order";
 import {
   GoogleLogo,
   LinkedInLogo,
@@ -11,18 +15,6 @@ import {
   TikTokLogo,
   YouTubeLogo,
 } from "@/components/platform-logos";
-
-export const COMPARISON_PLATFORM_ORDER: StrategyPlatform[] = [
-  "meta",
-  "google",
-  "tiktok",
-  "linkedin",
-  "pinterest",
-  "snapchat",
-];
-
-/** Platforms rendered in comparison UI (includes scrape-only ids not in strategy map). */
-export type ComparisonPlatformIconId = StrategyPlatform | "youtube" | "microsoft";
 
 export function ComparisonPlatformIcon({
   platform,

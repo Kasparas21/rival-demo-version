@@ -26,6 +26,16 @@ const DB_PLATFORMS_FOR_LIBRARY_PLATFORM: Record<AdsLibraryPlatform, string[]> = 
   snapchat: ["snapchat"],
 };
 
+/** Whether active `scraped_ads` rows already exist for a library platform (google includes youtube). */
+export function libraryPlatformHasActiveScrapedRows(
+  libraryPlatform: AdsLibraryPlatform,
+  existingActiveDbPlatforms: Set<string>
+): boolean {
+  return DB_PLATFORMS_FOR_LIBRARY_PLATFORM[libraryPlatform].some((db) =>
+    existingActiveDbPlatforms.has(db)
+  );
+}
+
 function joinedText(parts: (string | null | undefined)[]): string {
   const body = parts
     .map((p) => (typeof p === "string" ? p.trim() : ""))
