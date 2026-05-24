@@ -1,6 +1,8 @@
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
 import { isKnownPolarProductId } from "@/lib/billing/config";
 import { resolvePlanTier } from "@/lib/billing/entitlements";
+import type { PolarRawSubscription } from "@/lib/billing/polar-api-raw";
+import { readProductId } from "@/lib/billing/polar-api-raw";
 import { recordTesterInviteRedemption } from "@/lib/billing/tester-invite";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
@@ -125,6 +127,58 @@ export async function upsertPolarSubscription(
     rawPayload: subscription,
     applyDevOverride: false,
   });
+
+  if (error) {
+    return { error: error.message, planTier };
+  }
+
+  return { error: null, planTier };
+}
+
+export async function upsertPolarSubscriptionFromRaw(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  raw: PolarRawSubscription,
+  userId: string,
+  options?: { lastWebhookEventId?: string | null },
+): Promise<{ error: string | null; planTier: ReturnType<typeof resolvePlanTier> }> {
+  const productId = readProductId(raw);
+  if (!raw.id?.trim() || !productId) {
+    return { error: "Invalid subscription shape.", planTier: "free_trial" };
+  }
+  if (!isKnownPolarProductId(productId)) {
+    return { error: "Unknown Polar product id.", planTier: "free_trial" };
+  }
+
+  const planTier = resolvePlanTier({
+    status: raw.status,
+    polarProductId: productId,
+    rawPayload: raw,
+    applyDevOverride: false,
+  });
+
+  const mergedPayload = {
+    ...raw,
+    productId,
+    plan_tier: planTier,
+  };
+
+  const { error } = await admin.from("billing_subscriptions").upsert(
+    {
+      user_id: userId,
+      polar_customer_id: raw.customer_id ?? null,
+      polar_subscription_id: raw.id,
+      polar_product_id: productId,
+      polar_product_name: null,
+      status: raw.status,
+      trial_end: isoPolarDate(raw.trial_end),
+      current_period_end: isoPolarDate(raw.current_period_end),
+      cancel_at_period_end: raw.cancel_at_period_end ?? false,
+      last_webhook_event_id: options?.lastWebhookEventId ?? null,
+      raw_payload: jsonSafe(mergedPayload),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
 
   if (error) {
     return { error: error.message, planTier };

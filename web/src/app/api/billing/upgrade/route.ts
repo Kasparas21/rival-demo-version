@@ -1,11 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ResponseValidationError } from "@polar-sh/sdk/models/errors/responsevalidationerror";
-import { SubscriptionProrationBehavior } from "@polar-sh/sdk/models/components/subscriptionprorationbehavior";
-import { getAppUrl, isKnownPolarProductId } from "@/lib/billing/config";
+import { getAppUrl } from "@/lib/billing/config";
 import { getBillingEntitlement, hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import {
+  getPolarSubscriptionRaw,
+  isProProductId,
+  polarApiErrorMessage,
+  readProductId,
+  updatePolarSubscriptionProductRaw,
+  type PolarRawSubscription,
+} from "@/lib/billing/polar-api-raw";
 import { createPolarClient } from "@/lib/billing/polar";
 import { resolveUpgradeProductId } from "@/lib/billing/upgrade-plan";
-import { upsertPolarSubscription } from "@/lib/billing/sync-polar-subscription";
+import { upsertPolarSubscription, upsertPolarSubscriptionFromRaw } from "@/lib/billing/sync-polar-subscription";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -17,10 +23,27 @@ function settingsRedirect(origin: string, params: Record<string, string>): NextR
   return NextResponse.redirect(url);
 }
 
-function isResponseValidationFailure(error: unknown): boolean {
-  if (error instanceof ResponseValidationError) return true;
-  const message = error instanceof Error ? error.message : String(error);
-  return /response validation failed/i.test(message);
+async function syncSubscriptionToDb(subscriptionId: string, userId: string): Promise<string | null> {
+  const polar = createPolarClient();
+  try {
+    const subscription = await polar.subscriptions.get({ id: subscriptionId });
+    const admin = createSupabaseAdminClient();
+    const { error } = await upsertPolarSubscription(admin, subscription, userId, {
+      lastWebhookEventId: `upgrade:${subscriptionId}`,
+    });
+    return error;
+  } catch {
+    const raw = await getPolarSubscriptionRaw(subscriptionId);
+    if (!raw) {
+      return "Could not sync billing after upgrade.";
+    }
+
+    const admin = createSupabaseAdminClient();
+    const { error } = await upsertPolarSubscriptionFromRaw(admin, raw, userId, {
+      lastWebhookEventId: `upgrade:${subscriptionId}`,
+    });
+    return error;
+  }
 }
 
 async function runUpgrade(request: NextRequest) {
@@ -62,54 +85,49 @@ async function runUpgrade(request: NextRequest) {
   }
 
   const targetProductId = resolveUpgradeProductId(row?.polar_product_id, "pro");
-  const polar = createPolarClient();
-  const admin = createSupabaseAdminClient();
+  const before = await getPolarSubscriptionRaw(subscriptionId);
+  const beforeProductId = readProductId(before);
 
-  try {
-    await polar.subscriptions.update({
-      id: subscriptionId,
-      subscriptionUpdate: {
-        productId: targetProductId,
-        prorationBehavior: SubscriptionProrationBehavior.Prorate,
-      },
-    });
-  } catch (e) {
-    if (!isResponseValidationFailure(e)) {
-      const raw = e instanceof Error ? e.message : String(e);
-      const paymentFailed = /payment|402|declined|card/i.test(raw);
-      return settingsRedirect(request.nextUrl.origin, {
-        upgrade: "error",
-        message: paymentFailed
-          ? "Payment failed — update your card in Manage subscription and try again."
-          : raw.length > 200
-            ? `${raw.slice(0, 200)}…`
-            : raw,
-      });
-    }
+  if (isProProductId(beforeProductId)) {
+    return settingsRedirect(request.nextUrl.origin, { upgrade: "already_pro" });
   }
 
-  try {
-    let subscription = null;
-    try {
-      subscription = await polar.subscriptions.get({ id: subscriptionId });
-    } catch (getError) {
-      if (!isResponseValidationFailure(getError)) throw getError;
-    }
+  const updateResult = await updatePolarSubscriptionProductRaw({
+    subscriptionId,
+    productId: targetProductId,
+    prorationBehavior: "prorate",
+  });
 
-    if (subscription?.productId && isKnownPolarProductId(subscription.productId)) {
-      const { error } = await upsertPolarSubscription(admin, subscription, user.id, {
-        lastWebhookEventId: `upgrade:${subscriptionId}`,
-      });
-      if (error) {
-        return settingsRedirect(request.nextUrl.origin, {
-          upgrade: "error",
-          message: "Upgrade processed in Polar, but billing sync failed. Refresh Settings in a moment.",
-        });
-      }
-    }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Could not verify upgrade.";
-    return settingsRedirect(request.nextUrl.origin, { upgrade: "error", message });
+  if (!updateResult.ok) {
+    const message = polarApiErrorMessage(updateResult);
+    const paymentFailed = updateResult.status === 402 || /payment|declined|card/i.test(message);
+    return settingsRedirect(request.nextUrl.origin, {
+      upgrade: "error",
+      message: paymentFailed
+        ? "Payment failed — update your card in Manage subscription and try again."
+        : message.includes("Manage subscription")
+          ? message
+          : `${message} Try Manage subscription in Polar if this continues.`,
+    });
+  }
+
+  const after = await getPolarSubscriptionRaw(subscriptionId);
+  const afterProductId = readProductId(after) ?? readProductId(updateResult.json as PolarRawSubscription);
+
+  if (!isProProductId(afterProductId)) {
+    return settingsRedirect(request.nextUrl.origin, {
+      upgrade: "error",
+      message:
+        "Polar did not switch your plan to Pro. Open Manage subscription to upgrade there, or contact support.",
+    });
+  }
+
+  const syncError = await syncSubscriptionToDb(subscriptionId, user.id);
+  if (syncError) {
+    return settingsRedirect(request.nextUrl.origin, {
+      upgrade: "error",
+      message: "Upgraded in Polar, but billing sync failed. Refresh Settings in a moment.",
+    });
   }
 
   return settingsRedirect(getAppUrl(), { upgrade: "success" });

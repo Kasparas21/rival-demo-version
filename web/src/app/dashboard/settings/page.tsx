@@ -302,6 +302,25 @@ export default function SettingsPage() {
     queueMicrotask(() => void hydrate());
   }, [hydrate]);
 
+  useEffect(() => {
+    if (searchParams.get("upgrade") !== "success") return;
+
+    let cancelled = false;
+    setBillingSyncing(true);
+
+    void fetch("/api/billing/sync-subscription", { credentials: "include", cache: "no-store" })
+      .then(() => {
+        if (!cancelled) return hydrate();
+      })
+      .finally(() => {
+        if (!cancelled) setBillingSyncing(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, hydrate]);
+
   const billingActivating = isBillingActivating(billing) || billingSyncing;
 
   useEffect(() => {
