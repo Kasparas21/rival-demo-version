@@ -8,14 +8,15 @@ import {
   type AlertDigestItem,
 } from "@/lib/email/alert-digest-email";
 import { getResendApiKey } from "@/lib/email/resend-config";
+import { authorizeCron } from "@/lib/cron/authorize-cron";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-/** POST — send consolidated alert emails. Bearer CRON_SECRET. */
-export async function POST(req: Request): Promise<NextResponse> {
-  if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
+/** Send consolidated alert emails. Bearer CRON_SECRET. */
+async function runSendAlertEmails(req: Request): Promise<NextResponse> {
+  if (!authorizeCron(req)) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
@@ -117,5 +118,15 @@ export async function POST(req: Request): Promise<NextResponse> {
     alertsNotified += ids.length;
   }
 
-  return NextResponse.json({ ok: true, emailsSent, alertsNotified, usersChecked: userIds.length });
+  const summary = { ok: true, emailsSent, alertsNotified, usersChecked: userIds.length };
+  console.info("[cron/send-alert-emails]", summary);
+  return NextResponse.json(summary);
+}
+
+export async function GET(req: Request): Promise<NextResponse> {
+  return runSendAlertEmails(req);
+}
+
+export async function POST(req: Request): Promise<NextResponse> {
+  return runSendAlertEmails(req);
 }

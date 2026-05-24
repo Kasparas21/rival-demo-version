@@ -32,6 +32,7 @@ import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { filterWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidates";
+import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 export const runtime = "nodejs";
@@ -78,10 +79,6 @@ function isWithinRefreshWindowUtc(now = new Date()): boolean {
   return hour >= 4 && hour < 7;
 }
 
-function isMondayUtc(now = new Date()): boolean {
-  return now.getUTCDay() === 1;
-}
-
 async function userAllowsAutoRefresh(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
@@ -96,10 +93,6 @@ async function runWeeklyJobForRow(
   row: ScheduledScrapeRow,
   runDayYmd: string
 ): Promise<{ skipped: boolean }> {
-  if (row.is_workspace_brand && !isMondayUtc()) {
-    return { skipped: true };
-  }
-
   if (!(await userAllowsAutoRefresh(admin, row.user_id))) {
     return { skipped: true };
   }
@@ -398,10 +391,10 @@ async function runWeeklyJobForRow(
   }
 }
 
-/** POST — Vercel cron; Bearer CRON_SECRET. Daily cadence for Smart Prioritization refresh. */
-export async function POST(req: Request) {
-  if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response("Unauthorized", { status: 401 });
+/** Vercel cron; Bearer CRON_SECRET. Daily cadence for Smart Prioritization refresh. */
+async function runWeeklyScrape(req: Request) {
+  if (!authorizeCron(req)) {
+    return cronUnauthorizedResponse();
   }
 
   if (!isWithinRefreshWindowUtc()) {
@@ -460,5 +453,15 @@ export async function POST(req: Request) {
     );
   }
 
-  return Response.json({ processed, succeeded, failed, skipped });
+  const summary = { ok: true, processed, succeeded, failed, skipped, runDayYmd };
+  console.info("[cron/weekly-scrape]", summary);
+  return Response.json(summary);
+}
+
+export async function GET(req: Request) {
+  return runWeeklyScrape(req);
+}
+
+export async function POST(req: Request) {
+  return runWeeklyScrape(req);
 }

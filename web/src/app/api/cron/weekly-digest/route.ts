@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { buildDigestForUser } from "@/lib/digest/build-digest-for-user";
+import { authorizeCron } from "@/lib/cron/authorize-cron";
 import {
   digestListUnsubscribeHeaders,
   sendWeeklyDigestBatch,
@@ -18,15 +19,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-
-function authorizeCron(req: Request): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-  const auth = req.headers.get("authorization");
-  if (auth === `Bearer ${secret}`) return true;
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === secret;
-}
 
 type RunSummary = {
   ok: boolean;

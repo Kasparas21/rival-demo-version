@@ -2,11 +2,11 @@ import type { Database } from "@/lib/supabase/types";
 
 type SavedCompetitorRow = Database["public"]["Tables"]["saved_competitors"]["Row"];
 
-/** Saved rivals eligible for nightly scheduled refresh (excludes workspace brand row). */
+/** Saved rivals and workspace brand rows eligible for nightly scheduled refresh. */
 export function isEligibleWeeklyScrapeCandidate(
-  row: Pick<SavedCompetitorRow, "is_workspace_brand">,
+  _row: Pick<SavedCompetitorRow, "is_workspace_brand">,
 ): boolean {
-  return row.is_workspace_brand !== true;
+  return true;
 }
 
 export function filterWeeklyScrapeCandidates<

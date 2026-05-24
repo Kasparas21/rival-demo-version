@@ -1,13 +1,14 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { enrichAllPendingScrapedAdsForCompetitor } from "@/lib/strategy-overview/adEnrichment";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-/** POST — daily safety net for ads that failed enrichment during post-scrape recompute. Bearer CRON_SECRET. */
-export async function POST(req: Request) {
-  if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response("Unauthorized", { status: 401 });
+/** Daily safety net for ads that failed enrichment during post-scrape recompute. Bearer CRON_SECRET. */
+async function runEnrichPending(req: Request) {
+  if (!authorizeCron(req)) {
+    return cronUnauthorizedResponse();
   }
 
   const admin = createSupabaseAdminClient();
@@ -55,10 +56,20 @@ export async function POST(req: Request) {
     }
   }
 
-  return Response.json({
+  const summary = {
     ok: true,
     competitorsProcessed,
     adsEnriched,
     competitorsWithPending: pairs.length,
-  });
+  };
+  console.info("[cron/enrich-pending]", summary);
+  return Response.json(summary);
+}
+
+export async function GET(req: Request) {
+  return runEnrichPending(req);
+}
+
+export async function POST(req: Request) {
+  return runEnrichPending(req);
 }
