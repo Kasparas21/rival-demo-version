@@ -27,6 +27,7 @@ export function useAdDetailState() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [userDismissed, setUserDismissed] = useState(false);
+  const userDismissedRef = useRef(false);
   const inFlightOpenGenRef = useRef(0);
 
   const activeAdIdFromUrl = searchParams.get("ad");
@@ -37,6 +38,7 @@ export function useAdDetailState() {
       const id = adUuid.trim();
       if (!id || !isScrapedAdsUuid(id)) return;
       inFlightOpenGenRef.current += 1;
+      userDismissedRef.current = false;
       setUserDismissed(false);
       if (seed) putAdDetailSeed({ ...seed, adId: id });
       prefetchAdDetail(id);
@@ -72,11 +74,15 @@ export function useAdDetailState() {
       try {
         const res = await fetch(`/api/ad-detail?${q.toString()}`, { credentials: "include" });
         const json = (await res.json()) as AdDetailDrawerPayload & { ad?: { id: string }; error?: string };
-        if (openGen !== inFlightOpenGenRef.current) {
+        if (
+          openGen !== inFlightOpenGenRef.current ||
+          userDismissedRef.current
+        ) {
           return { ok: false, error: "Cancelled" };
         }
         if (json.ok && json.ad?.id && isScrapedAdsUuid(json.ad.id)) {
           setCachedAdDetail(json.ad.id, json);
+          userDismissedRef.current = false;
           setUserDismissed(false);
           const params = new URLSearchParams(searchParams.toString());
           params.set("ad", json.ad.id);
@@ -97,6 +103,7 @@ export function useAdDetailState() {
 
   const closeAd = useCallback(() => {
     inFlightOpenGenRef.current += 1;
+    userDismissedRef.current = true;
     setUserDismissed(true);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("ad");

@@ -103,6 +103,9 @@ import {
   youtubeThumbnailFromUrl,
   type GoogleAdRow,
   type LinkedInAdCard,
+  type PinterestAdCard as PinterestAdCardModel,
+  type SnapchatAdCard as SnapchatAdCardModel,
+  type TikTokAdCard as TikTokAdCardModel,
 } from "@/lib/ad-library/normalize";
 import { hydrateMetaLibraryCardForDisplay } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import { metaLibraryItemLookupKeys } from "@/lib/ad-library/meta-library-item-keys";
@@ -2314,8 +2317,10 @@ function CompetitorDashboardBody({
 
   const { activeAdId, openAd, closeAd, resolveLibraryAdAndOpen } = useAdDetailState();
   const [pendingOpenSeed, setPendingOpenSeed] = useState<AdDetailOpenSeed | null>(null);
+  const adLibraryOpenGenRef = useRef(0);
 
   const closeAdDetail = useCallback(() => {
+    adLibraryOpenGenRef.current += 1;
     setPendingOpenSeed(null);
     closeAd();
   }, [closeAd]);
@@ -3396,6 +3401,8 @@ function CompetitorDashboardBody({
   const openAdLibraryCard = useCallback(
     (platform: string, libraryItemId: string, alternateIds: string[] = [], rawAd?: unknown) => {
       void (async () => {
+        const openGen = ++adLibraryOpenGenRef.current;
+
         let cid = competitorDbIdForSaved.trim();
         const pl = platform.trim().toLowerCase();
         const lid = libraryItemId.trim();
@@ -3404,6 +3411,8 @@ function CompetitorDashboardBody({
         if (!cid && isOwnWorkspace) {
           cid = (await ensureWorkspaceLibraryLinked())?.trim() ?? "";
         }
+        if (openGen !== adLibraryOpenGenRef.current) return;
+
         if (!cid) {
           toast.error("Still linking your brand library — try again in a moment.");
           return;
@@ -3430,6 +3439,10 @@ function CompetitorDashboardBody({
         }
 
         const firstResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
+        if (openGen !== adLibraryOpenGenRef.current) {
+          setPendingOpenSeed(null);
+          return;
+        }
         if (firstResolve.ok) return;
 
         try {
@@ -3443,17 +3456,34 @@ function CompetitorDashboardBody({
             }),
           });
           const persistJson = (await persistRes.json()) as { ok?: boolean; error?: string; errors?: string[] };
+          if (openGen !== adLibraryOpenGenRef.current) {
+            setPendingOpenSeed(null);
+            return;
+          }
           if (!persistRes.ok || persistJson.ok === false) {
             toast.error(
               persistJson.error ?? persistJson.errors?.[0] ?? "Ads are still syncing — try again shortly.",
             );
           }
         } catch {
+          if (openGen !== adLibraryOpenGenRef.current) {
+            setPendingOpenSeed(null);
+            return;
+          }
           toast.error("Ads are still syncing — try again shortly.");
+        }
+
+        if (openGen !== adLibraryOpenGenRef.current) {
+          setPendingOpenSeed(null);
+          return;
         }
 
         refreshLibraryMappings();
         const retryResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
+        if (openGen !== adLibraryOpenGenRef.current) {
+          setPendingOpenSeed(null);
+          return;
+        }
         if (retryResolve.ok) return;
 
         setPendingOpenSeed(null);
@@ -4490,7 +4520,7 @@ function CompetitorDashboardBody({
               <MetaAdsAllModal
                 open={metaAdsModalOpen}
                 onClose={() => setMetaAdsModalOpen(false)}
-                ads={displayMetaAdsWithPreviews}
+                domain={cacheDomainNorm}
                 viewMode="grid"
                 brand={brand}
                 onAdActivate={(ad) => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad), ad)}
@@ -4595,7 +4625,7 @@ function CompetitorDashboardBody({
                   )}
                 </div>
               </div>
-              <AdsLibraryAllModal
+              <AdsLibraryAllModal<GoogleAdRow>
                 open={googleAdsModalOpen}
                 onClose={() => setGoogleAdsModalOpen(false)}
                 title="Google / YouTube ads"
@@ -4605,7 +4635,8 @@ function CompetitorDashboardBody({
                     <YouTubeLogo className="w-5 h-5" />
                   </>
                 }
-                ads={filteredGoogleRows}
+                domain={cacheDomainNorm}
+                platform="google"
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
@@ -4715,12 +4746,13 @@ function CompetitorDashboardBody({
                   )}
                 </div>
               </div>
-              <AdsLibraryAllModal
+              <AdsLibraryAllModal<LinkedInAdCard>
                 open={linkedInAdsModalOpen}
                 onClose={() => setLinkedInAdsModalOpen(false)}
                 title="LinkedIn ads"
                 logo={<LinkedInLogo className="w-5 h-5" />}
-                ads={filteredLinkedInAds}
+                domain={cacheDomainNorm}
+                platform="linkedin"
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
@@ -4825,12 +4857,13 @@ function CompetitorDashboardBody({
                   )}
                 </div>
               </div>
-              <AdsLibraryAllModal
+              <AdsLibraryAllModal<TikTokAdCardModel>
                 open={tiktokAdsModalOpen}
                 onClose={() => setTiktokAdsModalOpen(false)}
                 title="TikTok ads"
                 logo={<TikTokLogo className="w-5 h-5" />}
-                ads={displayTikTokAds}
+                domain={cacheDomainNorm}
+                platform="tiktok"
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
@@ -4946,12 +4979,13 @@ function CompetitorDashboardBody({
                   )}
                 </div>
               </div>
-              <AdsLibraryAllModal
+              <AdsLibraryAllModal<PinterestAdCardModel>
                 open={pinterestAdsModalOpen}
                 onClose={() => setPinterestAdsModalOpen(false)}
                 title="Pinterest ads"
                 logo={<PinterestLogo className="w-5 h-5" />}
-                ads={filteredPinterestAds}
+                domain={cacheDomainNorm}
+                platform="pinterest"
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (
@@ -5053,12 +5087,13 @@ function CompetitorDashboardBody({
                   )}
                 </div>
               </div>
-              <AdsLibraryAllModal
+              <AdsLibraryAllModal<SnapchatAdCardModel>
                 open={snapchatAdsModalOpen}
                 onClose={() => setSnapchatAdsModalOpen(false)}
                 title="Snapchat ads"
                 logo={<SnapchatLogo className="h-5 w-5 text-[#0fad00]" />}
-                ads={filteredSnapchatAds}
+                domain={cacheDomainNorm}
+                platform="snapchat"
                 getKey={(ad) => ad.id}
                 viewMode="grid"
                 renderItem={(ad) => (

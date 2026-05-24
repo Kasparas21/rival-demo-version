@@ -94,3 +94,6 @@ export const META_ADS_INLINE_PREVIEW = 3;
 
 /** Meta “View all” modal: ads rendered per page (DOM capped). */
 export const META_ADS_MODAL_PAGE_SIZE = 12;
+
+/** Expanded platform-ads modal — lazy-loaded batch size (Foreplay-style infinite scroll). */
+export const PLATFORM_ADS_MODAL_BATCH_SIZE = 24;

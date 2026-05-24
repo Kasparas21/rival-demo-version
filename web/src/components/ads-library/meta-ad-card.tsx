@@ -234,7 +234,7 @@ export function MetaAdCard({
           </div>
         ) : null}
         <div className={`min-w-0 flex flex-col ${viewMode === "list" ? "flex-1 min-h-0" : ""}`}>
-          <div className="p-4 flex items-start gap-3 border-b border-[#f1f5f9]">
+          <div className="p-4 flex items-start gap-3 border-b border-[#f1f5f9]" data-pa-section="brand">
             <CompetitorLogo
               sources={{
                 primary: ad.pageProfilePic,
@@ -284,7 +284,7 @@ export function MetaAdCard({
             </div>
           </div>
           {metaTitle || metaPrimary ? (
-            <div className="px-4 py-3 shrink-0">
+            <div className="px-4 py-3 shrink-0" data-pa-section="copy">
               {metaTitle ? (
                 <ExpandableAdText
                   text={metaTitle}
@@ -309,7 +309,7 @@ export function MetaAdCard({
               </div>
             </div>
           )}
-          <div className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]">
+          <div className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]" data-pa-section="cta">
             <div className="min-w-0 flex flex-col rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-sm">
               <p className="text-[12px] font-medium text-[#65676b] uppercase tracking-wide truncate">{siteLabel}</p>
               {metaLinkDesc ? (
