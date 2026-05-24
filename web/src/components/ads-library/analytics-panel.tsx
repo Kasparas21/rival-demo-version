@@ -7,6 +7,12 @@ import { describeArcClockwise } from "@/lib/charts/arc-geometry";
 import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
 import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import type { SharedLandingPagesListCache } from "@/components/competitor/landing-pages-tab";
+import {
+  brandWorkspaceFeatureTileClass,
+  brandWorkspaceLeftAccentClass,
+  brandWorkspaceShellClass,
+  brandWorkspaceTopSheenClass,
+} from "@/components/dashboard/brand-workspace-surfaces";
 import { RivalLogoVideo } from "@/components/ui/rival-loading";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
@@ -56,6 +62,8 @@ type Props = {
   onFreshnessRescrape?: () => void;
   /** Parent-owned landing pages list (`limit=100`); skips duplicate fetch when set. */
   landingPagesListCache?: SharedLandingPagesListCache | null;
+  /** YOUR BRAND workspace — sky gradient tiles match Workspace ads / Benchmark. */
+  isOwnWorkspace?: boolean;
 };
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -108,6 +116,7 @@ export function AdLibraryAnalyticsPanel({
   onViewAllLandingPages,
   onFreshnessRescrape,
   landingPagesListCache = null,
+  isOwnWorkspace = false,
 }: Props) {
   const [expanded, setExpanded] = useState(true);
 
@@ -124,9 +133,16 @@ export function AdLibraryAnalyticsPanel({
     setActivityScoreLoading(Boolean(competitorId));
   }, [competitorId]);
 
+  const sharedLandingPagesActive =
+    landingPagesListCache != null &&
+    (landingPagesListCache.loading ||
+      landingPagesListCache.isValidating ||
+      landingPagesListCache.data != null ||
+      landingPagesListCache.error != null);
+
   const internalLp = useScrapeKeyedCache<LandingPagesResponse>({
     cacheKey: lpCacheKey,
-    enabled: landingPagesListCache == null && Boolean(competitorId && domainKey),
+    enabled: !sharedLandingPagesActive && Boolean(competitorId && domainKey),
     validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
     fetcher: async () => {
       const r = await fetch(`/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}&limit=100`);
@@ -139,7 +155,10 @@ export function AdLibraryAnalyticsPanel({
     ? onViewAllLandingPages
     : undefined;
   const lpHasData = Boolean(lpRes?.ok && lpRes.landingPages && lpRes.landingPages.length > 0);
-  const loading = (landingPagesListCache?.loading ?? internalLp.loading) && !lpHasData;
+  const loading =
+    ((landingPagesListCache?.loading ?? internalLp.loading) ||
+      (landingPagesListCache?.isValidating ?? internalLp.isValidating)) &&
+    !lpHasData;
 
   const landingPages = useMemo(() => {
     if (!lpRes?.ok || !lpRes.landingPages) return [];
@@ -166,20 +185,44 @@ export function AdLibraryAnalyticsPanel({
   const activityFoxOnly = Boolean(competitorId) && activityScoreLoading && !landingLoading;
   const landingFoxOnly = !activityScoreLoading && landingLoading;
 
+  const sectionShell = isOwnWorkspace
+    ? brandWorkspaceShellClass
+    : "overflow-hidden rounded-2xl border border-[#cfe8f8]/80 bg-gradient-to-br from-[#e8f4fc]/90 via-[#f8fafc]/95 to-white shadow-[0_2px_8px_rgba(15,23,42,0.06)] ring-1 ring-white/80";
+
+  const tileClass = isOwnWorkspace
+    ? `${brandWorkspaceFeatureTileClass} p-5`
+    : "min-h-0 p-5";
+
+  const tileAccent = isOwnWorkspace ? (
+    <>
+      <div className={brandWorkspaceTopSheenClass} aria-hidden />
+      <div className={brandWorkspaceLeftAccentClass} aria-hidden />
+    </>
+  ) : null;
+
+  const sectionSheen = isOwnWorkspace ? <div className={brandWorkspaceTopSheenClass} aria-hidden /> : null;
+
+  const gridGap = isOwnWorkspace ? "gap-3 p-3 sm:p-4" : "gap-0";
+
   return (
-    <section className="mb-5 overflow-hidden rounded-2xl border border-[#cfe8f8]/80 bg-gradient-to-br from-[#e8f4fc]/90 via-[#f8fafc]/95 to-white shadow-[0_2px_8px_rgba(15,23,42,0.06)] ring-1 ring-white/80">
+    <section className={`relative mb-5 ${sectionShell}`}>
+      {sectionSheen}
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 transition-colors hover:bg-white/50"
+        className={`relative flex w-full items-center justify-between px-4 py-3 transition-colors ${
+          isOwnWorkspace ? "hover:bg-sky-50/30" : "hover:bg-white/50"
+        }`}
       >
         <div className="flex min-w-0 flex-col items-start gap-0.5 text-left sm:flex-row sm:items-center sm:gap-2">
           <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 shrink-0 text-[#2563eb]" aria-hidden />
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">Analytics</span>
+            <BarChart3 className={`h-4 w-4 shrink-0 ${isOwnWorkspace ? "text-sky-700" : "text-[#2563eb]"}`} aria-hidden />
+            <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${isOwnWorkspace ? "text-sky-800/90" : "text-slate-600"}`}>
+              Analytics
+            </span>
           </div>
-          <span className="hidden text-xs text-slate-500 sm:inline sm:pl-1">·</span>
-          <span className="text-xs font-medium text-slate-500">Across all platforms</span>
+          <span className={`hidden text-xs sm:inline sm:pl-1 ${isOwnWorkspace ? "text-sky-900/55" : "text-slate-500"}`}>·</span>
+          <span className={`text-xs font-medium ${isOwnWorkspace ? "text-sky-900/60" : "text-slate-500"}`}>Across all platforms</span>
         </div>
         {expanded ? (
           <ChevronUp className="h-4 w-4 shrink-0 text-[#64748b]" aria-hidden />
@@ -189,37 +232,43 @@ export function AdLibraryAnalyticsPanel({
       </button>
 
       {expanded ? (
-        <div className="grid grid-cols-1 gap-0 border-t border-[#e2e8f0]/90 xl:grid-cols-3">
-          <div className="min-h-0 border-b border-[#e2e8f0]/90 p-5 xl:border-b-0 xl:border-r">
-            <div className="mb-3 flex items-center gap-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+        <div className={`relative grid grid-cols-1 border-t ${isOwnWorkspace ? "border-sky-200/50" : "border-[#e2e8f0]/90"} xl:grid-cols-3 ${gridGap}`}>
+          <div className={`${tileClass} ${isOwnWorkspace ? "" : "border-b border-[#e2e8f0]/90 xl:border-b-0 xl:border-r"}`}>
+            {tileAccent}
+            <div className="relative mb-3 flex items-center gap-1.5 pl-1">
+              <span className={`text-[10px] font-semibold uppercase tracking-wider ${isOwnWorkspace ? "text-sky-800/90" : "text-[#64748b]"}`}>
                 Active ads · platform mix
               </span>
             </div>
+            <div className="relative pl-1">
             <PlatformDistributionGauge
               total={totalActiveAds}
               totalAllAds={totalAllAds}
               platformsCount={platformsWithAds}
               activeCounts={platformActiveCounts}
             />
+            </div>
           </div>
 
           {competitorId ? (
-            <div className="relative min-h-0 xl:col-span-2">
-              <div className="relative grid min-h-0 grid-cols-1 gap-0 xl:grid-cols-2">
+            <div className={`relative min-h-0 xl:col-span-2 ${isOwnWorkspace ? "" : ""}`}>
+              <div className={`relative grid min-h-0 grid-cols-1 xl:grid-cols-2 ${isOwnWorkspace ? "gap-3" : "gap-0"}`}>
                 <div
-                  className={`min-h-0 p-5 xl:border-b-0 ${
-                    bothAsyncLoading ? "" : "border-b border-[#e2e8f0]/90 xl:border-r"
+                  className={`${tileClass} ${
+                    isOwnWorkspace
+                      ? ""
+                      : `xl:border-b-0 ${bothAsyncLoading ? "" : "border-b border-[#e2e8f0]/90 xl:border-r"}`
                   }`}
                 >
+                  {tileAccent}
                   {!bothAsyncLoading ? (
-                    <div className="mb-3 flex items-center gap-1.5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+                    <div className="relative mb-3 flex items-center gap-1.5 pl-1">
+                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${isOwnWorkspace ? "text-sky-800/90" : "text-[#64748b]"}`}>
                         Activity score
                       </span>
                     </div>
                   ) : null}
-                  <div className="relative min-h-[140px]">
+                  <div className="relative min-h-[140px] pl-1">
                     {activityFoxOnly ? <AdLibraryAnalyticsFoxOverlay /> : null}
                     <ActivityScorePanel
                       competitorId={competitorId}
@@ -232,16 +281,17 @@ export function AdLibraryAnalyticsPanel({
                     />
                   </div>
                 </div>
-                <div className="min-h-0 p-5">
+                <div className={tileClass}>
+                  {tileAccent}
                   {!bothAsyncLoading ? (
-                    <div className="mb-3 flex items-center gap-1.5">
-                      <LinkIcon className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+                    <div className="relative mb-3 flex items-center gap-1.5 pl-1">
+                      <LinkIcon className={`h-3 w-3 shrink-0 ${isOwnWorkspace ? "text-sky-700/70" : "text-[#64748b]"}`} aria-hidden />
+                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${isOwnWorkspace ? "text-sky-800/90" : "text-[#64748b]"}`}>
                         Top landing pages
                       </span>
                     </div>
                   ) : null}
-                  <div className="relative min-h-[140px]">
+                  <div className="relative min-h-[140px] pl-1">
                     {landingFoxOnly ? <AdLibraryAnalyticsFoxOverlay /> : null}
                     <LandingPagesList
                       groups={landingPages}
@@ -255,14 +305,15 @@ export function AdLibraryAnalyticsPanel({
               </div>
             </div>
           ) : (
-            <div className="min-h-0 p-5 xl:border-b-0">
-              <div className="mb-3 flex items-center gap-1.5">
-                <LinkIcon className="h-3 w-3 shrink-0 text-[#64748b]" aria-hidden />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
+            <div className={`${tileClass} ${isOwnWorkspace ? "" : "xl:border-b-0"}`}>
+              {tileAccent}
+              <div className="relative mb-3 flex items-center gap-1.5 pl-1">
+                <LinkIcon className={`h-3 w-3 shrink-0 ${isOwnWorkspace ? "text-sky-700/70" : "text-[#64748b]"}`} aria-hidden />
+                <span className={`text-[10px] font-semibold uppercase tracking-wider ${isOwnWorkspace ? "text-sky-800/90" : "text-[#64748b]"}`}>
                   Top landing pages
                 </span>
               </div>
-              <div className="relative min-h-[140px]">
+              <div className="relative min-h-[140px] pl-1">
                 {landingLoading ? <AdLibraryAnalyticsFoxOverlay /> : null}
                 <LandingPagesList
                   groups={landingPages}

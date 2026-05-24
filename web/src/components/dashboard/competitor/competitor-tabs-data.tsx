@@ -2,6 +2,7 @@ import {
   BarChart3,
   Beaker,
   Bell,
+  Gauge,
   GitCompareArrows,
   Library,
   SlidersHorizontal,
@@ -29,7 +30,8 @@ export type CompetitorPageTabId =
   | "comparison"
   | "alerts"
   | "workspace-ads"
-  | "workspace-marketing-improvements";
+  | "workspace-marketing-improvements"
+  | "benchmark";
 
 export type CompetitorSubTab = {
   id: CompetitorSubTabId;
@@ -124,6 +126,13 @@ export const WORKSPACE_MARKETING_IMPROVEMENTS_TAB: CompetitorPageTab = {
   icon: TrendingUp,
 };
 
+/** Own brand vs all tracked competitors — rank-based benchmark view. */
+export const WORKSPACE_BENCHMARK_TAB: CompetitorPageTab = {
+  id: "benchmark",
+  label: "Benchmark",
+  icon: Gauge,
+};
+
 /** Own-brand hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
 export const OWN_BRAND_DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [
   "insights",
@@ -184,7 +193,7 @@ export function competitorPageTabsForView(opts: {
   if (!isOwnWorkspace) return base;
 
   const adsIdx = base.findIndex((t) => t.id === "ads library");
-  const inserts: CompetitorPageTab[] = [WORKSPACE_ADS_TAB];
+  const inserts: CompetitorPageTab[] = [WORKSPACE_ADS_TAB, WORKSPACE_BENCHMARK_TAB];
   if (showDebugTabs) inserts.push(WORKSPACE_MARKETING_IMPROVEMENTS_TAB);
 
   const next = [...base];

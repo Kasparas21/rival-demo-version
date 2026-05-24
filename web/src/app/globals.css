@@ -540,21 +540,52 @@ html:has([data-dashboard-app]) body {
   }
 }
 
+@keyframes ad-detail-slide-out {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@keyframes ad-detail-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .ad-detail-drawer-panel {
-  animation: ad-detail-slide-in 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   will-change: transform;
 }
 
-.ad-detail-drawer-backdrop {
+.ad-detail-drawer-panel--entering {
+  animation: ad-detail-slide-in 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ad-detail-drawer-panel--closing {
+  animation: ad-detail-slide-out 340ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.ad-detail-drawer-backdrop--entering {
   animation: ad-detail-backdrop-in 240ms ease-out forwards;
 }
 
+.ad-detail-drawer-backdrop--closing {
+  animation: ad-detail-backdrop-out 240ms ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .ad-detail-drawer-panel {
+  .ad-detail-drawer-panel--entering,
+  .ad-detail-drawer-panel--closing {
     animation: none;
   }
 
-  .ad-detail-drawer-backdrop {
+  .ad-detail-drawer-backdrop--entering,
+  .ad-detail-drawer-backdrop--closing {
     animation: none;
   }
 }

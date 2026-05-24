@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { isScrapedAdsUuid } from "@/lib/ad-detail/ad-id";
@@ -26,13 +26,18 @@ export function useAdDetailState() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [userDismissed, setUserDismissed] = useState(false);
+  const inFlightOpenGenRef = useRef(0);
 
-  const activeAdId = searchParams.get("ad");
+  const activeAdIdFromUrl = searchParams.get("ad");
+  const activeAdId = userDismissed ? null : activeAdIdFromUrl;
 
   const openAd = useCallback(
     (adUuid: string, seed?: AdDetailOpenSeed) => {
       const id = adUuid.trim();
       if (!id || !isScrapedAdsUuid(id)) return;
+      inFlightOpenGenRef.current += 1;
+      setUserDismissed(false);
       if (seed) putAdDetailSeed({ ...seed, adId: id });
       prefetchAdDetail(id);
       const params = new URLSearchParams(searchParams.toString());
@@ -58,6 +63,7 @@ export function useAdDetailState() {
       if (!cid || !pl || !lid) {
         return { ok: false, error: "Missing competitor or ad id" };
       }
+      const openGen = inFlightOpenGenRef.current;
       const q = new URLSearchParams({
         competitorId: cid,
         platform: pl,
@@ -66,8 +72,12 @@ export function useAdDetailState() {
       try {
         const res = await fetch(`/api/ad-detail?${q.toString()}`, { credentials: "include" });
         const json = (await res.json()) as AdDetailDrawerPayload & { ad?: { id: string }; error?: string };
+        if (openGen !== inFlightOpenGenRef.current) {
+          return { ok: false, error: "Cancelled" };
+        }
         if (json.ok && json.ad?.id && isScrapedAdsUuid(json.ad.id)) {
           setCachedAdDetail(json.ad.id, json);
+          setUserDismissed(false);
           const params = new URLSearchParams(searchParams.toString());
           params.set("ad", json.ad.id);
           router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -86,6 +96,8 @@ export function useAdDetailState() {
   );
 
   const closeAd = useCallback(() => {
+    inFlightOpenGenRef.current += 1;
+    setUserDismissed(true);
     const params = new URLSearchParams(searchParams.toString());
     params.delete("ad");
     const qs = params.toString();

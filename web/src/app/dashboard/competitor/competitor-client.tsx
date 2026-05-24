@@ -212,6 +212,7 @@ import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-ove
 import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
 import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
+import { BenchmarkTab } from "@/components/benchmark/benchmark-tab";
 import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-styles";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
@@ -1976,6 +1977,9 @@ function CompetitorDashboardBody({
     } else if (lower === "marketing improvements") {
       params.set("tab", "workspace-marketing-improvements");
       fix = true;
+    } else if (lower === "benchmark" && raw !== "benchmark") {
+      params.set("tab", "benchmark");
+      fix = true;
     }
     if (fix) {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
@@ -2051,6 +2055,16 @@ function CompetitorDashboardBody({
     [pathname, router, searchParams],
   );
 
+  const navigateFromBenchmark = useCallback(
+    (tab: string, sub?: string | null) => {
+      userNavIntentRef.current = { tab, sub: sub ?? null };
+      setNavTab(tab);
+      setNavSub(sub ?? null);
+      syncNavToUrl(tab, sub ?? null);
+    },
+    [syncNavToUrl],
+  );
+
   useEffect(() => {
     if (navTab !== "audience-copy") return;
     if (navSub !== "hooks" && navSub !== "briefs") return;
@@ -2094,7 +2108,7 @@ function CompetitorDashboardBody({
   useEffect(() => {
     if (
       !isOwnWorkspace &&
-      (navTab === "workspace-ads" || navTab === "workspace-marketing-improvements")
+      (navTab === "workspace-ads" || navTab === "workspace-marketing-improvements" || navTab === "benchmark")
     ) {
       const sub = deriveSubFromParams(searchParams, "ads library");
       setNavTab("ads library");
@@ -3061,9 +3075,7 @@ function CompetitorDashboardBody({
     Boolean(cacheDomainNorm.trim()) && navTab === "comparison";
 
   const landingPagesFetchEnabled =
-    Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()) &&
-    navTab === "tests" &&
-    navSub === "landing-pages";
+    Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()) && workspaceLibraryInteractive;
 
   const [recomputePollState, setRecomputePollState] = useState<RecomputePollState>({
     recomputeRunning: false,
@@ -3206,6 +3218,7 @@ function CompetitorDashboardBody({
   const landingPagesListHook = useScrapeKeyedCache<LandingPagesApiResponse>({
     cacheKey: landingPagesListCacheKey,
     enabled: landingPagesFetchEnabled,
+    persistAcrossTabs: true,
     validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
     fetcher: async () => {
       const res = await fetch(
@@ -3986,6 +3999,17 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
+      <KeepMountedTab active={navTab === "benchmark" && isOwnWorkspace} className="min-h-0">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+          <BenchmarkTab
+            fetchEnabled={navTab === "benchmark" && isOwnWorkspace}
+            cacheDomainNorm={cacheDomainNorm}
+            lastScrapedAt={accountLastScrapedAt}
+            onNavigate={navigateFromBenchmark}
+          />
+        </div>
+      </KeepMountedTab>
+
       <KeepMountedTab active={navTab === "workspace-marketing-improvements" && isOwnWorkspace} className="min-h-0">
         <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 w-full animate-in fade-in duration-200`}>
@@ -4165,6 +4189,7 @@ function CompetitorDashboardBody({
                 onViewAllLandingPages={navigateToLandingPagesExplorer}
                 onFreshnessRescrape={undefined}
                 landingPagesListCache={landingPagesListCacheForChildren}
+                isOwnWorkspace={isOwnWorkspace}
               />
             ) : showAdLibraryLinkingAnalyticsShell ? (
               <div className="mb-6 rounded-2xl border border-[#e5e7eb]/80 bg-gradient-to-br from-[#f8fafc] to-[#eff6ff]/60 px-4 py-14 sm:px-8 flex flex-col items-center justify-center gap-3 text-center shadow-[0_1px_3px_rgba(15,23,42,0.06)]">

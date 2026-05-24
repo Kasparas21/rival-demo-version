@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bookmark,
@@ -146,12 +146,75 @@ export function AdDetailDrawer({
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [hydrating, setHydrating] = useState(() => snapshot?.hydrating ?? false);
+  const [closing, setClosing] = useState(false);
+  const [entering, setEntering] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
+  const dismissedRef = useRef(false);
+  const isOpen = Boolean(adId || openSeed);
+  const showDrawer = isOpen || closing;
+
+  useLayoutEffect(() => {
+    if (isOpen) {
+      dismissedRef.current = false;
+      if (!wasOpenRef.current) setEntering(true);
+      wasOpenRef.current = true;
+    } else if (!closing) {
+      wasOpenRef.current = false;
+      setEntering(false);
+      setClosing(false);
+    }
+  }, [isOpen, closing]);
+
+  const requestClose = useCallback(() => {
+    if (closing || dismissedRef.current) return;
+    dismissedRef.current = true;
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onClose();
+      return;
+    }
+    setEntering(false);
+    setClosing(true);
+    onClose();
+  }, [closing, onClose]);
+
+  useEffect(() => {
+    if (!closing) return;
+
+    const panel = panelRef.current;
+    if (!panel) {
+      setClosing(false);
+      return;
+    }
+
+    let finished = false;
+    const finishClose = () => {
+      if (finished) return;
+      finished = true;
+      setClosing(false);
+    };
+
+    const onAnimationEnd = (event: AnimationEvent) => {
+      if (event.target !== panel || event.animationName !== "ad-detail-slide-out") return;
+      finishClose();
+    };
+
+    panel.addEventListener("animationend", onAnimationEnd);
+    const fallback = window.setTimeout(finishClose, 380);
+
+    return () => {
+      panel.removeEventListener("animationend", onAnimationEnd);
+      window.clearTimeout(fallback);
+    };
+  }, [closing]);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
+    if (closing || dismissedRef.current) return;
+
     const nextSnapshot = readAdDetailDisplaySnapshot(adId, openSeed);
     if (nextSnapshot) {
       setData(nextSnapshot.data);
@@ -170,16 +233,16 @@ export function AdDetailDrawer({
       setError(null);
     }
     setActiveTab("details");
-  }, [adId, openSeed]);
+  }, [adId, openSeed, closing]);
 
   useEffect(() => {
-    if (!adId) return;
+    if (!adId || dismissedRef.current) return;
 
     let cancelled = false;
 
     void fetchAdDetailPayload(adId)
       .then((res) => {
-        if (cancelled || !res) return;
+        if (cancelled || dismissedRef.current || !res) return;
         if (!isFullAdDetailPayload(res)) {
           if (!readAdDetailDisplaySnapshot(adId, openSeed)) {
             setError(res.error ?? "Failed to load");
@@ -201,7 +264,7 @@ export function AdDetailDrawer({
         setHydrating(false);
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (cancelled || dismissedRef.current) return;
         if (!readAdDetailDisplaySnapshot(adId, openSeed)) {
           setError(err instanceof Error ? err.message : "Network error");
           setLoading(false);
@@ -275,13 +338,13 @@ export function AdDetailDrawer({
   useEffect(() => {
     if (!adId) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") requestClose();
       if (e.key === "ArrowLeft" && onPrev) onPrev();
       if (e.key === "ArrowRight" && onNext) onNext();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [adId, onClose, onPrev, onNext]);
+  }, [adId, requestClose, onPrev, onNext]);
 
   const handleAnalysisSaved = useCallback((analysis: AdPreviewAnalysis, quota: AdPreviewAnalysisQuota) => {
     setData((prev) => {
@@ -299,21 +362,26 @@ export function AdDetailDrawer({
     });
   }, []);
 
-  if (!adId && !openSeed) return null;
+  if (!showDrawer) return null;
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex justify-end" role="dialog" aria-modal="true">
+    <div
+      className={`fixed inset-0 z-[150] flex justify-end${closing ? " pointer-events-none" : ""}`}
+      role="dialog"
+      aria-modal="true"
+    >
       <button
         type="button"
-        className="ad-detail-drawer-backdrop absolute inset-0 bg-black/40"
+        className={`ad-detail-drawer-backdrop absolute inset-0 bg-black/40${entering ? " ad-detail-drawer-backdrop--entering" : ""}${closing ? " ad-detail-drawer-backdrop--closing" : ""}`}
         aria-label="Close"
-        onClick={onClose}
+        onClick={requestClose}
+        disabled={closing}
       />
 
       <div
-        key={adId ?? openSeed?.adId ?? "preview"}
-        className="ad-detail-drawer-panel relative flex h-full w-full max-w-[1080px] border-l border-slate-200 bg-white shadow-2xl"
+        ref={panelRef}
+        className={`ad-detail-drawer-panel relative flex h-full w-full max-w-[1080px] border-l border-slate-200 bg-white shadow-2xl${entering ? " ad-detail-drawer-panel--entering" : ""}${closing ? " ad-detail-drawer-panel--closing" : ""}`}
       >
         <div className="flex w-full flex-shrink-0 flex-col">
           <div className="flex flex-shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -344,7 +412,8 @@ export function AdDetailDrawer({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={requestClose}
+                disabled={closing}
                 className="rounded-md p-1.5 transition-colors hover:bg-slate-100"
                 aria-label="Close"
               >

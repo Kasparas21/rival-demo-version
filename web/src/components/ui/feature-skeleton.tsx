@@ -107,6 +107,35 @@ export function ComparisonSkeleton() {
   );
 }
 
+export function BenchmarkSkeleton() {
+  return (
+    <div className="space-y-5" aria-busy="true" aria-label="Loading benchmark">
+      <SkSectionHeader />
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <SkPanel key={i} className="h-28" />
+        ))}
+      </div>
+      <SkPanel className="h-24" />
+      <div className="grid gap-5 lg:grid-cols-2">
+        <SkPanel className="h-56" />
+        <SkPanel className="h-56" />
+      </div>
+      <div className="grid gap-5 lg:grid-cols-5">
+        <SkPanel className="h-52 lg:col-span-3" />
+        <SkPanel className="h-52 lg:col-span-2" />
+      </div>
+      <SkPanel className="h-48" />
+      <SkPanel className="h-44" />
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <SkPanel key={i} className="h-28" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ActivityFeedSkeleton({ className }: { className?: string }) {
   return (
     <div
