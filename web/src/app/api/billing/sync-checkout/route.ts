@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
         ok: true,
         synced: false,
         pending: true,
-        message: "Subscription not ready yet — retry shortly.",
+        message: "We're setting up your account — this usually takes a few seconds.",
       });
     }
 
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
         ok: true,
         synced: false,
         pending: true,
-        message: "Subscription product not recognized yet.",
+        message: "We're finishing your subscription setup — almost there.",
       });
     }
 

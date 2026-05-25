@@ -1,14 +1,25 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import CheckoutSuccessClient from "./checkout-success-client";
+import { RivalLogoImg } from "@/components/rival-logo";
+import { RivalVideoShell } from "@/components/ui/rival-video-shell";
+import { glassPanelClass } from "@/components/ui/glass-styles";
 
 function CheckoutSuccessFallback() {
   return (
-    <main className="min-h-screen bg-[#f7f8fb] px-6 py-16">
-      <div className="mx-auto max-w-xl rounded-3xl border border-[#dcfce7] bg-white p-8 text-center shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-600">Payment successful</p>
-        <p className="mt-4 text-sm text-[#71717a]">Loading…</p>
+    <RivalVideoShell footerTint="light">
+      <div className="flex w-full flex-col items-center px-4 sm:px-6">
+        <Link
+          href="/"
+          className="mb-8 rounded-2xl border border-white/60 bg-white/40 px-5 py-3 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md"
+        >
+          <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
+        </Link>
+        <div className={`w-full max-w-[520px] text-center ${glassPanelClass}`}>
+          <p className="text-[13px] text-gray-600">Loading your confirmation…</p>
+        </div>
       </div>
-    </main>
+    </RivalVideoShell>
   );
 }
 

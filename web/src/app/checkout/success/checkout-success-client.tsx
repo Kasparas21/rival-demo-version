@@ -1,10 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { RivalLogoImg } from "@/components/rival-logo";
+import { RivalVideoShell } from "@/components/ui/rival-video-shell";
+import { glassPanelClass } from "@/components/ui/glass-styles";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 
 type SyncState = "idle" | "syncing" | "ready" | "pending" | "error";
+
+const SETUP_MESSAGE = "We're setting up your account — this usually takes a few seconds.";
 
 export default function CheckoutSuccessClient() {
   const router = useRouter();
@@ -52,7 +58,7 @@ export default function CheckoutSuccessClient() {
 
         if (json.pending && attempts < maxAttempts) {
           setSyncState("pending");
-          setSyncMessage(json.message ?? "Activating subscription…");
+          setSyncMessage(json.message ?? SETUP_MESSAGE);
           window.setTimeout(() => void runSync(), 2000);
           return;
         }
@@ -62,7 +68,7 @@ export default function CheckoutSuccessClient() {
       } catch {
         if (!cancelled && attempts < maxAttempts) {
           setSyncState("pending");
-          setSyncMessage("Activating subscription…");
+          setSyncMessage(SETUP_MESSAGE);
           window.setTimeout(() => void runSync(), 2000);
           return;
         }
@@ -89,40 +95,64 @@ export default function CheckoutSuccessClient() {
   }, [router, scrapeHref]);
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] px-6 py-16">
-      <div className="mx-auto max-w-xl rounded-3xl border border-[#dcfce7] bg-white p-8 text-center shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-600">Payment successful</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-[#1a1a2e]">
-          You&apos;re subscribed — let&apos;s scrape your active ads
-        </h1>
-        <p className="mt-3 text-sm leading-6 text-[#52525b]">
-          We&apos;ll pull your live ads across Meta, Google, and more so you can see what&apos;s working and where to
-          improve against competitors.
-        </p>
-
-        {activating ? (
-          <p className="mt-4 text-[13px] text-[#71717a]">{syncMessage ?? "Activating subscription…"}</p>
-        ) : null}
-
-        {!activating && syncMessage && syncState !== "error" ? (
-          <p className="mt-4 text-[13px] text-[#71717a]">{syncMessage}</p>
-        ) : null}
-
-        {syncState === "error" && syncMessage ? (
-          <p className="mt-4 text-[13px] font-medium text-[#b42318]" role="alert">
-            {syncMessage}
-          </p>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={startScraping}
-          disabled={!canStartScrape}
-          className="mt-7 inline-flex rounded-xl bg-[#1a1a2e] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#2d2d44] disabled:cursor-not-allowed disabled:opacity-50"
+    <RivalVideoShell footerTint="light">
+      <div className="flex w-full flex-col items-center px-4 sm:px-6">
+        <Link
+          href="/"
+          className="mb-8 rounded-2xl border border-white/60 bg-white/40 px-5 py-3 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 hover:bg-white/50"
         >
-          {activating ? "Preparing your account…" : "Start scraping your ads"}
-        </button>
+          <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
+        </Link>
+
+        <div className={`w-full max-w-[520px] text-center ${glassPanelClass}`}>
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2d5a1f]">
+            <span className="size-1.5 rounded-full bg-[#95C14B]" aria-hidden />
+            Payment successful
+          </span>
+
+          <h1 className="mt-5 text-[clamp(1.45rem,4vw,1.85rem)] font-semibold leading-tight tracking-tight text-gray-900">
+            You&apos;re subscribed — let&apos;s scrape your active ads
+          </h1>
+
+          <p className="mx-auto mt-3 max-w-md text-[14px] leading-relaxed text-gray-600">
+            We&apos;ll pull your live ads across Meta, Google, and more so you can see what&apos;s working and where to
+            improve against competitors.
+          </p>
+
+          {activating ? (
+            <div
+              className="mx-auto mt-6 flex max-w-sm items-center justify-center gap-3 rounded-2xl border border-white/70 bg-white/45 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]"
+              role="status"
+              aria-live="polite"
+            >
+              <span
+                className="size-4 shrink-0 animate-spin rounded-full border-2 border-[#4a7fa5]/25 border-t-[#4a7fa5]"
+                aria-hidden
+              />
+              <p className="text-[13px] leading-snug text-gray-700">{syncMessage ?? SETUP_MESSAGE}</p>
+            </div>
+          ) : null}
+
+          {!activating && syncMessage && syncState !== "error" ? (
+            <p className="mt-4 text-[13px] text-gray-600">{syncMessage}</p>
+          ) : null}
+
+          {syncState === "error" && syncMessage ? (
+            <p className="mt-4 rounded-xl border border-red-200/80 bg-red-50/90 px-3 py-2 text-[13px] font-medium text-[#b42318]" role="alert">
+              {syncMessage}
+            </p>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={startScraping}
+            disabled={!canStartScrape}
+            className="mt-8 inline-flex w-full max-w-sm justify-center rounded-full bg-gray-900 px-6 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-gray-900 disabled:active:scale-100"
+          >
+            {activating ? "Setting up your account…" : "Start scraping your ads"}
+          </button>
+        </div>
       </div>
-    </main>
+    </RivalVideoShell>
   );
 }
