@@ -586,17 +586,11 @@ export function competitorMatchesFilter(c: SidebarCompetitor, filter: string): b
 }
 
 /**
- * Only show the sidebar skeleton while a row truly has nothing to navigate with yet.
- * Onboarding historically saved `pending: true` even though domains were already known —
- * those rows must still render as normal links once we can derive a hostname.
+ * Show the full sidebar skeleton while discovery is still in progress.
+ * Pending rows must not fall through to the normal row layout (avatar-only + empty text).
  */
 export function competitorSidebarShowsLoadingSkeleton(c: SidebarCompetitor): boolean {
-  if (!c.pending) return false;
-  const host = coerceSidebarCompetitorUrlHost(c);
-  const looksLikeDomain =
-    /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(host) ||
-    Boolean(c.brand?.domain?.trim().includes(".") || c.slug.trim().includes("."));
-  return !looksLikeDomain;
+  return Boolean(c.pending);
 }
 
 /** Third-party favicon endpoint when Clearbit + Google SVG proxy fail (CDN hotlink quirks). */

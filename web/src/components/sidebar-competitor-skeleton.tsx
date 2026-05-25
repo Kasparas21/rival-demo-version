@@ -15,7 +15,7 @@ export function SidebarCompetitorSkeleton({ collapsed }: { collapsed: boolean })
     );
   }
   return (
-    <div className="flex min-w-0 items-center gap-3 overflow-hidden rounded-xl px-3 py-3" aria-hidden>
+    <div className="flex min-h-[52px] w-full min-w-0 items-center gap-3 px-3 py-2.5" aria-hidden>
       <BrandLogoSkeleton className="h-12 w-12 shrink-0 rounded-[10px]" />
       <div className="min-w-0 flex-1 space-y-2 overflow-hidden py-0.5">
         <div className="h-[14px] max-w-[140px] overflow-hidden rounded-md bg-[#e4e4e7]">

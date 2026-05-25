@@ -549,38 +549,48 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     competitor: SidebarCompetitor,
     rowSlugNav: string,
     removing: boolean,
-    alwaysVisible = false,
-  ) => (
-    <button
-      type="button"
-      disabled={removing}
-      onMouseDown={(e) => {
-        e.preventDefault();
-      }}
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        setRemoveCompetitorDialog({ competitor, rowSlugNav });
-      }}
-      className={[
-        "flex size-8 shrink-0 items-center justify-center rounded-lg text-[#a1a1aa] transition-colors duration-150",
-        "motion-reduce:transition-none hover:bg-red-50/90 hover:text-[#b42318]",
-        "pointer-coarse:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/40",
-        "disabled:pointer-events-none disabled:opacity-30",
-        removing || alwaysVisible
-          ? "opacity-100"
-          : "opacity-0 group-hover/comprow:opacity-100 motion-safe:transition-opacity",
-      ].join(" ")}
-      title={`Remove ${competitor.name}`}
-      aria-label={`Remove ${competitor.name} from watched competitors`}
-    >
-      {removing ? (
-        <span className="size-3.5 animate-pulse rounded-full bg-[#d4d4d8]" aria-hidden />
-      ) : (
-        <Trash2 className="size-4 shrink-0" strokeWidth={2} />
-      )}
-    </button>
-  );
+    options?: { alwaysVisible?: boolean; strictHoverOnly?: boolean },
+  ) => {
+    const alwaysVisible = options?.alwaysVisible ?? false;
+    const strictHoverOnly = options?.strictHoverOnly ?? false;
+
+    return (
+      <button
+        type="button"
+        disabled={removing}
+        onMouseDown={(e) => {
+          e.preventDefault();
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setRemoveCompetitorDialog({ competitor, rowSlugNav });
+        }}
+        className={[
+          "flex size-8 shrink-0 items-center justify-center rounded-lg text-[#a1a1aa] transition-[color,background-color,opacity,visibility] duration-150",
+          "motion-reduce:transition-none hover:bg-red-50/90 hover:text-[#b42318]",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/40",
+          "disabled:pointer-events-none disabled:opacity-30",
+          removing || alwaysVisible
+            ? "visible opacity-100"
+            : strictHoverOnly
+              ? "invisible opacity-0 group-hover/comprow:visible group-hover/comprow:opacity-100"
+              : [
+                  "opacity-0 group-hover/comprow:opacity-100 motion-safe:transition-opacity",
+                  "pointer-coarse:opacity-100 focus-visible:opacity-100",
+                ].join(" "),
+        ].join(" ")}
+        title={`Remove ${competitor.name}`}
+        aria-label={`Remove ${competitor.name} from watched competitors`}
+      >
+        {removing ? (
+          <span className="size-3.5 animate-pulse rounded-full bg-[#d4d4d8]" aria-hidden />
+        ) : (
+          <Trash2 className="size-4 shrink-0" strokeWidth={2} />
+        )}
+      </button>
+    );
+  };
 
   const collapsed = sidebarCollapsed;
 
@@ -857,10 +867,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                       title={competitor.name}
                     >
                       <SidebarCompetitorSkeleton collapsed />
-                      <div className="pointer-events-none absolute inset-0 flex items-start justify-end">
-                        <div className="pointer-events-auto pt-0.5 pr-0.5">
-                          {renderRemoveCompetitorButton(competitor, rowSlug, removing)}
-                        </div>
+                      <div className="absolute inset-0 flex items-start justify-end pt-0.5 pr-0.5">
+                        {renderRemoveCompetitorButton(competitor, rowSlug, removing, { strictHoverOnly: true })}
                       </div>
                     </div>
                   );
@@ -869,14 +877,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 return (
                   <div
                     key={`pending-${rowReactKey}`}
-                    className={`group/comprow relative rounded-xl ${competitorRowRing} ${activeRowStyles}`}
+                    className={`group/comprow relative w-full min-w-0 rounded-xl ${competitorRowRing} ${activeRowStyles}`}
                     aria-busy="true"
                     aria-label={`Loading competitor ${competitor.name}`}
                     title={competitor.name}
                   >
                     <SidebarCompetitorSkeleton collapsed={false} />
-                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center pr-1.5">
-                      <div className="pointer-events-auto">{renderRemoveCompetitorButton(competitor, rowSlug, removing)}</div>
+                    <div className="absolute inset-y-0 right-0 z-10 flex items-center pr-2">
+                      {renderRemoveCompetitorButton(competitor, rowSlug, removing, { strictHoverOnly: true })}
                     </div>
                   </div>
                 );
