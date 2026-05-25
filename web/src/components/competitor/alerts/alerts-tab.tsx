@@ -29,6 +29,7 @@ import {
   type AlertType,
 } from "@/lib/alerts/alert-types";
 import type { AlertRuleRow } from "@/lib/alerts/seed-default-rules";
+import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
 import { buildUpgradeToProHref } from "@/lib/billing/checkout-url";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 import { cn } from "@/lib/utils";
@@ -343,9 +344,9 @@ export function AlertsTab({
             {!allowAlertRules ? (
               <div className="border-b border-white/45 bg-amber-50/70 px-5 py-3 text-[12px] text-amber-900 backdrop-blur-sm">
                 Starter includes default alerts in your feed.{" "}
-                <Link href={upgradeToProHref} className="font-semibold underline">
+                <CheckoutNavigationLink href={upgradeToProHref} className="font-semibold underline">
                   Upgrade to Pro
-                </Link>{" "}
+                </CheckoutNavigationLink>{" "}
                 to customize rules, thresholds, and email notifications.
               </div>
             ) : null}

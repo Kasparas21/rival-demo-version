@@ -1,5 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+
+import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
+import { isCheckoutNavigationHref } from "@/lib/analytics/meta-pixel";
 
 const SIZE_CLASS = {
   sm: {
@@ -52,6 +57,14 @@ export function LandingTrialCta({
   );
 
   if (href) {
+    if (isCheckoutNavigationHref(href)) {
+      return (
+        <CheckoutNavigationLink href={href} className={wrapperClass}>
+          {content}
+        </CheckoutNavigationLink>
+      );
+    }
+
     return (
       <Link href={href} className={wrapperClass}>
         {content}

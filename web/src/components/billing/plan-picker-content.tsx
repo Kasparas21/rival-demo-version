@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
 import { buildApiBillingCheckoutHref } from "@/lib/billing/checkout-url";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
@@ -294,12 +295,12 @@ export function PlanPickerContent({
                 {PLAN_TRIAL_BADGE}
               </span>
 
-              <Link
+              <CheckoutNavigationLink
                 href={checkoutHref}
                 className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98]"
               >
                 Start free trial
-              </Link>
+              </CheckoutNavigationLink>
 
               <div className="mt-4 border-t border-gray-200/70 pt-3.5">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">

@@ -6,6 +6,7 @@ import { ExternalLink } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
+import { CheckoutNavigationAnchor } from "@/components/analytics/checkout-navigation-link";
 import {
   buildCheckoutHref,
   buildUpgradeToProHref,
@@ -792,18 +793,18 @@ export default function SettingsPage() {
               </p>
             ) : subscriptionActions.showCheckout ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                <a
+                <CheckoutNavigationAnchor
                   href={buildCheckoutHref("starter")}
                   className="inline-flex items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
                 >
                   Start 7-day free trial — Starter
-                </a>
-                <a
+                </CheckoutNavigationAnchor>
+                <CheckoutNavigationAnchor
                   href={upgradeToProHref}
                   className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
                 >
                   Upgrade to Pro
-                </a>
+                </CheckoutNavigationAnchor>
               </div>
             ) : subscriptionActions.showManage ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
@@ -815,12 +816,12 @@ export default function SettingsPage() {
                   <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
                 </a>
                 {subscriptionActions.showUpgradeToPro ? (
-                  <a
+                  <CheckoutNavigationAnchor
                     href={upgradeToProHref}
                     className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
                   >
                     Upgrade to Pro
-                  </a>
+                  </CheckoutNavigationAnchor>
                 ) : null}
               </div>
             ) : null}

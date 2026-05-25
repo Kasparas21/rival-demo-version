@@ -1,5 +1,7 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import type { Order } from "@polar-sh/sdk/models/components/order";
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
+import { sendPurchaseToMeta } from "@/lib/analytics/meta-purchase";
 import { getPolarWebhookSecret, isKnownPolarProductId } from "@/lib/billing/config";
 import {
   jsonSafe,
@@ -32,6 +34,15 @@ function stringMetadataValue(value: unknown): string | null {
 function asSubscription(data: unknown): Subscription | null {
   if (!data || typeof data !== "object") return null;
   return data as Subscription;
+}
+
+function asOrder(data: unknown): Order | null {
+  if (!data || typeof data !== "object") return null;
+  return data as Order;
+}
+
+function isOrderPaidEvent(payload: PolarWebhookPayload): payload is PolarWebhookPayload & { type: "order.paid" } {
+  return payload.type === "order.paid";
 }
 
 function eventIdFromRequest(headers: Headers, rawBody: string, payload: PolarWebhookPayload): string {
@@ -105,6 +116,28 @@ export async function POST(request: Request) {
 
     if (existingEvent) {
       return NextResponse.json({ ok: true, duplicate: true });
+    }
+
+    if (isOrderPaidEvent(payload)) {
+      const order = asOrder(payload.data);
+      const eventError = await recordWebhookEvent(admin, eventId, payload.type, rawPayload);
+      if (eventError) {
+        console.error("[polar-webhook] event insert failed", eventError);
+        return NextResponse.json({ ok: false, error: eventError }, { status: 500 });
+      }
+
+      if (order?.id) {
+        after(async () => {
+          try {
+            await sendPurchaseToMeta(order);
+          } catch (e) {
+            const message = e instanceof Error ? e.message : String(e);
+            console.error("[polar-webhook] sendPurchaseToMeta failed", message);
+          }
+        });
+      }
+
+      return NextResponse.json({ ok: true });
     }
 
     if (!isSubscriptionEvent(payload)) {

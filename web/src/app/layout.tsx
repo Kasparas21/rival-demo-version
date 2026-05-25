@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
 import { SiteGoogleAnalytics } from "@/components/analytics/google-analytics";
 import { SiteGoogleTagManager } from "@/components/analytics/google-tag-manager";
+import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
+import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
+import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { fontTempting } from "@/lib/fonts/tempting";
 import "./globals.css";
 
@@ -83,7 +86,11 @@ export default function RootLayout({
       <SiteGoogleAnalytics />
       <SiteGoogleTagManager />
       <body className={`${instrumentSerif.variable} ${fontTempting.variable} font-sans antialiased`}>
-        {children}
+        <MarketingConsentProvider>
+          <SiteMetaPixel />
+          {children}
+          <MarketingConsentBanner />
+        </MarketingConsentProvider>
       </body>
     </html>
   );

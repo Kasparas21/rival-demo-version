@@ -61,6 +61,9 @@ const reviews: Review[] = [
   },
 ];
 
+/** Mobile shows all reviews except the last three; desktop is unchanged. */
+const reviewsMobile = reviews.slice(0, -3);
+
 function ReviewStars({ count }: { count: Review["stars"] }) {
   return (
     <div className="flex gap-0.5 text-[13px] leading-none tracking-wider" aria-label={`${count} out of 5 stars`}>
@@ -149,7 +152,13 @@ export function LandingReviews() {
           <LandingHeadlineHighlight>of performance marketers.</LandingHeadlineHighlight>
         </h2>
 
-        <div className="mt-10 grid grid-cols-1 gap-5 text-left sm:mt-16 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
+        <div className="mt-10 grid grid-cols-1 gap-5 text-left md:hidden">
+          {reviewsMobile.map((review) => (
+            <ReviewCard key={review.name} review={review} />
+          ))}
+        </div>
+
+        <div className="mt-10 hidden grid-cols-1 gap-5 text-left sm:mt-16 sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 md:grid">
           {reviews.map((review) => (
             <ReviewCard key={review.name} review={review} />
           ))}

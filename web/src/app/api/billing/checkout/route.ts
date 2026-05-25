@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CheckoutCreate } from "@polar-sh/sdk/models/components/checkoutcreate";
 import { TrialInterval } from "@polar-sh/sdk/models/components/trialinterval";
 import { ensureUserProfile } from "@/lib/auth/profile";
+import { buildPolarCheckoutBrowserMetadata } from "@/lib/analytics/polar-checkout-metadata";
 import {
   getAppUrl,
   getPolarTesterDiscountId,
@@ -77,6 +78,7 @@ async function createCheckoutRedirect(request: NextRequest) {
   const productId = polarProductIdForPlan(plan, period);
   const appUrl = getAppUrl();
   const polar = createPolarClient();
+  const browserMetadata = buildPolarCheckoutBrowserMetadata(request);
 
   let checkoutBody: CheckoutCreate = {
     products: [productId],
@@ -92,6 +94,7 @@ async function createCheckoutRedirect(request: NextRequest) {
       source: "rival_checkout",
       plan,
       billing_period: period,
+      ...browserMetadata,
     },
     allowTrial: true,
     trialInterval: TrialInterval.Day,
@@ -134,6 +137,7 @@ async function createCheckoutRedirect(request: NextRequest) {
         invite_code: inviteStatus.inviteCode,
         plan: "pro",
         billing_period: "monthly",
+        ...browserMetadata,
       },
     };
   }

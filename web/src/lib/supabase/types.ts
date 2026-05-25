@@ -1261,6 +1261,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      meta_event: {
+        Row: {
+          order_id: string;
+          event_name: string;
+          sent_at: string;
+          meta_response: Json | null;
+        };
+        Insert: {
+          order_id: string;
+          event_name?: string;
+          sent_at?: string;
+          meta_response?: Json | null;
+        };
+        Update: {
+          order_id?: string;
+          event_name?: string;
+          sent_at?: string;
+          meta_response?: Json | null;
+        };
+        Relationships: [];
+      };
       tester_invite_redemptions: {
         Row: {
           id: string;
