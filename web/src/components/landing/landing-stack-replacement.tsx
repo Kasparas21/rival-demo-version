@@ -14,9 +14,12 @@ import {
 } from "@/components/platform-logos";
 import { RivalLogoImg } from "@/components/rival-logo";
 import {
+  WITHOUT_RIVAL_INTRO_MOBILE,
   WITHOUT_RIVAL_PAIN_POINTS,
+  WITHOUT_RIVAL_PAIN_POINTS_MOBILE,
   WITHOUT_RIVAL_STACK,
   WITH_RIVAL_FEATURES,
+  WITH_RIVAL_FEATURES_MOBILE,
   WITH_RIVAL_PLATFORMS,
 } from "@/components/landing/landing-stack-replacement-data";
 
@@ -46,6 +49,18 @@ function StackToolChip({ name, icon: Icon, iconClass, iconBg }: (typeof WITHOUT_
   );
 }
 
+function StackToolChipMobile({ name, icon: Icon, iconClass, iconBg }: (typeof WITHOUT_RIVAL_STACK)[number]) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-white/75 bg-white/62 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_2px_8px_-6px_rgba(239,68,68,0.12)] backdrop-blur-md">
+      <span className={`flex size-6 shrink-0 items-center justify-center rounded-md ${iconBg}`}>
+        <Icon className={`size-3 ${iconClass}`} strokeWidth={2.25} aria-hidden />
+      </span>
+      <span className="truncate text-[9px] font-semibold leading-tight text-[#1a1a1a]">{name}</span>
+    </div>
+  );
+}
+
+/** Desktop — unchanged. */
 function WithoutRivalCard() {
   return (
     <article className={`relative flex h-full flex-col overflow-hidden ${withoutRivalGlassCardClass} p-5 sm:p-7`}>
@@ -130,6 +145,60 @@ function WithoutRivalCard() {
   );
 }
 
+/** Mobile-only compact card. */
+function WithoutRivalCardMobile() {
+  return (
+    <article className={`relative overflow-hidden ${withoutRivalGlassCardClass} p-3.5`}>
+      <header className="relative flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#ef4444]/14 ring-1 ring-[#ef4444]/28">
+            <X className="size-3.5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
+          </span>
+          <h3 className="text-base font-bold text-[#1a1a1a]">Without Rival</h3>
+        </div>
+        <span className="shrink-0 rounded-full border border-[#ef4444]/30 bg-[#ef4444]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.08em] text-[#b91c1c]">
+          The old way
+        </span>
+      </header>
+
+      <p className="relative mt-2 text-[11px] leading-snug text-[#7f1d1d]/90">{WITHOUT_RIVAL_INTRO_MOBILE}</p>
+
+      <div className="relative mt-3 rounded-xl border border-white/70 bg-white/45 px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md">
+        <p className="text-center text-[9px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">
+          6 tools · 6 logins · zero intelligence
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-1.5">
+          {WITHOUT_RIVAL_STACK.map((tool) => (
+            <StackToolChipMobile key={tool.name} {...tool} />
+          ))}
+        </div>
+      </div>
+
+      <div className="relative mt-3 rounded-xl border border-[#ef4444]/20 bg-[#fef2f2]/45 px-2.5 py-2.5 backdrop-blur-md">
+        <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">Still manual</p>
+        <ul className="mt-2 space-y-1.5">
+          {WITHOUT_RIVAL_PAIN_POINTS_MOBILE.map((point) => (
+            <li key={point} className="flex items-start gap-2 text-[10px] leading-snug text-[#7f1d1d]/90">
+              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[#ef4444]/10 ring-1 ring-[#ef4444]/20">
+                <X className="size-2.5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
+              </span>
+              {point}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="relative mt-3 rounded-xl border border-[#ef4444]/25 bg-[#fef2f2]/70 px-3 py-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-md">
+        <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">What you pay today</p>
+        <p className="mt-0.5 text-base font-bold text-[#dc2626]">€350/mo</p>
+        <p className="mt-1 text-[10px] font-medium leading-snug text-[#991b1b]/85">
+          + manual glue · €270+/mo more than Rival · 6 logins · no strategy map
+        </p>
+      </div>
+    </article>
+  );
+}
+
 function WithRivalPlatformStrip() {
   return (
     <div className="mt-6 rounded-2xl border border-white/75 bg-white/50 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-md sm:px-5 sm:py-5">
@@ -150,6 +219,141 @@ function WithRivalPlatformStrip() {
         ))}
       </div>
     </div>
+  );
+}
+
+function WithRivalPlatformStripMobile() {
+  return (
+    <div className="mt-3 rounded-xl border border-white/75 bg-white/50 px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-md">
+      <p className="text-center text-[9px] font-bold uppercase tracking-[0.1em] text-[#4a7fa5]">All 6 platforms</p>
+      <div className="mt-2 grid grid-cols-6 gap-1">
+        {WITH_RIVAL_PLATFORMS.map((platform) => (
+          <div key={platform} className="flex flex-col items-center gap-0.5 rounded-lg border border-white/80 bg-white/70 px-0.5 py-1.5 shadow-sm">
+            <span className="flex size-6 items-center justify-center rounded-full bg-white shadow-[0_1px_4px_rgba(26,26,26,0.08)]">
+              {PLATFORM_ICONS[platform]}
+            </span>
+            <span className="text-[8px] font-semibold leading-none text-gray-600">{platform}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Desktop — unchanged. */
+function WithRivalCard() {
+  return (
+    <article className={`relative flex h-full flex-col ${rivalGlassCardClass} p-5 sm:p-7`}>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -inset-px rounded-[1.75rem] bg-gradient-to-br from-white/60 via-transparent to-[#4a7fa5]/10 opacity-80"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#4a7fa5]/20 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-[#95C14B]/15 blur-3xl"
+      />
+
+      <div className="relative flex flex-1 flex-col">
+        <header className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/30">
+            <Check className="size-5 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
+          </span>
+          <h3 className="text-xl font-bold text-[#1a1a1a]">With Rival</h3>
+        </header>
+
+        <div className="mt-6 flex justify-center">
+          <div className="rounded-2xl border border-white/75 bg-white/55 px-10 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_32px_-12px_rgba(74,127,165,0.25)] backdrop-blur-xl sm:px-12 sm:py-6">
+            <RivalLogoImg className="mx-auto h-11 w-auto max-w-[180px] object-contain sm:h-12" />
+          </div>
+        </div>
+
+        <WithRivalPlatformStrip />
+
+        <ul className="mt-6 space-y-3 sm:mt-7 sm:space-y-3.5">
+          {WITH_RIVAL_FEATURES.map((feature) => (
+            <li key={feature} className="flex items-start gap-3 text-[15px] leading-snug text-[#1a1a1a] sm:text-base">
+              <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/25">
+                <Check className="size-4 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
+              </span>
+              {feature}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
+          <div className="overflow-hidden rounded-2xl border border-[#4a7fa5]/40 bg-[#eff6ff]/85 px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_14px_44px_-16px_rgba(74,127,165,0.38)] backdrop-blur-md sm:px-6 sm:py-6">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:text-xs">
+              One plan · all 6 platforms
+            </p>
+            <p className="mt-2 text-[2.75rem] font-bold leading-none tracking-tight text-[#1a1a1a] sm:text-[3rem]">
+              €79<span className="text-2xl font-bold text-[#4a7fa5] sm:text-[2.25rem]">/mo</span>
+            </p>
+            <p className="mt-2 text-sm font-semibold text-[#4a7fa5] sm:text-base">Zero glue work · one login</p>
+          </div>
+
+          <div className="rounded-xl border border-[#95C14B]/30 bg-[#f3f9e8]/75 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-sm">
+            <p className="text-sm font-bold text-[#4a6b24] sm:text-[15px]">Save €270+/mo vs a 6-tool stack</p>
+            <p className="mt-1 text-xs text-[#5a7f2e]/90 sm:text-[13px]">
+              7-day trial · 1 competitor · cancel anytime
+            </p>
+          </div>
+
+          <LandingTrialCta href="/checkout" size="lg">
+            Start 7-day free trial
+            <span aria-hidden>→</span>
+          </LandingTrialCta>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+/** Mobile-only compact card. */
+function WithRivalCardMobile() {
+  return (
+    <article className={`relative flex flex-col ${rivalGlassCardClass} p-3.5`}>
+      <header className="relative flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/30">
+            <Check className="size-3.5 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
+          </span>
+          <h3 className="text-base font-bold text-[#1a1a1a]">With Rival</h3>
+        </div>
+        <RivalLogoImg className="h-5 w-auto max-w-[72px] shrink-0 object-contain" />
+      </header>
+
+      <WithRivalPlatformStripMobile />
+
+      <ul className="mt-3 space-y-1.5">
+        {WITH_RIVAL_FEATURES_MOBILE.map((feature) => (
+          <li key={feature} className="flex items-start gap-2 text-[11px] leading-snug text-[#1a1a1a]">
+            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/25">
+              <Check className="size-2.5 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
+            </span>
+            {feature}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-3 space-y-2">
+        <div className="rounded-xl border border-[#4a7fa5]/40 bg-[#eff6ff]/85 px-3 py-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-12px_rgba(74,127,165,0.3)] backdrop-blur-md">
+          <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#4a7fa5]">One plan · all 6 platforms</p>
+          <p className="mt-1 text-2xl font-bold leading-none tracking-tight text-[#1a1a1a]">
+            €79<span className="text-lg font-bold text-[#4a7fa5]">/mo</span>
+          </p>
+          <p className="mt-1 text-[10px] font-semibold text-[#4a7fa5]">Save €270+/mo · 7-day trial</p>
+        </div>
+
+        <LandingTrialCta href="/checkout" size="lg" className="w-full">
+          Start 7-day free trial
+          <span aria-hidden>→</span>
+        </LandingTrialCta>
+      </div>
+    </article>
   );
 }
 
@@ -184,81 +388,26 @@ export function LandingStackReplacement() {
             vs
           </div>
 
-          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-8">
-            <WithoutRivalCard />
+          {/* Mobile-only compact stack */}
+          <div className="flex flex-col gap-3 md:hidden">
+            <WithoutRivalCardMobile />
+            <div className="flex justify-center" aria-hidden>
+              <span className="inline-flex size-9 items-center justify-center rounded-full border border-white/80 bg-white/75 text-[9px] font-bold uppercase tracking-[0.16em] text-[#4a7fa5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_6px_18px_-6px_rgba(74,127,165,0.3)] backdrop-blur-xl">
+                vs
+              </span>
+            </div>
+            <WithRivalCardMobile />
+          </div>
 
+          {/* Desktop — unchanged side-by-side layout */}
+          <div className="hidden flex-col gap-6 md:flex lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-8">
+            <WithoutRivalCard />
             <div className="flex justify-center lg:hidden" aria-hidden>
               <span className="inline-flex size-12 items-center justify-center rounded-full border border-white/80 bg-white/75 text-[10px] font-bold uppercase tracking-[0.18em] text-[#4a7fa5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-8px_rgba(74,127,165,0.3)] backdrop-blur-xl">
                 vs
               </span>
             </div>
-
-            <article className={`relative flex h-full flex-col ${rivalGlassCardClass} p-5 sm:p-7`}>
-              <div
-                aria-hidden
-                className="pointer-events-none absolute -inset-px rounded-[1.75rem] bg-gradient-to-br from-white/60 via-transparent to-[#4a7fa5]/10 opacity-80"
-              />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#4a7fa5]/20 blur-3xl"
-              />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute -bottom-6 -left-6 h-28 w-28 rounded-full bg-[#95C14B]/15 blur-3xl"
-              />
-
-              <div className="relative flex flex-1 flex-col">
-                <header className="flex items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/30">
-                    <Check className="size-5 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
-                  </span>
-                  <h3 className="text-xl font-bold text-[#1a1a1a]">With Rival</h3>
-                </header>
-
-                <div className="mt-6 flex justify-center">
-                  <div className="rounded-2xl border border-white/75 bg-white/55 px-10 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_32px_-12px_rgba(74,127,165,0.25)] backdrop-blur-xl sm:px-12 sm:py-6">
-                    <RivalLogoImg className="mx-auto h-11 w-auto max-w-[180px] object-contain sm:h-12" />
-                  </div>
-                </div>
-
-                <WithRivalPlatformStrip />
-
-                <ul className="mt-6 space-y-3 sm:mt-7 sm:space-y-3.5">
-                  {WITH_RIVAL_FEATURES.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3 text-[15px] leading-snug text-[#1a1a1a] sm:text-base">
-                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/25">
-                        <Check className="size-4 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
-                      </span>
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
-                  <div className="overflow-hidden rounded-2xl border border-[#4a7fa5]/40 bg-[#eff6ff]/85 px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_14px_44px_-16px_rgba(74,127,165,0.38)] backdrop-blur-md sm:px-6 sm:py-6">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:text-xs">
-                      One plan · all 6 platforms
-                    </p>
-                    <p className="mt-2 text-[2.75rem] font-bold leading-none tracking-tight text-[#1a1a1a] sm:text-[3rem]">
-                      €79<span className="text-2xl font-bold text-[#4a7fa5] sm:text-[2.25rem]">/mo</span>
-                    </p>
-                    <p className="mt-2 text-sm font-semibold text-[#4a7fa5] sm:text-base">Zero glue work · one login</p>
-                  </div>
-
-                  <div className="rounded-xl border border-[#95C14B]/30 bg-[#f3f9e8]/75 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-sm">
-                    <p className="text-sm font-bold text-[#4a6b24] sm:text-[15px]">Save €270+/mo vs a 6-tool stack</p>
-                    <p className="mt-1 text-xs text-[#5a7f2e]/90 sm:text-[13px]">
-                      7-day trial · 1 competitor · cancel anytime
-                    </p>
-                  </div>
-
-                  <LandingTrialCta href="/checkout" size="lg">
-                    Start 7-day free trial
-                    <span aria-hidden>→</span>
-                  </LandingTrialCta>
-                </div>
-              </div>
-            </article>
+            <WithRivalCard />
           </div>
         </div>
       </LandingScrollReveal>

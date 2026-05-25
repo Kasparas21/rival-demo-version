@@ -11,25 +11,29 @@ import {
   type ComparisonRow,
 } from "@/components/landing/landing-comparison-data";
 
-function ComparisonMark({ value }: { value: boolean }) {
+function ComparisonMark({ value, compact = false }: { value: boolean; compact?: boolean }) {
   if (value) {
     return (
       <span
-        className="mx-auto flex size-6 items-center justify-center rounded-md bg-[#95C14B] shadow-[0_2px_8px_-2px_rgba(149,193,75,0.55)]"
+        className={`mx-auto flex items-center justify-center rounded-md bg-[#95C14B] shadow-[0_2px_8px_-2px_rgba(149,193,75,0.55)] ${compact ? "size-4 rounded-[4px]" : "size-6"}`}
         aria-label="Yes"
       >
-        <Check className="size-3.5 text-white" strokeWidth={3} aria-hidden />
+        <Check className={`text-white ${compact ? "size-2.5" : "size-3.5"}`} strokeWidth={3} aria-hidden />
       </span>
     );
   }
 
   return (
-    <span className="mx-auto flex size-6 items-center justify-center text-[#ef4444]" aria-label="No">
-      <X className="size-4" strokeWidth={2.75} aria-hidden />
+    <span
+      className={`mx-auto flex items-center justify-center text-[#ef4444] ${compact ? "size-4" : "size-6"}`}
+      aria-label="No"
+    >
+      <X className={compact ? "size-3" : "size-4"} strokeWidth={2.75} aria-hidden />
     </span>
   );
 }
 
+/** Desktop comparison table — unchanged layout. */
 function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[] }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/65 bg-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_32px_-12px_rgba(74,127,165,0.18)] backdrop-blur-xl ring-1 ring-white/45">
@@ -80,6 +84,63 @@ function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[]
   );
 }
 
+/** Mobile-only compact table — fits viewport without horizontal scroll. */
+function ComparisonTableMobile({ title, rows }: { title: string; rows: ComparisonRow[] }) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/65 bg-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_32px_-12px_rgba(74,127,165,0.18)] backdrop-blur-xl ring-1 ring-white/45">
+      <div className="border-b border-white/55 bg-white/40 px-3 py-2">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5]">{title}</h3>
+      </div>
+      <table className="w-full table-fixed border-collapse text-left">
+        <colgroup>
+          <col className="w-[44%]" />
+          <col className="w-[11%]" />
+          <col className="w-[11%]" />
+          <col className="w-[11%]" />
+          <col className="w-[11%]" />
+          <col className="w-[12%]" />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-white/50 bg-white/35 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
+            <th scope="col" className="px-2 py-2 text-left">
+              Feature
+            </th>
+            <th scope="col" className="px-0.5 py-2 text-center">
+              <RivalLogoImg className="mx-auto h-2.5 w-auto max-w-[36px] object-contain" />
+            </th>
+            {COMPETITOR_COLUMNS.map(({ key, label, mobile }) => (
+              <th key={key} scope="col" className="px-0.5 py-2 text-center" title={label}>
+                {mobile}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.feature} className="border-b border-white/40 last:border-b-0">
+              <th
+                scope="row"
+                className="px-2 py-2 text-left text-[10px] font-medium leading-tight text-[#1a1a1a]"
+                title={row.feature}
+              >
+                {row.featureMobile}
+              </th>
+              <td className="bg-[#4a7fa5]/[0.07] px-0.5 py-2 text-center">
+                <ComparisonMark value={row.rival} compact />
+              </td>
+              {COMPETITOR_COLUMNS.map(({ key }) => (
+                <td key={key} className="px-0.5 py-2 text-center">
+                  <ComparisonMark value={row[key]} compact />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function LandingComparison() {
   return (
     <section className="relative overflow-hidden py-14 sm:py-20">
@@ -100,7 +161,14 @@ export function LandingComparison() {
 
         <div className="mt-8 space-y-4 sm:mt-10">
           {LANDING_COMPARISON_SECTIONS.map((section) => (
-            <ComparisonTable key={section.title} title={section.title} rows={section.rows} />
+            <div key={section.title}>
+              <div className="md:hidden">
+                <ComparisonTableMobile title={section.title} rows={section.rows} />
+              </div>
+              <div className="hidden md:block">
+                <ComparisonTable title={section.title} rows={section.rows} />
+              </div>
+            </div>
           ))}
         </div>
 

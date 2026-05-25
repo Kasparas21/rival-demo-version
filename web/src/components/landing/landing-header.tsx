@@ -42,9 +42,20 @@ export function LandingHeader() {
 
         <div className="hidden h-5 w-px shrink-0 self-center bg-black/[0.12] md:block" aria-hidden />
 
-        <LandingTrialCta href="/checkout" size="sm">
-          Start trial
-        </LandingTrialCta>
+        <div className="md:hidden">
+          <LandingTrialCta
+            href="/checkout"
+            size="md"
+            className="[&_.landing-trial-cta-face]:min-w-[8.25rem] [&_.landing-trial-cta-face]:px-7 [&_.landing-trial-cta-face]:py-2.5 [&_.landing-trial-cta-face]:text-[15px]"
+          >
+            Start trial
+          </LandingTrialCta>
+        </div>
+        <div className="hidden md:block">
+          <LandingTrialCta href="/checkout" size="sm">
+            Start trial
+          </LandingTrialCta>
+        </div>
       </div>
     </header>
   );

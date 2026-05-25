@@ -6,6 +6,26 @@ import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-
 
 const MAX_FONT_PX = 112;
 const MIN_FONT_PX = 52;
+const DESKTOP_MIN_WIDTH_PX = 768;
+
+function AdIntelligenceHighlight() {
+  return (
+    <span className="hero-ad-intelligence-highlight">
+      ad intelligence
+      <svg
+        className="hero-ad-intelligence-swoosh"
+        viewBox="0 0 1000 100"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <path
+          d="M0 62 L42 50 L83 38 L125 38 L167 25 L208 12 L250 12 L292 0 L333 0 L375 0 L417 0 L458 0 L500 0 L542 0 L583 0 L625 0 L667 0 L708 0 L750 0 L792 0 L833 0 L875 0 L917 0 L958 0 L1000 0 L1000 62 L958 50 L917 50 L875 50 L833 50 L792 38 L750 38 L708 38 L667 38 L625 38 L583 38 L542 38 L500 38 L458 38 L417 38 L375 50 L333 50 L292 62 L250 62 L208 62 L167 75 L125 88 L83 100 L42 100 L0 100 Z"
+          fill="currentColor"
+        />
+      </svg>
+    </span>
+  );
+}
 
 export function HeroHeadline() {
   const headlineRef = useRef<HTMLHeadingElement>(null);
@@ -19,6 +39,12 @@ export function HeroHeadline() {
     if (!headline || !line1 || !line2) return;
 
     const fit = () => {
+      const isDesktop = window.innerWidth >= DESKTOP_MIN_WIDTH_PX;
+      if (!isDesktop) {
+        headline.style.fontSize = "";
+        return;
+      }
+
       const available = window.innerWidth - 32;
       if (available <= 0) return;
 
@@ -54,26 +80,24 @@ export function HeroHeadline() {
         ref={headlineRef}
         className={`${landingNavAnchorScrollClasses} hero-headline px-4 text-center lowercase`}
       >
-        <span ref={line1Ref} className="hero-headline-line whitespace-nowrap">
-          competitor{" "}
-          <span className="hero-ad-intelligence-highlight">
-            ad intelligence
-            <svg
-              className="hero-ad-intelligence-swoosh"
-              viewBox="0 0 1000 100"
-              preserveAspectRatio="none"
-              aria-hidden
-            >
-              <path
-                d="M0 62 L42 50 L83 38 L125 38 L167 25 L208 12 L250 12 L292 0 L333 0 L375 0 L417 0 L458 0 L500 0 L542 0 L583 0 L625 0 L667 0 L708 0 L750 0 L792 0 L833 0 L875 0 L917 0 L958 0 L1000 0 L1000 62 L958 50 L917 50 L875 50 L833 50 L792 38 L750 38 L708 38 L667 38 L625 38 L583 38 L542 38 L500 38 L458 38 L417 38 L375 50 L333 50 L292 62 L250 62 L208 62 L167 75 L125 88 L83 100 L42 100 L0 100 Z"
-                fill="currentColor"
-              />
-            </svg>
+        {/* Mobile-only headline — wrapper visibility (not hero-headline-line + hidden) */}
+        <div className="md:hidden">
+          <span className="hero-headline-line">competitor</span>
+          <span className="hero-headline-line">
+            <AdIntelligenceHighlight />
           </span>
-        </span>
-        <span ref={line2Ref} className="hero-headline-line whitespace-nowrap">
-          for all 6 platforms
-        </span>
+          <span className="hero-headline-line">for all 6 platforms</span>
+        </div>
+
+        {/* Desktop-only headline — original two-line layout + JS font scaling */}
+        <div className="hidden md:block">
+          <span ref={line1Ref} className="hero-headline-line whitespace-nowrap">
+            competitor <AdIntelligenceHighlight />
+          </span>
+          <span ref={line2Ref} className="hero-headline-line whitespace-nowrap">
+            for all 6 platforms
+          </span>
+        </div>
       </h1>
     </div>
   );

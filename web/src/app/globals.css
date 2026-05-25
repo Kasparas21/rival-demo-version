@@ -236,7 +236,7 @@ html:has([data-dashboard-app]) body {
 
 @media (max-width: 767px) {
   .hero-headline {
-    font-size: clamp(52px, 14vw, 112px);
+    font-size: clamp(40px, 11vw, 64px);
     letter-spacing: -0.045em;
   }
 }
