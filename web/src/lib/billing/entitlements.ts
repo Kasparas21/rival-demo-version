@@ -268,6 +268,24 @@ export function applyTesterInvitePlanLimits(limits: PlanLimits): PlanLimits {
   };
 }
 
+/** Polar 7-day trial on Starter/Pro: full plan features, but workspace trial competitor cap. */
+export function applyPolarTrialCompetitorCap(
+  limits: PlanLimits,
+  status: string,
+  planTier: PlanTier,
+): PlanLimits {
+  if (status !== "trialing") return limits;
+  if (planTier !== "starter" && planTier !== "pro") return limits;
+
+  const trialCap = limitsForTier("free_trial").maxWatchedCompetitors;
+  if (limits.maxWatchedCompetitors <= trialCap) return limits;
+
+  return {
+    ...limits,
+    maxWatchedCompetitors: trialCap,
+  };
+}
+
 export async function getBillingEntitlement(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -304,6 +322,8 @@ export async function getBillingEntitlement(
   let limits = limitsForTier(planTier);
   if (isTesterInviteBillingAccount(rawPayload, hasTesterRedemption)) {
     limits = applyTesterInvitePlanLimits(limits);
+  } else {
+    limits = applyPolarTrialCompetitorCap(limits, status, planTier);
   }
   const hasAccess = hasAccessForTier(planTier, status, isUnlimited);
 

@@ -10,6 +10,7 @@ import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
+import { limitsForTier } from "@/lib/billing/plan-limits";
 import {
   buildCompetitorSidebarHref,
   clearSidebarCompetitorsStorageForSignOut,
@@ -19,7 +20,6 @@ import {
   ensureSidebarStorageBelongsToUser,
   loadSidebarCompetitors,
   mergeAccountSidebarRowsWithLocalLibraryContext,
-  MAX_WATCHED_COMPETITORS,
   normalizeCompetitorSlug,
   purgeExcludedSidebarCompetitorRows,
   removeSidebarCompetitor,
@@ -197,7 +197,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     competitor: SidebarCompetitor;
     rowSlugNav: string;
   } | null>(null);
-  const [maxWatchedCompetitorsCap, setMaxWatchedCompetitorsCap] = useState(MAX_WATCHED_COMPETITORS);
+  const [maxWatchedCompetitorsCap, setMaxWatchedCompetitorsCap] = useState(
+    limitsForTier("free_trial").maxWatchedCompetitors,
+  );
 
   const refreshSavedCompetitors = useCallback(() => {
     setSavedCompetitors(loadSidebarCompetitors());

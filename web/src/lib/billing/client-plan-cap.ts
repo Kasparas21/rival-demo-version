@@ -2,8 +2,8 @@ import { limitsForTier } from "@/lib/billing/plan-limits";
 
 const SESSION_KEY = "rival:max-watched-competitors";
 
-/** Pro tier max — safe fallback before `/api/account/usage` resolves. */
-const DEFAULT_MAX_WATCHED_COMPETITORS = limitsForTier("pro").maxWatchedCompetitors;
+/** Workspace trial cap — conservative fallback before `/api/account/usage` resolves. */
+const DEFAULT_MAX_WATCHED_COMPETITORS = limitsForTier("free_trial").maxWatchedCompetitors;
 
 export const CLIENT_PLAN_CAP_EVENT = "rival-plan-cap";
 

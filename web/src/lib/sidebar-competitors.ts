@@ -420,7 +420,7 @@ export function upsertSidebarCompetitor(
   const list = loadSidebarCompetitors();
   const idx = findMatchingCompetitorIndex(list, slug, lookupName);
   const isNew = idx < 0;
-  const cap = readClientMaxWatchedCompetitors(MAX_WATCHED_COMPETITORS);
+  const cap = readClientMaxWatchedCompetitors();
   if (isNew && countWatchedSidebarCompetitors() >= cap) {
     return { ok: false, reason: "max_watched_competitors" };
   }
