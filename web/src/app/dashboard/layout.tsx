@@ -545,6 +545,43 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     window.location.assign("/login");
   };
 
+  const renderRemoveCompetitorButton = (
+    competitor: SidebarCompetitor,
+    rowSlugNav: string,
+    removing: boolean,
+    alwaysVisible = false,
+  ) => (
+    <button
+      type="button"
+      disabled={removing}
+      onMouseDown={(e) => {
+        e.preventDefault();
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setRemoveCompetitorDialog({ competitor, rowSlugNav });
+      }}
+      className={[
+        "flex size-8 shrink-0 items-center justify-center rounded-lg text-[#a1a1aa] transition-colors duration-150",
+        "motion-reduce:transition-none hover:bg-red-50/90 hover:text-[#b42318]",
+        "pointer-coarse:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/40",
+        "disabled:pointer-events-none disabled:opacity-30",
+        removing || alwaysVisible
+          ? "opacity-100"
+          : "opacity-0 group-hover/comprow:opacity-100 motion-safe:transition-opacity",
+      ].join(" ")}
+      title={`Remove ${competitor.name}`}
+      aria-label={`Remove ${competitor.name} from watched competitors`}
+    >
+      {removing ? (
+        <span className="size-3.5 animate-pulse rounded-full bg-[#d4d4d8]" aria-hidden />
+      ) : (
+        <Trash2 className="size-4 shrink-0" strokeWidth={2} />
+      )}
+    </button>
+  );
+
   const collapsed = sidebarCollapsed;
 
   return (
@@ -799,28 +836,52 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 onCompetitorView && activeCompetitorSlug !== "" && activeCompetitorSlug === rowSlug;
               const competitorRowRing =
                 "ring-2 ring-inset motion-reduce:transition-none transition-[background-color,color,box-shadow] duration-200 ease-out";
+              const storageKey = normalizeCompetitorSlug(competitor.slug);
+              const removing = removingCompetitorSlug !== null && removingCompetitorSlug === storageKey;
+              const activeRowStyles = isActive
+                ? "bg-[color:var(--rival-accent-blue)]/45 text-[color:var(--rival-primary)] shadow-sm ring-[color:var(--rival-accent-blue)]/60"
+                : "bg-transparent text-[#52525b] ring-transparent hover:bg-white/72 hover:text-[color:var(--rival-primary)]";
+
               if (competitorSidebarShowsLoadingSkeleton(competitor)) {
+                if (collapsed) {
+                  return (
+                    <div
+                      key={`pending-${rowReactKey}`}
+                      className={`group/comprow relative mx-auto flex size-11 shrink-0 items-center justify-center rounded-xl ${competitorRowRing} ${
+                        isActive
+                          ? "bg-[color:var(--rival-accent-blue)]/35 shadow-sm ring-[color:var(--rival-accent-blue)]/55"
+                          : "bg-transparent ring-transparent"
+                      }`}
+                      aria-busy="true"
+                      aria-label={`Loading competitor ${competitor.name}`}
+                      title={competitor.name}
+                    >
+                      <SidebarCompetitorSkeleton collapsed />
+                      <div className="absolute -right-1 -top-1 z-10">
+                        {renderRemoveCompetitorButton(competitor, rowSlug, removing, true)}
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={`pending-${rowReactKey}`}
-                    className={`rounded-xl ${competitorRowRing} ${
-                      isActive
-                        ? "bg-[color:var(--rival-accent-blue)]/35 shadow-sm ring-[color:var(--rival-accent-blue)]/55"
-                        : "bg-transparent ring-transparent"
-                    } ${collapsed ? "mx-auto flex size-11 shrink-0 items-center justify-center" : ""}`}
+                    className={`group/comprow relative flex min-h-[52px] w-full min-w-0 items-stretch rounded-xl ${competitorRowRing} ${activeRowStyles}`}
                     aria-busy="true"
                     aria-label={`Loading competitor ${competitor.name}`}
                     title={competitor.name}
                   >
-                    <SidebarCompetitorSkeleton collapsed={collapsed} />
+                    <div className="flex min-w-0 flex-1 items-center px-3 py-2.5 pr-2">
+                      <SidebarCompetitorSkeleton collapsed={false} />
+                    </div>
+                    <div className="relative flex shrink-0 items-center pr-2">
+                      {renderRemoveCompetitorButton(competitor, rowSlug, removing, true)}
+                    </div>
                   </div>
                 );
               }
               const href = buildCompetitorSidebarHref(competitor);
-
-              const activeRowStyles = isActive
-                ? "bg-[color:var(--rival-accent-blue)]/45 text-[color:var(--rival-primary)] shadow-sm ring-[color:var(--rival-accent-blue)]/60"
-                : "bg-transparent text-[#52525b] ring-transparent hover:bg-white/72 hover:text-[color:var(--rival-primary)]";
 
               if (collapsed) {
                 return (
@@ -836,9 +897,6 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   </Link>
                 );
               }
-
-              const storageKey = normalizeCompetitorSlug(competitor.slug);
-              const removing = removingCompetitorSlug !== null && removingCompetitorSlug === storageKey;
 
               return (
                 <div
@@ -872,36 +930,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     </div>
                   </Link>
                   <div className="relative flex shrink-0 items-center pr-2">
-                    <button
-                      type="button"
-                      disabled={removing}
-                      onMouseDown={(e) => {
-                        /* avoid Link focus ring / accidental navigation pulse */
-                        e.preventDefault();
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setRemoveCompetitorDialog({ competitor, rowSlugNav: rowSlug });
-                      }}
-                      className={[
-                        "flex size-8 shrink-0 items-center justify-center rounded-lg text-[#a1a1aa] transition-colors duration-150",
-                        "motion-reduce:transition-none hover:bg-red-50/90 hover:text-[#b42318]",
-                        "pointer-coarse:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/40",
-                        "disabled:pointer-events-none disabled:opacity-30",
-                        removing
-                          ? "opacity-100"
-                          : "opacity-0 group-hover/comprow:opacity-100 motion-safe:transition-opacity",
-                      ].join(" ")}
-                      title={`Remove ${competitor.name}`}
-                      aria-label={`Remove ${competitor.name} from watched competitors`}
-                    >
-                      {removing ? (
-                        <span className="size-3.5 animate-pulse rounded-full bg-[#d4d4d8]" aria-hidden />
-                      ) : (
-                        <Trash2 className="size-4 shrink-0" strokeWidth={2} />
-                      )}
-                    </button>
+                    {renderRemoveCompetitorButton(competitor, rowSlug, removing)}
                   </div>
                 </div>
               );
