@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import type { AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "@/lib/ad-library/ads-cache-pick";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
@@ -9,6 +9,12 @@ import {
   expandAdsCacheDomainCandidates,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import type { Database } from "@/lib/supabase/types";
+
+export type AdsCacheUserFetchResult = {
+  response: AdsLibraryResponse;
+  pickedRows: AdsCachePickRow[];
+  cacheDomain: string;
+};
 
 /**
  * Best-effort merge of the user's latest `ads_cache` rows for a competitor/workspace domain hint.
@@ -19,6 +25,15 @@ export async function fetchLatestAdsLibraryFromUserCache(
   userId: string,
   domainHint: string,
 ): Promise<AdsLibraryResponse | null> {
+  const bundle = await fetchLatestAdsLibraryBundleFromUserCache(supabase, userId, domainHint);
+  return bundle?.response ?? null;
+}
+
+export async function fetchLatestAdsLibraryBundleFromUserCache(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  domainHint: string,
+): Promise<AdsCacheUserFetchResult | null> {
   const trimmed = domainHint.trim();
   if (!trimmed) return null;
   const cleaned = normalizeCompetitorSlug(trimmed).toLowerCase();
@@ -29,7 +44,7 @@ export async function fetchLatestAdsLibraryFromUserCache(
   const fetchCache = async (domains: string[]) => {
     const { data, error } = await supabase
       .from("ads_cache")
-      .select("platform, ads_data, scraped_at, expires_at, competitor_domain")
+      .select("id, platform, ads_data, scraped_at, expires_at, competitor_domain")
       .eq("user_id", userId)
       .in("competitor_domain", domains);
     return { data, error };
@@ -57,7 +72,7 @@ export async function fetchLatestAdsLibraryFromUserCache(
     if (firstLabel.length >= 3) {
       const { data, error } = await supabase
         .from("ads_cache")
-        .select("platform, ads_data, scraped_at, expires_at, competitor_domain")
+        .select("id, platform, ads_data, scraped_at, expires_at, competitor_domain")
         .eq("user_id", userId)
         .or(`competitor_domain.eq.${firstLabel},competitor_domain.ilike.${firstLabel}.%`);
       if (error) {
@@ -76,5 +91,9 @@ export async function fetchLatestAdsLibraryFromUserCache(
     new Date().toISOString(),
   );
   if (latestByPlatform.size === 0) return null;
-  return adsLibraryResponseFromAdsCacheRows([...latestByPlatform.values()]);
+  return {
+    response: adsLibraryResponseFromAdsCacheRows([...latestByPlatform.values()]),
+    pickedRows: [...latestByPlatform.values()],
+    cacheDomain,
+  };
 }

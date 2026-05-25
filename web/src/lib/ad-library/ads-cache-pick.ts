@@ -2,6 +2,7 @@ import type { CacheablePlatform } from "./cache-ttl";
 import type { AdsLibraryPlatform } from "./ads-library-platform";
 
 export type AdsCachePickRow = {
+  id?: string;
   platform: string;
   ads_data: unknown;
   competitor_domain: string;

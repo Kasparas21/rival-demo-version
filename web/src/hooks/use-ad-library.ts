@@ -18,6 +18,7 @@ import {
   readAdsLibraryCacheLastKnownGoodForBrandDomain,
   stableAdsLibraryPayloadKey,
   writeAdsLibrarySessionCache,
+  type FetchAdsLibraryResult,
 } from "@/lib/ad-library/deduped-fetch";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import { countLibraryAdsForPlatform } from "@/lib/ad-library/library-response-utils";
@@ -39,6 +40,10 @@ import {
   type AdsLibraryUpdatedDetail,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import { repairAdsLibraryResponseMedia } from "@/lib/ad-library/repair-library-ad-media";
+import { readAdsCacheHydrateClientMeta } from "@/lib/ad-library/ads-cache-hydrate-meta";
+import {
+  fetchHydratedAdsLibraryConditional,
+} from "@/lib/ad-library/conditional-hydrate-fetch";
 
 type Brand = { name: string; domain: string; logoUrl?: string };
 
@@ -50,26 +55,27 @@ function totalAdsInResponse(response: AdsLibraryResponse | null): number {
   );
 }
 
+function readLocalAdsLibraryCacheForDomain(
+  payloadKey: string,
+  brandDomain: string,
+): FetchAdsLibraryResult | null {
+  return (
+    readAdsLibraryCacheLastKnownGood(payloadKey) ??
+    readAdsLibraryCacheLastKnownGoodForBrandDomain(brandDomain)
+  );
+}
+
 async function fetchHydratedAdsLibraryFromDomain(
   domain: string,
-  signal?: AbortSignal
-): Promise<AdsLibraryResponse | null> {
+  signal?: AbortSignal,
+  clientMeta = readAdsCacheHydrateClientMeta(domain),
+): Promise<AdsLibraryResponse | null | "fresh"> {
   const d = domain.trim();
   if (!d) return null;
-  try {
-    const res = await fetch("/api/competitor/ads-library/hydrate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ domain: d }),
-      signal,
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { ok?: boolean; response?: AdsLibraryResponse };
-    if (!json.ok || !json.response) return null;
-    return coerceAdsLibraryResponse(json.response);
-  } catch {
-    return null;
-  }
+  const result = await fetchHydratedAdsLibraryConditional(d, { signal, clientMeta });
+  if (result.kind === "fresh") return "fresh";
+  if (result.kind === "full") return result.response;
+  return null;
 }
 
 type Ids = Partial<{
@@ -234,28 +240,24 @@ export function useAdLibrary(
           0
         );
 
+        let hydrateMarkedFresh = false;
+
         if (cacheOnly && !forceFresh && totalAfterFetch === 0 && domain.length > 0) {
           try {
-            const hydrateRes = await fetch("/api/competitor/ads-library/hydrate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ domain }),
+            const hydrateResult = await fetchHydratedAdsLibraryConditional(domain, {
               signal: ac.signal,
+              clientMeta: readAdsCacheHydrateClientMeta(domain),
             });
-            if (hydrateRes.ok) {
-              const hydratedJson = (await hydrateRes.json()) as {
-                ok?: boolean;
-                response?: AdsLibraryResponse;
-              };
-              if (hydratedJson.ok && hydratedJson.response) {
-                json = hydratedJson.response;
-                httpOk = true;
-                totalAfterFetch = ALL_ADS_API_PLATFORMS.reduce(
-                  (sum, pl) =>
-                    sum + countLibraryAdsForPlatform(pl, coerceAdsLibraryResponse(json as AdsLibraryResponse)),
-                  0
-                );
-              }
+            if (hydrateResult.kind === "fresh") {
+              hydrateMarkedFresh = true;
+            } else if (hydrateResult.kind === "full") {
+              json = hydrateResult.response;
+              httpOk = true;
+              totalAfterFetch = ALL_ADS_API_PLATFORMS.reduce(
+                (sum, pl) =>
+                  sum + countLibraryAdsForPlatform(pl, coerceAdsLibraryResponse(json as AdsLibraryResponse)),
+                0
+              );
             }
           } catch (e) {
             if (e instanceof DOMException && e.name === "AbortError") return;
@@ -298,6 +300,9 @@ export function useAdLibrary(
         const merged = repairAdsLibraryResponseMedia(mergeAdsLibraryState(mergeBase, json));
         const priorTotal = totalAdsInResponse(dataRef.current);
         const mergedTotal = totalAdsInResponse(coerceAdsLibraryResponse(merged));
+        if (hydrateMarkedFresh && priorTotal > 0 && mergedTotal === priorTotal) {
+          return;
+        }
         if (isBackground && priorTotal > 0 && mergedTotal === 0) {
           return;
         }
@@ -431,6 +436,15 @@ export function useAdLibrary(
     void (async () => {
       const fromDb = await fetchHydratedAdsLibraryFromDomain(brand.domain, ac.signal);
       if (loadAbortRef.current !== ac || snapshot !== sessionRef.current) return;
+      if (fromDb === "fresh") {
+        const cached = readLocalAdsLibraryCacheForDomain(payloadKey, brand.domain);
+        if (cached && fetchResultHasLibraryCreatives(cached)) {
+          paintResponse(cached.response as AdsLibraryResponse, cached.httpOk);
+          return;
+        }
+        void load({ skipCache: false });
+        return;
+      }
       if (fromDb && totalAdsInResponse(fromDb) > 0) {
         paintResponse(fromDb, true);
         return;

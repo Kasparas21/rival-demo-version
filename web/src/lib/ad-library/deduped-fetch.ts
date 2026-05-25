@@ -3,6 +3,7 @@ import { coerceAdsLibraryResponse } from "./api-types";
 import { ALL_ADS_API_PLATFORMS } from "./channels-to-platforms";
 import { countLibraryAdsForPlatform } from "./library-response-utils";
 import { mirrorToLocalStorageIfSmall, safeSetSessionStorage } from "@/lib/cache/storage-quota";
+import { clearAdsCacheHydrateClientMetaForDomains } from "@/lib/ad-library/ads-cache-hydrate-meta";
 
 export type FetchAdsLibraryResult = {
   response: AdsLibraryResponse | AdsLibraryPartialJson;
@@ -361,6 +362,8 @@ export function clearAdsLibraryClientCachesForBrandDomains(domains: string[]): v
     domains.map((d) => cleanDomainForCacheKey(d)).filter((d) => d.length > 0)
   );
   if (targets.size === 0) return;
+
+  clearAdsCacheHydrateClientMetaForDomains(domains);
 
   if (typeof window !== "undefined") {
     try {
