@@ -5,7 +5,6 @@ import { getResendApiKey, getResendFromEmail } from "@/lib/email/resend-config";
 import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
 import {
-  getTesterInviteCodeFromRequest,
   matchesTesterInviteCode,
   normalizeInviteCode,
 } from "@/lib/billing/tester-invite";
@@ -14,12 +13,9 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function resolveSignupTesterInvite(request: NextRequest, bodyTester?: string): string | null {
-  const fromBody =
-    typeof bodyTester === "string" && matchesTesterInviteCode(bodyTester)
-      ? normalizeInviteCode(bodyTester)
-      : null;
-  return fromBody ?? getTesterInviteCodeFromRequest(request);
+function resolveSignupTesterInvite(_request: NextRequest, bodyTester?: string): string | null {
+  if (typeof bodyTester !== "string" || !bodyTester.trim()) return null;
+  return matchesTesterInviteCode(bodyTester) ? normalizeInviteCode(bodyTester) : null;
 }
 
 export async function POST(request: NextRequest) {

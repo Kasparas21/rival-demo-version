@@ -6,7 +6,8 @@ import { ensureUserProfile } from "@/lib/auth/profile";
 import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { persistTesterInviteToUserMetadata, readTesterInviteFromUserMetadata } from "@/lib/billing/tester-invite-user";
 import {
-  getTesterInviteCodeFromRequest,
+  matchesTesterInviteCode,
+  normalizeInviteCode,
   OAUTH_TESTER_INVITE_COOKIE,
   setTesterInviteCookie,
 } from "@/lib/billing/tester-invite";
@@ -168,8 +169,14 @@ export async function GET(request: NextRequest) {
   out.cookies.set("rival_oauth_next", "", { maxAge: 0, path: "/" });
   out.cookies.set(OAUTH_TESTER_INVITE_COOKIE, "", { maxAge: 0, path: "/" });
 
-  const inviteCode =
-    getTesterInviteCodeFromRequest(request) ?? readTesterInviteFromUserMetadata(user.user_metadata);
+  const inviteFromMetadata = readTesterInviteFromUserMetadata(user.user_metadata);
+  const oauthBridgeRaw = request.cookies.get(OAUTH_TESTER_INVITE_COOKIE)?.value;
+  const inviteFromOAuthBridge =
+    oauthBridgeRaw && matchesTesterInviteCode(oauthBridgeRaw)
+      ? normalizeInviteCode(oauthBridgeRaw)
+      : null;
+  /** Never attach tester access from a stale `rival_tester_invite` cookie on a normal Google signup. */
+  const inviteCode = inviteFromMetadata ?? inviteFromOAuthBridge;
   if (inviteCode) {
     setTesterInviteCookie(out, inviteCode);
     try {

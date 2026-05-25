@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
+import { adminSkipCheckoutDestination, getBillingEntitlement, shouldShowPostOnboardingPlanPicker } from "@/lib/billing/entitlements";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import {
@@ -8,7 +8,6 @@ import {
   safeAuthNextPath,
   type SearchParams,
 } from "@/lib/auth/auth-page-helpers";
-import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
 import { DASHBOARD_HOME_PATH, isGenericDashboardLanding } from "@/lib/dashboard/default-home";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -46,6 +45,9 @@ export default async function LoginPage({
         !isGenericDashboardLanding(dest) ? `/onboarding?next=${encodeURIComponent(dest)}` : "/onboarding",
       );
     }
+    if (shouldShowPostOnboardingPlanPicker(billing)) {
+      redirect(`/choose-plan?next=${encodeURIComponent(dest)}`);
+    }
     redirect(dest);
   }
 
@@ -54,7 +56,8 @@ export default async function LoginPage({
     testerFromQuery && matchesTesterInviteCode(testerFromQuery)
       ? normalizeInviteCode(testerFromQuery)
       : null;
-  const testerInviteCode = (await getTesterInviteCodeFromCookies()) ?? testerFromQueryCode;
+  /** Tester flow only from the explicit invite URL — never a stale `rival_tester_invite` cookie. */
+  const testerInviteCode = testerFromQueryCode;
 
   return <LoginForm testerInviteCode={testerInviteCode} />;
 }

@@ -4,6 +4,7 @@ import type { NextRequest, NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   getTesterInviteCodeFromRequest,
+  hasUserRedeemedTesterInvite,
   matchesTesterInviteCode,
   normalizeInviteCode,
   setTesterInviteCookie,
@@ -76,4 +77,35 @@ export async function getTesterInviteStatusForUser(
     userId: userId ?? null,
   });
   return { ...status, active: status.valid };
+}
+
+/**
+ * Whether the complimentary tester onboarding UI should show.
+ * Requires an explicit invite attribution (metadata, redemption, or invite URL) — not a stale cookie alone.
+ */
+export async function isTesterInviteFlowEligibleForUser(userId: string): Promise<boolean> {
+  const admin = createSupabaseAdminClient();
+
+  if (await hasUserRedeemedTesterInvite(admin, userId)) {
+    const { data, error } = await admin.auth.admin.getUserById(userId);
+    if (error || !data.user) return false;
+    const fromMetadata = readTesterInviteFromUserMetadata(data.user.user_metadata);
+    const status = await validateTesterInviteAccess(admin, {
+      inviteCode: fromMetadata,
+      userId,
+    });
+    return status.valid;
+  }
+
+  const { data, error } = await admin.auth.admin.getUserById(userId);
+  if (error || !data.user) return false;
+
+  const fromMetadata = readTesterInviteFromUserMetadata(data.user.user_metadata);
+  if (!fromMetadata) return false;
+
+  const status = await validateTesterInviteAccess(admin, {
+    inviteCode: fromMetadata,
+    userId,
+  });
+  return status.valid;
 }

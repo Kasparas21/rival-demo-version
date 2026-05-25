@@ -6,7 +6,7 @@ import {
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
-import { getTesterInviteStatusForUser } from "@/lib/billing/tester-invite-server";
+import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -57,12 +57,12 @@ export default async function ChoosePlanPage({
     redirect(destination);
   }
 
-  const testerInvite = await getTesterInviteStatusForUser(user.id);
+  const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
 
   return (
     <OnboardingPlanPicker
       dashboardNext={destination}
-      testerInviteActive={testerInvite.active}
+      testerInviteActive={testerInviteActive}
     />
   );
 }

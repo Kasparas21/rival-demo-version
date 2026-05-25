@@ -1,6 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { applyTesterInviteCookieFromRequest } from "@/lib/billing/tester-invite";
+import {
+  applyTesterInviteCookieFromRequest,
+  matchesTesterInviteCode,
+  TESTER_INVITE_COOKIE,
+} from "@/lib/billing/tester-invite";
+import {
+  getBillingEntitlement,
+  shouldShowPostOnboardingPlanPicker,
+} from "@/lib/billing/entitlements";
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
 
@@ -10,9 +18,20 @@ import type { Database } from "./types";
  */
 const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/reset-password", "/api/account"];
 const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
+const BILLING_EXEMPT_PREFIXES = ["/choose-plan", "/checkout", "/api/billing", "/auth/callback"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+function clearTesterInviteCookie(response: NextResponse): void {
+  response.cookies.set(TESTER_INVITE_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 export async function updateSession(request: NextRequest) {
@@ -64,10 +83,58 @@ export async function updateSession(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = profile?.onboarding_completed ? "/dashboard/spy" : "/onboarding";
     redirectUrl.search = "";
+    if (!profile?.onboarding_completed) {
+      redirectUrl.pathname = "/onboarding";
+      return NextResponse.redirect(redirectUrl);
+    }
+    const billing = await getBillingEntitlement(supabase, user.id);
+    if (shouldShowPostOnboardingPlanPicker(billing)) {
+      redirectUrl.pathname = "/choose-plan";
+      redirectUrl.searchParams.set("next", "/dashboard/spy");
+      return NextResponse.redirect(redirectUrl);
+    }
+    redirectUrl.pathname = "/dashboard/spy";
     return NextResponse.redirect(redirectUrl);
   }
 
+  if (
+    user &&
+    pathname.startsWith("/dashboard") &&
+    !matchesPrefix(pathname, BILLING_EXEMPT_PREFIXES)
+  ) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("onboarding_completed")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profile?.onboarding_completed) {
+      const billing = await getBillingEntitlement(supabase, user.id);
+      if (shouldShowPostOnboardingPlanPicker(billing)) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/choose-plan";
+        redirectUrl.searchParams.set("next", `${pathname}${search}`);
+        const gated = NextResponse.redirect(redirectUrl);
+        cookieJarMerge(response, gated);
+        return gated;
+      }
+    }
+  }
+
+  if (isAuthPage) {
+    const testerParam = request.nextUrl.searchParams.get("tester")?.trim();
+    const hasValidTesterQuery = Boolean(testerParam && testerParam !== "1" && matchesTesterInviteCode(testerParam));
+    if (!hasValidTesterQuery && request.cookies.get(TESTER_INVITE_COOKIE)?.value) {
+      clearTesterInviteCookie(response);
+    }
+  }
+
   return response;
+}
+
+function cookieJarMerge(from: NextResponse, to: NextResponse): void {
+  from.cookies.getAll().forEach((cookie) => {
+    to.cookies.set(cookie);
+  });
 }

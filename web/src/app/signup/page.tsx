@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import { SignupForm } from "@/components/auth/signup-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
-import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
+import { getBillingEntitlement, shouldShowPostOnboardingPlanPicker } from "@/lib/billing/entitlements";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
+import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function SignupPage({
@@ -34,7 +35,12 @@ export default async function SignupPage({
     if (!profile?.onboarding_completed) {
       redirect(safePostOnboardingPath ? `/onboarding?next=${encodeURIComponent(safePostOnboardingPath)}` : "/onboarding");
     }
-    redirect(safePostOnboardingPath ?? "/dashboard/spy");
+    const billing = await getBillingEntitlement(supabase, user.id);
+    const dest = safePostOnboardingPath ?? DASHBOARD_HOME_PATH;
+    if (shouldShowPostOnboardingPlanPicker(billing)) {
+      redirect(`/choose-plan?next=${encodeURIComponent(dest)}`);
+    }
+    redirect(dest);
   }
 
   const testerFromQuery = firstParam(params.tester);
@@ -42,7 +48,8 @@ export default async function SignupPage({
     testerFromQuery && matchesTesterInviteCode(testerFromQuery)
       ? normalizeInviteCode(testerFromQuery)
       : null;
-  const testerInviteCode = (await getTesterInviteCodeFromCookies()) ?? testerFromQueryCode;
+  /** Tester flow only from the explicit invite URL — never a stale `rival_tester_invite` cookie. */
+  const testerInviteCode = testerFromQueryCode;
 
   return <SignupForm testerInviteCode={testerInviteCode} />;
 }
