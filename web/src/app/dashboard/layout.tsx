@@ -857,8 +857,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                       title={competitor.name}
                     >
                       <SidebarCompetitorSkeleton collapsed />
-                      <div className="absolute -right-1 -top-1 z-10">
-                        {renderRemoveCompetitorButton(competitor, rowSlug, removing, true)}
+                      <div className="pointer-events-none absolute inset-0 flex items-start justify-end">
+                        <div className="pointer-events-auto pt-0.5 pr-0.5">
+                          {renderRemoveCompetitorButton(competitor, rowSlug, removing)}
+                        </div>
                       </div>
                     </div>
                   );
@@ -867,16 +869,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 return (
                   <div
                     key={`pending-${rowReactKey}`}
-                    className={`group/comprow relative flex min-h-[52px] w-full min-w-0 items-stretch rounded-xl ${competitorRowRing} ${activeRowStyles}`}
+                    className={`group/comprow relative rounded-xl ${competitorRowRing} ${activeRowStyles}`}
                     aria-busy="true"
                     aria-label={`Loading competitor ${competitor.name}`}
                     title={competitor.name}
                   >
-                    <div className="flex min-w-0 flex-1 items-center px-3 py-2.5 pr-2">
-                      <SidebarCompetitorSkeleton collapsed={false} />
-                    </div>
-                    <div className="relative flex shrink-0 items-center pr-2">
-                      {renderRemoveCompetitorButton(competitor, rowSlug, removing, true)}
+                    <SidebarCompetitorSkeleton collapsed={false} />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center pr-1.5">
+                      <div className="pointer-events-auto">{renderRemoveCompetitorButton(competitor, rowSlug, removing)}</div>
                     </div>
                   </div>
                 );
