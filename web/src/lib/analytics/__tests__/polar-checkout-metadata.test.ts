@@ -8,7 +8,7 @@ function mockRequest(options: {
   referer?: string | null;
   forwardedFor?: string | null;
   userAgent?: string | null;
-  ip?: string;
+  realIp?: string | null;
 }): Parameters<typeof buildPolarCheckoutBrowserMetadata>[0] {
   const url = new URL(options.url ?? "https://www.spy-rival.com/api/billing/checkout?plan=pro");
   const cookieStore = {
@@ -26,11 +26,11 @@ function mockRequest(options: {
         const lower = name.toLowerCase();
         if (lower === "referer") return options.referer ?? null;
         if (lower === "x-forwarded-for") return options.forwardedFor ?? null;
+        if (lower === "x-real-ip") return options.realIp ?? null;
         if (lower === "user-agent") return options.userAgent ?? null;
         return null;
       },
     },
-    ip: options.ip,
   } as Parameters<typeof buildPolarCheckoutBrowserMetadata>[0];
 }
 
@@ -73,9 +73,9 @@ describe("buildPolarCheckoutBrowserMetadata", () => {
     expect(meta.fbc).toMatch(/^fb\.1\.\d+\.ref456$/);
   });
 
-  it("falls back to request ip then empty strings", () => {
+  it("falls back to x-real-ip then empty strings", () => {
     expect(
-      buildPolarCheckoutBrowserMetadata(mockRequest({ ip: "198.51.100.2" })).client_ip,
+      buildPolarCheckoutBrowserMetadata(mockRequest({ realIp: "198.51.100.2" })).client_ip,
     ).toBe("198.51.100.2");
     expect(buildPolarCheckoutBrowserMetadata(mockRequest({})).client_ip).toBe("");
     expect(buildPolarCheckoutBrowserMetadata(mockRequest({})).user_agent).toBe("");

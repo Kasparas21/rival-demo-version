@@ -24,8 +24,8 @@ function readClientIp(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   if (forwarded) return forwarded;
 
-  const ip = request.ip?.trim();
-  if (ip) return ip;
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
 
   return "";
 }
