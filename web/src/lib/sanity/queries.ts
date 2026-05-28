@@ -4,6 +4,7 @@ export const postsQuery = `
     title,
     "slug": slug.current,
     publishedAt,
+    _updatedAt,
     mainImage,
     "categories": categories[]->{ title },
     "excerpt": pt::text(body)
@@ -13,7 +14,8 @@ export const postsQuery = `
 export const postSlugsQuery = `
   *[_type == "post" && defined(slug.current)] | order(publishedAt desc) {
     "slug": slug.current,
-    publishedAt
+    publishedAt,
+    _updatedAt
   }
 `;
 
@@ -23,6 +25,7 @@ export const postBySlugQuery = `
     title,
     "slug": slug.current,
     publishedAt,
+    _updatedAt,
     mainImage,
     body,
     "categories": categories[]->{ title },

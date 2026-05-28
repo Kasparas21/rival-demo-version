@@ -5,10 +5,12 @@ import { notFound } from "next/navigation";
 import { BlogShell } from "@/components/blog/blog-shell";
 import { PortableTextBody } from "@/components/blog/portable-text-body";
 import { PostCover } from "@/components/blog/post-cover";
+import { JsonLd } from "@/components/seo/JsonLd";
 import { fetchSanity, sanityClient } from "@/lib/sanity/client";
-import { formatBlogDate, primaryCategory, truncateExcerpt } from "@/lib/sanity/format";
+import { formatBlogDate, formatBlogPublicationLine, primaryCategory, truncateExcerpt } from "@/lib/sanity/format";
 import { postBySlugQuery, postSlugsQuery } from "@/lib/sanity/queries";
 import type { BlogPostDetail } from "@/lib/sanity/types";
+import { blogBreadcrumbJsonLd, blogPostingJsonLd } from "@/lib/seo/blog-json-ld";
 
 export const revalidate = 60;
 
@@ -24,11 +26,20 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const post = await sanityClient.fetch<BlogPostDetail | null>(postBySlugQuery, { slug });
-  if (!post) return { title: "Post not found | Rival" };
+  if (!post) return { title: "Post not found" };
+
+  const path = `/blog/${slug}`;
 
   return {
-    title: `${post.title} | Rival Blog`,
+    title: post.title,
     description: truncateExcerpt(post.excerpt, 160) || undefined,
+    alternates: { canonical: path },
+    openGraph: {
+      url: path,
+      type: "article",
+      publishedTime: post.publishedAt ?? undefined,
+      modifiedTime: post._updatedAt ?? post.publishedAt ?? undefined,
+    },
   };
 }
 
@@ -37,8 +48,13 @@ export default async function BlogPostPage({ params }: PageProps) {
   const post = await sanityClient.fetch<BlogPostDetail | null>(postBySlugQuery, { slug });
   if (!post) notFound();
 
+  const publicationLine = formatBlogPublicationLine(post.publishedAt, post._updatedAt);
+
   return (
     <BlogShell>
+      <JsonLd data={blogPostingJsonLd(post, slug)} />
+      <JsonLd data={blogBreadcrumbJsonLd(post, slug)} />
+
       <div className="mb-8">
         <Link href="/blog" className="text-sm font-medium text-gray-600 transition hover:text-gray-900">
           ← Back to blog
@@ -50,8 +66,10 @@ export default async function BlogPostPage({ params }: PageProps) {
         <div className="mx-auto max-w-3xl px-6 py-10 sm:px-10">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-500">
             {primaryCategory(post.categories)}
-            <span className="ml-2 text-gray-400">{formatBlogDate(post.publishedAt)}</span>
           </div>
+          {publicationLine ? (
+            <p className="mt-2 text-sm text-gray-500">{publicationLine}</p>
+          ) : null}
           <h1 className="mt-4 text-3xl font-semibold text-gray-900 sm:text-4xl">{post.title}</h1>
           {post.author?.name ? <p className="mt-3 text-sm text-gray-500">By {post.author.name}</p> : null}
           <div className="mt-10 border-t border-slate-100 pt-8">

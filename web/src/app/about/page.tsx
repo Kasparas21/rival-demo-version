@@ -6,9 +6,11 @@ import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHeader } from "@/components/landing/landing-header";
 
 export const metadata: Metadata = {
-  title: "About | Rival",
+  title: "About",
   description:
     "Rival was built by performance marketers who got tired of guessing what competitors were doing — one dashboard for Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat.",
+  alternates: { canonical: "/about" },
+  openGraph: { url: "/about" },
 };
 
 export default function AboutPage() {

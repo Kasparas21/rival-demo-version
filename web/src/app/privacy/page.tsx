@@ -4,8 +4,10 @@ import { PrivacyPolicyContent } from "@/components/legal/privacy-policy-content"
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Rival",
+  title: "Privacy Policy",
   description: "Privacy Policy for Rival (spy-rival.com) — how we collect, use, and protect your personal data.",
+  alternates: { canonical: "/privacy" },
+  openGraph: { url: "/privacy" },
 };
 
 export default function PrivacyPolicyPage() {

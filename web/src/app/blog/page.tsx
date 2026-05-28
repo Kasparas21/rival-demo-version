@@ -4,13 +4,15 @@ import Link from "next/link";
 import { BlogShell } from "@/components/blog/blog-shell";
 import { PostCover } from "@/components/blog/post-cover";
 import { fetchSanity } from "@/lib/sanity/client";
-import { formatBlogDate, primaryCategory, truncateExcerpt } from "@/lib/sanity/format";
+import { formatBlogPublicationLine, primaryCategory, truncateExcerpt } from "@/lib/sanity/format";
 import { postsQuery } from "@/lib/sanity/queries";
 import type { BlogPostListItem } from "@/lib/sanity/types";
 
 export const metadata: Metadata = {
-  title: "Blog | Rival",
+  title: "Blog",
   description: "Insights on competitor ads, creative strategy, and paid social.",
+  alternates: { canonical: "/blog" },
+  openGraph: { url: "/blog" },
 };
 
 export const revalidate = 60;
@@ -58,8 +60,12 @@ export default async function BlogPage() {
             <div className="flex flex-col justify-center gap-3 px-6 py-8">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-500">
                 {primaryCategory(heroPost.categories)}
-                <span className="ml-2 text-gray-400">{formatBlogDate(heroPost.publishedAt)}</span>
               </div>
+              {formatBlogPublicationLine(heroPost.publishedAt, heroPost._updatedAt) ? (
+                <p className="text-xs text-gray-500">
+                  {formatBlogPublicationLine(heroPost.publishedAt, heroPost._updatedAt)}
+                </p>
+              ) : null}
               <h1 className="text-2xl font-semibold text-gray-900 sm:text-3xl">{heroPost.title}</h1>
               <p className="text-sm text-gray-600">{truncateExcerpt(heroPost.excerpt)}</p>
               <Link className="text-sm font-semibold text-gray-900" href={`/blog/${heroPost.slug}`}>
@@ -78,8 +84,12 @@ export default async function BlogPage() {
               <div className="px-5 py-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.2em] text-purple-500">
                   {primaryCategory(post.categories)}
-                  <span className="ml-2 text-gray-400">{formatBlogDate(post.publishedAt)}</span>
                 </div>
+                {formatBlogPublicationLine(post.publishedAt, post._updatedAt) ? (
+                  <p className="mt-1 text-xs text-gray-500">
+                    {formatBlogPublicationLine(post.publishedAt, post._updatedAt)}
+                  </p>
+                ) : null}
                 <h2 className="mt-2 text-base font-semibold text-gray-900">{post.title}</h2>
                 <p className="mt-2 text-xs text-gray-600">{truncateExcerpt(post.excerpt, 120)}</p>
                 <Link className="mt-4 inline-block text-xs font-semibold text-gray-900" href={`/blog/${post.slug}`}>

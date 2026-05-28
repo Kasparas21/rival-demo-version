@@ -4,8 +4,10 @@ import { TermsOfServiceContent } from "@/components/legal/terms-of-service-conte
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | Rival",
+  title: "Terms of Service",
   description: "Terms of Service for Rival (spy-rival.com) — competitor advertising intelligence platform.",
+  alternates: { canonical: "/terms" },
+  openGraph: { url: "/terms" },
 };
 
 export default function TermsOfServicePage() {

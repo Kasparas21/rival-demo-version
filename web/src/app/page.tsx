@@ -1,5 +1,13 @@
+import type { Metadata } from "next";
 import LandingHome from "@/components/marketing/landing-home";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { homePageJsonLdBlocks } from "@/lib/seo/home-json-ld";
 import { redirect } from "next/navigation";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+  openGraph: { url: "/" },
+};
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -30,5 +38,12 @@ export default async function Home({
     redirect(`/auth/callback?${callbackParams.toString()}`);
   }
 
-  return <LandingHome />;
+  return (
+    <>
+      {homePageJsonLdBlocks().map((block, index) => (
+        <JsonLd key={`${String(block["@type"])}-${index}`} data={block} />
+      ))}
+      <LandingHome />
+    </>
+  );
 }

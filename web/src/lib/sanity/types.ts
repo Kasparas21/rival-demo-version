@@ -11,6 +11,7 @@ export type BlogPostListItem = {
   title: string;
   slug: string;
   publishedAt: string | null;
+  _updatedAt: string | null;
   mainImage: SanityImage | null;
   categories: { title: string }[] | null;
   excerpt: string | null;

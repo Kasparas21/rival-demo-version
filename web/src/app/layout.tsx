@@ -6,11 +6,8 @@ import { MarketingConsentBanner } from "@/components/analytics/marketing-consent
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { fontTempting } from "@/lib/fonts/tempting";
+import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
 import "./globals.css";
-
-const siteUrl = "https://spy-rival.com";
-const siteDescription =
-  "Spy Rival is an AI ad intelligence platform for finding competitor ads, tracking creative strategy, and mapping full-funnel campaigns across major ad libraries.";
 
 const instrumentSerif = Instrument_Serif({
   subsets: ["latin"],
@@ -19,13 +16,13 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "Spy Rival | AI Competitor Ad Intelligence",
-    template: "%s | Spy Rival",
+    default: `${SITE_NAME} | AI Competitor Ad Intelligence`,
+    template: `%s | ${SITE_NAME}`,
   },
-  description: siteDescription,
-  applicationName: "Spy Rival",
+  description: DEFAULT_DESCRIPTION,
+  applicationName: SITE_NAME,
   keywords: [
     "ad spy tool",
     "competitor ad intelligence",
@@ -35,31 +32,27 @@ export const metadata: Metadata = {
     "Google ads transparency",
     "competitor research",
   ],
-  authors: [{ name: "Spy Rival", url: siteUrl }],
-  creator: "Spy Rival",
-  publisher: "Spy Rival",
-  alternates: {
-    canonical: "/",
-  },
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
   openGraph: {
     type: "website",
-    url: siteUrl,
-    siteName: "Spy Rival",
-    title: "Spy Rival | AI Competitor Ad Intelligence",
-    description: siteDescription,
+    siteName: SITE_NAME,
+    title: `${SITE_NAME} | AI Competitor Ad Intelligence`,
+    description: DEFAULT_DESCRIPTION,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Spy Rival — AI Competitor Ad Intelligence",
+        alt: `${SITE_NAME} — AI Competitor Ad Intelligence`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Spy Rival | AI Competitor Ad Intelligence",
-    description: siteDescription,
+    title: `${SITE_NAME} | AI Competitor Ad Intelligence`,
+    description: DEFAULT_DESCRIPTION,
     images: ["/twitter-image"],
   },
   robots: {

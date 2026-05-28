@@ -4,8 +4,10 @@ import { CookiePolicyContent } from "@/components/legal/cookie-policy-content";
 import { LegalPageShell } from "@/components/legal/legal-page-shell";
 
 export const metadata: Metadata = {
-  title: "Cookie Policy | Rival",
+  title: "Cookie Policy",
   description: "How Rival (spy-rival.com) uses cookies and similar technologies on the website and platform.",
+  alternates: { canonical: "/cookies" },
+  openGraph: { url: "/cookies" },
 };
 
 export default function CookiePolicyPage() {

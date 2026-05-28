@@ -1,38 +1,26 @@
 import type { MetadataRoute } from "next";
 
-import { fetchSanity } from "@/lib/sanity/client";
-import { postSlugsQuery } from "@/lib/sanity/queries";
+import { getAllPostSlugs, normalizeBlogSlug } from "@/lib/sanity/posts";
+import { SITE_URL } from "@/lib/seo/site";
 
-const siteUrl = "https://spy-rival.com";
+const STATIC_ROUTES = ["", "/blog", "/about", "/privacy", "/terms", "/cookies"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const posts = await fetchSanity<{ slug: string; publishedAt: string | null }[]>(postSlugsQuery);
+  const posts = await getAllPostSlugs();
 
   return [
-    {
-      url: siteUrl,
+    ...STATIC_ROUTES.map((path) => ({
+      url: `${SITE_URL}${path}`,
       lastModified: now,
-      changeFrequency: "weekly",
-      priority: 1,
-    },
-    {
-      url: `${siteUrl}/blog`,
-      lastModified: posts[0]?.publishedAt ? new Date(posts[0].publishedAt) : now,
-      changeFrequency: "weekly",
-      priority: 0.7,
-    },
-    ...posts.map((post) => ({
-      url: `${siteUrl}/blog/${post.slug}`,
-      lastModified: post.publishedAt ? new Date(post.publishedAt) : now,
-      changeFrequency: "monthly" as const,
-      priority: 0.6,
     })),
-    {
-      url: `${siteUrl}/checkout`,
-      lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.5,
-    },
+    ...posts.map((post) => {
+      const slug = normalizeBlogSlug(post.slug)!;
+      const lastModified = post._updatedAt ?? post.publishedAt;
+      return {
+        url: `${SITE_URL}/blog/${slug}`,
+        lastModified: lastModified ? new Date(lastModified) : now,
+      };
+    }),
   ];
 }
