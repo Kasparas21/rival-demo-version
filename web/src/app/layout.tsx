@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
+import { Suspense } from "react";
 import { SiteGoogleAnalytics } from "@/components/analytics/google-analytics";
 import { SiteGoogleTagManager } from "@/components/analytics/google-tag-manager";
 import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
+import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { fontTempting } from "@/lib/fonts/tempting";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
@@ -76,11 +78,16 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <SiteMetaPixel />
+      </head>
       <SiteGoogleAnalytics />
       <SiteGoogleTagManager />
       <body className={`${instrumentSerif.variable} ${fontTempting.variable} font-sans antialiased`}>
         <MarketingConsentProvider>
-          <SiteMetaPixel />
+          <Suspense fallback={null}>
+            <MetaPixelPageView />
+          </Suspense>
           {children}
           <MarketingConsentBanner />
         </MarketingConsentProvider>

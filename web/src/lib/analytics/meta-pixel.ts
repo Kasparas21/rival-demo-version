@@ -1,7 +1,10 @@
-/** Public Meta Pixel ID (browser). */
-export function getMetaPixelId(): string | null {
+/** Meta Pixel ID assigned in Meta Events Manager. */
+export const DEFAULT_META_PIXEL_ID = "3206222459565978";
+
+/** Public Meta Pixel ID (browser). Env overrides the default. */
+export function getMetaPixelId(): string {
   const id = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
-  return id || null;
+  return id || DEFAULT_META_PIXEL_ID;
 }
 
 /** Paths that start checkout or prorated upgrade (InitiateCheckout). */

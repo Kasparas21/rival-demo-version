@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 
 import type { Order } from "@polar-sh/sdk/models/components/order";
 
+import { DEFAULT_META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 
@@ -35,9 +36,12 @@ export type MetaPurchaseEventPayload = {
 };
 
 function getMetaCapiEnv(): MetaCapiEnv | null {
-  const pixelId = process.env.META_PIXEL_ID?.trim();
+  const pixelId =
+    process.env.META_PIXEL_ID?.trim() ||
+    process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim() ||
+    DEFAULT_META_PIXEL_ID;
   const accessToken = process.env.META_CAPI_TOKEN?.trim();
-  if (!pixelId || !accessToken) return null;
+  if (!accessToken) return null;
   return { pixelId, accessToken };
 }
 
@@ -173,7 +177,7 @@ export async function sendPurchaseToMeta(order: Order): Promise<void> {
 
     const env = getMetaCapiEnv();
     if (!env) {
-      console.error("[meta-purchase] missing META_PIXEL_ID or META_CAPI_TOKEN");
+      console.error("[meta-purchase] missing META_CAPI_TOKEN");
       return;
     }
 
