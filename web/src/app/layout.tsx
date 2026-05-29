@@ -5,6 +5,7 @@ import { SiteGoogleTagManager } from "@/components/analytics/google-tag-manager"
 import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
+import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { fontTempting } from "@/lib/fonts/tempting";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
 import "./globals.css";
@@ -76,11 +77,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <SiteGoogleAnalytics />
-      <SiteGoogleTagManager />
+      <head>
+        <SiteGoogleAnalytics />
+        <SiteGoogleTagManager />
+        <SiteMetaPixel />
+      </head>
       <body className={`${instrumentSerif.variable} ${fontTempting.variable} font-sans antialiased`}>
         <MarketingConsentProvider>
-          <SiteMetaPixel />
+          <MetaPixelPageView />
           {children}
           <MarketingConsentBanner />
         </MarketingConsentProvider>

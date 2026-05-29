@@ -1,7 +1,6 @@
 "use client";
 
 import { getMetaPixelId } from "@/lib/analytics/meta-pixel";
-import { hasMarketingConsent } from "@/lib/analytics/marketing-consent";
 
 declare global {
   interface Window {
@@ -15,12 +14,12 @@ function fbq(...args: unknown[]): void {
 }
 
 export function trackMetaPageView(): void {
-  if (!getMetaPixelId() || !hasMarketingConsent()) return;
+  if (!getMetaPixelId()) return;
   fbq("track", "PageView");
 }
 
 export function trackMetaInitiateCheckout(): void {
-  if (!getMetaPixelId() || !hasMarketingConsent()) return;
+  if (!getMetaPixelId()) return;
   fbq("track", "InitiateCheckout");
 }
 

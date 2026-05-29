@@ -1,22 +1,10 @@
-"use client";
-
-import Script from "next/script";
-import { Suspense } from "react";
-
-import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
-import { useMarketingConsent } from "@/components/analytics/marketing-consent-provider";
-import { trackMetaPageView } from "@/lib/analytics/meta-pixel-client";
 import { getMetaPixelId } from "@/lib/analytics/meta-pixel";
 
+/** Meta Pixel base code in <head>: loader + init + PageView (per Meta setup guide). */
 export function SiteMetaPixel() {
   const pixelId = getMetaPixelId();
-  const { status } = useMarketingConsent();
 
-  if (!pixelId || status !== "granted") {
-    return null;
-  }
-
-  const initScript = `
+  const pixelScript = `
 !function(f,b,e,v,n,t,s)
 {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};
@@ -26,16 +14,12 @@ t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
 fbq('init', '${pixelId}');
+fbq('track', 'PageView');
 `.trim();
 
   return (
     <>
-      <Script
-        id="meta-pixel-base"
-        strategy="afterInteractive"
-        dangerouslySetInnerHTML={{ __html: initScript }}
-        onLoad={() => trackMetaPageView()}
-      />
+      <script dangerouslySetInnerHTML={{ __html: pixelScript }} />
       <noscript>
         <img
           height="1"
@@ -45,9 +29,6 @@ fbq('init', '${pixelId}');
           alt=""
         />
       </noscript>
-      <Suspense fallback={null}>
-        <MetaPixelPageView />
-      </Suspense>
     </>
   );
 }

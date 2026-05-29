@@ -4,6 +4,7 @@ import type { Order } from "@polar-sh/sdk/models/components/order";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
+import { getMetaPixelIdForCapi } from "@/lib/analytics/meta-pixel";
 
 const META_CAPI_VERSION = "v23.0";
 const PURCHASE_EVENT_SOURCE_URL = "https://www.spy-rival.com/checkout";
@@ -35,9 +36,9 @@ export type MetaPurchaseEventPayload = {
 };
 
 function getMetaCapiEnv(): MetaCapiEnv | null {
-  const pixelId = process.env.META_PIXEL_ID?.trim();
+  const pixelId = getMetaPixelIdForCapi();
   const accessToken = process.env.META_CAPI_TOKEN?.trim();
-  if (!pixelId || !accessToken) return null;
+  if (!accessToken) return null;
   return { pixelId, accessToken };
 }
 
@@ -173,7 +174,7 @@ export async function sendPurchaseToMeta(order: Order): Promise<void> {
 
     const env = getMetaCapiEnv();
     if (!env) {
-      console.error("[meta-purchase] missing META_PIXEL_ID or META_CAPI_TOKEN");
+      console.error("[meta-purchase] missing META_CAPI_TOKEN");
       return;
     }
 
