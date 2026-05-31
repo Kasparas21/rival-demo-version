@@ -157,11 +157,23 @@ function formatDate(value: string | null): string {
   }).format(new Date(value));
 }
 
-function labelStatus(status: string, activating: boolean): string {
+function labelStatus(status: string, activating: boolean, cancelScheduled = false): string {
   if (activating) return "Activating…";
+  if (cancelScheduled) return "Canceling";
   if (status === "none") return "No active subscription";
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+function subscriptionAccessEndDate(
+  billing: Pick<BillingState, "status" | "trialEnd" | "currentPeriodEnd">,
+): string | null {
+  if (billing.status === "trialing") {
+    return billing.trialEnd ?? billing.currentPeriodEnd;
+  }
+  return billing.currentPeriodEnd;
+}
+
+const CANCELED_SUBSCRIPTION_STATUSES = new Set(["canceled", "cancelled", "ended"]);
 
 const POLAR_BILLING_PORTAL = POLAR_BILLING_PORTAL_HREF;
 
@@ -206,9 +218,12 @@ export default function SettingsPage() {
     return null;
   }, [searchParams]);
 
-  const hydrate = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
+  const hydrate = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
+    if (!silent) {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
       const [profileRes, usageRes] = await Promise.all([
         fetch("/api/account/profile", { cache: "no-store", credentials: "include" }),
@@ -293,9 +308,13 @@ export default function SettingsPage() {
         }
       }
     } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Something went wrong while loading settings.");
+      if (!silent) {
+        setLoadError(e instanceof Error ? e.message : "Something went wrong while loading settings.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -303,49 +322,57 @@ export default function SettingsPage() {
     queueMicrotask(() => void hydrate());
   }, [hydrate]);
 
+  const syncPolarBilling = useCallback(async () => {
+    setBillingSyncing(true);
+    try {
+      const res = await fetch("/api/billing/sync-subscription", {
+        credentials: "include",
+        cache: "no-store",
+      });
+      const json = (await res.json()) as { synced?: boolean };
+      if (json.synced) await hydrate({ silent: true });
+    } catch {
+      /* ignore */
+    } finally {
+      setBillingSyncing(false);
+    }
+  }, [hydrate]);
+
   useEffect(() => {
     if (searchParams.get("upgrade") !== "success") return;
-
-    let cancelled = false;
-    setBillingSyncing(true);
-
-    void fetch("/api/billing/sync-subscription", { credentials: "include", cache: "no-store" })
-      .then(() => {
-        if (!cancelled) return hydrate();
-      })
-      .finally(() => {
-        if (!cancelled) setBillingSyncing(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [searchParams, hydrate]);
+    void syncPolarBilling();
+  }, [searchParams, syncPolarBilling]);
 
   const billingActivating = isBillingActivating(billing) || billingSyncing;
 
   useEffect(() => {
-    if (loading || billing.hasPolarBillingRecord || hasActivePaidSubscription(billing)) return;
+    if (loading) return;
+    void syncPolarBilling();
+  }, [loading, syncPolarBilling]);
 
-    let cancelled = false;
-    setBillingSyncing(true);
+  useEffect(() => {
+    if (loading) return;
+    if (!billing.hasPolarBillingRecord && !hasActivePaidSubscription(billing)) return;
 
-    void fetch("/api/billing/sync-subscription", { credentials: "include", cache: "no-store" })
-      .then((r) => r.json())
-      .then((json: { synced?: boolean }) => {
-        if (!cancelled && json.synced) void hydrate();
-      })
-      .catch(() => {
-        /* ignore */
-      })
-      .finally(() => {
-        if (!cancelled) setBillingSyncing(false);
-      });
-
-    return () => {
-      cancelled = true;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const onFocus = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => void syncPolarBilling(), 300);
     };
-  }, [loading, billing.hasPolarBillingRecord, billing.planTier, billing.status, billing.isUnlimited, hydrate]);
+
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [
+    loading,
+    billing.hasPolarBillingRecord,
+    billing.planTier,
+    billing.status,
+    billing.isUnlimited,
+    syncPolarBilling,
+  ]);
 
   const upgradeToProHref = useMemo(
     () =>
@@ -499,11 +526,16 @@ export default function SettingsPage() {
         showUpgradeToPro: false,
         showManage: false,
         cancelScheduled: false,
+        accessEndsAt: null as string | null,
+        isFullyCanceled: false,
       };
     }
 
     const polarUi = shouldUsePolarSubscriptionUi(billing) || billingSyncing;
-    const cancelScheduled = billing.cancelAtPeriodEnd && (billing.status === "active" || billing.status === "trialing");
+    const cancelScheduled =
+      billing.cancelAtPeriodEnd && (billing.status === "active" || billing.status === "trialing");
+    const accessEndsAt = subscriptionAccessEndDate(billing);
+    const isFullyCanceled = CANCELED_SUBSCRIPTION_STATUSES.has(billing.status);
 
     return {
       showCheckout: !polarUi,
@@ -511,6 +543,8 @@ export default function SettingsPage() {
       showUpgradeToPro: polarUi && billing.planTier !== "pro",
       showManage: polarUi,
       cancelScheduled,
+      accessEndsAt,
+      isFullyCanceled,
     };
   }, [billing, billingSyncing]);
 
@@ -688,16 +722,18 @@ export default function SettingsPage() {
               <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[#52525b]">
                 Status:{" "}
                 <span className="font-semibold text-[#1a1a2e]">
-                  {labelStatus(billing.status, billingActivating)}
+                  {labelStatus(billing.status, billingActivating, subscriptionActions.cancelScheduled)}
                 </span>
                 {billing.isUnlimited ? (
                   <> · Complimentary admin access — full product, no paywall.</>
+                ) : subscriptionActions.isFullyCanceled ? (
+                  <> · Your subscription has been canceled.</>
                 ) : (
                   <>
                     {billing.status === "trialing"
-                      ? ` · Trial ends ${formatDate(billing.trialEnd)}`
+                      ? ` · Trial ends ${formatDate(subscriptionActions.accessEndsAt)}`
                       : billing.hasAccess
-                        ? ` · Renews ${formatDate(billing.currentPeriodEnd)}`
+                        ? ` · Renews ${formatDate(subscriptionActions.accessEndsAt)}`
                         : ""}
                     {subscriptionActions.cancelScheduled ? " · Cancels at period end" : ""}
                   </>
@@ -737,8 +773,18 @@ export default function SettingsPage() {
           {subscriptionActions.cancelScheduled ? (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-[12px] leading-relaxed text-amber-950">
               Your subscription is set to cancel on{" "}
-              <span className="font-semibold">{formatDate(billing.currentPeriodEnd)}</span>. You can reopen Polar billing
-              to keep your plan or change it before that date.
+              <span className="font-semibold">{formatDate(subscriptionActions.accessEndsAt)}</span>. You can reopen
+              Polar billing to keep your plan or change it before that date.
+            </div>
+          ) : null}
+
+          {subscriptionActions.isFullyCanceled ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-[12px] leading-relaxed text-red-950">
+              Your subscription was canceled
+              {subscriptionActions.accessEndsAt
+                ? ` on ${formatDate(subscriptionActions.accessEndsAt)}`
+                : ""}
+              . Resubscribe below to restore access.
             </div>
           ) : null}
 
