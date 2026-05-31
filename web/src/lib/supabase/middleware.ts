@@ -13,6 +13,7 @@ import {
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { hasPrePaymentSetup, POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
+import { WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
 
@@ -156,7 +157,10 @@ export async function updateSession(request: NextRequest) {
 
     if (profile.onboarding_completed) {
       const billing = await getBillingEntitlement(supabase, user.id);
-      if (shouldShowPostOnboardingPlanPicker(billing)) {
+      const isWorkspaceBrandScrape =
+        pathname.startsWith("/dashboard/searching") &&
+        request.nextUrl.searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
+      if (shouldShowPostOnboardingPlanPicker(billing) && !isWorkspaceBrandScrape) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/choose-plan";
         redirectUrl.searchParams.set("next", `${pathname}${search}`);

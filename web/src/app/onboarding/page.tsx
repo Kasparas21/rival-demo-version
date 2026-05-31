@@ -26,6 +26,7 @@ import {
   shouldResumePostPaymentOnboarding,
 } from "@/lib/onboarding/phase";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
+import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -107,14 +108,16 @@ export default async function OnboardingPage({
     .maybeSingle();
 
   const billing = await getBillingEntitlement(supabase, user.id);
+  const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
+  const postPaymentResume = shouldResumePostPaymentOnboarding(profile, billing) || explicitPostPayment;
   const rawDestination = nextPath ? postOnboardingPath(nextPath) : DASHBOARD_HOME_PATH;
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
   const needsPlanPicker = shouldShowPostOnboardingPlanPicker(billing);
-  const postOnboardingDestination = needsPlanPicker
-    ? `/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`
-    : destinationAfterOnboarding;
-  const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
-  const postPaymentResume = shouldResumePostPaymentOnboarding(profile, billing) || explicitPostPayment;
+  const postOnboardingDestination = postPaymentResume
+    ? buildWorkspaceBrandScrapeHref()
+    : needsPlanPicker
+      ? `/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`
+      : destinationAfterOnboarding;
 
   if (profile?.onboarding_completed && !replayOnboarding) {
     if (needsPlanPicker) {

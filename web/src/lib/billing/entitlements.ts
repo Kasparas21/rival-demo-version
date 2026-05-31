@@ -237,9 +237,10 @@ export function shouldUsePolarSubscriptionUi(
  * Free-trial tier still has `hasAccess` for product features, but must pick Starter or Pro to subscribe.
  */
 export function shouldShowPostOnboardingPlanPicker(
-  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
+  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord">,
 ): boolean {
   if (billing.isUnlimited) return false;
+  if (billing.hasPolarBillingRecord) return false;
   return !hasActivePaidSubscription(billing);
 }
 

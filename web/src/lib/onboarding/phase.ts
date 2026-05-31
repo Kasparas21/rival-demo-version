@@ -22,6 +22,11 @@ export function isPostPaymentOnboardingSearchParams(params: {
   return phase === "post_payment";
 }
 
+export type OnboardingBillingSlice = Pick<
+  BillingEntitlement,
+  "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
+>;
+
 /** Authenticated user should finish regions + ad profiles after subscribing. */
 export function shouldResumePostPaymentOnboarding(
   profile: OnboardingProfileSlice | null | undefined,
@@ -44,7 +49,7 @@ function canFinishPostPaymentOnboarding(
  */
 export function resolveIncompleteOnboardingPath(
   profile: OnboardingProfileSlice | null | undefined,
-  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
+  billing: OnboardingBillingSlice,
   safeNext?: string | null,
 ): string {
   const dest = safeNext?.trim() || DASHBOARD_HOME_PATH;

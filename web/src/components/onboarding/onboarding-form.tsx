@@ -55,6 +55,7 @@ import {
   type AdsProfileSetup,
   type WorkspaceAdsScrapeHints,
 } from "@/lib/onboarding/workspace-ads-setup";
+import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 
 /** Workspace ad-profile step (2-column grid): label + input only */
 const workspaceAdProfileInputClass = `${glassInputClass} rounded-xl px-3 py-2.5 text-[14px]`;
@@ -817,7 +818,8 @@ export function OnboardingForm({
       }
 
       if (shouldNavigate) {
-        router.push(postOnboardingPath);
+        const destination = postPaymentResume ? buildWorkspaceBrandScrapeHref() : postOnboardingPath;
+        router.push(destination);
         router.refresh();
       }
       return true;
@@ -1338,7 +1340,15 @@ export function OnboardingForm({
               disabled={saving}
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
-              {saving ? "Setting up…" : showPlanStep ? "Continue →" : "Get started →"}
+              {saving
+                ? postPaymentResume
+                  ? "Starting scrape…"
+                  : "Setting up…"
+                : postPaymentResume
+                  ? "Start scraping →"
+                  : showPlanStep
+                    ? "Continue →"
+                    : "Get started →"}
             </button>
           </>
         ) : null}
