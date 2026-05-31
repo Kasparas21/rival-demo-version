@@ -183,8 +183,7 @@ export async function GET(request: NextRequest) {
     !onboardingDone &&
     !searchFromIncomplete &&
     pathname === "/onboarding" &&
-    resolvedNext &&
-    pathname !== RESET_PASSWORD_PATH
+    resolvedNext
   ) {
     finalDest.searchParams.set("next", resolvedNext);
   }
