@@ -302,7 +302,7 @@ function WithRivalCard() {
             </p>
           </div>
 
-          <LandingTrialCta href="/checkout" size="lg">
+          <LandingTrialCta href="/onboarding" size="lg">
             Start 7-day free trial
             <span aria-hidden>→</span>
           </LandingTrialCta>
@@ -348,7 +348,7 @@ function WithRivalCardMobile() {
           <p className="mt-1 text-[10px] font-semibold text-[#4a7fa5]">Save €270+/mo · 7-day trial</p>
         </div>
 
-        <LandingTrialCta href="/checkout" size="lg" className="w-full">
+        <LandingTrialCta href="/onboarding" size="lg" className="w-full">
           Start 7-day free trial
           <span aria-hidden>→</span>
         </LandingTrialCta>

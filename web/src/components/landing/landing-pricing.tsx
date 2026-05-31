@@ -6,7 +6,6 @@ import { Check, ShieldCheck, User, Users } from "lucide-react";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
-import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import type { BillingPeriod } from "@/lib/billing/config";
 import { PLAN_OFFERS, type PlanOffer, planPriceDisplay } from "@/lib/billing/plan-offers";
 
@@ -70,7 +69,7 @@ function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPer
       <p className="mt-4 text-sm leading-relaxed text-gray-600">{offer.summary}</p>
 
       <div className="mt-5">
-        <PulsatingTrialCta href={buildCheckoutHref(offer.slug, billing)} />
+        <PulsatingTrialCta href="/onboarding" />
       </div>
 
       <div className="mt-6 border-t border-white/60 pt-5">

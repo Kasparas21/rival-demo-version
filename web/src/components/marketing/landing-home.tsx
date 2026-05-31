@@ -1,4 +1,3 @@
-import { LandingBrandMarquee } from "@/components/landing/landing-brand-marquee";
 import { LandingComparison } from "@/components/landing/landing-comparison";
 import { LandingFAQ } from "@/components/landing/landing-faq";
 import { LandingFeatures } from "@/components/landing/landing-features";
@@ -7,7 +6,6 @@ import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHeader } from "@/components/landing/landing-header";
 import { LandingHero } from "@/components/landing/landing-hero";
 import {
-  LandingHeroTransition,
   LandingPageBackground,
   LandingSectionDivider,
 } from "@/components/landing/landing-page-background";
@@ -21,13 +19,11 @@ export default function LandingHome() {
       <LandingHeader />
       <div className="w-full overflow-x-clip">
         <LandingHero />
-        <LandingHeroTransition />
 
         <div className="relative isolate">
           <LandingPageBackground />
 
           <div className="relative z-10">
-            <LandingBrandMarquee />
             <LandingFeatures />
             <LandingSectionDivider />
             <LandingStackReplacement />

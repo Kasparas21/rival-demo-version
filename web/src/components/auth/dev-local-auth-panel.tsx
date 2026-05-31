@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 function isBrowserLocalHost(): boolean {
   if (typeof window === "undefined") return false;
@@ -15,9 +15,13 @@ type Props = {
 
 /** Shown on /login and /signup when running on localhost — skips Resend email. */
 export function DevLocalAuthPanel({ email, nextPath }: Props) {
-  const show = useMemo(() => isBrowserLocalHost(), []);
+  const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setShow(isBrowserLocalHost());
+  }, []);
 
   if (!show) return null;
 

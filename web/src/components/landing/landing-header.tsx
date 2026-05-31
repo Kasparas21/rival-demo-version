@@ -44,7 +44,7 @@ export function LandingHeader() {
 
         <div className="md:hidden">
           <LandingTrialCta
-            href="/checkout"
+            href="/onboarding"
             size="md"
             className="[&_.landing-trial-cta-face]:min-w-[8.25rem] [&_.landing-trial-cta-face]:px-7 [&_.landing-trial-cta-face]:py-2.5 [&_.landing-trial-cta-face]:text-[15px]"
           >
@@ -52,7 +52,7 @@ export function LandingHeader() {
           </LandingTrialCta>
         </div>
         <div className="hidden md:block">
-          <LandingTrialCta href="/checkout" size="sm">
+          <LandingTrialCta href="/onboarding" size="sm">
             Start trial
           </LandingTrialCta>
         </div>

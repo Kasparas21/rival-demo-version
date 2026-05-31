@@ -173,7 +173,7 @@ export function LandingComparison() {
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-2.5 text-center sm:mt-10">
-          <LandingTrialCta href="/signup" size="md">
+          <LandingTrialCta href="/onboarding" size="md">
             Start your 7-day trial
             <span aria-hidden>→</span>
           </LandingTrialCta>

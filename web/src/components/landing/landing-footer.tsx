@@ -12,7 +12,7 @@ const columns = [
       { label: "Compare", href: "/#compare" },
       { label: "Pricing", href: "/#pricing" },
       { label: "FAQ", href: "/#faq" },
-      { label: "Start trial", href: "/checkout" },
+      { label: "Start trial", href: "/onboarding" },
     ],
   },
   {

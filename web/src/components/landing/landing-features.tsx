@@ -33,7 +33,7 @@ function FeatureFig({ src, alt }: FeatureFigProps) {
 
 export function LandingFeatures() {
   return (
-    <section className="relative overflow-hidden py-16 text-center sm:py-24">
+    <section className="relative overflow-hidden pb-16 pt-8 text-center sm:pb-24 sm:pt-10">
       <LandingScrollReveal className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}>
           from competitor ads to your

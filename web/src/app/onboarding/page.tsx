@@ -1,17 +1,31 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
+import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { OnboardingDevHints } from "@/components/onboarding/onboarding-dev-hints";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import {
   adminSkipCheckoutDestination,
   getBillingEntitlement,
+  hasActivePaidSubscription,
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
 import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
+import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { normalizedWorkspaceHost, sanitizeCompanyUrlInput } from "@/lib/onboarding/host";
+import {
+  hasPrePaymentSetup,
+  isPostPaymentOnboardingSearchParams,
+  shouldResumePostPaymentOnboarding,
+} from "@/lib/onboarding/phase";
+import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -30,42 +44,20 @@ function postOnboardingPath(path: string): string {
   return path === "/checkout" ? "/api/billing/checkout" : path;
 }
 
-export default async function OnboardingPage({
-  searchParams,
+function initialDomainFromParams(params: SearchParams): string | null {
+  const raw = firstParam(params.domain);
+  if (!raw) return null;
+  const host = normalizedWorkspaceHost(sanitizeCompanyUrlInput(raw));
+  return host || null;
+}
+
+function OnboardingShell({
+  children,
+  showReplay,
 }: {
-  searchParams?: Promise<SearchParams>;
+  children: ReactNode;
+  showReplay?: boolean;
 }) {
-  const params = (await searchParams) ?? {};
-  const nextPath = safeNextPath(firstParam(params.next));
-  const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("onboarding_completed, company_name, company_url")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const billing = await getBillingEntitlement(supabase, user.id);
-  const rawDestination = nextPath ? postOnboardingPath(nextPath) : "/dashboard/spy";
-  const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
-  const showPlanStep = shouldShowPostOnboardingPlanPicker(billing);
-  const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
-
-  if (profile?.onboarding_completed && !replayOnboarding) {
-    if (showPlanStep) {
-      redirect(`/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`);
-    }
-    redirect(destinationAfterOnboarding);
-  }
-
   return (
     <RivalVideoShell footerTint="light">
       <div className="flex w-full flex-col items-center px-4 sm:px-6">
@@ -77,15 +69,112 @@ export default async function OnboardingPage({
             <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
           </Link>
         </div>
-        <OnboardingForm
-          initialData={profile}
-          postOnboardingPath={destinationAfterOnboarding}
-          showPlanStep={showPlanStep}
-          testerInviteActive={testerInviteActive}
-          userId={user.id}
-        />
-        <OnboardingDevHints showReplay={replayOnboarding} />
+        {children}
+        <OnboardingDevHints showReplay={showReplay} />
       </div>
     </RivalVideoShell>
+  );
+}
+
+export default async function OnboardingPage({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const params = (await searchParams) ?? {};
+  const nextPath = safeNextPath(firstParam(params.next));
+  const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
+  const initialDomain = initialDomainFromParams(params);
+  const explicitPostPayment = isPostPaymentOnboardingSearchParams(params);
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <OnboardingShell>
+        <OnboardingForm guestMode initialDomain={initialDomain} userId="guest" showPlanStep={false} />
+      </OnboardingShell>
+    );
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarding_completed, company_name, company_url")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const billing = await getBillingEntitlement(supabase, user.id);
+  const rawDestination = nextPath ? postOnboardingPath(nextPath) : DASHBOARD_HOME_PATH;
+  const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
+  const needsPlanPicker = shouldShowPostOnboardingPlanPicker(billing);
+  const postOnboardingDestination = needsPlanPicker
+    ? `/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`
+    : destinationAfterOnboarding;
+  const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
+  const postPaymentResume = shouldResumePostPaymentOnboarding(profile, billing) || explicitPostPayment;
+
+  if (profile?.onboarding_completed && !replayOnboarding) {
+    if (needsPlanPicker) {
+      redirect(`/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+    }
+    redirect(destinationAfterOnboarding);
+  }
+
+  if (
+    user &&
+    !replayOnboarding &&
+    !postPaymentResume &&
+    !hasPrePaymentSetup(profile) &&
+    shouldRedirectToTrialComplete(
+      null,
+      (await cookies()).get(TRIAL_PENDING_COOKIE)?.value,
+    )
+  ) {
+    redirect(CHOOSE_PLAN_AFTER_TRIAL_PATH);
+  }
+
+  if (hasPrePaymentSetup(profile) && needsPlanPicker && !replayOnboarding && !postPaymentResume) {
+    redirect(`/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+  }
+
+  if (
+    hasPrePaymentSetup(profile) &&
+    !postPaymentResume &&
+    (billing.isUnlimited || hasActivePaidSubscription(billing)) &&
+    !replayOnboarding
+  ) {
+    redirect("/onboarding?phase=post_payment");
+  }
+
+  let initialBrandSetup = null;
+  if (postPaymentResume) {
+    const admin = createSupabaseAdminClient();
+    const { data: brandRows } = await admin
+      .from("brands")
+      .select("ads_profile_setup")
+      .eq("user_id", user.id)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1);
+    initialBrandSetup = parseAdsProfileSetup(brandRows?.[0]?.ads_profile_setup ?? null);
+  }
+
+  return (
+    <OnboardingShell showReplay={replayOnboarding}>
+      <OnboardingForm
+        initialData={profile}
+        initialDomain={initialDomain}
+        postOnboardingPath={postOnboardingDestination}
+        prePaymentOnly={!postPaymentResume && !hasPrePaymentSetup(profile)}
+        showPlanStep={false}
+        testerInviteActive={testerInviteActive}
+        userId={user.id}
+        postPaymentResume={postPaymentResume}
+        initialBrandSetup={initialBrandSetup}
+      />
+    </OnboardingShell>
   );
 }

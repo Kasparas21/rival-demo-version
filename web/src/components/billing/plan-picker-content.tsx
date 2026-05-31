@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
-import { buildApiBillingCheckoutHref } from "@/lib/billing/checkout-url";
+import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { BillingPeriod } from "@/lib/billing/config";
@@ -93,6 +93,7 @@ type PlanPickerContentProps = {
   variant?: "page" | "overlay" | "onboarding";
   onSkip?: () => void;
   testerInviteActive?: boolean;
+  checkoutError?: string | null;
 };
 
 function TesterPlanPicker({
@@ -212,6 +213,7 @@ export function PlanPickerContent({
   variant = "page",
   testerInviteActive = false,
   dashboardNext,
+  checkoutError = null,
 }: PlanPickerContentProps) {
   const [billing, setBilling] = useState<BillingPeriod>("monthly");
   const maxSavingsPct = maxAnnualSavingsPercent();
@@ -229,6 +231,11 @@ export function PlanPickerContent({
 
   return (
     <>
+      {checkoutError ? (
+        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2.5 text-[13px] font-medium leading-relaxed text-[#b42318]">
+          {checkoutError}
+        </p>
+      ) : null}
       <div className={variant === "onboarding" ? "mb-4 text-left" : "text-center"}>
         {variant !== "onboarding" ? (
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">You&apos;re all set</p>
@@ -251,7 +258,7 @@ export function PlanPickerContent({
       <div className="mt-4 grid grid-cols-1 gap-4 text-left md:grid-cols-2 md:gap-5 md:items-stretch">
         {PLAN_OFFERS.map((offer) => {
           const price = planPriceDisplay(offer, billing);
-          const checkoutHref = buildApiBillingCheckoutHref(offer.slug, billing);
+          const checkoutHref = buildCheckoutHref(offer.slug, billing, dashboardNext);
           const isPro = offer.popular === true;
           const isAnnual = billing === "annual";
 

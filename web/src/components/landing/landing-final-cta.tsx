@@ -54,7 +54,7 @@ export function LandingFinalCTA() {
             </div>
 
             <div className="mx-auto mt-8 w-full max-w-lg">
-              <LandingTrialCta href="/checkout" size="lg">
+              <LandingTrialCta href="/onboarding" size="lg">
                 Start your 7-day trial
                 <span aria-hidden>→</span>
               </LandingTrialCta>

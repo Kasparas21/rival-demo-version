@@ -18,8 +18,10 @@ import {
 } from "@/lib/analytics/marketing-consent";
 
 type MarketingConsentContextValue = {
-  /** `null` until localStorage is read on the client. */
+  /** `null` until localStorage is read on the client, or when the user has not chosen yet. */
   status: MarketingConsentStatus | null;
+  /** False until the stored consent choice has been read (avoids banner flash on refresh). */
+  isResolved: boolean;
   acceptMarketing: () => void;
   rejectMarketing: () => void;
 };
@@ -28,9 +30,11 @@ const MarketingConsentContext = createContext<MarketingConsentContextValue | nul
 
 export function MarketingConsentProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<MarketingConsentStatus | null>(null);
+  const [isResolved, setIsResolved] = useState(false);
 
   useEffect(() => {
     setStatus(readStoredMarketingConsent());
+    setIsResolved(true);
   }, []);
 
   useEffect(() => {
@@ -54,8 +58,8 @@ export function MarketingConsentProvider({ children }: { children: ReactNode }) 
   }, []);
 
   const value = useMemo(
-    () => ({ status, acceptMarketing, rejectMarketing }),
-    [status, acceptMarketing, rejectMarketing],
+    () => ({ status, isResolved, acceptMarketing, rejectMarketing }),
+    [status, isResolved, acceptMarketing, rejectMarketing],
   );
 
   return (

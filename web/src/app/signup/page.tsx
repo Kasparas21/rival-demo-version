@@ -4,7 +4,9 @@ import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
 import { getBillingEntitlement, shouldShowPostOnboardingPlanPicker } from "@/lib/billing/entitlements";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
+import { CHOOSE_PLAN_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
+import { hasPrePaymentSetup, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function SignupPage({
@@ -29,18 +31,30 @@ export default async function SignupPage({
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("onboarding_completed")
+      .select("onboarding_completed, company_url")
       .eq("id", user.id)
       .maybeSingle();
-    if (!profile?.onboarding_completed) {
-      redirect(safePostOnboardingPath ? `/onboarding?next=${encodeURIComponent(safePostOnboardingPath)}` : "/onboarding");
-    }
     const billing = await getBillingEntitlement(supabase, user.id);
     const dest = safePostOnboardingPath ?? DASHBOARD_HOME_PATH;
-    if (shouldShowPostOnboardingPlanPicker(billing)) {
+
+    /** Trial funnel: show signup after guest onboarding — never skip straight to plans. */
+    if (
+      safeNext &&
+      isPostGuestSignupPath(safeNext) &&
+      !profile?.onboarding_completed &&
+      !hasPrePaymentSetup(profile)
+    ) {
+      await supabase.auth.signOut();
+    } else if (!profile?.onboarding_completed) {
+      if (safeNext && isPostGuestSignupPath(safeNext)) {
+        redirect(CHOOSE_PLAN_AFTER_TRIAL_PATH);
+      }
+      redirect(resolveIncompleteOnboardingPath(profile, billing, dest));
+    } else if (shouldShowPostOnboardingPlanPicker(billing)) {
       redirect(`/choose-plan?next=${encodeURIComponent(dest)}`);
+    } else {
+      redirect(dest);
     }
-    redirect(dest);
   }
 
   const testerFromQuery = firstParam(params.tester);

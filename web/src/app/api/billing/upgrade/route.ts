@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getAppUrl } from "@/lib/billing/config";
+import { appOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { getBillingEntitlement, hasActivePaidSubscription } from "@/lib/billing/entitlements";
 import {
   getPolarSubscriptionRaw,
@@ -130,7 +130,7 @@ async function runUpgrade(request: NextRequest) {
     });
   }
 
-  return settingsRedirect(getAppUrl(), { upgrade: "success" });
+  return settingsRedirect(appOriginForRequest(request), { upgrade: "success" });
 }
 
 /** GET/POST — prorated Starter → Pro upgrade via Polar subscriptions.update. */

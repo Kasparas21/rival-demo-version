@@ -40,16 +40,6 @@ export default async function ChoosePlanPage({
     redirect(`/login?next=${encodeURIComponent(`/choose-plan?next=${encodeURIComponent(nextPath)}`)}`);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("onboarding_completed")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile?.onboarding_completed) {
-    redirect(`/onboarding?next=${encodeURIComponent(nextPath)}`);
-  }
-
   const billing = await getBillingEntitlement(supabase, user.id);
   const destination = adminSkipCheckoutDestination(nextPath, billing.isUnlimited);
 
@@ -58,11 +48,13 @@ export default async function ChoosePlanPage({
   }
 
   const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
+  const checkoutError = firstParam(params.checkout_error);
 
   return (
     <OnboardingPlanPicker
       dashboardNext={destination}
       testerInviteActive={testerInviteActive}
+      checkoutError={checkoutError}
     />
   );
 }

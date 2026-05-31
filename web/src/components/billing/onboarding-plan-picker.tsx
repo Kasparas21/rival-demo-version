@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { TrialSetupBackgroundSync } from "@/components/onboarding/trial-setup-background-sync";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
@@ -9,11 +10,17 @@ import { planPickerGlassClass } from "@/components/ui/glass-styles";
 type Props = {
   dashboardNext: string;
   testerInviteActive?: boolean;
+  checkoutError?: string | null;
 };
 
-export function OnboardingPlanPicker({ dashboardNext, testerInviteActive = false }: Props) {
+export function OnboardingPlanPicker({
+  dashboardNext,
+  testerInviteActive = false,
+  checkoutError = null,
+}: Props) {
   return (
     <RivalVideoShell footerTint="light">
+      <TrialSetupBackgroundSync />
       <div className="w-full max-w-5xl px-1 sm:px-2">
         <div className="mb-8 flex justify-center">
           <Link
@@ -29,6 +36,7 @@ export function OnboardingPlanPicker({ dashboardNext, testerInviteActive = false
             dashboardNext={dashboardNext}
             variant="page"
             testerInviteActive={testerInviteActive}
+            checkoutError={checkoutError}
           />
         </div>
       </div>

@@ -38,4 +38,11 @@ describe("buildCheckoutHref", () => {
     expect(buildCheckoutHref("starter", "monthly")).toBe("/checkout?plan=starter");
     expect(buildCheckoutHref("pro", "annual")).toBe("/checkout?plan=pro&period=annual");
   });
+
+  it("preserves next through checkout for Polar return", () => {
+    const next = "/onboarding?phase=post_payment";
+    expect(buildCheckoutHref("starter", "monthly", next)).toBe(
+      `/checkout?plan=starter&next=${encodeURIComponent(next)}`,
+    );
+  });
 });

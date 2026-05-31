@@ -22,7 +22,8 @@ export function polarProductIdForPlan(plan: PolarPlanSlug, period: BillingPeriod
   const ids = getPolarProductIds();
   if (plan === "starter") {
     if (period === "annual" && ids.starterAnnual) return ids.starterAnnual;
-    return ids.starter ?? ids.legacy;
+    if (ids.starter) return ids.starter;
+    return ids.legacy;
   }
   if (period === "annual" && ids.proAnnual) return ids.proAnnual;
   return ids.pro;

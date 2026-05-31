@@ -29,6 +29,8 @@ type LandingTrialCtaSize = keyof typeof SIZE_CLASS;
 type LandingTrialCtaProps = {
   href?: string;
   size?: LandingTrialCtaSize;
+  /** Pulsating blur behind the pill (off for hero — reads like a search bar tray). */
+  showGlow?: boolean;
   className?: string;
   children: ReactNode;
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">;
@@ -37,6 +39,7 @@ type LandingTrialCtaProps = {
 export function LandingTrialCta({
   href,
   size = "md",
+  showGlow = true,
   className = "",
   children,
   type = "button",
@@ -48,10 +51,12 @@ export function LandingTrialCta({
 
   const content = (
     <>
-      <span
-        aria-hidden
-        className={`landing-pricing-cta-glow pointer-events-none absolute ${sizing.glow} rounded-full bg-[#4a7fa5]/30 opacity-70 blur-md`}
-      />
+      {showGlow ? (
+        <span
+          aria-hidden
+          className={`landing-pricing-cta-glow pointer-events-none absolute ${sizing.glow} rounded-full bg-[#4a7fa5]/30 opacity-70 blur-md`}
+        />
+      ) : null}
       <span className={`landing-trial-cta-face ${sizing.face}`}>{children}</span>
     </>
   );

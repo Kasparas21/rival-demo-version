@@ -12,6 +12,7 @@ import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
 import { buildAuthCallbackPath } from "@/lib/auth/build-email-token-callback-url";
 import { rememberOAuthNext, rememberOAuthTesterInvite } from "@/lib/auth/oauth-bridge-cookies";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
+import { isPostGuestSignupPath } from "@/lib/auth/trial-flow";
 import { TESTER_INVITE_METADATA_KEY } from "@/lib/billing/tester-invite-user";
 
 function looksLikeWrongPasswordAttempt(message: string): boolean {
@@ -93,6 +94,10 @@ export function LoginForm({ testerInviteCode = null }: { testerInviteCode?: stri
       return;
     }
 
+    if (isPostGuestSignupPath(next)) {
+      window.location.assign(next);
+      return;
+    }
     router.refresh();
     router.replace(next);
   };

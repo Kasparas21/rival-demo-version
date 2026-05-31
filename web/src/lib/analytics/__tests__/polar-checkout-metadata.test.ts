@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { buildPolarCheckoutBrowserMetadata } from "@/lib/analytics/polar-checkout-metadata";
+import {
+  buildPolarCheckoutBrowserMetadata,
+  polarCheckoutBrowserMetadataForApi,
+} from "@/lib/analytics/polar-checkout-metadata";
 
 function mockRequest(options: {
   cookies?: Record<string, string>;
@@ -79,5 +82,31 @@ describe("buildPolarCheckoutBrowserMetadata", () => {
     ).toBe("198.51.100.2");
     expect(buildPolarCheckoutBrowserMetadata(mockRequest({})).client_ip).toBe("");
     expect(buildPolarCheckoutBrowserMetadata(mockRequest({})).user_agent).toBe("");
+  });
+});
+
+describe("polarCheckoutBrowserMetadataForApi", () => {
+  it("omits empty analytics fields for Polar checkout metadata", () => {
+    expect(
+      polarCheckoutBrowserMetadataForApi({
+        fbp: "",
+        fbc: "",
+        client_ip: "",
+        user_agent: "",
+      }),
+    ).toEqual({});
+
+    expect(
+      polarCheckoutBrowserMetadataForApi({
+        fbp: "fb.1.1.1",
+        fbc: "",
+        client_ip: "203.0.113.1",
+        user_agent: "Mozilla/5.0",
+      }),
+    ).toEqual({
+      fbp: "fb.1.1.1",
+      client_ip: "203.0.113.1",
+      user_agent: "Mozilla/5.0",
+    });
   });
 });

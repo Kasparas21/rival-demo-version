@@ -43,12 +43,16 @@ import {
   buildSnapchatAdsGalleryPreviewUrl,
   buildTikTokAdsLibraryPreviewUrl,
 } from "@/lib/onboarding/ad-library-preview-urls";
+import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progress-bar";
+import { SIGNUP_AFTER_ONBOARDING_PATH } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { saveOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
 import {
   adsProfileSetupV1,
   emptyWorkspaceScrapeRow,
   mergeWorkspaceScrapeFromSocials,
+  type AdsProfileSetup,
   type WorkspaceAdsScrapeHints,
 } from "@/lib/onboarding/workspace-ads-setup";
 
@@ -257,10 +261,18 @@ function AdMarketChips({
 type Props = {
   userId: string;
   postOnboardingPath?: string;
-  /** Final onboarding step: Starter vs Pro (skipped when user already has access). */
+  /** @deprecated Trial funnel uses /choose-plan after onboarding; kept for dev replay. */
   showPlanStep?: boolean;
+  guestMode?: boolean;
+  /** Website + brand + platforms only (before paywall). Guest mode implies this. */
+  prePaymentOnly?: boolean;
+  /** Resume at regions (step 3) after payment — skips website / brand / platforms. */
+  postPaymentResume?: boolean;
+  initialStep?: number;
+  initialBrandSetup?: AdsProfileSetup | null;
+  initialDomain?: string | null;
   testerInviteActive?: boolean;
-  initialData: {
+  initialData?: {
     company_name?: string | null;
     company_url?: string | null;
   } | null;
@@ -282,26 +294,40 @@ export function OnboardingForm({
   userId,
   postOnboardingPath = "/dashboard/spy",
   showPlanStep = false,
+  guestMode = false,
+  prePaymentOnly = false,
+  postPaymentResume = false,
+  initialStep,
+  initialBrandSetup = null,
+  initialDomain = null,
   testerInviteActive = false,
-  initialData,
+  initialData = null,
 }: Props) {
   const router = useRouter();
-  const [step, setStep] = useState(0);
+  const compactPrePaymentFlow = guestMode || prePaymentOnly;
+  const [step, setStep] = useState(() => {
+    if (postPaymentResume) return STEP_WORKSPACE_MARKETS;
+    if (initialStep != null) return initialStep;
+    return STEP_WEBSITE;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const finishInFlightRef = useRef(false);
   /** Last website host seen when advancing from step 0 — invalidates caches when edited */
   const lastContinueFromWebsiteHostRef = useRef<string>("");
 
-  const [companyUrl, setCompanyUrl] = useState(() =>
-    sanitizeCompanyUrlInput(initialData?.company_url ?? "")
-  );
+  const [companyUrl, setCompanyUrl] = useState(() => {
+    if (initialDomain) return sanitizeCompanyUrlInput(initialDomain);
+    return sanitizeCompanyUrlInput(initialData?.company_url ?? "");
+  });
 
   const [brandLoading, setBrandLoading] = useState(false);
   const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(null);
 
   /** Workspace (your ads) */
-  const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(() => CHANNELS.map((c) => c.id));
+  const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(
+    () => initialBrandSetup?.channels ?? CHANNELS.map((c) => c.id),
+  );
   const [workspaceAdMarketCodes, setWorkspaceAdMarketCodes] = useState<string[]>([]);
   /** When true, all supported ISO markets apply (exclusive with manual country picks). */
   const [workspaceMarketsGlobal, setWorkspaceMarketsGlobal] = useState(false);
@@ -311,10 +337,39 @@ export function OnboardingForm({
    */
   const [workspaceMarketsAuto, setWorkspaceMarketsAuto] = useState(true);
   const [workspaceMarketsPickerExpanded, setWorkspaceMarketsPickerExpanded] = useState(false);
-  const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => emptyWorkspaceScrapeRow(""));
+  const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => {
+    const host = initialDomain
+      ? normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialDomain))
+      : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? ""));
+    const base = emptyWorkspaceScrapeRow(host);
+    if (!initialBrandSetup?.scrape) return base;
+    return { ...base, ...initialBrandSetup.scrape };
+  });
   const workspaceSocialMergedSigRef = useRef("");
+  const brandSetupHydratedRef = useRef(false);
 
   const normalizedCompany = useMemo(() => normalizedWorkspaceHost(companyUrl.trim()), [companyUrl]);
+
+  useEffect(() => {
+    if (!initialBrandSetup || brandSetupHydratedRef.current) return;
+    brandSetupHydratedRef.current = true;
+    setWorkspaceChannels(initialBrandSetup.channels);
+    const codes = initialBrandSetup.adMarketCountryCodes;
+    if (codes.length >= ONBOARDING_AD_MARKET_CODES.length) {
+      setWorkspaceMarketsGlobal(true);
+      setWorkspaceMarketsAuto(false);
+      setWorkspaceAdMarketCodes([]);
+    } else if (codes.length > 0) {
+      setWorkspaceMarketsGlobal(false);
+      setWorkspaceMarketsAuto(false);
+      setWorkspaceAdMarketCodes([...codes]);
+    }
+    setCompanyScrape((prev) => ({
+      ...emptyWorkspaceScrapeRow(normalizedCompany),
+      ...prev,
+      ...initialBrandSetup.scrape,
+    }));
+  }, [initialBrandSetup, normalizedCompany]);
 
   const effectiveWorkspaceMarketCodes = useMemo(() => {
     if (workspaceMarketsGlobal) return [...ONBOARDING_AD_MARKET_CODES];
@@ -432,8 +487,11 @@ export function OnboardingForm({
       try {
         const res = await fetch("/api/onboarding/brand-insights", {
           method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          credentials: guestMode ? "omit" : "include",
+          headers: {
+            "Content-Type": "application/json",
+            ...(guestMode ? { "x-rival-guest-onboarding": "1" } : {}),
+          },
           body: JSON.stringify({ domain: normalizedCompany }),
           signal: ac.signal,
         });
@@ -456,7 +514,7 @@ export function OnboardingForm({
 
     void load();
     return () => ac.abort();
-  }, [step, normalizedCompany, brandInsights]);
+  }, [step, normalizedCompany, brandInsights, guestMode]);
 
   const continueFromWebsite = () => {
     if (saving) return;
@@ -489,7 +547,73 @@ export function OnboardingForm({
     setStep(1);
   };
 
+  const buildPrePaymentDraft = (): OnboardingDraft => {
+    const companyHost = normalizedCompany;
+    return {
+      v: 1,
+      companyUrl,
+      companyHost,
+      workspaceChannels,
+      workspaceAdMarketCodes: [],
+      workspaceMarketsGlobal: false,
+      workspaceMarketsAuto: true,
+      companyScrape: emptyWorkspaceScrapeRow(companyHost),
+      brandInsights: brandInsights
+        ? {
+            ok: brandInsights.ok,
+            partial: brandInsights.partial,
+            domain: brandInsights.domain,
+            brandName: brandInsights.brandName,
+            description: brandInsights.description,
+            logoUrl: brandInsights.logoUrl,
+            contextSnippet: brandInsights.contextSnippet,
+            socials: brandInsights.socials,
+          }
+        : null,
+    };
+  };
+
+  const finishPrePaymentFlow = async (): Promise<boolean> => {
+    if (finishInFlightRef.current) return false;
+    finishInFlightRef.current = true;
+    setSaving(true);
+    setError(null);
+
+    try {
+      const companyHost = normalizedCompany;
+      if (!isPlausiblePublicHostname(companyHost)) {
+        setError("That doesn’t look like a valid website. Go back and fix your company URL.");
+        setStep(0);
+        return false;
+      }
+      if (!workspaceChannelsValid) {
+        setError("Pick at least one platform where your brand runs ads.");
+        setStep(STEP_WORKSPACE_CHANNELS);
+        return false;
+      }
+
+      const draft = buildPrePaymentDraft();
+      saveOnboardingDraft(draft);
+
+      if (!guestMode) {
+        const supabase = createSupabaseBrowserClient();
+        await supabase.auth.signOut();
+      }
+
+      router.push(SIGNUP_AFTER_ONBOARDING_PATH);
+      router.refresh();
+      return true;
+    } catch {
+      setError("Something went wrong. Try again.");
+      return false;
+    } finally {
+      finishInFlightRef.current = false;
+      setSaving(false);
+    }
+  };
+
   const saveOnboarding = async (options?: { navigate?: boolean }): Promise<boolean> => {
+    if (compactPrePaymentFlow) return finishPrePaymentFlow();
     if (finishInFlightRef.current) return false;
     finishInFlightRef.current = true;
     setSaving(true);
@@ -707,19 +831,16 @@ export function OnboardingForm({
   };
 
   const advanceFromAdProfiles = async () => {
-    const ok = await saveOnboarding({ navigate: !showPlanStep });
-    if (ok && showPlanStep) {
-      setError(null);
-      setStep(STEP_CHOOSE_PLAN);
-    }
+    await saveOnboarding({ navigate: true });
   };
 
-  const stepLabels = useMemo(() => {
-    const labels = ["Website", "Your brand", "Your platforms", "Your regions", "Your profiles"];
-    if (showPlanStep) labels.push("Your plan");
-    return labels;
-  }, [showPlanStep]);
-  const totalSteps = stepLabels.length;
+  const totalSteps = useMemo(() => {
+    if (compactPrePaymentFlow) return 3;
+    if (postPaymentResume) return 2;
+    return showPlanStep ? 6 : 5;
+  }, [compactPrePaymentFlow, postPaymentResume, showPlanStep]);
+  const progressStepIndex = postPaymentResume ? step - STEP_WORKSPACE_MARKETS : step;
+  const progressPercent = Math.round(((progressStepIndex + 1) / totalSteps) * 100);
   const isWideOnboardingStep = step === STEP_WORKSPACE_SCRAPE || step === STEP_CHOOSE_PLAN;
   const onboardingCardMaxWidth =
     step === STEP_WORKSPACE_SCRAPE
@@ -735,6 +856,13 @@ export function OnboardingForm({
   const goBack = () => {
     if (saving) return;
     setError(null);
+    if (postPaymentResume) {
+      if (step === STEP_WORKSPACE_SCRAPE) {
+        setWorkspaceMarketsPickerExpanded(false);
+        setStep(STEP_WORKSPACE_MARKETS);
+      }
+      return;
+    }
     if (step === STEP_BRAND) setStep(STEP_WEBSITE);
     else if (step > STEP_BRAND) {
       const prev = step - 1;
@@ -745,44 +873,34 @@ export function OnboardingForm({
     }
   };
 
+  const showBackButton = guestMode
+    ? false
+    : postPaymentResume
+      ? step === STEP_WORKSPACE_SCRAPE
+      : step > 0 && !(step === STEP_BRAND && brandLoading);
+
   return (
     <div
       className={`w-full rounded-[28px] border border-white/60 bg-white/40 px-7 py-9 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 sm:px-10 sm:py-10 ${
         onboardingCardMaxWidth
       }`}
     >
-      <div className="mb-5 flex items-center justify-between gap-2 sm:mb-6">
-        <div className="flex min-w-0 shrink-0 items-center">
-          {step > 0 ? (
-            <button
-              type="button"
-              disabled={(step === STEP_BRAND && brandLoading) || saving}
-              onClick={goBack}
-              className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-gray-600 transition hover:bg-gray-900/5 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ← Back
-            </button>
-          ) : (
-            <span className="inline-block w-[4.25rem]" aria-hidden />
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-3 sm:gap-4">
-          <div className="flex items-center gap-1.5">
-            {Array.from({ length: totalSteps }, (_, i) => i).map((i) => (
-              <div
-                key={i}
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  i === step ? "w-6 bg-gray-900" : i < step ? "w-3 bg-gray-900/50" : "w-3 bg-gray-900/15"
-                }`}
-                title={stepLabels[i]}
-              />
-            ))}
-          </div>
-          <p className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-gray-500">
-            Step {step + 1} of {totalSteps}
-          </p>
-        </div>
+      <div className="mb-7 pt-1 sm:mb-8">
+        <OnboardingProgressBar value={progressPercent} />
       </div>
+
+      {showBackButton ? (
+        <div className="mb-5 sm:mb-6">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={goBack}
+            className="rounded-lg px-1.5 py-1 text-[13px] font-medium text-gray-600 transition hover:bg-gray-900/5 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            ← Back
+          </button>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[13px] font-medium text-[#b42318]">
@@ -791,16 +909,15 @@ export function OnboardingForm({
       ) : null}
 
       <div key={step} className="rival-onboarding-step-in">
-        {step === 0 ? (
+        {!postPaymentResume && step === 0 ? (
           <>
-            <div className="mb-8">
-              <h1 className="text-[22px] font-semibold tracking-tight text-gray-900">Your website</h1>
+            <div className="mb-6">
+              <h1 id="onb-url-heading" className="text-[22px] font-semibold tracking-tight text-gray-900">
+                Your company website
+              </h1>
             </div>
 
             <div>
-              <label htmlFor="onb-url" className="mb-1.5 block text-[13px] font-semibold text-gray-900">
-                Company website
-              </label>
               <div className="flex min-w-0 items-center gap-0">
                 <div
                   className={`shrink-0 overflow-hidden transition-[max-width,margin-inline-end,opacity] duration-300 ease-out motion-reduce:transition-none ${
@@ -832,6 +949,7 @@ export function OnboardingForm({
                   enterKeyHint="next"
                   maxLength={MAX_COMPANY_INPUT_CHARS}
                   spellCheck={false}
+                  aria-labelledby="onb-url-heading"
                   onChange={handleCompanyChange}
                   className={`${glassInputClass} min-w-0 flex-1`}
                 />
@@ -849,7 +967,7 @@ export function OnboardingForm({
           </>
         ) : null}
 
-        {step === 1 ? (
+        {!postPaymentResume && step === 1 ? (
           <>
             <div className="mb-6">
               <h1 className="text-[22px] font-semibold tracking-tight text-gray-900">
@@ -863,13 +981,6 @@ export function OnboardingForm({
               </div>
             ) : brandInsights ? (
               <div className="space-y-5">
-                {brandInsights.partial && brandInsights.message ? (
-                  <p className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 py-2 text-[13px] font-medium text-amber-950">
-                    {brandInsights.message}{" "}
-                    <span className="text-amber-900/90">You can still continue.</span>
-                  </p>
-                ) : null}
-
                 <div className="flex gap-4">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -915,7 +1026,7 @@ export function OnboardingForm({
           </>
         ) : null}
 
-        {step === STEP_WORKSPACE_CHANNELS ? (
+        {!postPaymentResume && step === STEP_WORKSPACE_CHANNELS ? (
           <>
             <div className="mb-6">
               <h1 className="text-[22px] font-semibold tracking-tight text-gray-900">Your ad platforms</h1>
@@ -924,7 +1035,7 @@ export function OnboardingForm({
                 offers your company&apos;s pushing right now—which powers competitive strategy inside Rival.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {CHANNELS.map(({ id, name, Logo }) => {
                 const on = workspaceChannels.includes(id);
                 return (
@@ -933,23 +1044,25 @@ export function OnboardingForm({
                     type="button"
                     aria-pressed={on}
                     onClick={() => toggleWorkspaceChannel(id)}
-                    className={`flex w-full items-center gap-3.5 rounded-xl border px-4 py-3.5 text-left transition sm:gap-4 sm:px-4 sm:py-4 ${
+                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-xl border px-2.5 py-3 text-left transition sm:flex sm:items-center sm:gap-4 sm:px-4 sm:py-4 ${
                       on
                         ? "border-[#4a7fa5]/35 bg-white/55 text-gray-900 shadow-sm ring-1 ring-[#4a7fa5]/25"
                         : "border-gray-200/70 bg-white/30 text-gray-700 hover:border-gray-300/80 hover:bg-white/45"
                     }`}
                   >
-                    <Logo className="size-8 shrink-0 sm:size-9" />
-                    <span className="min-w-0 flex-1 text-[15px] font-semibold leading-tight sm:text-[16px]">{name}</span>
+                    <Logo className="size-7 shrink-0 sm:size-9" />
+                    <span className="min-w-0 text-[13px] font-semibold leading-snug sm:flex-1 sm:text-[16px]">
+                      {name}
+                    </span>
                     <span
-                      className={`flex size-7 shrink-0 items-center justify-center rounded-full border transition ${
+                      className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition sm:size-7 ${
                         on
                           ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
                           : "border-gray-300/80 bg-white/60"
                       }`}
                       aria-hidden
                     >
-                      {on ? <Check className="size-4" strokeWidth={2.75} /> : null}
+                      {on ? <Check className="size-3.5 sm:size-4" strokeWidth={2.75} /> : null}
                     </span>
                   </button>
                 );
@@ -959,6 +1072,10 @@ export function OnboardingForm({
               type="button"
               onClick={() => {
                 setError(null);
+                if (compactPrePaymentFlow) {
+                  void finishPrePaymentFlow();
+                  return;
+                }
                 setWorkspaceMarketsPickerExpanded(false);
                 setWorkspaceMarketsAuto(true);
                 setWorkspaceMarketsGlobal(false);
@@ -968,12 +1085,12 @@ export function OnboardingForm({
               disabled={saving || !workspaceChannelsValid}
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
-              Continue →
+              {compactPrePaymentFlow && saving ? "Saving…" : "Continue to sign up →"}
             </button>
           </>
         ) : null}
 
-        {step === STEP_WORKSPACE_MARKETS ? (
+        {!compactPrePaymentFlow && step === STEP_WORKSPACE_MARKETS ? (
           <>
             <div className="mb-5">
               <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Regions for your ads</h1>
@@ -1075,7 +1192,7 @@ export function OnboardingForm({
           </>
         ) : null}
 
-        {step === STEP_WORKSPACE_SCRAPE ? (
+        {!compactPrePaymentFlow && step === STEP_WORKSPACE_SCRAPE ? (
           <>
             <div className="mb-5">
               <h1 className="text-[21px] font-semibold tracking-tight text-gray-900">Your ad profiles</h1>
