@@ -3,7 +3,7 @@ import Link from "next/link";
 import { HeroHeadline } from "@/components/landing/hero-headline";
 import { LandingBrandMarquee } from "@/components/landing/landing-brand-marquee";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
-import { RivalVideoBackdrop } from "@/components/ui/rival-video-shell";
+import { ProgressiveRivalVideoBackdrop } from "@/components/ui/progressive-rival-video-backdrop";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
 import {
   MetaLogo,
@@ -82,7 +82,7 @@ export function LandingHero() {
         aria-hidden
         className="pointer-events-none absolute inset-0 left-1/2 z-0 w-screen max-w-[100vw] -translate-x-1/2"
       >
-        <RivalVideoBackdrop footerTint="light" className="h-full min-h-full" />
+        <ProgressiveRivalVideoBackdrop footerTint="light" className="h-full min-h-full" />
       </div>
 
       {/* Fade hero video into solid white before the logo marquee */}
