@@ -41,10 +41,10 @@ const FAN_ORIGIN = { x: 500, y: 22 };
 const FAN_END_Y = 196;
 
 const HERO_REVIEW_AVATARS = [
-  "/landing/hero-review-1.png",
-  "/landing/hero-review-2.png",
-  "/landing/hero-review-3.png",
-  "/landing/hero-review-4.png",
+  "/landing/hero-review-1.webp",
+  "/landing/hero-review-2.webp",
+  "/landing/hero-review-3.webp",
+  "/landing/hero-review-4.webp",
 ] as const;
 
 export function LandingHero() {

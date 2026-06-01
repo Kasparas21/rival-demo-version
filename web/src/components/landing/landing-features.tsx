@@ -48,7 +48,7 @@ export function LandingFeatures() {
         <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:items-start md:gap-8">
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-ad-library.png"
+              src="/landing/features/feature-ad-library.webp"
               alt="Ad Library dashboard showing ads from multiple platforms with Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat selectors and platform badges on ad tiles."
             />
             <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Every platform they advertise on — in one view.</h3>
@@ -60,7 +60,7 @@ export function LandingFeatures() {
 
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-strategy-map.png"
+              src="/landing/features/feature-strategy-map.webp"
               alt="Strategy Map showing a competitor's platform-by-funnel grid with activity tags and an AI strategy summary."
             />
             <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">See their whole strategy on one map.</h3>
@@ -73,7 +73,7 @@ export function LandingFeatures() {
 
           <article className="flex flex-col">
             <FeatureFig
-              src="/landing/features/feature-three-moves.png"
+              src="/landing/features/feature-three-moves.webp"
               alt="Three Moves dashboard with weekly tactical priorities grounded in scrape data: refresh, defend, and angle shifts with evidence."
             />
             <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Get three tactical moves every week.</h3>
