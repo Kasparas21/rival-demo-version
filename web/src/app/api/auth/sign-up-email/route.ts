@@ -9,6 +9,9 @@ import {
   normalizeInviteCode,
 } from "@/lib/billing/tester-invite";
 import { persistTesterInviteToUserMetadata } from "@/lib/billing/tester-invite-user";
+import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
+import { getSignupCopy } from "@/lib/i18n/auth";
+import { LOCALE_COOKIE, LOCALE_HEADER, parseLocale } from "@/lib/i18n/locale";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -24,13 +27,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Resend is not configured (RESEND_API_KEY)" }, { status: 503 });
   }
 
-  let body: { email?: string; password?: string; next?: string; testerInvite?: string };
+  let body: { email?: string; password?: string; next?: string; testerInvite?: string; locale?: string };
   try {
     body = (await request.json()) as {
       email?: string;
       password?: string;
       next?: string;
       testerInvite?: string;
+      locale?: string;
     };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
@@ -50,6 +54,11 @@ export async function POST(request: NextRequest) {
     nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
 
   const testerInvite = resolveSignupTesterInvite(request, body.testerInvite);
+
+  const locale = parseLocale(
+    body.locale ?? request.cookies.get(LOCALE_COOKIE)?.value ?? request.headers.get(LOCALE_HEADER),
+  );
+  const emailCopy = getSignupCopy(locale).confirmationEmail;
 
   const origin = authLinkOriginForRequest(request);
   const redirectParams = new URLSearchParams({ next });
@@ -96,20 +105,20 @@ export async function POST(request: NextRequest) {
   const { data, error: sendErr } = await resend.emails.send({
     from,
     to: email,
-    subject: "Confirm your Rival signup",
-    text: `Confirm your email to finish creating your account (link expires soon):\n\n${confirmUrl}\n`,
+    subject: emailCopy.subject,
+    text: fillCopyTemplate(emailCopy.text, { url: confirmUrl }),
     html: `
       <p style="font-family: system-ui, sans-serif; font-size: 15px; color: #111;">
-        Confirm your email to finish creating your Spy Rival account. This link expires shortly.
+        ${emailCopy.htmlIntro}
       </p>
       <p style="font-family: system-ui, sans-serif;">
         <a
           href="${confirmUrl}"
           style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;"
-        >Confirm your email</a>
+        >${emailCopy.htmlButton}</a>
       </p>
       <p style="font-family: system-ui, sans-serif; font-size: 12px; color: #64748b;">
-        If you did not sign up for Rival, you can ignore this email.
+        ${emailCopy.htmlIgnore}
       </p>
     `,
   });

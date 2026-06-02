@@ -3,6 +3,7 @@ import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 type FeatureFigProps = {
   src: string;
@@ -31,63 +32,43 @@ function FeatureFig({ src, alt }: FeatureFigProps) {
   );
 }
 
-export function LandingFeatures() {
+const FEATURE_IMAGES = [
+  "/landing/features/feature-ad-library.webp",
+  "/landing/features/feature-strategy-map.webp",
+  "/landing/features/feature-three-moves.webp",
+] as const;
+
+type Props = {
+  copy: LandingCopy["features"];
+};
+
+export function LandingFeatures({ copy }: Props) {
   return (
     <section className="relative overflow-hidden pb-16 pt-8 text-center sm:pb-24 sm:pt-10">
       <LandingScrollReveal className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <h2 id="solution" className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}>
-          from competitor ads to your
+        <h2
+          id="solution"
+          className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}
+        >
+          {copy.titleLine1}
           <br />
-          <LandingHeadlineHighlight>weekly action plan in 30 seconds.</LandingHeadlineHighlight>
+          <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
         </h2>
-        <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">
-          Rival pulls every active ad your competitors run across 6 platforms, decodes their funnel, and tells you the three moves to
-          make this week. One tool replaces six tabs.
-        </p>
+        <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">{copy.subtitle}</p>
 
         <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:items-start md:gap-8">
-          <article className="flex flex-col">
-            <FeatureFig
-              src="/landing/features/feature-ad-library.webp"
-              alt="Ad Library dashboard showing ads from multiple platforms with Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat selectors and platform badges on ad tiles."
-            />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Every platform they advertise on — in one view.</h3>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Add a competitor by domain and Rival pulls every active ad they run across Meta, Google, TikTok, LinkedIn, Pinterest, and
-              Snapchat. Foreplay shows you Meta. AdSpy stops at Google. Rival shows you all six — no more six tabs and four subscriptions.
-            </p>
-          </article>
-
-          <article className="flex flex-col">
-            <FeatureFig
-              src="/landing/features/feature-strategy-map.webp"
-              alt="Strategy Map showing a competitor's platform-by-funnel grid with activity tags and an AI strategy summary."
-            />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">See their whole strategy on one map.</h3>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Rival lays out each competitor&apos;s activity on a platform-by-funnel map — where they&apos;re going all-in, where they&apos;re just
-              testing, and where they&apos;re winding down — with an AI summary that reads their entire strategy in a single paragraph. It&apos;s
-              the difference between a pile of ads and an actual plan you can see.
-            </p>
-          </article>
-
-          <article className="flex flex-col">
-            <FeatureFig
-              src="/landing/features/feature-three-moves.webp"
-              alt="Three Moves dashboard with weekly tactical priorities grounded in scrape data: refresh, defend, and angle shifts with evidence."
-            />
-            <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">Get three tactical moves every week.</h3>
-            <p className="mt-2 text-sm leading-relaxed text-gray-500">
-              Skip the 47-page competitor reports. Rival reads your competitor&apos;s strategy weekly and outputs exactly three moves —
-              copy this angle, shift this budget, refresh this creative — each backed by your actual scrape data with specific numbers, not
-              generic advice.
-            </p>
-          </article>
+          {copy.cards.map((card, index) => (
+            <article key={card.title} className="flex flex-col">
+              <FeatureFig src={FEATURE_IMAGES[index]} alt={card.imageAlt} />
+              <h3 className="mt-8 text-lg font-bold text-[#1a1a1a]">{card.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-gray-500">{card.body}</p>
+            </article>
+          ))}
         </div>
 
         <div className="mt-14 flex justify-center sm:mt-16">
           <LandingTrialCta href="/features" size="md">
-            Explore every feature
+            {copy.cta}
             <span aria-hidden>→</span>
           </LandingTrialCta>
         </div>

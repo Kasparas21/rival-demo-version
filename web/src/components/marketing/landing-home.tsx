@@ -12,33 +12,40 @@ import {
 import { LandingPricing } from "@/components/landing/landing-pricing";
 import { LandingReviews } from "@/components/landing/landing-reviews";
 import { LandingStackReplacement } from "@/components/landing/landing-stack-replacement";
+import type { LandingCopy } from "@/lib/i18n/landing/types";
+import type { Locale } from "@/lib/i18n/locale";
 
-export default function LandingHome() {
+type Props = {
+  copy: LandingCopy;
+  locale: Locale;
+};
+
+export default function LandingHome({ copy, locale }: Props) {
   return (
     <div className="w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased">
-      <LandingHeader />
+      <LandingHeader copy={copy.header} locale={locale} />
       <div className="w-full overflow-x-clip">
-        <LandingHero />
+        <LandingHero copy={copy.hero} />
 
         <div className="relative isolate">
           <LandingPageBackground />
 
           <div className="relative z-10">
-            <LandingFeatures />
+            <LandingFeatures copy={copy.features} />
             <LandingSectionDivider />
-            <LandingStackReplacement />
+            <LandingStackReplacement copy={copy.stackReplacement} />
             <LandingSectionDivider />
-            <LandingReviews />
+            <LandingReviews copy={copy.reviews} />
             <LandingSectionDivider />
-            <LandingPricing />
+            <LandingPricing copy={copy.pricing} />
             <LandingSectionDivider />
-            <LandingFAQ />
+            <LandingFAQ copy={copy.faq} />
             <LandingSectionDivider />
-            <LandingComparison />
+            <LandingComparison copy={copy.comparison} />
             <LandingSectionDivider />
-            <LandingFinalCTA />
+            <LandingFinalCTA copy={copy.finalCta} />
             <LandingSectionDivider />
-            <LandingFooter />
+            <LandingFooter copy={copy.footer} />
           </div>
         </div>
       </div>

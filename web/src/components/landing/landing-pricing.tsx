@@ -7,7 +7,8 @@ import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import type { BillingPeriod } from "@/lib/billing/config";
-import { PLAN_OFFERS, type PlanOffer, planPriceDisplay } from "@/lib/billing/plan-offers";
+import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
+import type { LandingCopy, LandingPlanOffer } from "@/lib/i18n/landing/types";
 
 function PricingCheckLi({ children }: { children: React.ReactNode }) {
   return (
@@ -20,16 +21,41 @@ function PricingCheckLi({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PulsatingTrialCta({ href }: { href: string }) {
-  return (
-    <LandingTrialCta href={href} size="lg">
-      Start 7-day free trial
-    </LandingTrialCta>
-  );
+function planPriceDisplay(
+  offer: LandingPlanOffer,
+  billing: BillingPeriod,
+  labels: LandingCopy["pricing"],
+): {
+  primary: string;
+  secondary: string;
+  listMonthlyUsd?: number;
+} {
+  const { monthlyUsd, annualMonthlyUsd, annualYearlyUsd } = offer;
+
+  if (billing === "monthly") {
+    return {
+      primary: `€${monthlyUsd}`,
+      secondary: labels.billedMonthly,
+    };
+  }
+
+  return {
+    primary: `€${annualMonthlyUsd}`,
+    secondary: fillCopyTemplate(labels.billedAnnually, { yearlyUsd: annualYearlyUsd }),
+    listMonthlyUsd: monthlyUsd,
+  };
 }
 
-function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPeriod }) {
-  const price = planPriceDisplay(offer, billing);
+function PricingCard({
+  offer,
+  billing,
+  labels,
+}: {
+  offer: LandingPlanOffer;
+  billing: BillingPeriod;
+  labels: LandingCopy["pricing"];
+}) {
+  const price = planPriceDisplay(offer, billing, labels);
   const isAnnual = billing === "annual";
   const isPro = offer.popular === true;
   const Icon = isPro ? Users : User;
@@ -44,7 +70,7 @@ function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPer
     >
       {isPro ? (
         <span className="absolute -right-2 -top-3 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[11px] font-semibold text-[#4a7fa5] shadow-sm backdrop-blur-md">
-          Popular
+          {labels.popular}
         </span>
       ) : null}
 
@@ -57,11 +83,13 @@ function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPer
 
       <div className="mt-5">
         {isAnnual && price.listMonthlyUsd != null ? (
-          <p className="text-sm font-medium text-gray-400 line-through">€{price.listMonthlyUsd} /month</p>
+          <p className="text-sm font-medium text-gray-400 line-through">
+            €{price.listMonthlyUsd} {labels.perMonth}
+          </p>
         ) : null}
         <div className="mt-1 flex flex-wrap items-baseline gap-1.5">
           <span className="text-[2.5rem] font-bold leading-none tracking-tight text-[#1a1a1a]">{price.primary}</span>
-          <span className="text-base font-medium text-gray-500">/month</span>
+          <span className="text-base font-medium text-gray-500">{labels.perMonth}</span>
         </div>
         <p className="mt-1.5 text-sm font-medium text-[#4a7fa5]">{price.secondary}</p>
       </div>
@@ -69,11 +97,13 @@ function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPer
       <p className="mt-4 text-sm leading-relaxed text-gray-600">{offer.summary}</p>
 
       <div className="mt-5">
-        <PulsatingTrialCta href="/onboarding" />
+        <LandingTrialCta href="/onboarding" size="lg">
+          {labels.trialCta}
+        </LandingTrialCta>
       </div>
 
       <div className="mt-6 border-t border-white/60 pt-5">
-        <p className="text-xs font-semibold text-gray-500">Plan includes:</p>
+        <p className="text-xs font-semibold text-gray-500">{labels.planIncludes}</p>
         <ul className="mt-4 space-y-2.5">
           {isPro && offer.plusLabel ? (
             <>
@@ -94,7 +124,11 @@ function PricingCard({ offer, billing }: { offer: PlanOffer; billing: BillingPer
   );
 }
 
-export function LandingPricing() {
+type Props = {
+  copy: LandingCopy["pricing"];
+};
+
+export function LandingPricing({ copy }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>("monthly");
 
   return (
@@ -104,44 +138,24 @@ export function LandingPricing() {
           id="pricing"
           className={`${landingNavAnchorScrollClasses} text-[clamp(2rem,6vw,2.75rem)] font-bold lowercase tracking-tight text-[#1a1a1a]`}
         >
-          choose your plan
+          {copy.title}
         </h2>
 
         <div className="relative mx-auto mt-6 max-w-2xl overflow-hidden rounded-[1.75rem] border border-[#95C14B]/30 bg-[#f3f9e8]/78 px-5 py-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_44px_-18px_rgba(149,193,75,0.28)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-[#95C14B]/15 sm:px-7 sm:py-6 sm:text-center">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-[#95C14B]/22 blur-3xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-[#b8d96a]/18 blur-3xl"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/45 to-transparent"
-          />
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#95C14B]/10 via-transparent to-[#95C14B]/6"
-          />
-
           <div className="relative flex flex-col items-start gap-3 sm:items-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/18 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a6b24] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_4px_14px_-8px_rgba(149,193,75,0.25)] backdrop-blur-md">
               <ShieldCheck className="size-3.5 text-[#5a7f2e]" strokeWidth={2.5} aria-hidden />
-              Risk-free
+              {copy.riskFreeBadge}
             </span>
-            <p className="text-base font-bold tracking-tight text-[#1a1a1a] sm:text-lg">30-day money-back guarantee</p>
-            <p className="max-w-xl text-[13px] leading-relaxed text-[#4a5c3a] sm:text-sm">
-              Track your competitors. If within 30 days Rival hasn&apos;t shown you something worth acting on, email us for a
-              full refund. No questions asked.
-            </p>
+            <p className="text-base font-bold tracking-tight text-[#1a1a1a] sm:text-lg">{copy.guaranteeTitle}</p>
+            <p className="max-w-xl text-[13px] leading-relaxed text-[#4a5c3a] sm:text-sm">{copy.guaranteeBody}</p>
           </div>
         </div>
 
         <div className="mt-8 flex justify-center">
           <div
             role="radiogroup"
-            aria-label="Billing period"
+            aria-label={copy.billingAria}
             className="relative inline-flex rounded-full border border-white/70 bg-white/45 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_24px_-8px_rgba(74,127,165,0.2)] backdrop-blur-xl"
           >
             <button
@@ -153,7 +167,7 @@ export function LandingPricing() {
               }`}
               onClick={() => setBilling("monthly")}
             >
-              Monthly
+              {copy.monthly}
             </button>
             <button
               type="button"
@@ -164,7 +178,7 @@ export function LandingPricing() {
               }`}
               onClick={() => setBilling("annual")}
             >
-              Yearly
+              {copy.yearly}
             </button>
             <span
               aria-hidden
@@ -176,14 +190,12 @@ export function LandingPricing() {
         </div>
 
         <div className="mt-10 grid grid-cols-1 gap-5 text-left sm:mt-12 lg:grid-cols-2 lg:gap-6">
-          {PLAN_OFFERS.map((offer) => (
-            <PricingCard key={offer.slug} offer={offer} billing={billing} />
+          {copy.plans.map((offer) => (
+            <PricingCard key={offer.slug} offer={offer} billing={billing} labels={copy} />
           ))}
         </div>
 
-        <p className="mx-auto mt-8 max-w-xl text-xs leading-relaxed text-gray-500 sm:text-sm">
-          All plans start with a 7-day free trial · 1 competitor · card required · cancel anytime
-        </p>
+        <p className="mx-auto mt-8 max-w-xl text-xs leading-relaxed text-gray-500 sm:text-sm">{copy.footnote}</p>
       </LandingScrollReveal>
     </section>
   );

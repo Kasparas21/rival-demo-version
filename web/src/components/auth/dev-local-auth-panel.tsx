@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { SignupCopy } from "@/lib/i18n/auth/types";
+import { authCopyEn } from "@/lib/i18n/auth/en";
 
 function isBrowserLocalHost(): boolean {
   if (typeof window === "undefined") return false;
@@ -8,13 +10,16 @@ function isBrowserLocalHost(): boolean {
   return hn === "localhost" || hn === "127.0.0.1" || hn === "[::1]";
 }
 
+type DevPanelCopy = SignupCopy["devPanel"];
+
 type Props = {
   email: string;
   nextPath: string;
+  copy?: DevPanelCopy;
 };
 
 /** Shown on /login and /signup when running on localhost — skips Resend email. */
-export function DevLocalAuthPanel({ email, nextPath }: Props) {
+export function DevLocalAuthPanel({ email, nextPath, copy = authCopyEn.signup.devPanel }: Props) {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +33,7 @@ export function DevLocalAuthPanel({ email, nextPath }: Props) {
   const handleInstant = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      setError("Enter your email above first.");
+      setError(copy.emailRequired);
       return;
     }
     setLoading(true);
@@ -41,12 +46,12 @@ export function DevLocalAuthPanel({ email, nextPath }: Props) {
       });
       const json = (await res.json()) as { actionLink?: string; error?: string };
       if (!res.ok || !json.actionLink) {
-        setError(json.error ?? "Instant sign-in failed");
+        setError(json.error ?? copy.instantFailed);
         return;
       }
       window.location.assign(json.actionLink);
     } catch {
-      setError("Could not reach dev sign-in endpoint");
+      setError(copy.endpointFailed);
     } finally {
       setLoading(false);
     }
@@ -54,22 +59,19 @@ export function DevLocalAuthPanel({ email, nextPath }: Props) {
 
   return (
     <div className="mt-5 rounded-xl border border-dashed border-amber-300/90 bg-amber-50/70 px-3 py-3 text-[12px] text-amber-950">
-      <p className="font-semibold">Local dev — no email</p>
-      <p className="mt-1 leading-snug text-amber-900/90">
-        Sign in instantly (uses service role). Confirmation links from signup also stay on localhost while you develop
-        here.
-      </p>
+      <p className="font-semibold">{copy.title}</p>
+      <p className="mt-1 leading-snug text-amber-900/90">{copy.body}</p>
       <button
         type="button"
         disabled={loading}
         onClick={() => void handleInstant()}
         className="mt-2 w-full rounded-full border border-amber-400/80 bg-white/60 py-2.5 text-[13px] font-semibold text-amber-950 transition hover:bg-white/80 disabled:opacity-50"
       >
-        {loading ? "Signing in…" : "Continue without email (localhost)"}
+        {loading ? copy.signingIn : copy.continueWithoutEmail}
       </button>
       {error ? <p className="mt-2 text-[11px] font-medium text-red-700">{error}</p> : null}
       <p className="mt-2 text-[11px] text-amber-800/90">
-        Test onboarding:{" "}
+        {copy.testOnboarding}{" "}
         <a href="/login?next=%2Fonboarding" className="font-semibold underline underline-offset-2">
           /login?next=/onboarding
         </a>

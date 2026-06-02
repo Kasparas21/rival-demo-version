@@ -15,6 +15,10 @@ import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { hasOnboardingDraft } from "@/lib/onboarding/draft";
 import { TESTER_INVITE_METADATA_KEY } from "@/lib/billing/tester-invite-user";
+import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
+import type { SignupCopy } from "@/lib/i18n/auth/types";
+import { localizeSignupApiError } from "@/lib/i18n/auth/signup-api-errors";
+import type { Locale } from "@/lib/i18n/locale";
 
 function buildRedirectTo(path: string) {
   if (typeof window === "undefined") return path;
@@ -27,7 +31,16 @@ const glassInputWrap =
 const glassInputField =
   "w-full border-none bg-transparent py-3 text-[15px] font-medium tracking-wide text-gray-900 outline-none placeholder:text-gray-600 focus:ring-0";
 
-export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: string | null }) {
+export function SignupForm({
+  copy,
+  locale,
+  testerInviteCode = null,
+}: {
+  copy: SignupCopy;
+  locale: Locale;
+  testerInviteCode?: string | null;
+}) {
+  const t = copy;
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const next =
@@ -55,15 +68,15 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
   const handleSignUp = async () => {
     const trimmed = email.trim();
     if (!trimmed) {
-      setFormError("Enter your email address first.");
+      setFormError(t.errors.emailRequired);
       return;
     }
     if (!password) {
-      setFormError("Choose a password.");
+      setFormError(t.errors.passwordRequired);
       return;
     }
     if (password !== confirmPassword) {
-      setFormError("Passwords don't match");
+      setFormError(t.errors.passwordsMismatch);
       return;
     }
 
@@ -81,6 +94,7 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
         email: trimmed,
         password,
         next: effectiveNext,
+        locale,
         ...(testerInviteCode ? { testerInvite: testerInviteCode } : {}),
       }),
     });
@@ -94,18 +108,16 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
     setIsSubmitting(false);
 
     if (!res.ok) {
-      setFormError(payload.error ?? "Could not complete signup.");
+      setFormError(localizeSignupApiError(payload.error, t.errors));
       return;
     }
 
     if (!payload.ok) {
-      setFormError("Could not complete signup.");
+      setFormError(t.errors.signupFailed);
       return;
     }
 
-    setInfoMessage(
-      "Check your inbox for a confirmation email from us. Open the link to finish signup, then you can sign in."
-    );
+    setInfoMessage(t.success.confirmEmail);
   };
 
   const handleGoogleSignIn = async () => {
@@ -152,18 +164,18 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
     <RivalVideoShell footerTint="light">
       <Link
         href="/"
+        aria-label={t.homeAria}
         className="mb-8 rounded-2xl border border-white/60 bg-white/40 px-5 py-3 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 hover:bg-white/50 hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)]"
       >
         <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
       </Link>
 
       <div className={`w-full max-w-[440px] ${glassPanelClass}`}>
-        <h2 className="text-[1.65rem] font-semibold tracking-tight text-gray-900 sm:text-[1.75rem]">
-          Create your account
-        </h2>
-        <p className="mt-2.5 text-[14px] font-medium leading-relaxed text-gray-600">
-          Enter your email and choose a password.
-        </p>
+        <div className="-mt-1 mb-4 flex justify-end">
+          <OnboardingCardLocaleSwitcher locale={locale} ariaLabel={t.localeSwitcherAria} align="end" />
+        </div>
+        <h2 className="text-[1.65rem] font-semibold tracking-tight text-gray-900 sm:text-[1.75rem]">{t.title}</h2>
+        <p className="mt-2.5 text-[14px] font-medium leading-relaxed text-gray-600">{t.subtitle}</p>
 
         <form
           className="mt-8 space-y-5"
@@ -174,14 +186,14 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
         >
           <div>
             <label htmlFor="signup-email" className="text-[13px] font-semibold text-gray-900">
-              Email address
+              {t.emailLabel}
             </label>
             <div className={glassInputWrap}>
               <input
                 id="signup-email"
                 type="email"
                 autoComplete="email"
-                placeholder="yourstore@example.com"
+                placeholder={t.emailPlaceholder}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className={glassInputField}
@@ -191,14 +203,14 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
 
           <div>
             <label htmlFor="signup-password" className="text-[13px] font-semibold text-gray-900">
-              Password
+              {t.passwordLabel}
             </label>
             <div className={glassInputWrap}>
               <input
                 id="signup-password"
                 type="password"
                 autoComplete="new-password"
-                placeholder="Choose a password"
+                placeholder={t.passwordPlaceholder}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className={glassInputField}
@@ -208,14 +220,14 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
 
           <div>
             <label htmlFor="signup-password-confirm" className="text-[13px] font-semibold text-gray-900">
-              Confirm password
+              {t.confirmPasswordLabel}
             </label>
             <div className={glassInputWrap}>
               <input
                 id="signup-password-confirm"
                 type="password"
                 autoComplete="new-password"
-                placeholder="Confirm your password"
+                placeholder={t.confirmPasswordPlaceholder}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 className={glassInputField}
@@ -228,7 +240,7 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
             disabled={isSubmitting}
             className="mt-0 w-full rounded-full bg-gray-900 px-5 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-65 disabled:hover:scale-100"
           >
-            {isSubmitting ? "Creating account…" : "Create account"}
+            {isSubmitting ? t.submitting : t.submit}
           </button>
         </form>
 
@@ -242,7 +254,7 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
 
         <div className="mt-6 flex items-center gap-3 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
           <span className="h-px flex-1 bg-gray-900/10" />
-          or
+          {t.dividerOr}
           <span className="h-px flex-1 bg-gray-900/10" />
         </div>
 
@@ -253,7 +265,7 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
           className="mt-5 flex w-full items-center justify-center gap-2.5 rounded-full border border-white/60 bg-white/35 px-5 py-3.5 text-[14px] font-semibold tracking-wide text-gray-900 shadow-[0_4px_24px_rgba(31,38,135,0.06)] backdrop-blur-sm transition hover:bg-white/45 disabled:cursor-not-allowed disabled:opacity-65"
         >
           <Google className="h-6 w-6 shrink-0" aria-hidden />
-          {isSendingGoogle ? "Opening Google…" : "Continue with Google"}
+          {isSendingGoogle ? t.googleOpening : t.google}
         </button>
 
         {googleError ? <p className="mt-4 text-[13px] text-[#b42318]">{googleError}</p> : null}
@@ -261,12 +273,13 @@ export function SignupForm({ testerInviteCode = null }: { testerInviteCode?: str
         <DevLocalAuthPanel
           email={email}
           nextPath={safeAuthNextPath(searchParams.get("next"), "/signup") ?? "/onboarding"}
+          copy={t.devPanel}
         />
 
         <p className={linkMutedClass}>
-          Already have an account?{" "}
+          {t.alreadyHaveAccount}{" "}
           <Link href={loginHref} className="font-semibold text-gray-900 underline underline-offset-2">
-            Sign in
+            {t.signIn}
           </Link>
         </p>
       </div>

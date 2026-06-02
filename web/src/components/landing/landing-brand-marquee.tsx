@@ -65,8 +65,17 @@ function stripImgClass() {
   return "!h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(72vw,420px)] object-contain opacity-80 grayscale [image-rendering:auto]";
 }
 
+type MarqueeProps = {
+  embedded?: boolean;
+  ariaLabel?: string;
+  label?: string;
+};
+
 /** Infinite logo strip — soft white gradient edges, subtle logos. */
-export function LandingBrandMarquee({ embedded = false }: { embedded?: boolean }) {
+export function LandingBrandMarquee({
+  embedded = false,
+  ariaLabel = "Brands and sectors Rival understands",
+}: MarqueeProps) {
   return (
     <section
       className={
@@ -74,7 +83,7 @@ export function LandingBrandMarquee({ embedded = false }: { embedded?: boolean }
           ? "relative z-10 mt-16 w-full overflow-hidden [--landing-marquee-slide-h:24px] sm:mt-[4.25rem] md:mt-20 sm:[--landing-marquee-slide-h:28px] md:[--landing-marquee-slide-h:32px]"
           : "relative isolate z-10 -mt-8 overflow-hidden pb-8 pt-10 [--landing-marquee-slide-h:24px] sm:-mt-10 sm:pb-10 sm:pt-12 sm:[--landing-marquee-slide-h:28px] md:[--landing-marquee-slide-h:32px]"
       }
-      aria-label="Brands and sectors Rival understands"
+      aria-label={ariaLabel}
     >
       {!embedded ? (
         <>
@@ -124,7 +133,7 @@ export function LandingBrandMarquee({ embedded = false }: { embedded?: boolean }
             hoverSpeed={12}
             fadeOut
             fadeOutColor="#ffffff"
-            ariaLabel="Brands and sectors Rival understands"
+            ariaLabel={ariaLabel}
             renderItem={(item) =>
               "node" in item ? (
                 <span className="inline-flex shrink-0 items-center text-black/70">{item.node}</span>

@@ -1,5 +1,6 @@
 import type { ChannelId } from "@/components/channel-picker-modal";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
+import type { IdentifierValidationCopy } from "@/lib/i18n/onboarding/types";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
 
 export type ValidateIdentifierResult =
@@ -7,11 +8,23 @@ export type ValidateIdentifierResult =
   | { valid: false; error: string }
   | { valid: false; warning: string };
 
+const DEFAULT_VALIDATION: IdentifierValidationCopy = {
+  metaAdLibrary:
+    "Please enter the Ad Library URL, not the Facebook page. Find it at facebook.com/ads/library",
+  googleTransparency:
+    "That link doesn't include a Transparency advertiser ID (…/advertiser/AR…). Open Google Ads Transparency Center, search for the brand, then open any creative or ad — copy the URL from that page's address bar and paste it here. Don't use only a shop domain or a ?domain= search results page.",
+  linkedInKeyword: "This looks like a keyword search — results may include other companies",
+};
+
 /**
  * Inline validation rules for competitor identifier fields on blur / submit.
  * Meta blocks non–Ad Library Facebook URLs; LinkedIn warns on keyword-style URLs.
  */
-export function validateIdentifierField(fieldId: ChannelId, value: string): ValidateIdentifierResult {
+export function validateIdentifierField(
+  fieldId: ChannelId,
+  value: string,
+  messages: IdentifierValidationCopy = DEFAULT_VALIDATION,
+): ValidateIdentifierResult {
   const v = value.trim();
   if (!v) return { valid: true };
 
@@ -27,8 +40,7 @@ export function validateIdentifierField(fieldId: ChannelId, value: string): Vali
         if (!low.includes("ads/library")) {
           return {
             valid: false,
-            error:
-              "Please enter the Ad Library URL, not the Facebook page. Find it at facebook.com/ads/library",
+            error: messages.metaAdLibrary,
           };
         }
       }
@@ -42,8 +54,7 @@ export function validateIdentifierField(fieldId: ChannelId, value: string): Vali
       if (!low.includes("facebook.com") && !low.includes("fb.com") && !low.includes("fb.me")) {
         return {
           valid: false,
-          error:
-            "Please enter the Ad Library URL, not the Facebook page. Find it at facebook.com/ads/library",
+          error: messages.metaAdLibrary,
         };
       }
 
@@ -53,7 +64,7 @@ export function validateIdentifierField(fieldId: ChannelId, value: string): Vali
       if (low.includes("linkedin.com") && !linkedInAdLibraryUrlHasAdvertiserTargeting(v)) {
         return {
           valid: false,
-          warning: "This looks like a keyword search — results may include other companies",
+          warning: messages.linkedInKeyword,
         };
       }
       return { valid: true };
@@ -62,8 +73,7 @@ export function validateIdentifierField(fieldId: ChannelId, value: string): Vali
       if (canonicalGoogleAdsTransparencyStartUrl(v)) return { valid: true };
       return {
         valid: false,
-        error:
-          "That link doesn’t include a Transparency advertiser ID (…/advertiser/AR…). Open Google Ads Transparency Center, search for the brand, then open any creative or ad — copy the URL from that page’s address bar and paste it here. Don’t use only a shop domain or a ?domain= search results page.",
+        error: messages.googleTransparency,
       };
     }
     case "tiktok":

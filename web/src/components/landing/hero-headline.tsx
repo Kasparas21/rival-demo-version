@@ -3,15 +3,16 @@
 import { useLayoutEffect, useRef } from "react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 const MAX_FONT_PX = 112;
 const MIN_FONT_PX = 52;
 const DESKTOP_MIN_WIDTH_PX = 768;
 
-function AdIntelligenceHighlight() {
+function AdIntelligenceHighlight({ label }: { label: string }) {
   return (
     <span className="hero-ad-intelligence-highlight">
-      ad intelligence
+      {label}
       <svg
         className="hero-ad-intelligence-swoosh"
         viewBox="0 0 1000 100"
@@ -27,21 +28,25 @@ function AdIntelligenceHighlight() {
   );
 }
 
-export function HeroHeadline() {
+type Props = {
+  headline: LandingCopy["hero"]["headline"];
+};
+
+export function HeroHeadline({ headline }: Props) {
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const line1Ref = useRef<HTMLSpanElement>(null);
   const line2Ref = useRef<HTMLSpanElement>(null);
 
   useLayoutEffect(() => {
-    const headline = headlineRef.current;
+    const headlineEl = headlineRef.current;
     const line1 = line1Ref.current;
     const line2 = line2Ref.current;
-    if (!headline || !line1 || !line2) return;
+    if (!headlineEl || !line1 || !line2) return;
 
     const fit = () => {
       const isDesktop = window.innerWidth >= DESKTOP_MIN_WIDTH_PX;
       if (!isDesktop) {
-        headline.style.fontSize = "";
+        headlineEl.style.fontSize = "";
         return;
       }
 
@@ -49,11 +54,11 @@ export function HeroHeadline() {
       if (available <= 0) return;
 
       let size = MAX_FONT_PX;
-      headline.style.fontSize = `${size}px`;
+      headlineEl.style.fontSize = `${size}px`;
 
       while (size > MIN_FONT_PX && (line1.scrollWidth > available || line2.scrollWidth > available)) {
         size -= 1;
-        headline.style.fontSize = `${size}px`;
+        headlineEl.style.fontSize = `${size}px`;
       }
     };
 
@@ -71,7 +76,7 @@ export function HeroHeadline() {
       observer.disconnect();
       window.removeEventListener("resize", fit);
     };
-  }, []);
+  }, [headline]);
 
   return (
     <div className="relative z-10 left-1/2 mb-10 w-screen max-w-[100vw] -translate-x-1/2 sm:mb-14">
@@ -80,22 +85,21 @@ export function HeroHeadline() {
         ref={headlineRef}
         className={`${landingNavAnchorScrollClasses} hero-headline px-4 text-center lowercase`}
       >
-        {/* Mobile-only headline — wrapper visibility (not hero-headline-line + hidden) */}
         <div className="md:hidden">
-          <span className="hero-headline-line">competitor</span>
+          <span className="hero-headline-line">{headline.mobile.line1}</span>
           <span className="hero-headline-line">
-            <AdIntelligenceHighlight />
+            <AdIntelligenceHighlight label={headline.mobile.highlight} />
           </span>
-          <span className="hero-headline-line">for all 6 platforms</span>
+          <span className="hero-headline-line">{headline.mobile.line3}</span>
         </div>
 
-        {/* Desktop-only headline — original two-line layout + JS font scaling */}
         <div className="hidden md:block">
           <span ref={line1Ref} className="hero-headline-line whitespace-nowrap">
-            competitor <AdIntelligenceHighlight />
+            {headline.desktop.line1Prefix}
+            <AdIntelligenceHighlight label={headline.desktop.highlight} />
           </span>
           <span ref={line2Ref} className="hero-headline-line whitespace-nowrap">
-            for all 6 platforms
+            {headline.desktop.line2}
           </span>
         </div>
       </h1>

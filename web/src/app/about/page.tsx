@@ -4,6 +4,8 @@ import Link from "next/link";
 import { AboutContent } from "@/components/legal/about-content";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHeader } from "@/components/landing/landing-header";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getLandingCopy } from "@/lib/i18n/landing";
 
 export const metadata: Metadata = {
   title: "About",
@@ -13,10 +15,13 @@ export const metadata: Metadata = {
   openGraph: { url: "/about" },
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const locale = await getRequestLocale();
+  const copy = getLandingCopy(locale);
+
   return (
     <div className="min-h-screen w-full overflow-x-clip bg-[#f8f9fb] font-sans text-[#1a1a1a] antialiased">
-      <LandingHeader />
+      <LandingHeader copy={copy.header} locale={locale} />
       <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-28 sm:px-6 sm:pt-32">
         <p className="mb-2 text-sm text-[#4a7fa5]">
           <Link href="/" className="hover:underline">
@@ -27,7 +32,7 @@ export default function AboutPage() {
         </p>
         <AboutContent />
       </main>
-      <LandingFooter />
+      <LandingFooter copy={copy.footer} />
     </div>
   );
 }

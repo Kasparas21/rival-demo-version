@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SignupForm } from "@/components/auth/signup-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
@@ -8,12 +9,24 @@ import { CHOOSE_PLAN_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { hasPrePaymentSetup, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getSignupCopy } from "@/lib/i18n/auth";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const copy = getSignupCopy(locale);
+  return { title: copy.pageTitle };
+}
 
 export default async function SignupPage({
   searchParams,
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
+  const locale = await getRequestLocale();
+  const copy = getSignupCopy(locale);
   const params = (await searchParams) ?? {};
   const safeNext = safeAuthNextPath(firstParam(params.next), "/signup");
   const safePostOnboardingPath = safeNext ? postOnboardingPath(safeNext) : null;
@@ -65,5 +78,5 @@ export default async function SignupPage({
   /** Tester flow only from the explicit invite URL — never a stale `rival_tester_invite` cookie. */
   const testerInviteCode = testerFromQueryCode;
 
-  return <SignupForm testerInviteCode={testerInviteCode} />;
+  return <SignupForm copy={copy} locale={locale} testerInviteCode={testerInviteCode} />;
 }

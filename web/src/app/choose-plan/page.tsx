@@ -8,6 +8,8 @@ import {
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getOnboardingCopy } from "@/lib/i18n/onboarding";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -28,6 +30,8 @@ export default async function ChoosePlanPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
+  const locale = await getRequestLocale();
+  const copy = getOnboardingCopy(locale);
   const params = (await searchParams) ?? {};
   const nextPath = safeNextPath(firstParam(params.next));
 
@@ -52,6 +56,9 @@ export default async function ChoosePlanPage({
 
   return (
     <OnboardingPlanPicker
+      locale={locale}
+      localeSwitcherAria={copy.localeSwitcherAria}
+      copy={copy.planPicker}
       dashboardNext={destination}
       testerInviteActive={testerInviteActive}
       checkoutError={checkoutError}

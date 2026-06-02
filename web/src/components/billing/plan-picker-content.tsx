@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
@@ -8,13 +7,13 @@ import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { BillingPeriod } from "@/lib/billing/config";
+import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
+import { onboardingCopyEn } from "@/lib/i18n/onboarding/en";
+import type { PlanPickerCopy } from "@/lib/i18n/onboarding/types";
 import {
-  PLAN_OFFERS,
-  PLAN_PICKER_INTRO,
-  PLAN_TRIAL_BADGE,
-  maxAnnualSavingsPercent,
-  planPriceDisplay,
-} from "@/lib/billing/plan-offers";
+  localizedPlanPriceDisplay,
+  maxAnnualSavingsPercentForPlans,
+} from "@/lib/i18n/onboarding/plan-price";
 
 function PlanGlassCheck({ children }: { children: React.ReactNode }) {
   return (
@@ -37,17 +36,19 @@ function BillingToggle({
   billing,
   onChange,
   maxSavingsPct,
+  copy,
   className = "",
 }: {
   billing: BillingPeriod;
   onChange: (b: BillingPeriod) => void;
   maxSavingsPct: number;
+  copy: PlanPickerCopy;
   className?: string;
 }) {
   return (
     <div
       role="radiogroup"
-      aria-label="Billing period"
+      aria-label={copy.billingAria}
       className={`inline-flex max-w-full rounded-full border border-gray-200/80 bg-white/50 p-1 ${className}`.trim()}
     >
       <button
@@ -59,7 +60,7 @@ function BillingToggle({
         }`}
         onClick={() => onChange("monthly")}
       >
-        Monthly
+        {copy.monthly}
       </button>
       <button
         type="button"
@@ -70,7 +71,7 @@ function BillingToggle({
         }`}
         onClick={() => onChange("annual")}
       >
-        Annual
+        {copy.annual}
         <span
           className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
             billing === "annual"
@@ -78,7 +79,7 @@ function BillingToggle({
               : "bg-[#95C14B]/25 text-gray-800"
           }`}
         >
-          Save {maxSavingsPct}%
+          {fillCopyTemplate(copy.savePercentBadge, { percent: maxSavingsPct })}
         </span>
       </button>
     </div>
@@ -89,6 +90,7 @@ const planCardBase = "flex flex-col rounded-2xl border bg-white/50 p-5 backdrop-
 const planCardPopular = "border-gray-900/25 ring-1 ring-gray-900/10 shadow-[0_12px_40px_rgba(17,24,39,0.08)]";
 
 type PlanPickerContentProps = {
+  copy?: PlanPickerCopy;
   dashboardNext?: string;
   variant?: "page" | "overlay" | "onboarding";
   onSkip?: () => void;
@@ -99,16 +101,19 @@ type PlanPickerContentProps = {
 function TesterPlanPicker({
   variant,
   dashboardNext,
+  copy,
 }: {
   variant: "page" | "overlay" | "onboarding";
   dashboardNext?: string;
+  copy: PlanPickerCopy;
 }) {
   const router = useRouter();
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
-  const proOffer = PLAN_OFFERS.find((offer) => offer.slug === "pro") ?? PLAN_OFFERS[1]!;
+  const proOffer = copy.plans.find((offer) => offer.slug === "pro") ?? copy.plans[1]!;
   const isOnboarding = variant === "onboarding";
   const destinationAfterActivate = dashboardNext ?? DASHBOARD_HOME_PATH;
+  const t = copy.tester;
 
   const titleClass =
     variant === "onboarding"
@@ -127,13 +132,13 @@ function TesterPlanPicker({
       });
       const json = (await res.json()) as { ok?: boolean; error?: string; startWorkspaceScrape?: boolean };
       if (!res.ok || !json.ok) {
-        setClaimError(json.error ?? "Could not activate tester access.");
+        setClaimError(json.error ?? t.claimError);
         return;
       }
       router.push(json.startWorkspaceScrape ? buildWorkspaceBrandScrapeHref() : destinationAfterActivate);
       router.refresh();
     } catch {
-      setClaimError("Network error — try again.");
+      setClaimError(t.networkError);
     } finally {
       setClaiming(false);
     }
@@ -143,9 +148,9 @@ function TesterPlanPicker({
     <div className={isOnboarding ? "mx-auto w-full max-w-xl" : undefined}>
       <div className={isOnboarding ? "mb-4 text-center" : variant === "page" || variant === "overlay" ? "text-center" : "mb-4 text-left"}>
         {variant !== "onboarding" ? (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">You&apos;re all set</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">{copy.allSet}</p>
         ) : null}
-        <h1 className={isOnboarding ? titleClass : `mt-1 ${titleClass}`}>Your tester access</h1>
+        <h1 className={isOnboarding ? titleClass : `mt-1 ${titleClass}`}>{t.title}</h1>
         <p
           className={
             isOnboarding
@@ -153,7 +158,7 @@ function TesterPlanPicker({
               : "mx-auto mt-2 max-w-sm text-[13px] text-gray-600"
           }
         >
-          Pro is included for your test cohort — 100% discount already applied. No payment required.
+          {t.body}
         </p>
       </div>
 
@@ -162,22 +167,24 @@ function TesterPlanPicker({
           <div className="flex items-start justify-between gap-2">
             <p className="text-lg font-semibold text-gray-900">{proOffer.name}</p>
             <span className="shrink-0 rounded-full bg-[#95C14B] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-gray-900">
-              Tester
+              {t.badge}
             </span>
           </div>
 
           <div className="mt-3">
-            <p className="text-[13px] font-medium text-gray-400 line-through">${proOffer.monthlyUsd}/mo</p>
+            <p className="text-[13px] font-medium text-gray-400 line-through">
+              {fillCopyTemplate(t.listPricePerMonth, { amount: proOffer.monthlyUsd })}
+            </p>
             <div className="flex flex-wrap items-baseline gap-1.5">
-              <span className="text-[1.65rem] font-bold leading-none tracking-tight text-gray-900">$0</span>
-              <span className="text-[13px] font-medium text-gray-500">/mo — 100% discount applied</span>
+              <span className="text-[1.65rem] font-bold leading-none tracking-tight text-gray-900">€0</span>
+              <span className="text-[13px] font-medium text-gray-500">{t.freePerMonth}</span>
             </div>
           </div>
 
           <p className="mt-2 text-[13px] text-gray-700">{proOffer.summary}</p>
 
           <span className="mt-3 inline-flex w-fit rounded-full border border-[#95C14B]/40 bg-[#95C14B]/12 px-2.5 py-1 text-[11px] font-semibold text-gray-800">
-            Complimentary tester Pro
+            {t.complimentary}
           </span>
 
           <button
@@ -186,7 +193,7 @@ function TesterPlanPicker({
             onClick={() => void claimWithoutCard()}
             className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {claiming ? "Activating…" : "Activate without payment (no card)"}
+            {claiming ? t.activating : t.activate}
           </button>
 
           {claimError ? (
@@ -195,7 +202,7 @@ function TesterPlanPicker({
 
           <div className="mt-4 border-t border-gray-200/70 pt-3.5">
             <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
-              {proOffer.plusLabel ?? "Includes"}
+              {proOffer.plusLabel ?? copy.includes}
             </p>
             <ul className="mt-2 space-y-1.5">
               {proOffer.features.map((feature) => (
@@ -210,16 +217,17 @@ function TesterPlanPicker({
 }
 
 export function PlanPickerContent({
+  copy = onboardingCopyEn.planPicker,
   variant = "page",
   testerInviteActive = false,
   dashboardNext,
   checkoutError = null,
 }: PlanPickerContentProps) {
   const [billing, setBilling] = useState<BillingPeriod>("monthly");
-  const maxSavingsPct = maxAnnualSavingsPercent();
+  const maxSavingsPct = maxAnnualSavingsPercentForPlans(copy.plans);
 
   if (testerInviteActive) {
-    return <TesterPlanPicker variant={variant} dashboardNext={dashboardNext} />;
+    return <TesterPlanPicker variant={variant} dashboardNext={dashboardNext} copy={copy} />;
   }
 
   const titleClass =
@@ -238,9 +246,9 @@ export function PlanPickerContent({
       ) : null}
       <div className={variant === "onboarding" ? "mb-4 text-left" : "text-center"}>
         {variant !== "onboarding" ? (
-          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">You&apos;re all set</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-gray-500">{copy.allSet}</p>
         ) : null}
-        <h1 className={variant === "onboarding" ? titleClass : `mt-1 ${titleClass}`}>Choose your plan</h1>
+        <h1 className={variant === "onboarding" ? titleClass : `mt-1 ${titleClass}`}>{copy.choosePlanTitle}</h1>
         <p
           className={
             variant === "onboarding"
@@ -248,16 +256,16 @@ export function PlanPickerContent({
               : "mx-auto mt-2 max-w-sm text-[13px] text-gray-600"
           }
         >
-          {PLAN_PICKER_INTRO}
+          {copy.intro}
         </p>
         <div className="mt-4 flex justify-center">
-          <BillingToggle billing={billing} onChange={setBilling} maxSavingsPct={maxSavingsPct} />
+          <BillingToggle billing={billing} onChange={setBilling} maxSavingsPct={maxSavingsPct} copy={copy} />
         </div>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 text-left md:grid-cols-2 md:gap-5 md:items-stretch">
-        {PLAN_OFFERS.map((offer) => {
-          const price = planPriceDisplay(offer, billing);
+        {copy.plans.map((offer) => {
+          const price = localizedPlanPriceDisplay(offer, billing, copy);
           const checkoutHref = buildCheckoutHref(offer.slug, billing, dashboardNext);
           const isPro = offer.popular === true;
           const isAnnual = billing === "annual";
@@ -271,7 +279,7 @@ export function PlanPickerContent({
                 <p className="text-lg font-semibold text-gray-900">{offer.name}</p>
                 {isPro ? (
                   <span className="shrink-0 rounded-full bg-gray-900 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                    Popular
+                    {copy.popular}
                   </span>
                 ) : null}
               </div>
@@ -279,18 +287,19 @@ export function PlanPickerContent({
               <div className="mt-3">
                 {isAnnual && price.listMonthlyUsd != null ? (
                   <p className="text-[13px] font-medium text-gray-400 line-through">
-                    ${price.listMonthlyUsd}/mo
+                    €{price.listMonthlyUsd}
+                    {copy.perMonth}
                   </p>
                 ) : null}
                 <div className="flex flex-wrap items-baseline gap-1.5">
                   <span className="text-[1.65rem] font-bold leading-none tracking-tight text-gray-900">
                     {price.primary}
                   </span>
-                  <span className="text-[13px] font-medium text-gray-500">/mo</span>
+                  <span className="text-[13px] font-medium text-gray-500">{copy.perMonth}</span>
                 </div>
                 {isAnnual && price.savingsPercent != null ? (
                   <p className="mt-1 text-[12px] font-semibold text-[#2d5a1f]">
-                    Save {price.savingsPercent}% vs paying monthly
+                    {fillCopyTemplate(copy.saveVsMonthly, { percent: price.savingsPercent })}
                   </p>
                 ) : null}
                 <p className="mt-1 text-[12px] text-gray-500">{price.secondary}</p>
@@ -299,19 +308,19 @@ export function PlanPickerContent({
               <p className="mt-2 text-[13px] text-gray-700">{offer.summary}</p>
 
               <span className="mt-3 inline-flex w-fit rounded-full border border-[#95C14B]/40 bg-[#95C14B]/12 px-2.5 py-1 text-[11px] font-semibold text-gray-800">
-                {PLAN_TRIAL_BADGE}
+                {copy.trialBadge}
               </span>
 
               <CheckoutNavigationLink
                 href={checkoutHref}
                 className="mt-3 flex w-full justify-center rounded-full bg-gray-900 py-3 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98]"
               >
-                Start free trial
+                {copy.startFreeTrial}
               </CheckoutNavigationLink>
 
               <div className="mt-4 border-t border-gray-200/70 pt-3.5">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
-                  {offer.plusLabel ?? "Includes"}
+                  {offer.plusLabel ?? copy.includes}
                 </p>
                 <ul className="mt-2 space-y-1.5">
                   {offer.features.map((feature) => (

@@ -1,19 +1,28 @@
 "use client";
 
-import Link from "next/link";
 import { TrialSetupBackgroundSync } from "@/components/onboarding/trial-setup-background-sync";
+import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
+import { OnboardingFlowHeader } from "@/components/onboarding/onboarding-flow-header";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
-import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { planPickerGlassClass } from "@/components/ui/glass-styles";
+import type { Locale } from "@/lib/i18n/locale";
+import type { PlanPickerCopy } from "@/lib/i18n/onboarding/types";
+import { onboardingCopyEn } from "@/lib/i18n/onboarding/en";
 
 type Props = {
+  locale: Locale;
+  localeSwitcherAria?: string;
+  copy?: PlanPickerCopy;
   dashboardNext: string;
   testerInviteActive?: boolean;
   checkoutError?: string | null;
 };
 
 export function OnboardingPlanPicker({
+  locale,
+  localeSwitcherAria = onboardingCopyEn.localeSwitcherAria,
+  copy = onboardingCopyEn.planPicker,
   dashboardNext,
   testerInviteActive = false,
   checkoutError = null,
@@ -22,17 +31,14 @@ export function OnboardingPlanPicker({
     <RivalVideoShell footerTint="light">
       <TrialSetupBackgroundSync />
       <div className="w-full max-w-5xl px-1 sm:px-2">
-        <div className="mb-8 flex justify-center">
-          <Link
-            href="/"
-            className="rounded-2xl border border-white/60 bg-white/40 px-5 py-3 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 hover:bg-white/50 hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)]"
-          >
-            <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
-          </Link>
-        </div>
+        <OnboardingFlowHeader />
 
         <div className={planPickerGlassClass}>
+          <div className="-mt-0.5 mb-4 flex justify-end">
+            <OnboardingCardLocaleSwitcher locale={locale} ariaLabel={localeSwitcherAria} align="end" />
+          </div>
           <PlanPickerContent
+            copy={copy}
             dashboardNext={dashboardNext}
             variant="page"
             testerInviteActive={testerInviteActive}

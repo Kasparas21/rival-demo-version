@@ -8,6 +8,8 @@ import { MarketingConsentProvider } from "@/components/analytics/marketing-conse
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { fontTempting } from "@/lib/fonts/tempting";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getLandingCopy } from "@/lib/i18n/landing";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
 import "./globals.css";
 
@@ -71,13 +73,16 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const lang = await getRequestLocale();
+  const consentCopy = getLandingCopy(lang).consent;
+
   return (
-    <html lang="en">
+    <html lang={lang}>
       <head>
         <SiteGoogleAnalytics />
         <SiteGoogleTagManager />
@@ -89,7 +94,7 @@ export default function RootLayout({
             <MetaPixelPageView />
           </Suspense>
           {children}
-          <MarketingConsentBanner />
+          <MarketingConsentBanner copy={consentCopy} />
         </MarketingConsentProvider>
       </body>
     </html>

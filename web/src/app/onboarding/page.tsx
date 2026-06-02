@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
@@ -13,7 +12,7 @@ import {
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
 import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
-import { RivalLogoImg } from "@/components/rival-logo";
+import { OnboardingFlowHeader } from "@/components/onboarding/onboarding-flow-header";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
@@ -27,6 +26,8 @@ import {
 } from "@/lib/onboarding/phase";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getOnboardingCopy } from "@/lib/i18n/onboarding";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -62,14 +63,7 @@ function OnboardingShell({
   return (
     <RivalVideoShell footerTint="light">
       <div className="flex w-full flex-col items-center px-4 sm:px-6">
-        <div className="mb-8 flex justify-center">
-          <Link
-            href="/"
-            className="rounded-2xl border border-white/60 bg-white/40 px-5 py-3 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition-all duration-300 hover:bg-white/50 hover:shadow-[0_8px_32px_0_rgba(31,38,135,0.1)]"
-          >
-            <RivalLogoImg className="h-8 w-auto max-w-[180px] object-contain object-center sm:h-9" />
-          </Link>
-        </div>
+        <OnboardingFlowHeader className="max-w-5xl" />
         {children}
         <OnboardingDevHints showReplay={showReplay} />
       </div>
@@ -82,6 +76,8 @@ export default async function OnboardingPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
+  const locale = await getRequestLocale();
+  const copy = getOnboardingCopy(locale);
   const params = (await searchParams) ?? {};
   const nextPath = safeNextPath(firstParam(params.next));
   const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
@@ -96,7 +92,14 @@ export default async function OnboardingPage({
   if (!user) {
     return (
       <OnboardingShell>
-        <OnboardingForm guestMode initialDomain={initialDomain} userId="guest" showPlanStep={false} />
+        <OnboardingForm
+          copy={copy}
+          locale={locale}
+          guestMode
+          initialDomain={initialDomain}
+          userId="guest"
+          showPlanStep={false}
+        />
       </OnboardingShell>
     );
   }
@@ -168,6 +171,8 @@ export default async function OnboardingPage({
   return (
     <OnboardingShell showReplay={replayOnboarding}>
       <OnboardingForm
+        copy={copy}
+        locale={locale}
         initialData={profile}
         initialDomain={initialDomain}
         postOnboardingPath={postOnboardingDestination}

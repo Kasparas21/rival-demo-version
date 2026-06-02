@@ -1,16 +1,23 @@
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHeader } from "@/components/landing/landing-header";
+import type { LandingCopy } from "@/lib/i18n/landing/types";
+import type { Locale } from "@/lib/i18n/locale";
 import { LandingPageBackground, LandingSectionDivider } from "@/components/landing/landing-page-background";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { FeaturesPageHero } from "@/components/marketing/features-page-hero";
 import { FEATURE_DEFINITIONS } from "@/components/marketing/features-page-data";
 import { FeaturesPageSection } from "@/components/marketing/features-page-section";
 
-export function FeaturesPage() {
+type Props = {
+  copy: LandingCopy;
+  locale: Locale;
+};
+
+export function FeaturesPage({ copy, locale }: Props) {
   return (
     <div className="w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased">
-      <LandingHeader />
+      <LandingHeader copy={copy.header} locale={locale} />
 
       <div className="relative isolate pt-28 sm:pt-32">
         <LandingPageBackground />
@@ -45,7 +52,7 @@ export function FeaturesPage() {
           </section>
 
           <LandingSectionDivider />
-          <LandingFooter />
+          <LandingFooter copy={copy.footer} />
         </main>
       </div>
     </div>
