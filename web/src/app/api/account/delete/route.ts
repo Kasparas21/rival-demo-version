@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { deletePolarCustomerForUser } from "@/lib/billing/delete-polar-customer";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -48,6 +49,16 @@ export async function POST(req: Request) {
       },
       { status: 502 },
     );
+  }
+
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "account_deleted",
+      properties: { user_id: user.id },
+    });
   }
 
   const admin = createSupabaseAdminClient();

@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, KeyboardEvent } from "react";
 import { Search, X, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
+import posthog from "posthog-js";
 import { ChannelPickerModal, CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { saveSearchToAccount } from "@/lib/account/client";
@@ -194,6 +195,12 @@ export default function SpyOnCompetitorPage() {
       query: query.trim(),
       terms: termPayload,
       channels: selectedChannels,
+    });
+    posthog.capture("competitor_search_submitted", {
+      query: query.trim(),
+      channel_count: selectedChannels.length,
+      channels: selectedChannels,
+      term_count: termPayload.length,
     });
     try {
       sessionStorage.removeItem(SPY_FORM_DRAFT_KEY);

@@ -1,9 +1,30 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
+import {
+  POSTHOG_DISTINCT_ID_COOKIE,
+  readPostHogDistinctIdCookie,
+} from "@/lib/analytics/posthog-distinct-id";
+import { isPostHogServerConfigured } from "@/lib/analytics/posthog-config";
 import { resolveLocale } from "@/lib/i18n/resolve-locale";
 import { isLocale, LOCALE_COOKIE, LOCALE_HEADER } from "@/lib/i18n/locale";
 import { updateSession } from "@/lib/supabase/middleware";
+
+function ensurePostHogDistinctIdCookie(request: NextRequest, response: NextResponse) {
+  if (!isPostHogServerConfigured()) return;
+
+  const existing = readPostHogDistinctIdCookie(
+    request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value,
+  );
+  if (existing) return;
+
+  response.cookies.set(POSTHOG_DISTINCT_ID_COOKIE, crypto.randomUUID(), {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
+}
 
 function handleHomeLocale(request: NextRequest) {
   const langParam = request.nextUrl.searchParams.get("lang");
@@ -26,6 +47,8 @@ function handleHomeLocale(request: NextRequest) {
       sameSite: "lax",
     });
   }
+
+  ensurePostHogDistinctIdCookie(request, response);
 
   response.headers.set("Vary", "Cookie, x-vercel-ip-country");
 

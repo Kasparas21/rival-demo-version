@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import {
   featureNotAvailableResponseBody,
   getBillingEntitlement,
@@ -105,6 +106,21 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (!billing.isUnlimited) {
     await supabase.rpc("increment_csv_export_usage", { p_ads_count: ads.length });
+  }
+
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "csv_exported",
+      properties: {
+        user_id: user.id,
+        ad_count: ads.length,
+        competitor_id: competitorId ?? null,
+        domain: domain ?? null,
+      },
+    });
   }
 
   const csv = lines.join("\n");

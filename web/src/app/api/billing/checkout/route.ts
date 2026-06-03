@@ -22,6 +22,7 @@ import {
   friendlyPolarCheckoutError,
   shouldPrefillPolarCustomerEmail,
 } from "@/lib/billing/polar-checkout-email";
+import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { createPolarClient } from "@/lib/billing/polar";
 import {
   isTesterInviteCheckoutRequest,
@@ -178,6 +179,21 @@ async function createCheckoutRedirect(request: NextRequest) {
   }
 
   const checkout = await polar.checkouts.create(checkoutBody);
+
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "checkout_created",
+      properties: {
+        user_id: user.id,
+        plan,
+        billing_period: period,
+        is_tester_invite: isTesterCheckout,
+      },
+    });
+  }
 
   if (wantsJson) {
     const out = NextResponse.json({ ok: true, url: checkout.url });

@@ -33,16 +33,10 @@ export const landingCopyDe: LandingCopy = {
   },
   hero: {
     headline: {
-      mobile: {
-        line1: "wettbewerber-",
-        highlight: "anzeigen-intelligence",
-        line3: "für alle 6 plattformen",
-      },
-      desktop: {
-        line1Prefix: "wettbewerber-",
-        highlight: "anzeigen-intelligence",
-        line2: "für alle 6 plattformen",
-      },
+      line1Prefix: "sehen sie ",
+      highlight: "jede anzeige",
+      line2: "ihrer wettbewerber schalten.",
+      subline: "über alle 6 plattformen in einem dashboard",
     },
     trialCta: "7-Tage-Test starten →",
     platformTrialAria: "Test mit {platform} starten",

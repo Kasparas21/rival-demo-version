@@ -145,16 +145,10 @@ export const landingCopyEn: LandingCopy = {
   },
   hero: {
     headline: {
-      mobile: {
-        line1: "competitor",
-        highlight: "ad intelligence",
-        line3: "for all 6 platforms",
-      },
-      desktop: {
-        line1Prefix: "competitor ",
-        highlight: "ad intelligence",
-        line2: "for all 6 platforms",
-      },
+      line1Prefix: "see ",
+      highlight: "every ad",
+      line2: "your competitors run.",
+      subline: "across all 6 platforms, in one dashboard",
     },
     trialCta: "Start your 7-day trial →",
     platformTrialAria: "Start your trial with {platform}",

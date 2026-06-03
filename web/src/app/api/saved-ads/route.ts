@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { resolveScrapedAdIdForLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -145,6 +146,21 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (insertErr) {
     return NextResponse.json({ ok: false, error: insertErr.message }, { status: 500 });
+  }
+
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "ad_saved",
+      properties: {
+        user_id: user.id,
+        platform: srcAd.platform,
+        format: srcAd.format,
+        competitor_id: srcAd.competitor_id,
+      },
+    });
   }
 
   return NextResponse.json({ ok: true, savedAd: inserted });

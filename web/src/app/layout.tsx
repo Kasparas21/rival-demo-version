@@ -7,6 +7,10 @@ import { MarketingConsentBanner } from "@/components/analytics/marketing-consent
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
+import { PostHogIdentify } from "@/components/analytics/posthog-identify";
+import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
+import { getPostHogBootstrap } from "@/lib/analytics/posthog-server";
+import { fontInter } from "@/lib/fonts/inter";
 import { fontTempting } from "@/lib/fonts/tempting";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getLandingCopy } from "@/lib/i18n/landing";
@@ -80,6 +84,7 @@ export default async function RootLayout({
 }>) {
   const lang = await getRequestLocale();
   const consentCopy = getLandingCopy(lang).consent;
+  const posthogBootstrap = await getPostHogBootstrap();
 
   return (
     <html lang={lang}>
@@ -88,13 +93,18 @@ export default async function RootLayout({
         <SiteGoogleTagManager />
         <SiteMetaPixel />
       </head>
-      <body className={`${instrumentSerif.variable} ${fontTempting.variable} font-sans antialiased`}>
+      <body
+        className={`${instrumentSerif.variable} ${fontInter.variable} ${fontInter.className} ${fontTempting.variable} font-sans antialiased`}
+      >
         <MarketingConsentProvider>
-          <Suspense fallback={null}>
-            <MetaPixelPageView />
-          </Suspense>
-          {children}
-          <MarketingConsentBanner copy={consentCopy} />
+          <SitePostHogProvider bootstrap={posthogBootstrap}>
+            <PostHogIdentify />
+            <Suspense fallback={null}>
+              <MetaPixelPageView />
+            </Suspense>
+            {children}
+            <MarketingConsentBanner copy={consentCopy} />
+          </SitePostHogProvider>
         </MarketingConsentProvider>
       </body>
     </html>

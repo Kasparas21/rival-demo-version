@@ -12,6 +12,7 @@ import { persistTesterInviteToUserMetadata } from "@/lib/billing/tester-invite-u
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import { getSignupCopy } from "@/lib/i18n/auth";
 import { LOCALE_COOKIE, LOCALE_HEADER, parseLocale } from "@/lib/i18n/locale";
+import { getPostHogServerClient } from "@/lib/analytics/posthog-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -129,6 +130,19 @@ export async function POST(request: NextRequest) {
 
   if (!data?.id) {
     return NextResponse.json({ error: "Email send failed" }, { status: 502 });
+  }
+
+  const posthog = getPostHogServerClient();
+  if (posthog && userId) {
+    posthog.capture({
+      distinctId: userId,
+      event: "user_signed_up",
+      properties: {
+        email,
+        locale,
+        has_tester_invite: Boolean(testerInvite),
+      },
+    });
   }
 
   return NextResponse.json({ ok: true });

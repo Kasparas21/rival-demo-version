@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { ensureUserProfile } from "@/lib/auth/profile";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -55,6 +56,20 @@ export async function PATCH(_req: Request, ctx: { params: Promise<{ id: string }
 
   if (updErr || !updated) {
     return NextResponse.json({ error: updErr?.message ?? "Update failed" }, { status: 500 });
+  }
+
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "competitor_follow_toggled",
+      properties: {
+        user_id: user.id,
+        competitor_id: id,
+        is_followed: nextFollowed,
+      },
+    });
   }
 
   return NextResponse.json({ competitor: updated });

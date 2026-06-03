@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import posthog from "posthog-js";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { glassPanelClass } from "@/components/ui/glass-styles";
@@ -40,6 +41,8 @@ export default function CheckoutSuccessClient() {
           pending?: boolean;
           error?: string;
           message?: string;
+          status?: string;
+          planTier?: string;
         };
 
         if (cancelled) return;
@@ -53,6 +56,11 @@ export default function CheckoutSuccessClient() {
         if (json.synced) {
           setSyncState("ready");
           setSyncMessage(null);
+          posthog.capture("checkout_completed", {
+            checkout_id: checkoutId,
+            plan_status: json.status,
+            plan_tier: json.planTier,
+          });
           return;
         }
 

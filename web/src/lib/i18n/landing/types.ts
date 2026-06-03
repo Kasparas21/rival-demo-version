@@ -71,8 +71,11 @@ export type LandingCopy = {
   };
   hero: {
     headline: {
-      mobile: { line1: string; highlight: string; line3: string };
-      desktop: { line1Prefix: string; highlight: string; line2: string };
+      /** First line: `{line1Prefix}{highlight}` e.g. "see every ad" */
+      line1Prefix: string;
+      highlight: string;
+      line2: string;
+      subline: string;
     };
     trialCta: string;
     platformTrialAria: string;

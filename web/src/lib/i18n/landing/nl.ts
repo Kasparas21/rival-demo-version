@@ -33,16 +33,10 @@ export const landingCopyNl: LandingCopy = {
   },
   hero: {
     headline: {
-      mobile: {
-        line1: "concurrent-",
-        highlight: "ad intelligence",
-        line3: "voor alle 6 platformen",
-      },
-      desktop: {
-        line1Prefix: "concurrent-",
-        highlight: "ad intelligence",
-        line2: "voor alle 6 platformen",
-      },
+      line1Prefix: "zie ",
+      highlight: "elke ad",
+      line2: "die uw concurrenten draaien.",
+      subline: "over alle 6 platformen, in één dashboard",
     },
     trialCta: "Start je 7-daagse proef →",
     platformTrialAria: "Start proef met {platform}",

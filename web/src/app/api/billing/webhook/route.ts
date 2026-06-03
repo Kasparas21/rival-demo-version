@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import type { Order } from "@polar-sh/sdk/models/components/order";
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
 import { sendPurchaseToMeta } from "@/lib/analytics/meta-purchase";
+import { getPostHogServerClient } from "@/lib/analytics/posthog-server";
 import { getPolarWebhookSecret, isKnownPolarProductId } from "@/lib/billing/config";
 import {
   jsonSafe,
@@ -172,13 +173,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, ignored: true, reason: "missing_user_id" });
     }
 
-    const { error } = await upsertPolarSubscription(admin, subscription, userId, {
+    const { error, planTier } = await upsertPolarSubscription(admin, subscription, userId, {
       lastWebhookEventId: eventId,
     });
 
     if (error) {
       console.error("[polar-webhook] billing_subscriptions upsert", error);
       return NextResponse.json({ ok: false, error }, { status: 500 });
+    }
+
+    const posthog = getPostHogServerClient();
+    if (posthog) {
+      posthog.capture({
+        distinctId: userId,
+        event: "subscription_activated",
+        properties: {
+          subscription_id: subscription.id,
+          product_id: subscription.productId,
+          status: subscription.status,
+          plan_tier: planTier,
+          event_type: payload.type,
+        },
+      });
     }
 
     await recordTesterInviteFromSubscription(admin, subscription, userId);
