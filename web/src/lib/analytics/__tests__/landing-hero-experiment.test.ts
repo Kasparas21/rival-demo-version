@@ -22,9 +22,9 @@ describe("applyLandingHeroHeadlineExperiment", () => {
     expect(variant.highlight).toBe("what rivals");
   });
 
-  it("keeps control copy for test on non-English locales", () => {
-    expect(applyLandingHeroHeadlineExperiment(controlHeadline, "test", "de")).toEqual(
-      controlHeadline,
-    );
+  it("shows test copy on non-English locales until translated", () => {
+    const variant = applyLandingHeroHeadlineExperiment(controlHeadline, "test", "de");
+    expect(variant).not.toEqual(controlHeadline);
+    expect(variant.highlight).toBe("what rivals");
   });
 });

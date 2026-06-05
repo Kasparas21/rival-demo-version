@@ -12,8 +12,9 @@ const HERO_HEADLINE_VARIANT_B_EN: LandingCopy["hero"]["headline"] = {
 export function applyLandingHeroHeadlineExperiment(
   headline: LandingCopy["hero"]["headline"],
   variant: LandingHeroHeadlineVariant,
-  locale: string,
+  _locale: string,
 ): LandingCopy["hero"]["headline"] {
-  if (variant !== "test" || locale !== "en") return headline;
+  if (variant !== "test") return headline;
+  // Experiment copy is EN-only for now; still show it when assigned test on de/nl.
   return HERO_HEADLINE_VARIANT_B_EN;
 }
