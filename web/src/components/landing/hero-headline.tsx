@@ -1,8 +1,14 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import posthog from "posthog-js";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import {
+  getLandingHeroTestHeadline,
+  isLandingHeroTestVariant,
+} from "@/lib/analytics/landing-hero-experiment";
+import { isPostHogConfigured, LANDING_HERO_HEADLINE_FLAG } from "@/lib/analytics/posthog-config";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 const MAX_FONT_PX = 96;
@@ -18,11 +24,31 @@ type Props = {
   headline: LandingCopy["hero"]["headline"];
 };
 
-export function HeroHeadline({ headline }: Props) {
+export function HeroHeadline({ headline: serverHeadline }: Props) {
+  const [headline, setHeadline] = useState(serverHeadline);
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const line1Ref = useRef<HTMLSpanElement>(null);
   const line2Ref = useRef<HTMLSpanElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setHeadline(serverHeadline);
+  }, [serverHeadline]);
+
+  useEffect(() => {
+    if (!isPostHogConfigured()) return;
+
+    const applyExperimentHeadline = () => {
+      if (!posthog.__loaded) return;
+      const flag = posthog.getFeatureFlag(LANDING_HERO_HEADLINE_FLAG, { send_event: false });
+      setHeadline(
+        isLandingHeroTestVariant(flag) ? getLandingHeroTestHeadline() : serverHeadline,
+      );
+    };
+
+    applyExperimentHeadline();
+    return posthog.onFeatureFlags(applyExperimentHeadline);
+  }, [serverHeadline]);
 
   useLayoutEffect(() => {
     const headlineEl = headlineRef.current;

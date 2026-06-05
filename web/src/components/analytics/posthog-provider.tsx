@@ -54,6 +54,12 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     if (!apiKey || initializedRef.current) return;
 
     const mergedBootstrap = mergeBootstrap(bootstrap);
+    const cookieDistinctId = readClientPostHogDistinctId();
+
+    // Keep analytics person id aligned with server A/B assignment cookie.
+    if (cookieDistinctId && posthog.get_distinct_id() !== cookieDistinctId) {
+      posthog.reset();
+    }
 
     posthog.init(apiKey, {
       api_host: POSTHOG_BROWSER_API_HOST,

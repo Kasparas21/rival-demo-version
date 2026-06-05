@@ -50,6 +50,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
+      // Home runs PostHog A/B — never cache HTML at the edge (same page for all users).
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, must-revalidate",
+          },
+          { key: "Vary", value: "Cookie" },
+        ],
+      },
       {
         source: "/((?!dashboard|checkout|api).*)",
         headers: [

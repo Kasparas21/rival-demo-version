@@ -9,6 +9,8 @@ import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getLandingCopy } from "@/lib/i18n/landing";
 import { homePageJsonLdBlocks } from "@/lib/seo/home-json-ld";
 
+export const dynamic = "force-dynamic";
+
 type SearchParams = Record<string, string | string[] | undefined>;
 
 function firstParam(value: string | string[] | undefined): string | null {
