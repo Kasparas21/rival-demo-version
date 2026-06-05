@@ -53,6 +53,7 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
       session_recording: {
         maskAllInputs: true,
       },
+      advanced_disable_feature_flags: false,
     });
 
     initializedRef.current = true;

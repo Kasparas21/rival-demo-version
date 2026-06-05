@@ -62,11 +62,13 @@ export async function getPostHogBootstrap(): Promise<BootstrapConfig | undefined
   if (!client || !distinctId) return undefined;
 
   try {
-    const flags = await client.getAllFlags(distinctId);
+    const flagValue = await client.getFeatureFlag(LANDING_HERO_HEADLINE_FLAG, distinctId);
     await flushPostHogServerEvents();
     return {
       distinctID: distinctId,
-      featureFlags: flags,
+      featureFlags: {
+        [LANDING_HERO_HEADLINE_FLAG]: flagValue ?? "control",
+      },
     };
   } catch {
     return { distinctID: distinctId };

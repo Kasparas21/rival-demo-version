@@ -45,6 +45,25 @@ function attachPostHogDistinctId(
   });
 }
 
+function applyPostHogDistinctIdCookie(request: NextRequest, response: NextResponse) {
+  const distinctId = resolvePostHogDistinctId(request);
+  if (!distinctId) return response;
+
+  const hasCookie = readPostHogDistinctIdCookie(
+    request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value,
+  );
+  if (!hasCookie) {
+    response.cookies.set(POSTHOG_DISTINCT_ID_COOKIE, distinctId, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
+
+  return response;
+}
+
 function handleHomeLocale(request: NextRequest) {
   const langParam = request.nextUrl.searchParams.get("lang");
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value;
@@ -100,7 +119,7 @@ export async function middleware(request: NextRequest) {
     return handleHomeLocale(request);
   }
 
-  return updateSession(request);
+  return applyPostHogDistinctIdCookie(request, await updateSession(request));
 }
 
 export const config = {
