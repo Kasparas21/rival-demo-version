@@ -8,7 +8,6 @@ import { MarketingConsentProvider } from "@/components/analytics/marketing-conse
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
-import { PostHogLandingExperimentExposure } from "@/components/analytics/posthog-landing-experiment";
 import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
 import { getPostHogBootstrap } from "@/lib/analytics/posthog-server";
 import { fontInter } from "@/lib/fonts/inter";
@@ -100,7 +99,6 @@ export default async function RootLayout({
         <MarketingConsentProvider>
           <SitePostHogProvider bootstrap={posthogBootstrap}>
             <PostHogIdentify />
-            <PostHogLandingExperimentExposure />
             <Suspense fallback={null}>
               <MetaPixelPageView />
             </Suspense>

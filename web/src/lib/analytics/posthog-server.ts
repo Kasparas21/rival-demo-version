@@ -15,34 +15,40 @@ import {
   readPostHogDistinctIdCookie,
 } from "@/lib/analytics/posthog-distinct-id";
 
-let posthogServerClient: PostHog | null = null;
-
-export function getPostHogServerClient(): PostHog | null {
+function createPostHogServerClient(): PostHog | null {
   if (!isPostHogServerConfigured()) return null;
 
   const apiKey = getPostHogServerKey() ?? getPostHogPublicKey();
   if (!apiKey) return null;
 
-  if (!posthogServerClient) {
-    posthogServerClient = new PostHog(apiKey, {
-      host: getPostHogApiHost(),
-      flushAt: 1,
-      flushInterval: 0,
-    });
-  }
-
-  return posthogServerClient;
+  return new PostHog(apiKey, {
+    host: getPostHogApiHost(),
+    flushAt: 1,
+    flushInterval: 0,
+  });
 }
 
-/** Serverless requests must flush or `$feature_flag_called` never reaches PostHog. */
-async function flushPostHogServerEvents(): Promise<void> {
-  const client = getPostHogServerClient();
-  if (!client) return;
+/** Fresh client + shutdown per request — reliable on Vercel serverless. */
+async function withPostHogServer<T>(
+  fn: (client: PostHog, distinctId: string) => Promise<T>,
+): Promise<T | null> {
+  const distinctId = await getPostHogDistinctId();
+  const client = createPostHogServerClient();
+  if (!client || !distinctId) return null;
+
   try {
-    await client.flush();
-  } catch {
-    // Non-blocking — headline still renders from cached evaluation.
+    return await fn(client, distinctId);
+  } finally {
+    try {
+      await client.shutdown();
+    } catch {
+      // Best-effort flush before the lambda exits.
+    }
   }
+}
+
+export function getPostHogServerClient(): PostHog | null {
+  return createPostHogServerClient();
 }
 
 export async function getPostHogDistinctId(): Promise<string | null> {
@@ -57,22 +63,17 @@ export async function getPostHogDistinctId(): Promise<string | null> {
 }
 
 export async function getPostHogBootstrap(): Promise<BootstrapConfig | undefined> {
-  const client = getPostHogServerClient();
-  const distinctId = await getPostHogDistinctId();
-  if (!client || !distinctId) return undefined;
-
-  try {
+  const result = await withPostHogServer(async (client, distinctId) => {
     const flagValue = await client.getFeatureFlag(LANDING_HERO_HEADLINE_FLAG, distinctId);
-    await flushPostHogServerEvents();
     return {
       distinctID: distinctId,
       featureFlags: {
         [LANDING_HERO_HEADLINE_FLAG]: flagValue ?? "control",
       },
-    };
-  } catch {
-    return { distinctID: distinctId };
-  }
+    } satisfies BootstrapConfig;
+  });
+
+  return result ?? undefined;
 }
 
 export type LandingHeroHeadlineVariant = "control" | "test";
@@ -81,24 +82,17 @@ export type LandingHeroHeadlineVariant = "control" | "test";
 const LANDING_HERO_TEST_VARIANTS = new Set(["test", "variant-b"]);
 
 export async function getLandingHeroHeadlineVariant(): Promise<LandingHeroHeadlineVariant> {
-  const client = getPostHogServerClient();
-  const distinctId = await getPostHogDistinctId();
-  if (!client || !distinctId) return "control";
-
-  try {
+  const result = await withPostHogServer(async (client, distinctId) => {
     const value = await client.getFeatureFlag(LANDING_HERO_HEADLINE_FLAG, distinctId);
-    await flushPostHogServerEvents();
     if (value === true || (typeof value === "string" && LANDING_HERO_TEST_VARIANTS.has(value))) {
-      return "test";
+      return "test" as const;
     }
-    return "control";
-  } catch {
-    return "control";
-  }
+    return "control" as const;
+  });
+
+  return result ?? "control";
 }
 
 export async function shutdownPostHogServer(): Promise<void> {
-  if (!posthogServerClient) return;
-  await posthogServerClient.shutdown();
-  posthogServerClient = null;
+  // No-op: clients are shut down per request in withPostHogServer.
 }

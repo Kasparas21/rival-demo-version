@@ -6,6 +6,8 @@ import { PostHogProvider as PHProvider } from "posthog-js/react";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { useOptionalMarketingConsent } from "@/components/analytics/marketing-consent-provider";
+import { readClientPostHogDistinctId } from "@/lib/analytics/posthog-client-distinct-id";
+import { reportLandingHeroExperimentExposure } from "@/lib/analytics/posthog-report-exposure";
 import {
   getPostHogPublicKey,
   isPostHogConfigured,
@@ -16,6 +18,18 @@ type Props = {
   children: ReactNode;
   bootstrap?: BootstrapConfig;
 };
+
+function mergeBootstrap(serverBootstrap?: BootstrapConfig): BootstrapConfig | undefined {
+  const cookieDistinctId = readClientPostHogDistinctId();
+  const distinctID = serverBootstrap?.distinctID ?? cookieDistinctId;
+  if (!distinctID && !serverBootstrap?.featureFlags) return undefined;
+
+  return {
+    ...serverBootstrap,
+    distinctID,
+    featureFlags: serverBootstrap?.featureFlags,
+  };
+}
 
 export function SitePostHogProvider({ children, bootstrap }: Props) {
   const consent = useOptionalMarketingConsent();
@@ -39,6 +53,8 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     const apiKey = getPostHogPublicKey();
     if (!apiKey || initializedRef.current) return;
 
+    const mergedBootstrap = mergeBootstrap(bootstrap);
+
     posthog.init(apiKey, {
       api_host: POSTHOG_BROWSER_API_HOST,
       ui_host: "https://eu.posthog.com",
@@ -47,13 +63,16 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
       capture_pageview: "history_change",
       capture_pageleave: true,
       persistence: "localStorage+cookie",
-      bootstrap,
+      bootstrap: mergedBootstrap,
       opt_out_capturing_by_default: false,
       disable_session_recording: false,
       session_recording: {
         maskAllInputs: true,
       },
       advanced_disable_feature_flags: false,
+      loaded: (client) => {
+        reportLandingHeroExperimentExposure(client);
+      },
     });
 
     initializedRef.current = true;
