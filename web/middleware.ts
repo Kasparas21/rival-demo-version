@@ -2,23 +2,42 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import {
+  isPostHogServerConfigured,
+  POSTHOG_DISTINCT_ID_HEADER,
+} from "@/lib/analytics/posthog-config";
+import {
   POSTHOG_DISTINCT_ID_COOKIE,
   readPostHogDistinctIdCookie,
 } from "@/lib/analytics/posthog-distinct-id";
-import { isPostHogServerConfigured } from "@/lib/analytics/posthog-config";
 import { resolveLocale } from "@/lib/i18n/resolve-locale";
 import { isLocale, LOCALE_COOKIE, LOCALE_HEADER } from "@/lib/i18n/locale";
 import { updateSession } from "@/lib/supabase/middleware";
 
-function ensurePostHogDistinctIdCookie(request: NextRequest, response: NextResponse) {
-  if (!isPostHogServerConfigured()) return;
+function resolvePostHogDistinctId(request: NextRequest): string | null {
+  if (!isPostHogServerConfigured()) return null;
 
-  const existing = readPostHogDistinctIdCookie(
+  return (
+    readPostHogDistinctIdCookie(request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value) ??
+    crypto.randomUUID()
+  );
+}
+
+function attachPostHogDistinctId(
+  request: NextRequest,
+  response: NextResponse,
+  requestHeaders: Headers,
+) {
+  const distinctId = resolvePostHogDistinctId(request);
+  if (!distinctId) return;
+
+  requestHeaders.set(POSTHOG_DISTINCT_ID_HEADER, distinctId);
+
+  const hasCookie = readPostHogDistinctIdCookie(
     request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value,
   );
-  if (existing) return;
+  if (hasCookie) return;
 
-  response.cookies.set(POSTHOG_DISTINCT_ID_COOKIE, crypto.randomUUID(), {
+  response.cookies.set(POSTHOG_DISTINCT_ID_COOKIE, distinctId, {
     path: "/",
     maxAge: 60 * 60 * 24 * 365,
     sameSite: "lax",
@@ -48,7 +67,7 @@ function handleHomeLocale(request: NextRequest) {
     });
   }
 
-  ensurePostHogDistinctIdCookie(request, response);
+  attachPostHogDistinctId(request, response, requestHeaders);
 
   response.headers.set("Vary", "Cookie, x-vercel-ip-country");
 

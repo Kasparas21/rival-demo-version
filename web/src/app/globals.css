@@ -219,7 +219,7 @@ html:has([data-dashboard-app]) body {
   font-weight: 800;
   font-style: normal;
   font-synthesis: none;
-  line-height: 0.98;
+  line-height: 1.05;
   letter-spacing: -0.04em;
   color: #1a1a1a;
   overflow: visible;
@@ -234,7 +234,7 @@ html:has([data-dashboard-app]) body {
 }
 
 .hero-headline-line + .hero-headline-line {
-  margin-top: -0.12em;
+  margin-top: 0.06em;
 }
 
 @media (max-width: 767px) {

@@ -17,4 +17,4 @@ export function readPostHogDistinctIdCookie(
   return cookieValue.trim();
 }
 
-export { POSTHOG_DISTINCT_ID_COOKIE };
+export { POSTHOG_DISTINCT_ID_COOKIE, POSTHOG_DISTINCT_ID_HEADER } from "@/lib/analytics/posthog-config";

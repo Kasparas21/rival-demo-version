@@ -49,6 +49,10 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
       persistence: "localStorage+cookie",
       bootstrap,
       opt_out_capturing_by_default: false,
+      disable_session_recording: false,
+      session_recording: {
+        maskAllInputs: true,
+      },
     });
 
     initializedRef.current = true;

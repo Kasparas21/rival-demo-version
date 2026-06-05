@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { BootstrapConfig } from "posthog-js";
 import { PostHog } from "posthog-node";
 
@@ -8,6 +8,7 @@ import {
   getPostHogServerKey,
   isPostHogServerConfigured,
   LANDING_HERO_HEADLINE_FLAG,
+  POSTHOG_DISTINCT_ID_HEADER,
 } from "@/lib/analytics/posthog-config";
 import {
   POSTHOG_DISTINCT_ID_COOKIE,
@@ -33,7 +34,24 @@ export function getPostHogServerClient(): PostHog | null {
   return posthogServerClient;
 }
 
+/** Serverless requests must flush or `$feature_flag_called` never reaches PostHog. */
+async function flushPostHogServerEvents(): Promise<void> {
+  const client = getPostHogServerClient();
+  if (!client) return;
+  try {
+    await client.flush();
+  } catch {
+    // Non-blocking — headline still renders from cached evaluation.
+  }
+}
+
 export async function getPostHogDistinctId(): Promise<string | null> {
+  const headerStore = await headers();
+  const fromHeader = readPostHogDistinctIdCookie(
+    headerStore.get(POSTHOG_DISTINCT_ID_HEADER),
+  );
+  if (fromHeader) return fromHeader;
+
   const cookieStore = await cookies();
   return readPostHogDistinctIdCookie(cookieStore.get(POSTHOG_DISTINCT_ID_COOKIE)?.value) ?? null;
 }
@@ -45,6 +63,7 @@ export async function getPostHogBootstrap(): Promise<BootstrapConfig | undefined
 
   try {
     const flags = await client.getAllFlags(distinctId);
+    await flushPostHogServerEvents();
     return {
       distinctID: distinctId,
       featureFlags: flags,
@@ -66,6 +85,7 @@ export async function getLandingHeroHeadlineVariant(): Promise<LandingHeroHeadli
 
   try {
     const value = await client.getFeatureFlag(LANDING_HERO_HEADLINE_FLAG, distinctId);
+    await flushPostHogServerEvents();
     if (value === true || (typeof value === "string" && LANDING_HERO_TEST_VARIANTS.has(value))) {
       return "test";
     }

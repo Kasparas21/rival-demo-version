@@ -6,6 +6,9 @@ export const POSTHOG_BROWSER_API_HOST = "/ingest";
 
 export const POSTHOG_DISTINCT_ID_COOKIE = "rival_ph_distinct_id";
 
+/** Set in middleware so the same request can evaluate flags before the cookie round-trips. */
+export const POSTHOG_DISTINCT_ID_HEADER = "x-rival-ph-distinct-id";
+
 /** Feature flag / experiment key — create in PostHog → Feature flags → link to an experiment. */
 export const LANDING_HERO_HEADLINE_FLAG = "landing-hero-headline";
 
