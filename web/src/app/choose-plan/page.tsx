@@ -8,6 +8,8 @@ import {
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getOnboardingCopy } from "@/lib/i18n/onboarding";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -28,6 +30,8 @@ export default async function ChoosePlanPage({
 }: {
   searchParams?: Promise<SearchParams>;
 }) {
+  const locale = await getRequestLocale();
+  const copy = getOnboardingCopy(locale);
   const params = (await searchParams) ?? {};
   const nextPath = safeNextPath(firstParam(params.next));
 
@@ -40,16 +44,6 @@ export default async function ChoosePlanPage({
     redirect(`/login?next=${encodeURIComponent(`/choose-plan?next=${encodeURIComponent(nextPath)}`)}`);
   }
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("onboarding_completed")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile?.onboarding_completed) {
-    redirect(`/onboarding?next=${encodeURIComponent(nextPath)}`);
-  }
-
   const billing = await getBillingEntitlement(supabase, user.id);
   const destination = adminSkipCheckoutDestination(nextPath, billing.isUnlimited);
 
@@ -58,11 +52,16 @@ export default async function ChoosePlanPage({
   }
 
   const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
+  const checkoutError = firstParam(params.checkout_error);
 
   return (
     <OnboardingPlanPicker
+      locale={locale}
+      localeSwitcherAria={copy.localeSwitcherAria}
+      copy={copy.planPicker}
       dashboardNext={destination}
       testerInviteActive={testerInviteActive}
+      checkoutError={checkoutError}
     />
   );
 }

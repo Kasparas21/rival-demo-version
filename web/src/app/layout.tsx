@@ -5,9 +5,15 @@ import { SiteGoogleAnalytics } from "@/components/analytics/google-analytics";
 import { SiteGoogleTagManager } from "@/components/analytics/google-tag-manager";
 import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
-import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
+import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
+import { PostHogIdentify } from "@/components/analytics/posthog-identify";
+import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
+import { getPostHogBootstrap } from "@/lib/analytics/posthog-server";
+import { fontInter } from "@/lib/fonts/inter";
 import { fontTempting } from "@/lib/fonts/tempting";
+import { getRequestLocale } from "@/lib/i18n/get-request-locale";
+import { getLandingCopy } from "@/lib/i18n/landing";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
 import "./globals.css";
 
@@ -71,25 +77,34 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const lang = await getRequestLocale();
+  const consentCopy = getLandingCopy(lang).consent;
+  const posthogBootstrap = await getPostHogBootstrap();
+
   return (
-    <html lang="en">
+    <html lang={lang}>
       <head>
+        <SiteGoogleAnalytics />
+        <SiteGoogleTagManager />
         <SiteMetaPixel />
       </head>
-      <SiteGoogleAnalytics />
-      <SiteGoogleTagManager />
-      <body className={`${instrumentSerif.variable} ${fontTempting.variable} font-sans antialiased`}>
+      <body
+        className={`${instrumentSerif.variable} ${fontInter.variable} ${fontInter.className} ${fontTempting.variable} font-sans antialiased`}
+      >
         <MarketingConsentProvider>
-          <Suspense fallback={null}>
-            <MetaPixelPageView />
-          </Suspense>
-          {children}
-          <MarketingConsentBanner />
+          <SitePostHogProvider bootstrap={posthogBootstrap}>
+            <PostHogIdentify />
+            <Suspense fallback={null}>
+              <MetaPixelPageView />
+            </Suspense>
+            {children}
+            <MarketingConsentBanner copy={consentCopy} />
+          </SitePostHogProvider>
         </MarketingConsentProvider>
       </body>
     </html>

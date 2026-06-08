@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
-import { getAppUrl } from "@/lib/billing/config";
+import { NextResponse, type NextRequest } from "next/server";
+import { appOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { createPolarClient } from "@/lib/billing/polar";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -20,7 +20,7 @@ export async function GET() {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const appUrl = getAppUrl();
+    const appUrl = appOriginForRequest(request);
     const returnUrl = `${appUrl}/dashboard/settings`;
     const session = billing?.polar_customer_id
       ? await createPolarClient().customerSessions.create({

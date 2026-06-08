@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isSubscriptionStatusAllowed } from "@/lib/billing/entitlements";
 import { createPolarClient } from "@/lib/billing/polar";
 import {
+  pickSubscriptionForSync,
   recordTesterInviteFromSubscription,
   upsertPolarSubscription,
 } from "@/lib/billing/sync-polar-subscription";
@@ -22,7 +22,7 @@ export async function GET() {
     }
 
     const polar = createPolarClient();
-    let subscription: Subscription | null = null;
+    const subscriptions: Subscription[] = [];
 
     const iterator = await polar.subscriptions.list({
       externalCustomerId: user.id,
@@ -30,14 +30,10 @@ export async function GET() {
     });
 
     for await (const page of iterator) {
-      for (const sub of page.result.items) {
-        if (isSubscriptionStatusAllowed(sub.status)) {
-          subscription = sub;
-          break;
-        }
-      }
-      if (subscription) break;
+      subscriptions.push(...page.result.items);
     }
+
+    const subscription = pickSubscriptionForSync(subscriptions);
 
     if (!subscription?.id || !subscription.productId) {
       return NextResponse.json({

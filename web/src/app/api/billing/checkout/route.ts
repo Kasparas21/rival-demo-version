@@ -2,21 +2,27 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CheckoutCreate } from "@polar-sh/sdk/models/components/checkoutcreate";
 import { TrialInterval } from "@polar-sh/sdk/models/components/trialinterval";
 import { ensureUserProfile } from "@/lib/auth/profile";
-import { buildPolarCheckoutBrowserMetadata } from "@/lib/analytics/polar-checkout-metadata";
 import {
-  getAppUrl,
-  getPolarTesterDiscountId,
-  polarProductIdForPlan,
-  type PolarPlanSlug,
-} from "@/lib/billing/config";
-import { parseCheckoutPeriod } from "@/lib/billing/checkout-url";
-import { buildApiBillingCheckoutHref } from "@/lib/billing/checkout-url";
+  buildPolarCheckoutBrowserMetadata,
+  polarCheckoutBrowserMetadataForApi,
+} from "@/lib/analytics/polar-checkout-metadata";
+import { appOriginForRequest } from "@/lib/auth/auth-link-origin";
+import { getPolarTesterDiscountId, type PolarPlanSlug } from "@/lib/billing/config";
+import { resolvePolarCheckoutProducts } from "@/lib/billing/polar-checkout";
+import {
+  buildCheckoutHref,
+  buildChoosePlanHref,
+  buildPolarCheckoutReturnUrl,
+  parseCheckoutPeriod,
+  safeCheckoutNextPath,
+} from "@/lib/billing/checkout-url";
 import { getBillingEntitlement, hasActivePaidSubscription } from "@/lib/billing/entitlements";
 import { shouldRedirectCheckoutToUpgrade } from "@/lib/billing/upgrade-plan";
 import {
   friendlyPolarCheckoutError,
   shouldPrefillPolarCustomerEmail,
 } from "@/lib/billing/polar-checkout-email";
+import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { createPolarClient } from "@/lib/billing/polar";
 import {
   isTesterInviteCheckoutRequest,
@@ -27,6 +33,31 @@ import {
 import { resolveTesterInviteCodeForUser } from "@/lib/billing/tester-invite-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+function checkoutBrowserFailure(
+  request: NextRequest,
+  wantsJson: boolean,
+  message: string,
+  status = 500,
+): NextResponse {
+  if (wantsJson) {
+    return NextResponse.json({ ok: false, error: message }, { status });
+  }
+  const returnUrl = new URL(
+    buildChoosePlanHref(safeCheckoutNextPath(request.nextUrl.searchParams.get("next"))),
+    request.nextUrl.origin,
+  );
+  returnUrl.searchParams.set("checkout_error", message);
+  return NextResponse.redirect(returnUrl);
+}
+
+function loginNextForCheckoutRequest(request: NextRequest): string {
+  const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
+  const plan: PolarPlanSlug =
+    planParam === "starter" ? "starter" : planParam === "pro" ? "pro" : "starter";
+  const period = parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
+  return buildCheckoutHref(plan, period, safeCheckoutNextPath(request.nextUrl.searchParams.get("next")));
+}
 
 async function createCheckoutRedirect(request: NextRequest) {
   const wantsJson = request.nextUrl.searchParams.get("intent") === "json";
@@ -40,7 +71,7 @@ async function createCheckoutRedirect(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
     const loginUrl = new URL("/login", request.nextUrl.origin);
-    loginUrl.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
+    loginUrl.searchParams.set("next", loginNextForCheckoutRequest(request));
     return NextResponse.redirect(loginUrl);
   }
 
@@ -75,13 +106,13 @@ async function createCheckoutRedirect(request: NextRequest) {
     return NextResponse.redirect(portalUrl);
   }
 
-  const productId = polarProductIdForPlan(plan, period);
-  const appUrl = getAppUrl();
+  const appUrl = appOriginForRequest(request);
   const polar = createPolarClient();
-  const browserMetadata = buildPolarCheckoutBrowserMetadata(request);
+  const browserMetadata = polarCheckoutBrowserMetadataForApi(buildPolarCheckoutBrowserMetadata(request));
+  const polarProducts = await resolvePolarCheckoutProducts(polar, plan, period);
 
   let checkoutBody: CheckoutCreate = {
-    products: [productId],
+    ...polarProducts,
     externalCustomerId: user.id,
     ...(shouldPrefillPolarCustomerEmail(user.email)
       ? { customerEmail: user.email!.trim() }
@@ -100,7 +131,10 @@ async function createCheckoutRedirect(request: NextRequest) {
     trialInterval: TrialInterval.Day,
     trialIntervalCount: 7,
     successUrl: `${appUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
-    returnUrl: `${appUrl}/choose-plan`,
+    returnUrl: buildPolarCheckoutReturnUrl(
+      appUrl,
+      safeCheckoutNextPath(request.nextUrl.searchParams.get("next")),
+    ),
   };
 
   let testerInviteCode: string | null = null;
@@ -115,14 +149,16 @@ async function createCheckoutRedirect(request: NextRequest) {
 
     if (!inviteStatus.valid || !inviteStatus.inviteCode) {
       const message = testerInviteUnavailableMessage(inviteStatus.reason);
-      return NextResponse.json({ ok: false, error: message }, { status: 403 });
+      return checkoutBrowserFailure(request, wantsJson, message, 403);
     }
 
     const discountId = getPolarTesterDiscountId();
     if (!discountId) {
-      return NextResponse.json(
-        { ok: false, error: "Tester discount is not configured (POLAR_TESTER_DISCOUNT_ID)." },
-        { status: 503 },
+      return checkoutBrowserFailure(
+        request,
+        wantsJson,
+        "Tester discount is not configured (POLAR_TESTER_DISCOUNT_ID).",
+        503,
       );
     }
 
@@ -144,6 +180,21 @@ async function createCheckoutRedirect(request: NextRequest) {
 
   const checkout = await polar.checkouts.create(checkoutBody);
 
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "checkout_created",
+      properties: {
+        user_id: user.id,
+        plan,
+        billing_period: period,
+        is_tester_invite: isTesterCheckout,
+      },
+    });
+  }
+
   if (wantsJson) {
     const out = NextResponse.json({ ok: true, url: checkout.url });
     if (testerInviteCode) {
@@ -164,10 +215,7 @@ export async function GET(request: NextRequest) {
     return await createCheckoutRedirect(request);
   } catch (e) {
     const raw = e instanceof Error ? e.message : "Could not create checkout.";
-    return NextResponse.json(
-      { ok: false, error: friendlyPolarCheckoutError(raw) },
-      { status: 500 },
-    );
+    return checkoutBrowserFailure(request, request.nextUrl.searchParams.get("intent") === "json", friendlyPolarCheckoutError(raw));
   }
 }
 

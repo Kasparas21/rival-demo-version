@@ -1,6 +1,9 @@
 /** Short-lived client cookie so OAuth round-trips keep `next` when Supabase strips query params. */
 export const OAUTH_NEXT_COOKIE = "rival_oauth_next";
 
+/** Set when guest onboarding draft is saved — routes post-auth to /trial/complete if `next` is lost. */
+export const TRIAL_PENDING_COOKIE = "rival_trial_pending";
+
 /** Short-lived client cookie carrying tester invite through Google OAuth. */
 export const OAUTH_TESTER_INVITE_COOKIE = "rival_oauth_tester";
 
@@ -20,4 +23,14 @@ export function rememberOAuthTesterInvite(inviteCode: string | null | undefined)
   const code = inviteCode?.trim().toLowerCase();
   if (!code) return;
   setClientCookie(OAUTH_TESTER_INVITE_COOKIE, code);
+}
+
+export function rememberTrialPending(): void {
+  setClientCookie(TRIAL_PENDING_COOKIE, "1");
+}
+
+export function clearTrialPending(): void {
+  if (typeof document === "undefined") return;
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${TRIAL_PENDING_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 }

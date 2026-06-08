@@ -1,11 +1,40 @@
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
 import { isKnownPolarProductId } from "@/lib/billing/config";
-import { resolvePlanTier } from "@/lib/billing/entitlements";
+import { isSubscriptionStatusAllowed, resolvePlanTier } from "@/lib/billing/entitlements";
 import type { PolarRawSubscription } from "@/lib/billing/polar-api-raw";
 import { readProductId } from "@/lib/billing/polar-api-raw";
 import { recordTesterInviteRedemption } from "@/lib/billing/tester-invite";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
+
+const SYNC_TERMINAL_STATUSES = new Set(["canceled", "cancelled", "ended", "unpaid", "past_due"]);
+
+export function pickSubscriptionForSync(subscriptions: Subscription[]): Subscription | null {
+  if (subscriptions.length === 0) return null;
+
+  const active = subscriptions.filter((sub) => isSubscriptionStatusAllowed(sub.status));
+  if (active.length > 0) {
+    return active.sort((a, b) => {
+      const aCancel = a.cancelAtPeriodEnd ? 1 : 0;
+      const bCancel = b.cancelAtPeriodEnd ? 1 : 0;
+      if (bCancel !== aCancel) return bCancel - aCancel;
+      return (
+        new Date(b.currentPeriodEnd ?? 0).getTime() - new Date(a.currentPeriodEnd ?? 0).getTime()
+      );
+    })[0];
+  }
+
+  const terminal = subscriptions.filter((sub) => SYNC_TERMINAL_STATUSES.has(sub.status));
+  if (terminal.length > 0) {
+    return terminal.sort((a, b) => {
+      const aTime = new Date(a.endedAt ?? a.canceledAt ?? a.currentPeriodEnd ?? 0).getTime();
+      const bTime = new Date(b.endedAt ?? b.canceledAt ?? b.currentPeriodEnd ?? 0).getTime();
+      return bTime - aTime;
+    })[0];
+  }
+
+  return subscriptions[0] ?? null;
+}
 
 export function jsonSafe(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;

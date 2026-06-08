@@ -3,23 +3,53 @@ import type { PlanTier } from "@/lib/billing/plan-limits";
 import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
 import { shouldRedirectCheckoutToUpgrade } from "@/lib/billing/upgrade-plan";
 
-function checkoutQuery(plan: PolarPlanSlug, period: BillingPeriod): string {
+export function safeCheckoutNextPath(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed || !trimmed.startsWith("/") || trimmed.startsWith("//")) return null;
+  return trimmed;
+}
+
+function checkoutQuery(
+  plan: PolarPlanSlug,
+  period: BillingPeriod,
+  next?: string | null,
+): string {
   const params = new URLSearchParams({ plan });
   if (period === "annual") params.set("period", "annual");
+  const safeNext = safeCheckoutNextPath(next);
+  if (safeNext) params.set("next", safeNext);
   return params.toString();
 }
 
+/** Plan picker URL; optional `next` is preserved through Polar checkout return. */
+export function buildChoosePlanHref(next?: string | null): string {
+  const safeNext = safeCheckoutNextPath(next);
+  if (!safeNext) return "/choose-plan";
+  return `/choose-plan?next=${encodeURIComponent(safeNext)}`;
+}
+
+/** Polar hosted checkout back button — always return to plan picker, not onboarding. */
+export function buildPolarCheckoutReturnUrl(appUrl: string, next?: string | null): string {
+  const base = appUrl.replace(/\/+$/, "");
+  return `${base}${buildChoosePlanHref(next)}`;
+}
+
 /** Marketing page entry: `/checkout?plan=starter` or `?plan=pro&period=annual`. */
-export function buildCheckoutHref(plan: PolarPlanSlug, period: BillingPeriod = "monthly"): string {
-  return `/checkout?${checkoutQuery(plan, period)}`;
+export function buildCheckoutHref(
+  plan: PolarPlanSlug,
+  period: BillingPeriod = "monthly",
+  next?: string | null,
+): string {
+  return `/checkout?${checkoutQuery(plan, period, next)}`;
 }
 
 /** Logged-in redirect target for Polar session creation. */
 export function buildApiBillingCheckoutHref(
   plan: PolarPlanSlug,
   period: BillingPeriod = "monthly",
+  next?: string | null,
 ): string {
-  return `/api/billing/checkout?${checkoutQuery(plan, period)}`;
+  return `/api/billing/checkout?${checkoutQuery(plan, period, next)}`;
 }
 
 export const POLAR_BILLING_PORTAL_HREF = "/api/billing/portal";
@@ -58,5 +88,5 @@ export function buildUpgradeToProHref(options: {
   ) {
     return POLAR_BILLING_UPGRADE_HREF;
   }
-  return buildCheckoutHref("pro");
+  return buildCheckoutHref("pro", "monthly");
 }

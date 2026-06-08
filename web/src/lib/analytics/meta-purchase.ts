@@ -2,9 +2,9 @@ import { createHash } from "crypto";
 
 import type { Order } from "@polar-sh/sdk/models/components/order";
 
-import { DEFAULT_META_PIXEL_ID } from "@/lib/analytics/meta-pixel";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
+import { getMetaPixelIdForCapi } from "@/lib/analytics/meta-pixel";
 
 const META_CAPI_VERSION = "v23.0";
 const PURCHASE_EVENT_SOURCE_URL = "https://www.spy-rival.com/checkout";
@@ -36,10 +36,7 @@ export type MetaPurchaseEventPayload = {
 };
 
 function getMetaCapiEnv(): MetaCapiEnv | null {
-  const pixelId =
-    process.env.META_PIXEL_ID?.trim() ||
-    process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim() ||
-    DEFAULT_META_PIXEL_ID;
+  const pixelId = getMetaPixelIdForCapi();
   const accessToken = process.env.META_CAPI_TOKEN?.trim();
   if (!accessToken) return null;
   return { pixelId, accessToken };

@@ -5,18 +5,26 @@ import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal"
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
-import {
-  COMPETITOR_COLUMNS,
-  LANDING_COMPARISON_SECTIONS,
-  type ComparisonRow,
-} from "@/components/landing/landing-comparison-data";
+import type { ComparisonRowCopy, LandingCopy } from "@/lib/i18n/landing/types";
 
-function ComparisonMark({ value, compact = false }: { value: boolean; compact?: boolean }) {
+type CompetitorKey = "panoramata" | "adspyder" | "poweradspy" | "adlibrary";
+
+function ComparisonMark({
+  value,
+  compact = false,
+  yesAria,
+  noAria,
+}: {
+  value: boolean;
+  compact?: boolean;
+  yesAria: string;
+  noAria: string;
+}) {
   if (value) {
     return (
       <span
         className={`mx-auto flex items-center justify-center rounded-md bg-[#95C14B] shadow-[0_2px_8px_-2px_rgba(149,193,75,0.55)] ${compact ? "size-4 rounded-[4px]" : "size-6"}`}
-        aria-label="Yes"
+        aria-label={yesAria}
       >
         <Check className={`text-white ${compact ? "size-2.5" : "size-3.5"}`} strokeWidth={3} aria-hidden />
       </span>
@@ -26,15 +34,28 @@ function ComparisonMark({ value, compact = false }: { value: boolean; compact?: 
   return (
     <span
       className={`mx-auto flex items-center justify-center text-[#ef4444] ${compact ? "size-4" : "size-6"}`}
-      aria-label="No"
+      aria-label={noAria}
     >
       <X className={compact ? "size-3" : "size-4"} strokeWidth={2.75} aria-hidden />
     </span>
   );
 }
 
-/** Desktop comparison table — unchanged layout. */
-function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[] }) {
+function ComparisonTable({
+  title,
+  rows,
+  featureColumn,
+  competitorColumns,
+  yesAria,
+  noAria,
+}: {
+  title: string;
+  rows: ComparisonRowCopy[];
+  featureColumn: string;
+  competitorColumns: LandingCopy["comparison"]["competitorColumns"];
+  yesAria: string;
+  noAria: string;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/65 bg-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_32px_-12px_rgba(74,127,165,0.18)] backdrop-blur-xl ring-1 ring-white/45">
       <div className="border-b border-white/55 bg-white/40 px-4 py-2.5 sm:px-5">
@@ -45,12 +66,12 @@ function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[]
           <thead>
             <tr className="border-b border-white/50 bg-white/35 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
               <th scope="col" className="px-4 py-2.5 text-left sm:px-5">
-                Feature
+                {featureColumn}
               </th>
               <th scope="col" className="w-14 px-1 py-2.5 text-center sm:w-16">
                 <RivalLogoImg className="mx-auto h-3.5 w-auto max-w-[52px] object-contain" />
               </th>
-              {COMPETITOR_COLUMNS.map(({ key, label, short }) => (
+              {competitorColumns.map(({ key, label, short }) => (
                 <th key={key} scope="col" className="w-12 px-1 py-2.5 text-center sm:w-14" title={label}>
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">{short}</span>
@@ -68,11 +89,15 @@ function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[]
                   {row.feature}
                 </th>
                 <td className="bg-[#4a7fa5]/[0.07] px-1 py-2.5 text-center">
-                  <ComparisonMark value={row.rival} />
+                  <ComparisonMark value={row.rival} yesAria={yesAria} noAria={noAria} />
                 </td>
-                {COMPETITOR_COLUMNS.map(({ key }) => (
+                {competitorColumns.map(({ key }) => (
                   <td key={key} className="px-1 py-2.5 text-center">
-                    <ComparisonMark value={row[key]} />
+                    <ComparisonMark
+                      value={row[key as CompetitorKey]}
+                      yesAria={yesAria}
+                      noAria={noAria}
+                    />
                   </td>
                 ))}
               </tr>
@@ -84,8 +109,21 @@ function ComparisonTable({ title, rows }: { title: string; rows: ComparisonRow[]
   );
 }
 
-/** Mobile-only compact table — fits viewport without horizontal scroll. */
-function ComparisonTableMobile({ title, rows }: { title: string; rows: ComparisonRow[] }) {
+function ComparisonTableMobile({
+  title,
+  rows,
+  featureColumn,
+  competitorColumns,
+  yesAria,
+  noAria,
+}: {
+  title: string;
+  rows: ComparisonRowCopy[];
+  featureColumn: string;
+  competitorColumns: LandingCopy["comparison"]["competitorColumns"];
+  yesAria: string;
+  noAria: string;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/65 bg-white/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_32px_-12px_rgba(74,127,165,0.18)] backdrop-blur-xl ring-1 ring-white/45">
       <div className="border-b border-white/55 bg-white/40 px-3 py-2">
@@ -103,12 +141,12 @@ function ComparisonTableMobile({ title, rows }: { title: string; rows: Compariso
         <thead>
           <tr className="border-b border-white/50 bg-white/35 text-[9px] font-semibold uppercase tracking-wide text-gray-400">
             <th scope="col" className="px-2 py-2 text-left">
-              Feature
+              {featureColumn}
             </th>
             <th scope="col" className="px-0.5 py-2 text-center">
               <RivalLogoImg className="mx-auto h-2.5 w-auto max-w-[36px] object-contain" />
             </th>
-            {COMPETITOR_COLUMNS.map(({ key, label, mobile }) => (
+            {competitorColumns.map(({ key, label, mobile }) => (
               <th key={key} scope="col" className="px-0.5 py-2 text-center" title={label}>
                 {mobile}
               </th>
@@ -126,11 +164,16 @@ function ComparisonTableMobile({ title, rows }: { title: string; rows: Compariso
                 {row.featureMobile}
               </th>
               <td className="bg-[#4a7fa5]/[0.07] px-0.5 py-2 text-center">
-                <ComparisonMark value={row.rival} compact />
+                <ComparisonMark value={row.rival} compact yesAria={yesAria} noAria={noAria} />
               </td>
-              {COMPETITOR_COLUMNS.map(({ key }) => (
+              {competitorColumns.map(({ key }) => (
                 <td key={key} className="px-0.5 py-2 text-center">
-                  <ComparisonMark value={row[key]} compact />
+                  <ComparisonMark
+                    value={row[key as CompetitorKey]}
+                    compact
+                    yesAria={yesAria}
+                    noAria={noAria}
+                  />
                 </td>
               ))}
             </tr>
@@ -141,7 +184,11 @@ function ComparisonTableMobile({ title, rows }: { title: string; rows: Compariso
   );
 }
 
-export function LandingComparison() {
+type Props = {
+  copy: LandingCopy["comparison"];
+};
+
+export function LandingComparison({ copy }: Props) {
   return (
     <section className="relative overflow-hidden py-14 sm:py-20">
       <LandingScrollReveal className="mx-auto w-full max-w-4xl px-4 sm:px-6">
@@ -150,34 +197,46 @@ export function LandingComparison() {
             id="compare"
             className={`${landingNavAnchorScrollClasses} text-[clamp(1.875rem,5.5vw,2.75rem)] font-bold lowercase leading-[1.08] tracking-tight text-[#1a1a1a]`}
           >
-            better competitor intel.
+            {copy.titleLine1}
             <br />
-            <LandingHeadlineHighlight>less manual spying.</LandingHeadlineHighlight>
+            <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-500">
-            Rival vs Panoramata, AdSpyder, PowerAdSpy, and AdLibrary.com — at a glance.
-          </p>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-500">{copy.subtitle}</p>
         </div>
 
         <div className="mt-8 space-y-4 sm:mt-10">
-          {LANDING_COMPARISON_SECTIONS.map((section) => (
+          {copy.sections.map((section) => (
             <div key={section.title}>
               <div className="md:hidden">
-                <ComparisonTableMobile title={section.title} rows={section.rows} />
+                <ComparisonTableMobile
+                  title={section.title}
+                  rows={section.rows}
+                  featureColumn={copy.featureColumn}
+                  competitorColumns={copy.competitorColumns}
+                  yesAria={copy.yesAria}
+                  noAria={copy.noAria}
+                />
               </div>
               <div className="hidden md:block">
-                <ComparisonTable title={section.title} rows={section.rows} />
+                <ComparisonTable
+                  title={section.title}
+                  rows={section.rows}
+                  featureColumn={copy.featureColumn}
+                  competitorColumns={copy.competitorColumns}
+                  yesAria={copy.yesAria}
+                  noAria={copy.noAria}
+                />
               </div>
             </div>
           ))}
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-2.5 text-center sm:mt-10">
-          <LandingTrialCta href="/signup" size="md">
-            Start your 7-day trial
+          <LandingTrialCta href="/onboarding" size="md">
+            {copy.cta}
             <span aria-hidden>→</span>
           </LandingTrialCta>
-          <p className="text-xs text-gray-500">The only cross-platform competitor-set OS built for weekly moves.</p>
+          <p className="text-xs text-gray-500">{copy.ctaFootnote}</p>
         </div>
       </LandingScrollReveal>
     </section>

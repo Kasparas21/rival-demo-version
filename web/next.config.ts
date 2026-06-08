@@ -2,8 +2,15 @@ import bundleAnalyzer from "@next/bundle-analyzer";
 import path from "node:path";
 import type { NextConfig } from "next";
 
+import { POSTHOG_EU_API_HOST } from "./src/lib/analytics/posthog-config";
+
 /** Repo root (parent of `web/`). Matches Vercel workspace root when deploy root is the Git repo. */
 const repoRoot = path.join(__dirname, "..");
+
+const posthogApiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim() || POSTHOG_EU_API_HOST;
+const posthogAssetsHost = posthogApiHost
+  .replace("https://eu.i.posthog.com", "https://eu-assets.i.posthog.com")
+  .replace("https://us.i.posthog.com", "https://us-assets.i.posthog.com");
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -14,8 +21,21 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
+  skipTrailingSlashRedirect: true,
   turbopack: {
     root: repoRoot,
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/ingest/static/:path*",
+        destination: `${posthogAssetsHost}/static/:path*`,
+      },
+      {
+        source: "/ingest/:path*",
+        destination: `${posthogApiHost}/:path*`,
+      },
+    ];
   },
   images: {
     remotePatterns: [
@@ -30,6 +50,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
+      // Home runs PostHog A/B — never cache HTML at the edge (same page for all users).
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-cache, no-store, must-revalidate",
+          },
+          { key: "Vary", value: "Cookie" },
+        ],
+      },
       {
         source: "/((?!dashboard|checkout|api).*)",
         headers: [

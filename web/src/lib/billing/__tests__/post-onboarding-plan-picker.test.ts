@@ -7,9 +7,9 @@ import {
 import type { BillingEntitlement } from "@/lib/billing/entitlements";
 
 function billing(
-  partial: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
-): Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited"> {
-  return partial;
+  partial: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord">,
+): Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"> {
+  return { hasPolarBillingRecord: false, ...partial };
 }
 
 describe("post-onboarding plan picker", () => {
@@ -26,6 +26,14 @@ describe("post-onboarding plan picker", () => {
     expect(hasActivePaidSubscription(billing({ planTier: "starter", status: "trialing", isUnlimited: false }))).toBe(
       true,
     );
+  });
+
+  it("hides when Polar checkout record exists but subscription sync is still pending", () => {
+    expect(
+      shouldShowPostOnboardingPlanPicker(
+        billing({ planTier: "free_trial", status: "none", isUnlimited: false, hasPolarBillingRecord: true }),
+      ),
+    ).toBe(false);
   });
 
   it("computes annual savings for Starter at 25%", () => {

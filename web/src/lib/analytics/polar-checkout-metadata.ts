@@ -7,6 +7,24 @@ export type PolarCheckoutBrowserMetadata = {
   user_agent: string;
 };
 
+export type PolarCheckoutBrowserMetadataFields = Partial<
+  Pick<PolarCheckoutBrowserMetadata, "fbp" | "fbc" | "client_ip" | "user_agent">
+>;
+
+/**
+ * Polar rejects empty strings in metadata (min length 1). Omit unset analytics fields so checkout still works without Meta cookies.
+ */
+export function polarCheckoutBrowserMetadataForApi(
+  metadata: PolarCheckoutBrowserMetadata,
+): PolarCheckoutBrowserMetadataFields {
+  const out: PolarCheckoutBrowserMetadataFields = {};
+  if (metadata.fbp.trim()) out.fbp = metadata.fbp.trim();
+  if (metadata.fbc.trim()) out.fbc = metadata.fbc.trim();
+  if (metadata.client_ip.trim()) out.client_ip = metadata.client_ip.trim();
+  if (metadata.user_agent.trim()) out.user_agent = metadata.user_agent.trim();
+  return out;
+}
+
 function readFbclid(requestUrl: URL, referer: string | null): string | null {
   const fromRequest = requestUrl.searchParams.get("fbclid")?.trim();
   if (fromRequest) return fromRequest;

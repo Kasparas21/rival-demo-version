@@ -1,5 +1,5 @@
-import { landingFaqItems } from "@/lib/seo/faq-items";
-import { DEFAULT_DESCRIPTION, SITE_URL } from "@/lib/seo/site";
+import type { LandingCopy } from "@/lib/i18n/landing/types";
+import { SITE_URL } from "@/lib/seo/site";
 
 export function organizationJsonLd() {
   return {
@@ -13,19 +13,18 @@ export function organizationJsonLd() {
   };
 }
 
-export function softwareApplicationJsonLd() {
+export function softwareApplicationJsonLd(copy: LandingCopy) {
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: "Spy Rival",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
-    description:
-      "AI competitor ad intelligence across Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat.",
+    description: copy.jsonLd.appDescription,
     offers: [
       {
         "@type": "Offer",
-        name: "Starter",
+        name: copy.jsonLd.starterName,
         price: "79",
         priceCurrency: "EUR",
         priceSpecification: {
@@ -38,7 +37,7 @@ export function softwareApplicationJsonLd() {
       },
       {
         "@type": "Offer",
-        name: "Pro",
+        name: copy.jsonLd.proName,
         price: "149",
         priceCurrency: "EUR",
         priceSpecification: {
@@ -53,11 +52,11 @@ export function softwareApplicationJsonLd() {
   };
 }
 
-export function faqPageJsonLd() {
+export function faqPageJsonLd(copy: LandingCopy) {
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: landingFaqItems.map((item) => ({
+    mainEntity: copy.faq.items.map((item) => ({
       "@type": "Question",
       name: item.q,
       acceptedAnswer: {
@@ -69,8 +68,6 @@ export function faqPageJsonLd() {
 }
 
 /** Organization + SoftwareApplication + FAQPage blocks for the homepage. */
-export function homePageJsonLdBlocks() {
-  return [organizationJsonLd(), softwareApplicationJsonLd(), faqPageJsonLd()];
+export function homePageJsonLdBlocks(copy: LandingCopy) {
+  return [organizationJsonLd(), softwareApplicationJsonLd(copy), faqPageJsonLd(copy)];
 }
-
-export { DEFAULT_DESCRIPTION };

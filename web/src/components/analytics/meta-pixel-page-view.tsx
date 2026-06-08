@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 
 import { trackMetaPageView } from "@/lib/analytics/meta-pixel-client";
 
-/** SPA route changes — initial PageView is sent by the base pixel script in <head>. */
+/** SPA route changes — initial PageView is in the base pixel script in <head>. */
 export function MetaPixelPageView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();

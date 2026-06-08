@@ -12,13 +12,17 @@ export const maxDuration = 60;
 type Body = { domain?: string };
 
 export async function POST(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const isGuestOnboarding = request.headers.get("x-rival-guest-onboarding") === "1";
+
+  if (!isGuestOnboarding) {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   let body: Body;
@@ -34,6 +38,21 @@ export async function POST(request: Request) {
   }
 
   const fallbackName = hostToBrandLabel(domain);
+
+  /** Guest trial: domain label only — full Firecrawl runs after signup when draft is saved. */
+  if (isGuestOnboarding) {
+    return NextResponse.json({
+      ok: true,
+      partial: true,
+      domain,
+      brandName: fallbackName,
+      description: null,
+      logoUrl: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`,
+      contextSnippet: null,
+      socials: [] as { label: string; href: string; handle: string }[],
+    });
+  }
+
   const scrape = await scrapeBrandPreview(domain);
 
   if (!scrape.ok) {

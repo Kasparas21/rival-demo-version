@@ -7,8 +7,13 @@ import {
 } from "@/lib/billing/tester-invite";
 import {
   getBillingEntitlement,
+  hasActivePaidSubscription,
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
+import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
+import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
+import { hasPrePaymentSetup, POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
+import { WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
 
@@ -70,6 +75,10 @@ export async function updateSession(request: NextRequest) {
     if (pathname.startsWith("/api/")) {
       return response;
     }
+    /** Guest trial funnel: allow /onboarding before signup. */
+    if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) {
+      return response;
+    }
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     redirectUrl.searchParams.set("next", `${pathname}${search}`);
@@ -79,16 +88,31 @@ export async function updateSession(request: NextRequest) {
   if (user && isAuthPage) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("onboarding_completed")
+      .select("onboarding_completed, company_url")
       .eq("id", user.id)
       .maybeSingle();
+    const billing = await getBillingEntitlement(supabase, user.id);
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.search = "";
     if (!profile?.onboarding_completed) {
-      redirectUrl.pathname = "/onboarding";
+      const nextParam = request.nextUrl.searchParams.get("next");
+      const trialPending = request.cookies.get(TRIAL_PENDING_COOKIE)?.value;
+      if (shouldRedirectToTrialComplete(nextParam, trialPending)) {
+        const trialPlans = new URL(CHOOSE_PLAN_AFTER_TRIAL_PATH, request.url);
+        redirectUrl.pathname = trialPlans.pathname;
+        redirectUrl.search = trialPlans.search;
+        return NextResponse.redirect(redirectUrl);
+      }
+      if (hasPrePaymentSetup(profile) && shouldShowPostOnboardingPlanPicker(billing)) {
+        redirectUrl.pathname = "/choose-plan";
+        redirectUrl.searchParams.set("next", POST_PAYMENT_ONBOARDING_PATH);
+        return NextResponse.redirect(redirectUrl);
+      }
+      const target = new URL(resolveIncompleteOnboardingPath(profile, billing, "/dashboard/spy"), request.url);
+      redirectUrl.pathname = target.pathname;
+      redirectUrl.search = target.search;
       return NextResponse.redirect(redirectUrl);
     }
-    const billing = await getBillingEntitlement(supabase, user.id);
     if (shouldShowPostOnboardingPlanPicker(billing)) {
       redirectUrl.pathname = "/choose-plan";
       redirectUrl.searchParams.set("next", "/dashboard/spy");
@@ -105,13 +129,38 @@ export async function updateSession(request: NextRequest) {
   ) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("onboarding_completed")
+      .select("onboarding_completed, company_url")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.onboarding_completed) {
+    if (!profile?.onboarding_completed) {
       const billing = await getBillingEntitlement(supabase, user.id);
+      const redirectUrl = request.nextUrl.clone();
       if (shouldShowPostOnboardingPlanPicker(billing)) {
+        redirectUrl.pathname = "/choose-plan";
+        redirectUrl.searchParams.set("next", POST_PAYMENT_ONBOARDING_PATH);
+      } else if (billing.isUnlimited || hasActivePaidSubscription(billing)) {
+        redirectUrl.pathname = POST_PAYMENT_ONBOARDING_PATH;
+        redirectUrl.search = "";
+      } else {
+        const target = new URL(
+          resolveIncompleteOnboardingPath(profile, billing, `${pathname}${search}`),
+          request.url,
+        );
+        redirectUrl.pathname = target.pathname;
+        redirectUrl.search = target.search;
+      }
+      const gated = NextResponse.redirect(redirectUrl);
+      cookieJarMerge(response, gated);
+      return gated;
+    }
+
+    if (profile.onboarding_completed) {
+      const billing = await getBillingEntitlement(supabase, user.id);
+      const isWorkspaceBrandScrape =
+        pathname.startsWith("/dashboard/searching") &&
+        request.nextUrl.searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
+      if (shouldShowPostOnboardingPlanPicker(billing) && !isWorkspaceBrandScrape) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/choose-plan";
         redirectUrl.searchParams.set("next", `${pathname}${search}`);

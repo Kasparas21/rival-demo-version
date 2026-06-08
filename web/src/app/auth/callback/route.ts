@@ -3,7 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CookieOptions } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureUserProfile } from "@/lib/auth/profile";
+import {
+  CHOOSE_PLAN_AFTER_TRIAL_PATH,
+  resolveAuthCallbackNext,
+  shouldRedirectToTrialComplete,
+} from "@/lib/auth/trial-flow";
+import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
+import { resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { persistTesterInviteToUserMetadata, readTesterInviteFromUserMetadata } from "@/lib/billing/tester-invite-user";
 import {
   matchesTesterInviteCode,
@@ -128,13 +135,12 @@ export async function GET(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_completed")
+    .select("onboarding_completed, company_url")
     .eq("id", user.id)
     .maybeSingle();
 
   const onboardingDone = profile?.onboarding_completed === true;
-  const requestedNext = url.searchParams.get("next") ?? request.cookies.get("rival_oauth_next")?.value;
-  const safeRequested = safeNextPath(requestedNext);
+  const safeRequested = resolveAuthCallbackNext(url.searchParams.get("next"), request.cookies);
   const safePostOnboardingPath = safeRequested ? postOnboardingPath(safeRequested) : null;
   const billing = await getBillingEntitlement(supabase, user.id);
   const resolvedNext = safePostOnboardingPath
@@ -144,10 +150,25 @@ export async function GET(request: NextRequest) {
   const RESET_PASSWORD_PATH = "/reset-password";
 
   let pathname: string;
+  let searchFromIncomplete: string | null = null;
   if (safePostOnboardingPath === RESET_PASSWORD_PATH) {
     pathname = RESET_PASSWORD_PATH;
+  } else if (
+    !onboardingDone &&
+    shouldRedirectToTrialComplete(safeRequested, request.cookies.get(TRIAL_PENDING_COOKIE)?.value)
+  ) {
+    const trialPlans = new URL(CHOOSE_PLAN_AFTER_TRIAL_PATH, url.origin);
+    pathname = trialPlans.pathname;
+    searchFromIncomplete = trialPlans.search;
   } else if (!onboardingDone) {
-    pathname = "/onboarding";
+    const incompleteTarget = resolveIncompleteOnboardingPath(
+      profile,
+      billing,
+      resolvedNext ?? "/dashboard/spy",
+    );
+    const parsedIncomplete = new URL(incompleteTarget, url.origin);
+    pathname = parsedIncomplete.pathname;
+    searchFromIncomplete = parsedIncomplete.search;
   } else if (resolvedNext) {
     pathname = resolvedNext;
   } else {
@@ -156,9 +177,14 @@ export async function GET(request: NextRequest) {
 
   const finalDest = request.nextUrl.clone();
   finalDest.pathname = pathname;
-  finalDest.search = "";
+  finalDest.search = searchFromIncomplete ?? "";
   finalDest.hash = "";
-  if (!onboardingDone && resolvedNext && pathname !== RESET_PASSWORD_PATH) {
+  if (
+    !onboardingDone &&
+    !searchFromIncomplete &&
+    pathname === "/onboarding" &&
+    resolvedNext
+  ) {
     finalDest.searchParams.set("next", resolvedNext);
   }
 

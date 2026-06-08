@@ -28,8 +28,18 @@ export function friendlyPolarCheckoutError(raw: string): string {
   if (/not a valid email address/i.test(raw)) {
     return "Checkout could not start because Polar rejected the account email address. Use a real email on your account or enter email on the checkout page.";
   }
+  if (
+    /product_price_id/i.test(raw) &&
+    /Field required/i.test(raw) &&
+    (/metadata.*fbp/i.test(raw) || /string_too_short/i.test(raw))
+  ) {
+    return "Checkout could not start because optional analytics metadata was invalid. Try again — if it persists, refresh the page and start checkout once more.";
+  }
   if (/product_price_id/i.test(raw) && /Field required/i.test(raw)) {
-    return "Checkout could not start: the Polar product has no active price. In Polar Dashboard → Products, add a recurring price to this product.";
+    return "Checkout could not start: Polar could not find an active price for this product. In Polar → Catalogue, open Starter / Pro, confirm a recurring price exists, then set POLAR_STARTER_PRODUCT_ID and POLAR_PRO_PRODUCT_ID in .env.local to each product's ID (UUID) — not the Share link. Restart the dev server after updating env.";
+  }
+  if (/product does not exist/i.test(raw)) {
+    return "Checkout could not start: the product ID in .env.local does not exist in your Polar account. Copy each product's ID from Polar → Catalogue (Starter, Pro, and annual variants) into POLAR_STARTER_PRODUCT_ID, POLAR_PRO_PRODUCT_ID, etc.";
   }
   return raw.length > 280 ? `${raw.slice(0, 280)}…` : raw;
 }
