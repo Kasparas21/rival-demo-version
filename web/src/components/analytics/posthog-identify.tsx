@@ -16,9 +16,9 @@ export function PostHogIdentify() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
+      if (event === "SIGNED_IN" && session?.user?.id) {
         posthog.identify(session.user.id, {
-          email: session.user.email,
+          email: session.user.email ?? undefined,
         });
       } else if (event === "SIGNED_OUT") {
         posthog.reset();

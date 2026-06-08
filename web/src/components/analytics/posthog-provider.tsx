@@ -6,7 +6,6 @@ import { PostHogProvider as PHProvider } from "posthog-js/react";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { useOptionalMarketingConsent } from "@/components/analytics/marketing-consent-provider";
-import { readClientPostHogDistinctId } from "@/lib/analytics/posthog-client-distinct-id";
 import { reportLandingHeroExperimentExposure } from "@/lib/analytics/posthog-report-exposure";
 import {
   getPostHogPublicKey,
@@ -20,15 +19,8 @@ type Props = {
 };
 
 function mergeBootstrap(serverBootstrap?: BootstrapConfig): BootstrapConfig | undefined {
-  const cookieDistinctId = readClientPostHogDistinctId();
-  const distinctID = serverBootstrap?.distinctID ?? cookieDistinctId;
-  if (!distinctID && !serverBootstrap?.featureFlags) return undefined;
-
-  return {
-    ...serverBootstrap,
-    distinctID,
-    featureFlags: serverBootstrap?.featureFlags,
-  };
+  if (!serverBootstrap?.featureFlags) return undefined;
+  return { featureFlags: serverBootstrap.featureFlags };
 }
 
 export function SitePostHogProvider({ children, bootstrap }: Props) {
@@ -54,12 +46,6 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     if (!apiKey || initializedRef.current) return;
 
     const mergedBootstrap = mergeBootstrap(bootstrap);
-    const cookieDistinctId = readClientPostHogDistinctId();
-
-    // Keep analytics person id aligned with server A/B assignment cookie.
-    if (cookieDistinctId && posthog.get_distinct_id() !== cookieDistinctId) {
-      posthog.reset();
-    }
 
     posthog.init(apiKey, {
       api_host: POSTHOG_BROWSER_API_HOST,
