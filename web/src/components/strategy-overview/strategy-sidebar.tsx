@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 import type { StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
 import { normalizeStrategyMapPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { classifyAngleCategory, parseAngleForDisplay } from "@/lib/comparison/stealable-angle-present";
@@ -14,6 +16,8 @@ type Props = {
   lastScrapedAt?: string | null;
   onFreshnessRescrape?: () => void;
   activityScoreEnabled?: boolean;
+  /** Static fallback when no saved competitor (e.g. landing hero demo). */
+  activityScoreFallback?: ReactNode;
 };
 
 const CARD =
@@ -60,6 +64,7 @@ export function StrategyOverviewSidebar({
   lastScrapedAt = null,
   onFreshnessRescrape,
   activityScoreEnabled = true,
+  activityScoreFallback,
 }: Props) {
   const m = normalizeStrategyMapPayload(map);
   const signals = m.audienceSignals;
@@ -81,6 +86,8 @@ export function StrategyOverviewSidebar({
           lastScrapedAt={lastScrapedAt}
           onFreshnessRefresh={onFreshnessRescrape}
         />
+      ) : activityScoreFallback ? (
+        activityScoreFallback
       ) : (
         <div className={`${CARD} text-[12px] text-slate-600`}>
           Activity score needs a saved competitor record. Open this brand from your sidebar after tracking it in Rival.

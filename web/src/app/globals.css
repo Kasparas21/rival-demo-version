@@ -63,7 +63,6 @@ html:not(:has([data-dashboard-app])) body {
   background-size: 240% 240%, 220% 220%, 200% 200%, 180% 180%;
   background-position: 12% 28%, 88% 72%, 45% 88%, 95% 12%;
   background-repeat: no-repeat;
-  animation: rival-landing-bg-wave 26s ease-in-out infinite;
 }
 
 html:has([data-dashboard-app]) body {
@@ -173,49 +172,12 @@ html:has([data-dashboard-app]) body {
     transform: none;
   }
 
-  .landing-tempting-highlight {
-    animation: none;
-    color: #1a1a1a;
-  }
-
-  .landing-tempting-highlight::before {
-    animation: none;
-    opacity: 0.65;
-    transform: none;
-  }
 }
 
-/** Section headline accents — Tempting script + black→dark-blue wave (post-hero landing). */
-.landing-tempting-highlight {
-  position: relative;
-  display: inline;
-  font-family: var(--font-tempting), "Tempting", cursive;
-  font-style: normal;
-  font-weight: 400;
-  font-size: 1.12em;
-  line-height: 1.05;
-  letter-spacing: 0.01em;
-  vertical-align: baseline;
-  color: #1a1a1a;
-  animation: hero-ad-intelligence-color 4.5s linear infinite;
-}
-
-.landing-tempting-highlight::before {
-  content: "";
-  position: absolute;
-  inset: -0.08em -0.18em 0.06em;
-  z-index: -1;
-  border-radius: 0.2em;
-  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.55) 55%, transparent 100%);
-  filter: blur(10px);
-  animation: hero-ad-intelligence-glow 2.8s ease-in-out infinite;
-}
-
-
-/** Hero headline — Inter latin (next/font on body); JS shrinks when lines exceed the column. */
+/** Hero headline — Inter latin; fluid size via clamp (no JS reflow). */
 .hero-headline {
   font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-  font-size: 96px;
+  font-size: clamp(40px, 11vw, 96px);
   font-weight: 800;
   font-style: normal;
   font-synthesis: none;
@@ -237,10 +199,33 @@ html:has([data-dashboard-app]) body {
   margin-top: 0.06em;
 }
 
-@media (max-width: 767px) {
+@media (min-width: 768px) {
   .hero-headline {
-    font-size: clamp(40px, 11vw, 64px);
-    letter-spacing: -0.045em;
+    font-size: clamp(48px, 6.2vw, 96px);
+    letter-spacing: -0.04em;
+  }
+}
+
+.landing-scroll-reveal {
+  opacity: 0;
+  transform: translate3d(0, 28px, 0);
+  transition:
+    opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1) var(--landing-reveal-delay, 0s),
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1) var(--landing-reveal-delay, 0s);
+  will-change: opacity, transform;
+}
+
+.landing-scroll-reveal--visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-scroll-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+    will-change: auto;
   }
 }
 
@@ -270,6 +255,11 @@ html:has([data-dashboard-app]) body {
     animation: none;
     color: #1d4ed8;
   }
+
+  .landing-hero-variant-b .hero-headline-accent {
+    animation: none;
+    color: inherit;
+  }
 }
 
 .hero-subline {
@@ -280,6 +270,21 @@ html:has([data-dashboard-app]) body {
   line-height: 1.35;
   letter-spacing: -0.02em;
   color: rgb(26 26 26 / 0.62);
+}
+
+.hero-platform-word {
+  display: inline;
+  white-space: nowrap;
+}
+
+.hero-platform-glow-letter {
+  display: inline;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--platform-neon) 11%, rgb(26 26 26 / 0.62));
+  text-shadow:
+    0 0 0.5px color-mix(in srgb, var(--platform-neon) 38%, transparent),
+    0 0 1px color-mix(in srgb, var(--platform-neon) 22%, transparent),
+    0 0 2px color-mix(in srgb, var(--platform-neon) 10%, transparent);
 }
 
 @keyframes rival-logo-shimmer {
@@ -474,7 +479,205 @@ html:has([data-dashboard-app]) body {
     0 14px 36px -10px rgba(74, 127, 165, 0.55);
 }
 
+.hero-variant-b-headline {
+  font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-synthesis: none;
+  width: 100%;
+  max-width: none;
+  margin-inline: auto;
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* Variant B sky — feather clouds out before the white section fade */
+.hero-variant-b-sky-clouds {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.72) 38%,
+    rgba(0, 0, 0, 0.28) 58%,
+    transparent 72%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.95) 0%,
+    rgba(0, 0, 0, 0.72) 38%,
+    rgba(0, 0, 0, 0.28) 58%,
+    transparent 72%
+  );
+}
+
+/* Variant B — light copy on darker blue hero wash */
+.landing-hero-variant-b .hero-headline {
+  color: #f5f9fc;
+  text-shadow: 0 1px 18px rgba(8, 28, 48, 0.22);
+}
+
+.landing-hero-variant-b .hero-headline-accent {
+  color: inherit;
+  animation: none;
+}
+
+.landing-hero-variant-b .hero-subline {
+  color: rgb(240 247 252 / 0.88);
+  font-weight: 500;
+  text-shadow: 0 1px 12px rgba(8, 28, 48, 0.18);
+}
+
+@media (min-width: 768px) {
+  .hero-variant-b-headline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-wrap: wrap;
+  }
+
+  .hero-variant-b-headline-line {
+    display: inline-block;
+    width: auto;
+    max-width: 100%;
+    margin-inline: auto;
+    text-align: center;
+  }
+}
+
+.hero-variant-b-headline-accent {
+  font: inherit;
+  letter-spacing: inherit;
+  animation: hero-variant-b-accent-color 4.5s linear infinite;
+}
+
+/* Variant B product demo — rises on first paint (transform + opacity only). */
+@keyframes hero-variant-b-demo-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, clamp(56px, 14vh, 132px), 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.hero-variant-b-demo-enter {
+  transform: translate3d(0, clamp(56px, 14vh, 132px), 0);
+  opacity: 0;
+  animation: hero-variant-b-demo-rise 1.05s cubic-bezier(0.16, 1, 0.3, 1) 0.18s both;
+  backface-visibility: hidden;
+}
+
+@keyframes hero-variant-b-accent-color {
+  0%,
+  100% {
+    color: #1a1a1a;
+  }
+  45% {
+    color: #1d4ed8;
+  }
+  55% {
+    color: #1e3a8a;
+  }
+}
+
+/* Landing glow-line CTA — rotating conic border arc */
+@property --landing-glow-cta-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes landing-glow-cta-spin {
+  0% {
+    --landing-glow-cta-angle: 0deg;
+  }
+  100% {
+    --landing-glow-cta-angle: 360deg;
+  }
+}
+
+.landing-glow-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.landing-glow-cta::before,
+.landing-glow-cta::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: content-box;
+  padding: 1px;
+  border-radius: 9999px;
+  translate: -50% -50%;
+  background-image: conic-gradient(
+    from var(--landing-glow-cta-angle),
+    transparent 50%,
+    rgba(255, 255, 255, 0.96)
+  );
+  animation: landing-glow-cta-spin 3s linear infinite;
+  pointer-events: none;
+}
+
+.landing-glow-cta::before {
+  z-index: 0;
+  filter: blur(24px);
+  opacity: 0.5;
+}
+
+.landing-glow-cta::after {
+  z-index: 1;
+}
+
+.landing-glow-cta-face {
+  position: absolute;
+  inset: 1px;
+  z-index: 2;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: linear-gradient(to bottom, #7eb3d4, #4a7fa5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 22px rgba(255, 255, 255, 0.18),
+    0 10px 32px -6px rgba(74, 127, 165, 0.55);
+  transition: filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+.landing-glow-cta-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.landing-glow-cta:hover .landing-glow-cta-face,
+.landing-glow-cta:focus-visible .landing-glow-cta-face {
+  filter: brightness(1.05);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .hero-variant-b-headline-accent {
+    animation: none;
+    color: #1d4ed8;
+  }
+
+  .hero-variant-b-demo-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .landing-glow-cta::before,
+  .landing-glow-cta::after {
+    animation: none;
+    --landing-glow-cta-angle: 120deg;
+  }
+
   .landing-pricing-cta-glow {
     animation: none;
     opacity: 0.65;

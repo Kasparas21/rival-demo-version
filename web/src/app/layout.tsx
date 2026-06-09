@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
 import { Suspense } from "react";
-import { SiteGoogleAnalytics } from "@/components/analytics/google-analytics";
-import { SiteGoogleTagManager } from "@/components/analytics/google-tag-manager";
+import { DeferredMarketingTags } from "@/components/analytics/deferred-marketing-tags";
 import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
-import { SiteMetaPixel } from "@/components/analytics/meta-pixel";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
@@ -88,15 +86,11 @@ export default async function RootLayout({
 
   return (
     <html lang={lang}>
-      <head>
-        <SiteGoogleAnalytics />
-        <SiteGoogleTagManager />
-        <SiteMetaPixel />
-      </head>
       <body
         className={`${instrumentSerif.variable} ${fontInter.variable} ${fontInter.className} ${fontTempting.variable} font-sans antialiased`}
       >
         <MarketingConsentProvider>
+          <DeferredMarketingTags />
           <SitePostHogProvider bootstrap={posthogBootstrap}>
             <PostHogIdentify />
             <Suspense fallback={null}>

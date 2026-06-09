@@ -181,6 +181,10 @@ export type LandingCopy = {
     subtitle: string;
     monthlyPrice: string;
     annualPrice: string;
+    monthlyLabel: string;
+    annualLabel: string;
+    annualSaveBadge: string;
+    billingAria: string;
     trialCta: string;
     cancelNote: string;
   };

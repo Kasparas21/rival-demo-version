@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { applyLandingHeroHeadlineExperiment } from "@/lib/analytics/landing-hero-experiment";
+import {
+  applyLandingHeroHeadlineExperiment,
+  isLandingHeroTestVariant,
+  parseDevHeroVariantPreview,
+} from "@/lib/analytics/landing-hero-experiment";
 
 const controlHeadline = {
   line1Prefix: "see ",
@@ -8,6 +12,32 @@ const controlHeadline = {
   line2: "your competitors run.",
   subline: "across all 6 platforms, in one dashboard",
 };
+
+describe("parseDevHeroVariantPreview", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("maps dev query params to variants in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(parseDevHeroVariantPreview("control")).toBe("control");
+    expect(parseDevHeroVariantPreview("example-variant")).toBe("test");
+    expect(parseDevHeroVariantPreview("variant")).toBe("test");
+    expect(parseDevHeroVariantPreview(null)).toBeNull();
+  });
+
+  it("ignores preview params outside development", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(parseDevHeroVariantPreview("control")).toBeNull();
+  });
+});
+
+describe("isLandingHeroTestVariant", () => {
+  it("treats PostHog example-variant as the test arm", () => {
+    expect(isLandingHeroTestVariant("example-variant")).toBe(true);
+    expect(isLandingHeroTestVariant("control")).toBe(false);
+  });
+});
 
 describe("applyLandingHeroHeadlineExperiment", () => {
   it("returns control copy for control variant", () => {

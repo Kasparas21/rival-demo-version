@@ -46,28 +46,44 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     if (!apiKey || initializedRef.current) return;
 
     const mergedBootstrap = mergeBootstrap(bootstrap);
+    const onMarketingPage =
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/dashboard");
 
-    posthog.init(apiKey, {
-      api_host: POSTHOG_BROWSER_API_HOST,
-      ui_host: "https://eu.posthog.com",
-      defaults: "2026-05-30",
-      person_profiles: "identified_only",
-      capture_pageview: "history_change",
-      capture_pageleave: true,
-      persistence: "localStorage+cookie",
-      bootstrap: mergedBootstrap,
-      opt_out_capturing_by_default: false,
-      disable_session_recording: false,
-      session_recording: {
-        maskAllInputs: true,
-      },
-      advanced_disable_feature_flags: false,
-      loaded: (client) => {
-        reportLandingHeroExperimentExposure(client);
-      },
-    });
+    const initPostHog = () => {
+      if (initializedRef.current) return;
 
-    initializedRef.current = true;
+      posthog.init(apiKey, {
+        api_host: POSTHOG_BROWSER_API_HOST,
+        ui_host: "https://eu.posthog.com",
+        defaults: "2026-05-30",
+        person_profiles: "identified_only",
+        capture_pageview: "history_change",
+        capture_pageleave: true,
+        persistence: "localStorage+cookie",
+        bootstrap: mergedBootstrap,
+        opt_out_capturing_by_default: false,
+        disable_session_recording: onMarketingPage,
+        session_recording: onMarketingPage
+          ? undefined
+          : {
+              maskAllInputs: true,
+            },
+        advanced_disable_feature_flags: false,
+        loaded: (client) => {
+          reportLandingHeroExperimentExposure(client);
+        },
+      });
+
+      initializedRef.current = true;
+    };
+
+    if (onMarketingPage && "requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(() => initPostHog(), { timeout: 2500 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    initPostHog();
 
     return () => {
       // Keep singleton alive for SPA navigations; consent effect handles opt-out.

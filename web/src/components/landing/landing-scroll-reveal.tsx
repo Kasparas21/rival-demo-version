@@ -1,7 +1,6 @@
 "use client";
 
-import { motion, useInView, useReducedMotion } from "framer-motion";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 type LandingScrollRevealProps = {
   children: ReactNode;
@@ -9,42 +8,58 @@ type LandingScrollRevealProps = {
   delay?: number;
 };
 
-/** Blur + 3D lift-in for landing content — sections/backgrounds stay static; only inner content animates. */
+/** Lightweight scroll reveal — CSS transitions only (no framer-motion on landing). */
 export function LandingScrollReveal({ children, className = "", delay = 0 }: LandingScrollRevealProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, amount: 0.15, margin: "0px 0px -8% 0px" });
-  const reduceMotion = useReducedMotion();
+  const [visible, setVisible] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const syncMotion = () => setReduceMotion(mq.matches);
+    syncMotion();
+    mq.addEventListener("change", syncMotion);
+
+    const node = ref.current;
+    if (!node) {
+      mq.removeEventListener("change", syncMotion);
+      return;
+    }
+
+    if (mq.matches) {
+      setVisible(true);
+      mq.removeEventListener("change", syncMotion);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -8% 0px", threshold: 0.12 },
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      mq.removeEventListener("change", syncMotion);
+    };
+  }, []);
 
   if (reduceMotion) {
     return <div className={className}>{children}</div>;
   }
 
   return (
-    <div ref={ref} className={`[perspective:1200px] ${className}`.trim()}>
-      <motion.div
-        initial={{
-          y: 40,
-          rotateX: 10,
-          filter: "blur(8px)",
-        }}
-        animate={
-          inView
-            ? {
-                y: 0,
-                rotateX: 0,
-                filter: "blur(0px)",
-              }
-            : undefined
-        }
-        transition={{
-          duration: 0.45,
-          delay,
-          ease: [0.22, 1, 0.36, 1],
-        }}
-        style={{ transformOrigin: "50% 100%", transformStyle: "preserve-3d" }}
-      >
-        {children}
-      </motion.div>
+    <div
+      ref={ref}
+      className={`landing-scroll-reveal ${visible ? "landing-scroll-reveal--visible" : ""} ${className}`.trim()}
+      style={{ "--landing-reveal-delay": `${delay}s` } as CSSProperties}
+    >
+      {children}
     </div>
   );
 }

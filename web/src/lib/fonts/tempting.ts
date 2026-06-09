@@ -7,12 +7,8 @@ export const fontTempting = localFont({
       weight: "400",
       style: "normal",
     },
-    {
-      path: "../../assets/fonts/TemptingPersonalUse.ttf",
-      weight: "400",
-      style: "normal",
-    },
   ],
   variable: "--font-tempting",
   display: "swap",
+  preload: false,
 });

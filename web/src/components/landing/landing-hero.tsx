@@ -97,12 +97,7 @@ export function LandingHero({ copy }: Props) {
       <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">
           <div className="relative z-20 flex justify-center px-4">
-            <LandingTrialCta
-              href="/onboarding"
-              size="md"
-              showGlow={false}
-              className="[&_.landing-trial-cta-face]:min-w-[17rem] [&_.landing-trial-cta-face]:px-10 [&_.landing-trial-cta-face]:py-3.5 [&_.landing-trial-cta-face]:text-base sm:[&_.landing-trial-cta-face]:min-w-[19rem] sm:[&_.landing-trial-cta-face]:px-14 sm:[&_.landing-trial-cta-face]:py-4 sm:[&_.landing-trial-cta-face]:text-[17px]"
-            >
+            <LandingTrialCta href="/onboarding" size="hero">
               {copy.trialCta}
             </LandingTrialCta>
           </div>
@@ -180,6 +175,7 @@ export function LandingHero({ copy }: Props) {
                   alt=""
                   width={72}
                   height={72}
+                  loading="lazy"
                   className="size-full object-cover"
                   sizes="36px"
                 />

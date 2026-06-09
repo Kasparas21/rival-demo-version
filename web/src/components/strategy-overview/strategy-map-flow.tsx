@@ -30,6 +30,8 @@ type Props = {
   mapKey: string;
   onNodeClick?: (nodeId: string) => void;
   onEdgeHover?: (edge: { reasoning: string; confidence: number } | null) => void;
+  /** Override default map canvas height (e.g. hero demo embed). */
+  mapHeightClass?: string;
 };
 
 function FlowInner({
@@ -231,7 +233,12 @@ function FlowInner({
 }
 
 export function StrategyMapFlow(props: Props) {
-  const { mapKey, map, ...rest } = props;
+  const {
+    mapKey,
+    map,
+    mapHeightClass = "h-[min(680px,78vh)]",
+    ...rest
+  } = props;
   const safeMap = normalizeStrategyMapPayload(map);
   const containerRef = useRef<HTMLDivElement>(null);
   return (
@@ -239,7 +246,7 @@ export function StrategyMapFlow(props: Props) {
       <StrategyMapLegend />
       <div
         ref={containerRef}
-        className="h-[min(680px,78vh)] w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]"
+        className={`${mapHeightClass} w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]`}
       >
         <ReactFlowProvider>
           <FlowInner key={mapKey} map={safeMap} fitContainerRef={containerRef} {...rest} />

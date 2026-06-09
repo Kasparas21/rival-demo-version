@@ -49,7 +49,7 @@ export function ProgressiveRivalVideoBackdrop({
           loop
           muted
           playsInline
-          preload="auto"
+          preload="metadata"
           onCanPlay={() => setVideoReady(true)}
           className={cn(
             "absolute inset-0 z-0 h-full w-full object-cover transition-opacity duration-700 ease-out",

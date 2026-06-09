@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import type { ComponentType } from "react";
 import {
   BarChart3,
@@ -15,17 +16,16 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { AdLibraryPreview } from "@/components/feature-previews/ad-library-preview";
-import { ActivityScorePreview } from "@/components/feature-previews/activity-score-preview";
-import { AudienceInferencePreview } from "@/components/feature-previews/audience-inference-preview";
-import { CopyVaultPreview } from "@/components/feature-previews/copy-vault-preview";
-import { MondayDigestPreview } from "@/components/feature-previews/monday-digest-preview";
-import { PlatformPrioritizationPreview } from "@/components/feature-previews/platform-prioritization-preview";
-import { StealableAnglesPreview } from "@/components/feature-previews/stealable-angles-preview";
-import { StrategyMapPreview } from "@/components/feature-previews/strategy-map-preview";
-import { ThreeMovesPreview } from "@/components/feature-previews/three-moves-preview";
-import { TimelinePreview } from "@/components/feature-previews/timeline-preview";
 import type { FeatureIconKey } from "@/components/marketing/features-page-data";
+
+const previewFallback = () => (
+  <div className="flex min-h-[280px] items-center justify-center rounded-2xl border border-dashed border-[#e5e7eb] bg-white/60">
+    <p className="text-[12px] text-[#94a3b8]">Loading preview…</p>
+  </div>
+);
+
+const lazyPreview = (loader: () => Promise<{ default: ComponentType }>) =>
+  dynamic(loader, { ssr: false, loading: previewFallback });
 
 export const FEATURE_ICON_MAP: Record<FeatureIconKey, LucideIcon> = {
   "layout-grid": LayoutGrid,
@@ -41,14 +41,54 @@ export const FEATURE_ICON_MAP: Record<FeatureIconKey, LucideIcon> = {
 };
 
 export const FEATURE_PREVIEW_MAP: Record<string, ComponentType> = {
-  "ad-library": AdLibraryPreview,
-  "strategy-map": StrategyMapPreview,
-  "three-moves": ThreeMovesPreview,
-  "stealable-angles": StealableAnglesPreview,
-  "copy-vault": CopyVaultPreview,
-  timeline: TimelinePreview,
-  "activity-score": ActivityScorePreview,
-  "audience-inference": AudienceInferencePreview,
-  "monday-digest": MondayDigestPreview,
-  "platform-prioritization": PlatformPrioritizationPreview,
+  "ad-library": lazyPreview(() =>
+    import("@/components/feature-previews/ad-library-preview").then((m) => ({
+      default: m.AdLibraryPreview,
+    })),
+  ),
+  "strategy-map": lazyPreview(() =>
+    import("@/components/feature-previews/strategy-map-preview").then((m) => ({
+      default: m.StrategyMapPreview,
+    })),
+  ),
+  "three-moves": lazyPreview(() =>
+    import("@/components/feature-previews/three-moves-preview").then((m) => ({
+      default: m.ThreeMovesPreview,
+    })),
+  ),
+  "stealable-angles": lazyPreview(() =>
+    import("@/components/feature-previews/stealable-angles-preview").then((m) => ({
+      default: m.StealableAnglesPreview,
+    })),
+  ),
+  "copy-vault": lazyPreview(() =>
+    import("@/components/feature-previews/copy-vault-preview").then((m) => ({
+      default: m.CopyVaultPreview,
+    })),
+  ),
+  timeline: lazyPreview(() =>
+    import("@/components/feature-previews/timeline-preview").then((m) => ({
+      default: m.TimelinePreview,
+    })),
+  ),
+  "activity-score": lazyPreview(() =>
+    import("@/components/feature-previews/activity-score-preview").then((m) => ({
+      default: m.ActivityScorePreview,
+    })),
+  ),
+  "audience-inference": lazyPreview(() =>
+    import("@/components/feature-previews/audience-inference-preview").then((m) => ({
+      default: m.AudienceInferencePreview,
+    })),
+  ),
+  "monday-digest": lazyPreview(() =>
+    import("@/components/feature-previews/monday-digest-preview").then((m) => ({
+      default: m.MondayDigestPreview,
+    })),
+  ),
+  "platform-prioritization": lazyPreview(() =>
+    import("@/components/feature-previews/platform-prioritization-preview").then((m) => ({
+      default: m.PlatformPrioritizationPreview,
+    })),
+  ),
 };
