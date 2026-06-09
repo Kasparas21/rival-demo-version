@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { HeroVariantBDeferredDemo } from "@/components/landing/hero-variant-b-deferred-demo";
 import { HeroVariantBDemoEntrance } from "@/components/landing/hero-variant-b-demo-entrance";
 import { HeroVariantBGlowCta } from "@/components/landing/hero-variant-b-glow-cta";
+import { HeroHeadline } from "@/components/landing/hero-headline";
 import { HeroVariantBSkyClouds } from "@/components/landing/hero-variant-b-sky-clouds";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 
@@ -41,24 +42,10 @@ export function LandingHeroVariantB({ headline, trialCtaLabel = "Start your 7-da
           />
         </div>
 
-        <div className="relative isolate flex flex-1 flex-col items-center justify-center px-3 pt-24 pb-8 sm:px-4 sm:pt-28 sm:pb-10 md:justify-start md:px-4 md:pt-[7.5rem] md:pb-8">
-          <div className="relative z-10 mx-auto w-full max-w-5xl text-center">
-            <h1 id="how-it-works" className="hero-headline hero-variant-b-headline mx-auto lowercase">
-              <span className="hero-headline-line hero-variant-b-headline-line block max-md:whitespace-normal md:whitespace-nowrap">
-                {headline.line1Prefix}
-                <span className="hero-headline-accent">{headline.highlight}</span>
-              </span>
-              {headline.line2 ? (
-                <span className="hero-headline-line hero-variant-b-headline-line block max-md:whitespace-normal md:whitespace-nowrap">
-                  {headline.line2}
-                </span>
-              ) : null}
-            </h1>
-            <p className="hero-subline mx-auto mt-4 max-w-2xl text-pretty sm:mt-5">{headline.subline}</p>
-
-            <div className="mt-8 flex justify-center sm:mt-10">
-              <HeroVariantBGlowCta href="/onboarding">{trialCtaLabel}</HeroVariantBGlowCta>
-            </div>
+        <div className="landing-hero-copy-zone landing-hero-copy-zone--variant-b">
+          <HeroHeadline headline={headline} variant="variant-b" showSubline />
+          <div className="landing-hero-copy-zone__cta">
+            <HeroVariantBGlowCta href="/onboarding">{trialCtaLabel}</HeroVariantBGlowCta>
           </div>
         </div>
 

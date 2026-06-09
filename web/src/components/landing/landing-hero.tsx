@@ -92,7 +92,9 @@ export function LandingHero({ copy }: Props) {
         className="pointer-events-none absolute inset-x-0 bottom-0 left-1/2 z-[1] h-[min(48vh,460px)] w-screen max-w-[100vw] -translate-x-1/2 bg-gradient-to-b from-transparent from-[12%] via-white/80 via-[62%] to-white"
       />
 
-      <HeroHeadline headline={copy.headline} />
+      <div className="landing-hero-copy-zone landing-hero-copy-zone--control">
+        <HeroHeadline headline={copy.headline} variant="control" />
+      </div>
 
       <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">

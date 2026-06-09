@@ -1,32 +1,52 @@
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 
+type Props = {
+  headline: LandingCopy["hero"]["headline"];
+  /** Control (video hero) vs PostHog variant B (blue sky hero). */
+  variant?: "control" | "variant-b";
+  /** When false, subline is omitted (variant B renders it in the zone wrapper). */
+  showSubline?: boolean;
+};
+
 function HeroHeadlineAccent({ label }: { label: string }) {
   return <span className="hero-headline-accent">{label}</span>;
 }
 
-type Props = {
-  headline: LandingCopy["hero"]["headline"];
-};
+/** Shared hero headline — same center axis as the header pill on mobile and desktop. */
+export function HeroHeadline({
+  headline,
+  variant = "control",
+  showSubline = true,
+}: Props) {
+  const isVariantB = variant === "variant-b";
 
-/** Server-resolved headline — CSS clamp sizing, no client reflow. */
-export function HeroHeadline({ headline }: Props) {
   return (
-    <div className="relative z-10 mx-auto mb-9 w-full max-w-[54rem] px-4 sm:mb-12 sm:px-6">
+    <div className="landing-hero-copy">
       <h1
         id="how-it-works"
-        className={`${landingNavAnchorScrollClasses} hero-headline text-center lowercase`}
+        className={[
+          "landing-hero-copy__headline hero-headline lowercase",
+          isVariantB ? "hero-variant-b-headline" : "",
+          !isVariantB ? landingNavAnchorScrollClasses : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
-        <span className="hero-headline-line max-md:whitespace-normal md:whitespace-nowrap">
+        <span className="landing-hero-copy__line landing-hero-copy__line--primary">
           {headline.line1Prefix}
           <HeroHeadlineAccent label={headline.highlight} />
         </span>
-        <span className="hero-headline-line max-md:whitespace-normal md:whitespace-nowrap">
-          {headline.line2}
-        </span>
+        {headline.line2 ? (
+          <span className="landing-hero-copy__line landing-hero-copy__line--secondary">
+            {headline.line2}
+          </span>
+        ) : null}
       </h1>
 
-      <p className="hero-subline mx-auto mt-4 max-w-xl lowercase sm:mt-5">{headline.subline}</p>
+      {showSubline ? (
+        <p className="landing-hero-copy__subline hero-subline">{headline.subline}</p>
+      ) : null}
     </div>
   );
 }

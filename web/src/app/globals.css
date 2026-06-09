@@ -174,10 +174,81 @@ html:has([data-dashboard-app]) body {
 
 }
 
+/** Hero copy block — shares center axis with the floating header (max-w-5xl). */
+.landing-hero-copy {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 64rem;
+  margin-inline: auto;
+  padding-inline: 1rem;
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .landing-hero-copy {
+    padding-inline: 1.5rem;
+  }
+}
+
+.landing-hero-copy-zone {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.landing-hero-copy-zone--control {
+  margin-bottom: 2.25rem;
+}
+
+@media (min-width: 640px) {
+  .landing-hero-copy-zone--control {
+    margin-bottom: 3rem;
+  }
+}
+
+.landing-hero-copy-zone--variant-b {
+  flex: 1;
+  padding-top: 6.25rem;
+  padding-bottom: 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .landing-hero-copy-zone--variant-b {
+    padding-top: 7rem;
+    padding-bottom: 2rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .landing-hero-copy-zone--variant-b {
+    min-height: min(46vh, 28rem);
+    justify-content: center;
+    padding-top: 7.5rem;
+    padding-bottom: 2rem;
+  }
+}
+
+.landing-hero-copy-zone__cta {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+@media (min-width: 640px) {
+  .landing-hero-copy-zone__cta {
+    margin-top: 2.5rem;
+  }
+}
+
 /** Hero headline — Inter latin; fluid size via clamp (no JS reflow). */
 .hero-headline {
   font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-  font-size: clamp(40px, 11vw, 96px);
   font-weight: 800;
   font-style: normal;
   font-synthesis: none;
@@ -186,8 +257,84 @@ html:has([data-dashboard-app]) body {
   color: #1a1a1a;
   overflow: visible;
   width: 100%;
-  max-width: 55rem;
   margin-inline: auto;
+  text-align: center;
+}
+
+.landing-hero-copy__headline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.landing-hero-copy__line {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.landing-hero-copy__line + .landing-hero-copy__line {
+  margin-top: 0.06em;
+}
+
+.landing-hero-copy__subline {
+  margin-inline: auto;
+  margin-top: 1rem;
+  max-width: 36rem;
+  text-align: center;
+  text-wrap: pretty;
+}
+
+@media (min-width: 640px) {
+  .landing-hero-copy__subline {
+    margin-top: 1.25rem;
+  }
+}
+
+/* Mobile headline sizing */
+@media (max-width: 767px) {
+  .hero-headline {
+    font-size: clamp(2rem, 9.5vw, 2.75rem);
+    letter-spacing: -0.035em;
+  }
+
+  .landing-hero-copy__line--primary,
+  .landing-hero-copy__line--secondary {
+    hyphens: auto;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* Desktop headline sizing */
+@media (min-width: 768px) {
+  .hero-headline {
+    font-size: clamp(3rem, 5.8vw, 6rem);
+    letter-spacing: -0.04em;
+  }
+
+  /* Control — two short lines, one row each when there is room */
+  .landing-hero-copy-zone--control .landing-hero-copy__line {
+    width: auto;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    hyphens: manual;
+  }
+
+  /* Variant B — often one long line (DE/EN/NL); balance-wrap but stay centered */
+  .landing-hero-copy-zone--variant-b .landing-hero-copy__line {
+    width: 100%;
+    max-width: 100%;
+    white-space: normal;
+    text-wrap: balance;
+    overflow-wrap: normal;
+    hyphens: manual;
+  }
 }
 
 .hero-headline-line {
@@ -197,13 +344,6 @@ html:has([data-dashboard-app]) body {
 
 .hero-headline-line + .hero-headline-line {
   margin-top: 0.06em;
-}
-
-@media (min-width: 768px) {
-  .hero-headline {
-    font-size: clamp(48px, 6.2vw, 96px);
-    letter-spacing: -0.04em;
-  }
 }
 
 .landing-scroll-reveal {
@@ -482,11 +622,6 @@ html:has([data-dashboard-app]) body {
 .hero-variant-b-headline {
   font-family: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
-  width: 100%;
-  max-width: none;
-  margin-inline: auto;
-  text-align: center;
-  text-wrap: balance;
 }
 
 /* Variant B sky — feather clouds out before the white section fade */
@@ -522,24 +657,6 @@ html:has([data-dashboard-app]) body {
   color: rgb(240 247 252 / 0.88);
   font-weight: 500;
   text-shadow: 0 1px 12px rgba(8, 28, 48, 0.18);
-}
-
-@media (min-width: 768px) {
-  .hero-variant-b-headline {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-wrap: wrap;
-  }
-
-  .hero-variant-b-headline-line {
-    display: inline-block;
-    width: auto;
-    max-width: 100%;
-    margin-inline: auto;
-    text-align: center;
-  }
 }
 
 .hero-variant-b-headline-accent {
