@@ -50,15 +50,15 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
-      // Home runs PostHog A/B — never cache HTML at the edge (same page for all users).
+      // Home varies by locale + hero A/B cookies — short edge cache, revalidate in background.
       {
         source: "/",
         headers: [
           {
             key: "Cache-Control",
-            value: "private, no-cache, no-store, must-revalidate",
+            value: "private, max-age=0, s-maxage=60, stale-while-revalidate=300",
           },
-          { key: "Vary", value: "Cookie" },
+          { key: "Vary", value: "Cookie, x-vercel-ip-country" },
         ],
       },
       {

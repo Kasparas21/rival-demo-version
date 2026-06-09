@@ -9,6 +9,10 @@ export const POSTHOG_DISTINCT_ID_COOKIE = "rival_ph_distinct_id";
 /** Set in middleware so the same request can evaluate flags before the cookie round-trips. */
 export const POSTHOG_DISTINCT_ID_HEADER = "x-rival-ph-distinct-id";
 
+/** Edge-assigned hero A/B arm — avoids blocking SSR on PostHog API. */
+export const LANDING_HERO_VARIANT_COOKIE = "rival_hero_variant";
+export const LANDING_HERO_VARIANT_HEADER = "x-rival-hero-variant";
+
 /** Feature flag / experiment key — create in PostHog → Feature flags → Experiments. */
 export const LANDING_HERO_HEADLINE_FLAG = "landing-page-hero-test-1";
 

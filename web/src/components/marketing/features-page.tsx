@@ -1,3 +1,4 @@
+import { fontTempting } from "@/lib/fonts/tempting";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import { LandingHeader } from "@/components/landing/landing-header";
@@ -16,7 +17,9 @@ type Props = {
 
 export function FeaturesPage({ copy, locale }: Props) {
   return (
-    <div className="w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased">
+    <div
+      className={`${fontTempting.variable} w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased`}
+    >
       <LandingHeader copy={copy.header} locale={locale} />
 
       <div className="relative isolate pt-28 sm:pt-32">

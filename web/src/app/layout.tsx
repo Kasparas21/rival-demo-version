@@ -5,11 +5,9 @@ import { DeferredMarketingTags } from "@/components/analytics/deferred-marketing
 import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
 import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
-import { PostHogIdentify } from "@/components/analytics/posthog-identify";
 import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
 import { getPostHogBootstrap } from "@/lib/analytics/posthog-server";
 import { fontInter } from "@/lib/fonts/inter";
-import { fontTempting } from "@/lib/fonts/tempting";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getLandingCopy } from "@/lib/i18n/landing";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
@@ -87,12 +85,11 @@ export default async function RootLayout({
   return (
     <html lang={lang}>
       <body
-        className={`${instrumentSerif.variable} ${fontInter.variable} ${fontInter.className} ${fontTempting.variable} font-sans antialiased`}
+        className={`${instrumentSerif.variable} ${fontInter.variable} ${fontInter.className} font-sans antialiased`}
       >
         <MarketingConsentProvider>
           <DeferredMarketingTags />
           <SitePostHogProvider bootstrap={posthogBootstrap}>
-            <PostHogIdentify />
             <Suspense fallback={null}>
               <MetaPixelPageView />
             </Suspense>

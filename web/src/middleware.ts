@@ -1,7 +1,15 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import { POSTHOG_DISTINCT_ID_HEADER } from "@/lib/analytics/posthog-config";
+import {
+  getLandingHeroVariantFromDistinctId,
+  parseLandingHeroVariantCookie,
+} from "@/lib/analytics/landing-hero-bucket";
+import {
+  LANDING_HERO_VARIANT_COOKIE,
+  LANDING_HERO_VARIANT_HEADER,
+  POSTHOG_DISTINCT_ID_HEADER,
+} from "@/lib/analytics/posthog-config";
 import {
   POSTHOG_DISTINCT_ID_COOKIE,
   readPostHogDistinctIdCookie,
@@ -26,17 +34,34 @@ function attachPostHogDistinctId(
   const distinctId = resolvePostHogDistinctId(request);
   requestHeaders.set(POSTHOG_DISTINCT_ID_HEADER, distinctId);
 
-  const hasCookie = readPostHogDistinctIdCookie(
+  const heroVariant =
+    parseLandingHeroVariantCookie(request.cookies.get(LANDING_HERO_VARIANT_COOKIE)?.value) ??
+    getLandingHeroVariantFromDistinctId(distinctId);
+  requestHeaders.set(LANDING_HERO_VARIANT_HEADER, heroVariant);
+
+  const hasDistinctCookie = readPostHogDistinctIdCookie(
     request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value,
   );
-  if (hasCookie) return;
+  if (!hasDistinctCookie) {
+    response.cookies.set(POSTHOG_DISTINCT_ID_COOKIE, distinctId, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
 
-  response.cookies.set(POSTHOG_DISTINCT_ID_COOKIE, distinctId, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-  });
+  const hasHeroCookie = parseLandingHeroVariantCookie(
+    request.cookies.get(LANDING_HERO_VARIANT_COOKIE)?.value,
+  );
+  if (!hasHeroCookie) {
+    response.cookies.set(LANDING_HERO_VARIANT_COOKIE, heroVariant, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+  }
 }
 
 function applyPostHogDistinctIdCookie(request: NextRequest, response: NextResponse) {

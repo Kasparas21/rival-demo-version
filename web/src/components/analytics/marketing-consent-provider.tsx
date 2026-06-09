@@ -28,14 +28,21 @@ type MarketingConsentContextValue = {
 
 const MarketingConsentContext = createContext<MarketingConsentContextValue | null>(null);
 
-export function MarketingConsentProvider({ children }: { children: ReactNode }) {
-  const [status, setStatus] = useState<MarketingConsentStatus | null>(null);
-  const [isResolved, setIsResolved] = useState(false);
+function readInitialConsent(): {
+  status: MarketingConsentStatus | null;
+  isResolved: boolean;
+} {
+  if (typeof window === "undefined") {
+    return { status: null, isResolved: false };
+  }
+  return { status: readStoredMarketingConsent(), isResolved: true };
+}
 
-  useEffect(() => {
-    setStatus(readStoredMarketingConsent());
-    setIsResolved(true);
-  }, []);
+export function MarketingConsentProvider({ children }: { children: ReactNode }) {
+  const [status, setStatus] = useState<MarketingConsentStatus | null>(
+    () => readInitialConsent().status,
+  );
+  const [isResolved] = useState(() => readInitialConsent().isResolved);
 
   useEffect(() => {
     const onConsentChange = (event: Event) => {

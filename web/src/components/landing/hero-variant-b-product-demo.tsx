@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
 
-import { DemoAdLibraryView } from "@/components/landing/hero-variant-b-demo/ad-library-view";
 import { HeroVariantBDemoShell } from "@/components/landing/hero-variant-b-demo/chrome";
 import { HeroVariantBDemoFeatureSwitch } from "@/components/landing/hero-variant-b-demo/feature-switch";
 import {
@@ -11,6 +10,14 @@ import {
   type CompetitorPageTabId,
   type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
+
+const DemoAdLibraryView = dynamic(
+  () =>
+    import("@/components/landing/hero-variant-b-demo/ad-library-view").then((m) => ({
+      default: m.DemoAdLibraryView,
+    })),
+  { ssr: false },
+);
 
 const DemoInsightsView = dynamic(
   () =>

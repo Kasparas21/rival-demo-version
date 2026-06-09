@@ -1,9 +1,13 @@
 "use client";
 
-import type { BootstrapConfig } from "posthog-js";
-import posthog from "posthog-js";
-import { PostHogProvider as PHProvider } from "posthog-js/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import type { BootstrapConfig, PostHog } from "posthog-js";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 
 import { useOptionalMarketingConsent } from "@/components/analytics/marketing-consent-provider";
 import { reportLandingHeroExperimentExposure } from "@/lib/analytics/posthog-report-exposure";
@@ -18,6 +22,11 @@ type Props = {
   bootstrap?: BootstrapConfig;
 };
 
+type PostHogProviderComponent = ComponentType<{
+  client: PostHog;
+  children: ReactNode;
+}>;
+
 function mergeBootstrap(serverBootstrap?: BootstrapConfig): BootstrapConfig | undefined {
   if (!serverBootstrap?.featureFlags) return undefined;
   return { featureFlags: serverBootstrap.featureFlags };
@@ -26,6 +35,10 @@ function mergeBootstrap(serverBootstrap?: BootstrapConfig): BootstrapConfig | un
 export function SitePostHogProvider({ children, bootstrap }: Props) {
   const consent = useOptionalMarketingConsent();
   const initializedRef = useRef(false);
+  const posthogRef = useRef<PostHog | null>(null);
+  const [posthogClient, setPosthogClient] = useState<PostHog | null>(null);
+  const [Provider, setProvider] = useState<PostHogProviderComponent | null>(null);
+  const [Identify, setIdentify] = useState<ComponentType | null>(null);
 
   const hasConsent = consent?.status === "granted";
   const consentResolved = consent?.isResolved ?? false;
@@ -34,10 +47,14 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     if (!isPostHogConfigured() || !consentResolved) return;
 
     if (!hasConsent) {
-      if (initializedRef.current) {
-        posthog.opt_out_capturing();
-        posthog.reset();
+      if (initializedRef.current && posthogRef.current) {
+        posthogRef.current.opt_out_capturing();
+        posthogRef.current.reset();
         initializedRef.current = false;
+        posthogRef.current = null;
+        setPosthogClient(null);
+        setProvider(null);
+        setIdentify(null);
       }
       return;
     }
@@ -53,29 +70,42 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     const initPostHog = () => {
       if (initializedRef.current) return;
 
-      posthog.init(apiKey, {
-        api_host: POSTHOG_BROWSER_API_HOST,
-        ui_host: "https://eu.posthog.com",
-        defaults: "2026-05-30",
-        person_profiles: "identified_only",
-        capture_pageview: "history_change",
-        capture_pageleave: true,
-        persistence: "localStorage+cookie",
-        bootstrap: mergedBootstrap,
-        opt_out_capturing_by_default: false,
-        disable_session_recording: onMarketingPage,
-        session_recording: onMarketingPage
-          ? undefined
-          : {
-              maskAllInputs: true,
-            },
-        advanced_disable_feature_flags: false,
-        loaded: (client) => {
-          reportLandingHeroExperimentExposure(client);
-        },
-      });
+      void Promise.all([
+        import("posthog-js"),
+        import("posthog-js/react"),
+        import("@/components/analytics/posthog-identify"),
+      ]).then(([posthogModule, reactModule, identifyModule]) => {
+          if (initializedRef.current) return;
 
-      initializedRef.current = true;
+          const posthog = posthogModule.default;
+          posthog.init(apiKey, {
+            api_host: POSTHOG_BROWSER_API_HOST,
+            ui_host: "https://eu.posthog.com",
+            defaults: "2026-05-30",
+            person_profiles: "identified_only",
+            capture_pageview: "history_change",
+            capture_pageleave: true,
+            persistence: "localStorage+cookie",
+            bootstrap: mergedBootstrap,
+            opt_out_capturing_by_default: false,
+            disable_session_recording: onMarketingPage,
+            session_recording: onMarketingPage
+              ? undefined
+              : {
+                  maskAllInputs: true,
+                },
+            advanced_disable_feature_flags: false,
+            loaded: (client) => {
+              reportLandingHeroExperimentExposure(client);
+            },
+          });
+
+          initializedRef.current = true;
+          posthogRef.current = posthog;
+          setPosthogClient(posthog);
+          setProvider(() => reactModule.PostHogProvider);
+          setIdentify(() => identifyModule.PostHogIdentify);
+        });
     };
 
     if (onMarketingPage && "requestIdleCallback" in window) {
@@ -84,15 +114,16 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     }
 
     initPostHog();
-
-    return () => {
-      // Keep singleton alive for SPA navigations; consent effect handles opt-out.
-    };
   }, [bootstrap, consentResolved, hasConsent]);
 
-  if (!isPostHogConfigured() || !hasConsent) {
+  if (!Provider || !posthogClient) {
     return <>{children}</>;
   }
 
-  return <PHProvider client={posthog}>{children}</PHProvider>;
+  return (
+    <Provider client={posthogClient}>
+      {Identify ? <Identify /> : null}
+      {children}
+    </Provider>
+  );
 }

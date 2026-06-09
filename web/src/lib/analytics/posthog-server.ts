@@ -1,15 +1,21 @@
 import { cookies, headers } from "next/headers";
-import { cache } from "react";
 import type { BootstrapConfig } from "posthog-js";
 import { PostHog } from "posthog-node";
 
+import {
+  getLandingHeroVariantFromDistinctId,
+  getPostHogFlagValueForHeroVariant,
+  parseLandingHeroVariantCookie,
+  type LandingHeroHeadlineVariant,
+} from "@/lib/analytics/landing-hero-bucket";
 import {
   getPostHogApiHost,
   getPostHogPublicKey,
   getPostHogServerKey,
   isPostHogServerConfigured,
   LANDING_HERO_HEADLINE_FLAG,
-  LANDING_HERO_TEST_VARIANT_KEYS,
+  LANDING_HERO_VARIANT_COOKIE,
+  LANDING_HERO_VARIANT_HEADER,
   POSTHOG_DISTINCT_ID_HEADER,
 } from "@/lib/analytics/posthog-config";
 import {
@@ -30,28 +36,15 @@ function createPostHogServerClient(): PostHog | null {
   });
 }
 
-/** Fresh client + shutdown per request — reliable on Vercel serverless. */
-async function withPostHogServer<T>(
-  fn: (client: PostHog, distinctId: string) => Promise<T>,
-): Promise<T | null> {
-  const distinctId = await getPostHogDistinctId();
-  const client = createPostHogServerClient();
-  if (!client || !distinctId) return null;
-
-  try {
-    return await fn(client, distinctId);
-  } finally {
-    try {
-      await client.shutdown();
-    } catch {
-      // Best-effort flush before the lambda exits.
-    }
-  }
-}
-
 export function getPostHogServerClient(): PostHog | null {
   return createPostHogServerClient();
 }
+
+export async function shutdownPostHogServer(): Promise<void> {
+  // No-op: API routes create short-lived clients per call.
+}
+
+export type { LandingHeroHeadlineVariant };
 
 export async function getPostHogDistinctId(): Promise<string | null> {
   const headerStore = await headers();
@@ -64,48 +57,38 @@ export async function getPostHogDistinctId(): Promise<string | null> {
   return readPostHogDistinctIdCookie(cookieStore.get(POSTHOG_DISTINCT_ID_COOKIE)?.value) ?? null;
 }
 
-export type LandingHeroHeadlineVariant = "control" | "test";
+async function getLandingHeroVariantFromRequest(): Promise<LandingHeroHeadlineVariant> {
+  const headerStore = await headers();
+  const fromHeader = parseLandingHeroVariantCookie(headerStore.get(LANDING_HERO_VARIANT_HEADER));
+  if (fromHeader) return fromHeader;
 
-const LANDING_HERO_TEST_VARIANTS = new Set<string>(LANDING_HERO_TEST_VARIANT_KEYS);
+  const cookieStore = await cookies();
+  const fromCookie = parseLandingHeroVariantCookie(
+    cookieStore.get(LANDING_HERO_VARIANT_COOKIE)?.value,
+  );
+  if (fromCookie) return fromCookie;
 
-function heroVariantFromFlag(value: string | boolean | undefined): LandingHeroHeadlineVariant {
-  if (value === true || (typeof value === "string" && LANDING_HERO_TEST_VARIANTS.has(value))) {
-    return "test";
-  }
+  const distinctId = await getPostHogDistinctId();
+  if (distinctId) return getLandingHeroVariantFromDistinctId(distinctId);
+
   return "control";
 }
 
-type PostHogLandingData = {
-  bootstrap: BootstrapConfig | undefined;
-  heroVariant: LandingHeroHeadlineVariant;
-};
-
-/** One PostHog round-trip per request — shared by layout bootstrap + page hero variant. */
-export const getPostHogLandingData = cache(async (): Promise<PostHogLandingData> => {
-  const result = await withPostHogServer(async (client, distinctId) => {
-    const flagValue = await client.getFeatureFlag(LANDING_HERO_HEADLINE_FLAG, distinctId);
-    return {
-      bootstrap: {
-        distinctID: distinctId,
-        featureFlags: {
-          [LANDING_HERO_HEADLINE_FLAG]: flagValue ?? "control",
-        },
-      } satisfies BootstrapConfig,
-      heroVariant: heroVariantFromFlag(flagValue),
-    };
-  });
-
-  return result ?? { bootstrap: undefined, heroVariant: "control" };
-});
-
+/** Client bootstrap from edge-assigned variant — no PostHog API round-trip on SSR. */
 export async function getPostHogBootstrap(): Promise<BootstrapConfig | undefined> {
-  return (await getPostHogLandingData()).bootstrap;
+  const distinctId = await getPostHogDistinctId();
+  if (!distinctId) return undefined;
+
+  const heroVariant = await getLandingHeroVariantFromRequest();
+
+  return {
+    distinctID: distinctId,
+    featureFlags: {
+      [LANDING_HERO_HEADLINE_FLAG]: getPostHogFlagValueForHeroVariant(heroVariant),
+    },
+  };
 }
 
 export async function getLandingHeroHeadlineVariant(): Promise<LandingHeroHeadlineVariant> {
-  return (await getPostHogLandingData()).heroVariant;
-}
-
-export async function shutdownPostHogServer(): Promise<void> {
-  // No-op: clients are shut down per request in withPostHogServer.
+  return getLandingHeroVariantFromRequest();
 }
