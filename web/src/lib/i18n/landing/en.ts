@@ -150,6 +150,13 @@ export const landingCopyEn: LandingCopy = {
       line2: "your competitors run.",
       subline: "across all 6 platforms, in one dashboard",
     },
+    testHeadline: {
+      line1Prefix: "the ",
+      highlight: "ultimate ad spy tool",
+      line2: "",
+      subline:
+        "See every ad your competitors run across Meta, Google, TikTok, LinkedIn, Pinterest & Snapchat - in one dashboard.",
+    },
     trialCta: "Start your 7-day trial →",
     platformTrialAria: "Start your trial with {platform}",
     marketersPillAria: "Built for performance marketers",

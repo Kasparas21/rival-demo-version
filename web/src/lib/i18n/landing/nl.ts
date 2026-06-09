@@ -38,6 +38,13 @@ export const landingCopyNl: LandingCopy = {
       line2: "die uw concurrenten draaien.",
       subline: "over alle 6 platformen, in één dashboard",
     },
+    testHeadline: {
+      line1Prefix: "de ",
+      highlight: "ultieme ad-spy-tool",
+      line2: "",
+      subline:
+        "Bekijk elke ad die je concurrenten draaien op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat – in één dashboard.",
+    },
     trialCta: "Start je 7-daagse proef →",
     platformTrialAria: "Start proef met {platform}",
     marketersPillAria: "Gebouwd voor performance marketeers",

@@ -38,6 +38,13 @@ export const landingCopyDe: LandingCopy = {
       line2: "ihrer wettbewerber schalten.",
       subline: "über alle 6 plattformen in einem dashboard",
     },
+    testHeadline: {
+      line1Prefix: "das ",
+      highlight: "ultimative ad-spy-tool",
+      line2: "",
+      subline:
+        "Sehen Sie jede Anzeige Ihrer Wettbewerber auf Meta, Google, TikTok, LinkedIn, Pinterest und Snapchat – in einem Dashboard.",
+    },
     trialCta: "7-Tage-Test starten →",
     platformTrialAria: "Test mit {platform} starten",
     marketersPillAria: "Für Performance-Marketer gebaut",

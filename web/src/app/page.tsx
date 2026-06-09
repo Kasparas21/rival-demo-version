@@ -55,7 +55,7 @@ export default async function Home({
     ...copy,
     hero: {
       ...copy.hero,
-      headline: applyLandingHeroHeadlineExperiment(copy.hero.headline, heroVariant, locale),
+      headline: applyLandingHeroHeadlineExperiment(copy.hero, heroVariant),
     },
   };
   const hasAuthParams = Boolean(

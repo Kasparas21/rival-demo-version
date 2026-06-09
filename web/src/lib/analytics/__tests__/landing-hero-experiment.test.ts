@@ -5,13 +5,9 @@ import {
   isLandingHeroTestVariant,
   parseDevHeroVariantPreview,
 } from "@/lib/analytics/landing-hero-experiment";
-
-const controlHeadline = {
-  line1Prefix: "see ",
-  highlight: "every ad",
-  line2: "your competitors run.",
-  subline: "across all 6 platforms, in one dashboard",
-};
+import { landingCopyDe } from "@/lib/i18n/landing/de";
+import { landingCopyEn } from "@/lib/i18n/landing/en";
+import { landingCopyNl } from "@/lib/i18n/landing/nl";
 
 describe("parseDevHeroVariantPreview", () => {
   afterEach(() => {
@@ -42,19 +38,25 @@ describe("isLandingHeroTestVariant", () => {
 describe("applyLandingHeroHeadlineExperiment", () => {
   it("returns control copy for control variant", () => {
     expect(
-      applyLandingHeroHeadlineExperiment(controlHeadline, "control", "en"),
-    ).toEqual(controlHeadline);
+      applyLandingHeroHeadlineExperiment(landingCopyEn.hero, "control"),
+    ).toEqual(landingCopyEn.hero.headline);
   });
 
-  it("returns variant copy only for test on English", () => {
-    const variant = applyLandingHeroHeadlineExperiment(controlHeadline, "test", "en");
-    expect(variant).not.toEqual(controlHeadline);
-    expect(variant.highlight).toBe("what rivals");
+  it("returns localized test copy for English", () => {
+    const variant = applyLandingHeroHeadlineExperiment(landingCopyEn.hero, "test");
+    expect(variant).toEqual(landingCopyEn.hero.testHeadline);
+    expect(variant.highlight).toBe("ultimate ad spy tool");
   });
 
-  it("shows test copy on non-English locales until translated", () => {
-    const variant = applyLandingHeroHeadlineExperiment(controlHeadline, "test", "de");
-    expect(variant).not.toEqual(controlHeadline);
-    expect(variant.highlight).toBe("what rivals");
+  it("returns localized test copy for German", () => {
+    const variant = applyLandingHeroHeadlineExperiment(landingCopyDe.hero, "test");
+    expect(variant).toEqual(landingCopyDe.hero.testHeadline);
+    expect(variant.highlight).toBe("ultimative ad-spy-tool");
+  });
+
+  it("returns localized test copy for Dutch", () => {
+    const variant = applyLandingHeroHeadlineExperiment(landingCopyNl.hero, "test");
+    expect(variant).toEqual(landingCopyNl.hero.testHeadline);
+    expect(variant.highlight).toBe("ultieme ad-spy-tool");
   });
 });

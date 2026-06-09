@@ -47,6 +47,14 @@ export type StackToolCopy = {
   iconBg: string;
 };
 
+export type LandingHeroHeadlineCopy = {
+  /** First line: `{line1Prefix}{highlight}` e.g. "see every ad" */
+  line1Prefix: string;
+  highlight: string;
+  line2: string;
+  subline: string;
+};
+
 export type LandingCopy = {
   locale: Locale;
   meta: {
@@ -70,13 +78,9 @@ export type LandingCopy = {
     localeSwitcherAria: string;
   };
   hero: {
-    headline: {
-      /** First line: `{line1Prefix}{highlight}` e.g. "see every ad" */
-      line1Prefix: string;
-      highlight: string;
-      line2: string;
-      subline: string;
-    };
+    headline: LandingHeroHeadlineCopy;
+    /** PostHog variant B hero — localized per locale. */
+    testHeadline: LandingHeroHeadlineCopy;
     trialCta: string;
     platformTrialAria: string;
     marketersPillAria: string;

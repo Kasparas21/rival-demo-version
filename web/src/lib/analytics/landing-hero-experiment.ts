@@ -4,19 +4,6 @@ import type { LandingHeroHeadlineVariant } from "@/lib/analytics/posthog-server"
 
 const LANDING_HERO_TEST_VARIANT_SET = new Set<string>(LANDING_HERO_TEST_VARIANT_KEYS);
 
-/** Alternate hero copy for PostHog experiment variant `test`. */
-export const LANDING_HERO_TEST_HEADLINE: LandingCopy["hero"]["headline"] = {
-  line1Prefix: "the ",
-  highlight: "ultimate ad spy tool",
-  line2: "",
-  subline:
-    "See every ad your competitors run across Meta, Google, TikTok, LinkedIn, Pinterest & Snapchat - in one dashboard.",
-};
-
-export function getLandingHeroTestHeadline(): LandingCopy["hero"]["headline"] {
-  return LANDING_HERO_TEST_HEADLINE;
-}
-
 export function isLandingHeroTestVariant(flag: string | boolean | undefined | null): boolean {
   return flag === true || (typeof flag === "string" && LANDING_HERO_TEST_VARIANT_SET.has(flag));
 }
@@ -46,11 +33,9 @@ export function isDevHeroVariantPreviewActive(heroParam: string | null | undefin
 }
 
 export function applyLandingHeroHeadlineExperiment(
-  headline: LandingCopy["hero"]["headline"],
+  hero: Pick<LandingCopy["hero"], "headline" | "testHeadline">,
   variant: LandingHeroHeadlineVariant,
-  _locale: string,
 ): LandingCopy["hero"]["headline"] {
-  if (variant !== "test") return headline;
-  // Experiment copy is EN-only for now; still show it when assigned test on de/nl.
-  return LANDING_HERO_TEST_HEADLINE;
+  if (variant !== "test") return hero.headline;
+  return hero.testHeadline;
 }
