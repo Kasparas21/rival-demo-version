@@ -60,22 +60,24 @@ type SortKey = "activityScore" | "activeAdCount" | "newAdsThisPeriod" | "creativ
 
 type Props = {
   fetchEnabled: boolean;
+  brandId: string;
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
   onNavigate: (tab: string, sub?: string | null) => void;
 };
 
-export function BenchmarkTab({ fetchEnabled, cacheDomainNorm, lastScrapedAt = null, onNavigate }: Props) {
+export function BenchmarkTab({ fetchEnabled, brandId, cacheDomainNorm, lastScrapedAt = null, onNavigate }: Props) {
   const stamp = lastScrapedAt ?? "none";
   const cacheKey = useMemo(
-    () => `${cacheDomainNorm.trim().toLowerCase()}:benchmark:v2:${stamp}`,
-    [cacheDomainNorm, stamp],
+    () => `${brandId}:${cacheDomainNorm.trim().toLowerCase()}:benchmark:v2:${stamp}`,
+    [brandId, cacheDomainNorm, stamp],
   );
 
   const fetchBenchmark = useCallback(async (): Promise<BenchmarkApiResponse> => {
-    const res = await fetch("/api/brand/benchmark", { credentials: "include" });
+    const qs = brandId ? `?brandId=${encodeURIComponent(brandId)}` : "";
+    const res = await fetch(`/api/brand/benchmark${qs}`, { credentials: "include" });
     return (await res.json()) as BenchmarkApiResponse;
-  }, []);
+  }, [brandId]);
 
   const { data, loading, error, refetch, isValidating } = useScrapeKeyedCache<BenchmarkApiResponse>({
     cacheKey,

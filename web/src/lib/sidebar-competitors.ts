@@ -1,22 +1,55 @@
 /** Persisted “spied” competitors for the dashboard sidebar */
 
-import { readClientMaxWatchedCompetitors } from "@/lib/billing/client-plan-cap";
+import { readClientCompetitorSlotsRemaining, readClientMaxWatchedCompetitors } from "@/lib/billing/client-plan-cap";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
 import { safeSetLocalStorage } from "@/lib/cache/storage-quota";
 
 export const SIDEBAR_COMPETITORS_EVENT = "rival_sidebar_competitors";
 export const SIDEBAR_COMPETITORS_STORAGE_KEY = "rival_sidebar_competitors_v2";
 const STORAGE_V1 = "rival_competitors";
+const ACTIVE_BRAND_STORAGE_KEY = "rival_active_brand";
 /** Tracks which Supabase user last owned `SIDEBAR_COMPETITORS_STORAGE_KEY` — prevents cross-account leakage on shared browsers. */
 const SIDEBAR_STORAGE_OWNER_KEY = "rival_sidebar_competitors_owner_v1";
+
+function scopedSidebarStorageKey(): string {
+  if (typeof window === "undefined") return SIDEBAR_COMPETITORS_STORAGE_KEY;
+  try {
+    const activeBrand = window.localStorage.getItem(ACTIVE_BRAND_STORAGE_KEY)?.trim();
+    if (activeBrand && activeBrand !== "default" && activeBrand !== "_workspace") {
+      return `${SIDEBAR_COMPETITORS_STORAGE_KEY}:${activeBrand}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  return SIDEBAR_COMPETITORS_STORAGE_KEY;
+}
+
+function removeAllSidebarCompetitorStorage(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const key = window.localStorage.key(i);
+      if (
+        key === SIDEBAR_COMPETITORS_STORAGE_KEY ||
+        key?.startsWith(`${SIDEBAR_COMPETITORS_STORAGE_KEY}:`)
+      ) {
+        keys.push(key);
+      }
+    }
+    for (const key of keys) window.localStorage.removeItem(key);
+    window.localStorage.removeItem(STORAGE_V1);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function ensureSidebarStorageBelongsToUser(userId: string): void {
   if (typeof window === "undefined" || !userId) return;
   try {
     const prev = localStorage.getItem(SIDEBAR_STORAGE_OWNER_KEY);
     if (prev && prev !== userId) {
-      localStorage.removeItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
-      localStorage.removeItem(STORAGE_V1);
+      removeAllSidebarCompetitorStorage();
       window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
     }
     localStorage.setItem(SIDEBAR_STORAGE_OWNER_KEY, userId);
@@ -29,9 +62,18 @@ export function ensureSidebarStorageBelongsToUser(userId: string): void {
 export function clearSidebarCompetitorsStorageForSignOut(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
-    localStorage.removeItem(STORAGE_V1);
+    removeAllSidebarCompetitorStorage();
     localStorage.removeItem(SIDEBAR_STORAGE_OWNER_KEY);
+    window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSidebarCompetitorsForBrand(brandId: string): void {
+  if (typeof window === "undefined" || !brandId.trim()) return;
+  try {
+    window.localStorage.removeItem(`${SIDEBAR_COMPETITORS_STORAGE_KEY}:${brandId.trim()}`);
     window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
   } catch {
     /* ignore */
@@ -361,7 +403,13 @@ export function wouldExceedWatchedCompetitorCap(
   const slug = normalizeCompetitorSlug(trimmed);
   const watched = loadWatchedSidebarCompetitors(workspaceDomain);
   const idx = findMatchingCompetitorIndex(watched, slug, trimmed);
-  return idx < 0 && watched.length >= cap;
+  if (idx >= 0) return false;
+
+  const globalRemaining = readClientCompetitorSlotsRemaining();
+  if (globalRemaining !== null) {
+    return globalRemaining <= 0;
+  }
+  return watched.length >= cap;
 }
 
 export type UpsertSidebarCompetitorResult =
@@ -372,9 +420,11 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
   if (typeof window === "undefined") return [];
   try {
     let list: SidebarCompetitor[];
-    const raw = window.localStorage.getItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
-    if (!raw) list = migrateV1IfNeeded();
-    else {
+    const key = scopedSidebarStorageKey();
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      list = key === SIDEBAR_COMPETITORS_STORAGE_KEY ? migrateV1IfNeeded() : [];
+    } else {
       const parsed = JSON.parse(raw) as unknown;
       list = Array.isArray(parsed) ? (parsed as SidebarCompetitor[]) : [];
     }
@@ -383,7 +433,7 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
     const logosHoisted = withLogos.some((c, i) => c.logoUrl !== deduped[i].logoUrl);
     if (deduped.length !== list.length || logosHoisted) {
       safeSetLocalStorage(
-        SIDEBAR_COMPETITORS_STORAGE_KEY,
+        key,
         JSON.stringify(withLogos.slice(0, MAX_STORED))
       );
     }
@@ -397,9 +447,10 @@ export function saveSidebarCompetitors(list: SidebarCompetitor[]) {
   if (typeof window === "undefined") return;
   const cleaned = dedupeSidebarCompetitors(list).slice(0, MAX_STORED).map(hoistLogoOntoRow);
   const serialized = JSON.stringify(cleaned);
-  const prev = window.localStorage.getItem(SIDEBAR_COMPETITORS_STORAGE_KEY);
+  const key = scopedSidebarStorageKey();
+  const prev = window.localStorage.getItem(key);
   if (prev === serialized) return;
-  if (!safeSetLocalStorage(SIDEBAR_COMPETITORS_STORAGE_KEY, serialized)) {
+  if (!safeSetLocalStorage(key, serialized)) {
     if (process.env.NODE_ENV === "development") {
       console.warn("[sidebar] could not persist competitors list — storage full");
     }
@@ -421,8 +472,13 @@ export function upsertSidebarCompetitor(
   const idx = findMatchingCompetitorIndex(list, slug, lookupName);
   const isNew = idx < 0;
   const cap = readClientMaxWatchedCompetitors();
-  if (isNew && countWatchedSidebarCompetitors() >= cap) {
-    return { ok: false, reason: "max_watched_competitors" };
+  if (isNew) {
+    const globalRemaining = readClientCompetitorSlotsRemaining();
+    if (globalRemaining !== null) {
+      if (globalRemaining <= 0) return { ok: false, reason: "max_watched_competitors" };
+    } else if (countWatchedSidebarCompetitors() >= cap) {
+      return { ok: false, reason: "max_watched_competitors" };
+    }
   }
   const prev = idx >= 0 ? list[idx] : undefined;
   const merged: SidebarCompetitor = prev

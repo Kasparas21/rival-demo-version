@@ -30,6 +30,7 @@ type ProfileState = {
 
 type PlanLimitsState = {
   maxWatchedCompetitors: number;
+  maxOwnBrandWorkspaces: number;
   maxAdsProcessedPerMonth: number;
   maxSwapsPerMonth: number;
   csvExportsPerMonth: number;
@@ -77,6 +78,7 @@ type BillingState = {
 
 const emptyLimits: PlanLimitsState = {
   maxWatchedCompetitors: 5,
+  maxOwnBrandWorkspaces: 5,
   maxAdsProcessedPerMonth: 50_000,
   maxSwapsPerMonth: 15,
   csvExportsPerMonth: 0,
@@ -129,6 +131,10 @@ function mapLimitsFromApi(raw: Record<string, unknown> | undefined): PlanLimitsS
       typeof raw.maxWatchedCompetitors === "number"
         ? raw.maxWatchedCompetitors
         : emptyLimits.maxWatchedCompetitors,
+    maxOwnBrandWorkspaces:
+      typeof raw.maxOwnBrandWorkspaces === "number" && raw.maxOwnBrandWorkspaces >= 1
+        ? raw.maxOwnBrandWorkspaces
+        : emptyLimits.maxOwnBrandWorkspaces,
     maxAdsProcessedPerMonth:
       typeof raw.maxAdsProcessedPerMonth === "number"
         ? raw.maxAdsProcessedPerMonth
@@ -700,7 +706,8 @@ export default function SettingsPage() {
               </p>
               <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
                 {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
-                slots remaining.
+                slots remaining (shared across up to {formatNum(usage.limits.maxOwnBrandWorkspaces)} brand
+                workspaces).
               </p>
             </div>
             <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">

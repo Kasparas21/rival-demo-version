@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
       user.id,
       workspaceDomainGuess,
       primary?.name,
-      { persistAds: false },
+      { persistAds: false, brandId },
     );
     return NextResponse.json({
       lastScrapedAt: ensured?.lastScrapedAt ?? null,

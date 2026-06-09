@@ -1,6 +1,6 @@
 "use client";
-import React, { useCallback, useEffect, useMemo, useState, Suspense } from "react";
-import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Settings, Trash2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Plus, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandProvider, type Brand } from "./brand-context";
@@ -10,9 +10,10 @@ import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
-import { limitsForTier } from "@/lib/billing/plan-limits";
+import { limitsForTier, type PlanTier } from "@/lib/billing/plan-limits";
 import {
   buildCompetitorSidebarHref,
+  clearSidebarCompetitorsForBrand,
   clearSidebarCompetitorsStorageForSignOut,
   coerceSidebarCompetitorUrlHost,
   competitorSidebarShowsLoadingSkeleton,
@@ -29,12 +30,15 @@ import {
   SIDEBAR_COMPETITORS_EVENT,
   SIDEBAR_COMPETITORS_STORAGE_KEY,
   suppressSidebarUpsertAfterRemoval,
+  WORKSPACE_BRAND_PLACEHOLDER_SLUG,
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import {
   CLIENT_PLAN_CAP_EVENT,
+  clearClientCompetitorSlotUsage,
+  fetchDashboardBillingSnapshot,
+  readClientGlobalCompetitorsUsed,
   readClientMaxWatchedCompetitors,
-  syncClientMaxWatchedCompetitorsFromUsage,
 } from "@/lib/billing/client-plan-cap";
 import {
   buildCompetitorDashboardPath,
@@ -45,7 +49,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   deleteSavedCompetitorFromAccount,
   fetchSavedCompetitorsFromAccount,
-  syncCompetitorsToAccount,
 } from "@/lib/account/client";
 import { collectAdsCacheDomainVariantsForSavedCompetitorRow } from "@/lib/ad-library/competitor-cache-domain";
 import { clearAdsLibraryClientCachesForBrandDomains } from "@/lib/ad-library/deduped-fetch";
@@ -91,9 +94,8 @@ function RemoveWatchedCompetitorDialog({
           Remove &ldquo;{label}&rdquo;?
         </p>
         <p className="mt-3 text-[14px] leading-relaxed text-[#52525b]">
-          This permanently removes scraped ads, saved snapshots, and strategy summaries for{" "}
-          <span className="font-medium text-[#3f3f46]">{domainLabel}</span> from your account. If you add
-          this competitor again, you will need to run a fresh scrape; previous results will not return.
+          This removes <span className="font-medium text-[#3f3f46]">{domainLabel}</span> from this brand&apos;s
+          competitor list. Existing scraped ads and analysis stay available if you add this competitor to a brand again.
         </p>
         <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
           <button
@@ -112,6 +114,60 @@ function RemoveWatchedCompetitorDialog({
           >
             Remove competitor
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandWorkspaceLimitDialog({
+  variant,
+  onDismiss,
+}: {
+  variant: "trial" | "plan_cap";
+  onDismiss: () => void;
+}) {
+  const isTrial = variant === "trial";
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:items-center sm:justify-center sm:pb-4 sm:pt-4">
+      <button
+        type="button"
+        className="absolute inset-0 bg-[#0f0f12]/45 backdrop-blur-[3px] motion-reduce:backdrop-blur-none"
+        aria-label="Close"
+        onClick={onDismiss}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="brand-workspace-limit-title"
+        className="relative z-[1] w-full max-w-[400px] rounded-2xl border border-[#e8e8e8]/95 bg-white p-6 shadow-[0_24px_80px_rgba(31,38,135,0.15)]"
+      >
+        <p
+          id="brand-workspace-limit-title"
+          className="text-[17px] font-semibold leading-snug tracking-tight text-[#1a1a2e]"
+        >
+          {isTrial ? "Another brand workspace isn’t available on free trial" : "Brand workspace limit reached"}
+        </p>
+        <p className="mt-3 text-[14px] leading-relaxed text-[#52525b]">
+          {isTrial
+            ? "Your free trial includes one own-brand workspace. Upgrade to a paid plan to add more brands and keep a separate competitor list for each client."
+            : "You’ve reached the maximum number of brand workspaces on your current plan."}
+        </p>
+        <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="w-full rounded-xl border border-[#e4e4e7] bg-white px-4 py-2.5 text-[14px] font-medium text-[#3f3f46] outline-none transition-colors hover:bg-[#fafafa] sm:w-auto"
+          >
+            Got it
+          </button>
+          <Link
+            href="/checkout"
+            className="flex w-full items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-center text-[14px] font-medium text-white transition-colors hover:bg-[#2d2d44] sm:w-auto"
+            onClick={onDismiss}
+          >
+            View plans
+          </Link>
         </div>
       </div>
     </div>
@@ -174,12 +230,28 @@ function mapApiBrandRow(row: {
   };
 }
 
+function withoutOwnedBrandRows(
+  competitors: SidebarCompetitor[],
+  brands: Brand[],
+  activeWorkspaceDomain?: string | null,
+): SidebarCompetitor[] {
+  const domains = [
+    activeWorkspaceDomain,
+    ...brands.map((brand) => brand.domain).filter((domain): domain is string => Boolean(domain?.trim())),
+  ];
+  return domains.reduce(
+    (rows, domain) => sidebarCompetitorsWithoutWorkspaceRow(rows, domain),
+    competitors,
+  );
+}
+
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [brandsLoaded, setBrandsLoaded] = useState(false);
   const [activeBrandId, setActiveBrandId] = useState("");
   const [isBrandMenuOpen, setIsBrandMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -193,6 +265,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [showWelcome, setShowWelcome] = useState(false);
   const [competitorRemoveError, setCompetitorRemoveError] = useState<string | null>(null);
   const [removingCompetitorSlug, setRemovingCompetitorSlug] = useState<string | null>(null);
+  const [brandRemoveError, setBrandRemoveError] = useState<string | null>(null);
+  const [removingBrandId, setRemovingBrandId] = useState<string | null>(null);
   const [removeCompetitorDialog, setRemoveCompetitorDialog] = useState<{
     competitor: SidebarCompetitor;
     rowSlugNav: string;
@@ -200,9 +274,39 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [maxWatchedCompetitorsCap, setMaxWatchedCompetitorsCap] = useState(
     limitsForTier("free_trial").maxWatchedCompetitors,
   );
+  const [globalCompetitorsUsed, setGlobalCompetitorsUsed] = useState<number | null>(null);
+  const [billingPlanTier, setBillingPlanTier] = useState<PlanTier>("free_trial");
+  const [maxOwnBrandWorkspaces, setMaxOwnBrandWorkspacesState] = useState(
+    limitsForTier("free_trial").maxOwnBrandWorkspaces,
+  );
+  const [brandWorkspaceLimitDialog, setBrandWorkspaceLimitDialog] = useState<"trial" | "plan_cap" | null>(
+    null,
+  );
 
   const refreshSavedCompetitors = useCallback(() => {
+    const activeId =
+      activeBrandId ||
+      (typeof window !== "undefined"
+        ? window.localStorage.getItem("rival_active_brand") ??
+          window.localStorage.getItem("rival_active_workspace") ??
+          ""
+        : "");
+    if (!activeId || activeId === "default" || activeId === "_workspace") {
+      setSavedCompetitors([]);
+      return;
+    }
+    localStorage.setItem("rival_active_brand", activeId);
     setSavedCompetitors(loadSidebarCompetitors());
+  }, [activeBrandId]);
+
+  const refreshBillingUsage = useCallback(() => {
+    void fetchDashboardBillingSnapshot().then((snap) => {
+      if (!snap) return;
+      setBillingPlanTier(snap.planTier);
+      setMaxOwnBrandWorkspacesState(snap.maxOwnBrandWorkspaces);
+      setMaxWatchedCompetitorsCap(snap.maxWatchedCompetitors);
+      setGlobalCompetitorsUsed(snap.competitorsWatched);
+    });
   }, []);
 
   const hydrateDashboardPrefs = useCallback(() => {
@@ -219,7 +323,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refreshSavedCompetitors();
     const onStorage = (e: StorageEvent) => {
-      if (e.key === SIDEBAR_COMPETITORS_STORAGE_KEY) refreshSavedCompetitors();
+      if (
+        e.key === SIDEBAR_COMPETITORS_STORAGE_KEY ||
+        e.key?.startsWith(`${SIDEBAR_COMPETITORS_STORAGE_KEY}:`)
+      ) {
+        refreshSavedCompetitors();
+      }
     };
     window.addEventListener(SIDEBAR_COMPETITORS_EVENT, refreshSavedCompetitors);
     window.addEventListener("storage", onStorage);
@@ -230,19 +339,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, [refreshSavedCompetitors]);
 
   useEffect(() => {
-    void syncClientMaxWatchedCompetitorsFromUsage().then(setMaxWatchedCompetitorsCap);
-    const onCap = () => setMaxWatchedCompetitorsCap(readClientMaxWatchedCompetitors());
+    void refreshBillingUsage();
+    const onCap = () => {
+      setMaxWatchedCompetitorsCap(readClientMaxWatchedCompetitors());
+      setGlobalCompetitorsUsed(readClientGlobalCompetitorsUsed());
+    };
     window.addEventListener(CLIENT_PLAN_CAP_EVENT, onCap);
     return () => window.removeEventListener(CLIENT_PLAN_CAP_EVENT, onCap);
-  }, []);
-
-  useEffect(() => {
-    const ws = brands[0]?.domain?.trim() || null;
-    setWorkspaceDomainForCompetitorCap(ws);
-    if (purgeExcludedSidebarCompetitorRows(ws)) {
-      refreshSavedCompetitors();
-    }
-  }, [brands, refreshSavedCompetitors]);
+  }, [refreshBillingUsage]);
 
   useEffect(() => {
     hydrateDashboardPrefs();
@@ -286,10 +390,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           }[];
         }) => {
           if (!d.ok || !d.brands?.length) {
+            setBrandsLoaded(true);
             return;
           }
           const mapped = d.brands.map(mapApiBrandRow);
           setBrands(mapped);
+          setBrandsLoaded(true);
           const stored =
             typeof window !== "undefined"
               ? window.localStorage.getItem("rival_active_brand") ??
@@ -313,12 +419,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       setIsBrandMenuOpen(false);
       const domain = brand.domain?.trim();
       if (!domain) {
-        router.push("/dashboard/settings", { scroll: false });
+        const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=workspace-ads`;
+        router.push(href, { scroll: false });
         return;
       }
       const base = buildCompetitorDashboardPath(domain);
       const channels = brand.adsSetup?.channels;
       const q = new URLSearchParams();
+      if (!channels?.length) {
+        q.set("tab", "workspace-ads");
+      }
       if (channels?.length) {
         q.set("channels", channels.join(","));
         q.set("confirmed", "1");
@@ -328,6 +438,153 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     },
     [router],
   );
+
+  const workspaceFallbackBrand: Brand = useMemo(() => {
+    const cn = userProfile?.company_name?.trim();
+    const email = userProfile?.email?.trim();
+    const label = cn || "Your workspace";
+    const badge =
+      cn && cn.length > 0
+        ? cn
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((w) => w[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2) || "?"
+        : (email?.[0] ?? "?").toUpperCase();
+    return { id: "_workspace", name: label, badge, color: "#343434" };
+  }, [userProfile]);
+
+  const activeBrand = useMemo(() => {
+    const b = brands.find((x) => x.id === activeBrandId) ?? brands[0];
+    if (b) return b;
+    return workspaceFallbackBrand;
+  }, [activeBrandId, brands, workspaceFallbackBrand]);
+
+  const previousActiveBrandIdRef = useRef<string | null>(null);
+
+  const handleAddBrand = useCallback(async () => {
+    if (brands.length >= maxOwnBrandWorkspaces) {
+      setBrandWorkspaceLimitDialog(billingPlanTier === "free_trial" ? "trial" : "plan_cap");
+      return;
+    }
+    try {
+      const res = await fetch("/api/account/brands", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `Brand ${brands.length + 1}`,
+          color: "#343434",
+        }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        code?: string;
+        brand?: {
+          id: string;
+          name: string;
+          domain?: string | null;
+          logo_url?: string | null;
+          color?: string | null;
+          brand_context?: string | null;
+          ads_profile_setup?: unknown | null;
+        };
+        error?: string;
+      };
+      if (!res.ok || !json.brand) {
+        if (json.code === "brand_workspace_limit") {
+          setBrandWorkspaceLimitDialog(billingPlanTier === "free_trial" ? "trial" : "plan_cap");
+        }
+        return;
+      }
+      const next = mapApiBrandRow(json.brand);
+      setBrands((prev) => [...prev.filter((b) => b.id !== next.id), next]);
+      setActiveBrandId(next.id);
+      localStorage.setItem("rival_active_brand", next.id);
+      setIsBrandMenuOpen(false);
+      saveSidebarCompetitors([]);
+      refreshSavedCompetitors();
+      refreshBillingUsage();
+      const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=workspace-ads`;
+      router.push(href, { scroll: false });
+    } catch {
+      // Keep current workspace if creation fails.
+    }
+  }, [
+    brands.length,
+    billingPlanTier,
+    maxOwnBrandWorkspaces,
+    refreshBillingUsage,
+    refreshSavedCompetitors,
+    router,
+  ]);
+
+  const handleDeleteBrand = useCallback(
+    async (brand: Brand) => {
+      if (brands.length <= 1 || removingBrandId) return;
+      const confirmed = window.confirm(`Delete "${brand.name}"? This removes the brand workspace, not saved ad data.`);
+      if (!confirmed) return;
+
+      setBrandRemoveError(null);
+      setRemovingBrandId(brand.id);
+      try {
+        const res = await fetch("/api/account/brands", {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: brand.id }),
+        });
+        const json = (await res.json()) as { ok?: boolean; nextBrandId?: string | null; error?: string };
+        if (!res.ok || !json.ok) {
+          setBrandRemoveError(json.error ?? "Could not delete brand");
+          return;
+        }
+
+        clearSidebarCompetitorsForBrand(brand.id);
+        const remaining = brands.filter((b) => b.id !== brand.id);
+        setBrands(remaining);
+        refreshBillingUsage();
+
+        if (activeBrandId === brand.id) {
+          const next = remaining.find((b) => b.id === json.nextBrandId) ?? remaining[0];
+          if (next) {
+            setActiveBrandId(next.id);
+            localStorage.setItem("rival_active_brand", next.id);
+            goToBrandHub(next);
+          }
+        }
+      } catch {
+        setBrandRemoveError("Could not delete brand");
+      } finally {
+        setRemovingBrandId(null);
+      }
+    },
+    [activeBrandId, brands, goToBrandHub, refreshBillingUsage, removingBrandId],
+  );
+
+  useEffect(() => {
+    if (!brandsLoaded || brands.length === 0) return;
+    const ws = activeBrand.domain?.trim() || null;
+    setWorkspaceDomainForCompetitorCap(ws);
+    if (purgeExcludedSidebarCompetitorRows(ws)) {
+      queueMicrotask(refreshSavedCompetitors);
+    }
+  }, [activeBrand.domain, brands.length, brandsLoaded, refreshSavedCompetitors]);
+
+  useEffect(() => {
+    if (!brandsLoaded || brands.length === 0) return;
+    if (!activeBrand.id) return;
+    if (previousActiveBrandIdRef.current === null) {
+      previousActiveBrandIdRef.current = activeBrand.id;
+      return;
+    }
+    if (previousActiveBrandIdRef.current === activeBrand.id) return;
+    previousActiveBrandIdRef.current = activeBrand.id;
+    localStorage.setItem("rival_active_brand", activeBrand.id);
+    queueMicrotask(refreshSavedCompetitors);
+  }, [activeBrand.id, brands.length, brandsLoaded, refreshSavedCompetitors]);
 
   useEffect(() => {
     refreshUserProfile();
@@ -349,10 +606,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onBrands = () => {
       refreshBrands();
+      refreshBillingUsage();
     };
     window.addEventListener(RIVAL_BRANDS_UPDATED_EVENT, onBrands);
     return () => window.removeEventListener(RIVAL_BRANDS_UPDATED_EVENT, onBrands);
-  }, [refreshBrands]);
+  }, [refreshBrands, refreshBillingUsage]);
 
   useEffect(() => {
     if (brands.length === 0) return;
@@ -390,20 +648,23 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     const syncAccountCompetitors = async () => {
+      if (!brandsLoaded || brands.length === 0) return;
+      if (!activeBrand.id || activeBrand.id === "default" || activeBrand.id === "_workspace") return;
       const { data: authData } = await supabase.auth.getUser();
       const uid = authData.user?.id;
       if (!uid) return;
 
+      localStorage.setItem("rival_active_brand", activeBrand.id);
       ensureSidebarStorageBelongsToUser(uid);
 
-      const workspaceDomain = brands[0]?.domain?.trim() || null;
+      const workspaceDomain = activeBrand.domain?.trim() || null;
       purgeExcludedSidebarCompetitorRows(workspaceDomain);
 
       const localCompetitors = sidebarCompetitorsWithoutWorkspaceRow(
         loadSidebarCompetitors(),
         workspaceDomain,
       );
-      const remoteCompetitors = await fetchSavedCompetitorsFromAccount();
+      const remoteCompetitors = await fetchSavedCompetitorsFromAccount(activeBrand.id);
 
       if (cancelled) return;
 
@@ -413,15 +674,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           workspaceDomain,
         );
         let merged = mergeAccountSidebarRowsWithLocalLibraryContext(visibleRemote, localCompetitors);
-        merged = sidebarCompetitorsWithoutWorkspaceRow(merged, workspaceDomain);
+        merged = withoutOwnedBrandRows(merged, brands, workspaceDomain);
         saveSidebarCompetitors(merged);
         refreshSavedCompetitors();
+        refreshBillingUsage();
         return;
       }
 
-      if (localCompetitors.length > 0) {
-        await syncCompetitorsToAccount(localCompetitors);
-      }
+      saveSidebarCompetitors([]);
+      refreshSavedCompetitors();
+      refreshBillingUsage();
     };
 
     void syncAccountCompetitors();
@@ -429,60 +691,40 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [refreshSavedCompetitors, brands, supabase]);
+  }, [refreshSavedCompetitors, refreshBillingUsage, activeBrand.domain, activeBrand.id, brands, brandsLoaded, supabase]);
 
   useEffect(() => {
-    const ws = brands[0]?.domain?.trim() || null;
-    if (!ws) return;
+    if (!brandsLoaded || brands.length === 0) return;
+    const ws = activeBrand.domain?.trim() || null;
     const cur = loadSidebarCompetitors();
-    const next = sidebarCompetitorsWithoutWorkspaceRow(cur, ws);
+    const next = withoutOwnedBrandRows(cur, brands, ws);
     if (next.length === cur.length) return;
     saveSidebarCompetitors(next);
-    refreshSavedCompetitors();
-  }, [brands, refreshSavedCompetitors]);
+    queueMicrotask(refreshSavedCompetitors);
+  }, [activeBrand.domain, brands, brandsLoaded, refreshSavedCompetitors]);
 
   useEffect(() => {
-    if (activeBrandId) localStorage.setItem("rival_active_brand", activeBrandId);
-  }, [activeBrandId]);
+    if (!brandsLoaded) return;
+    if (!activeBrandId) return;
+    localStorage.setItem("rival_active_brand", activeBrandId);
+    queueMicrotask(refreshSavedCompetitors);
+  }, [activeBrandId, brandsLoaded, refreshSavedCompetitors]);
 
   useEffect(() => {
     localStorage.setItem("rival_sidebar_collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  const workspaceFallbackBrand: Brand = useMemo(() => {
-    const cn = userProfile?.company_name?.trim();
-    const email = userProfile?.email?.trim();
-    const label = cn || "Your workspace";
-    const badge =
-      cn && cn.length > 0
-        ? cn
-            .split(/\s+/)
-            .filter(Boolean)
-            .map((w) => w[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2) || "?"
-        : (email?.[0] ?? "?").toUpperCase();
-    return { id: "_workspace", name: label, badge, color: "#343434" };
-  }, [userProfile]);
-
-  const activeBrand = useMemo(() => {
-    const b = brands.find((x) => x.id === activeBrandId) ?? brands[0];
-    if (b) return b;
-    return workspaceFallbackBrand;
-  }, [activeBrandId, brands, workspaceFallbackBrand]);
-
   const sidebarCompetitorRows = useMemo(() => {
     const deduped = dedupeSidebarCompetitors(savedCompetitors);
-    return sidebarCompetitorsWithoutWorkspaceRow(deduped, activeBrand.domain);
-  }, [savedCompetitors, activeBrand.domain]);
+    return withoutOwnedBrandRows(deduped, brands, activeBrand.domain);
+  }, [savedCompetitors, brands, activeBrand.domain]);
   const pathCompetitorHost = competitorHostFromDashboardPathname(pathname);
   const queryCompetitorHost = searchParams.get("url")?.trim();
   const pricingGate = searchParams.get("pricing") === "1";
   const activeCompetitorSlug =
     pathCompetitorHost || (queryCompetitorHost ? normalizeCompetitorSlug(queryCompetitorHost) : "");
 
-  const canSwitchBrand = brands.length > 1;
+  const canSwitchBrand = brands.length > 0;
 
   useEffect(() => {
     if (!removeCompetitorDialog) return;
@@ -500,7 +742,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       setRemovingCompetitorSlug(storageSlug);
       setCompetitorRemoveError(null);
 
-      const result = await deleteSavedCompetitorFromAccount(storageSlug, cacheDomain);
+      const result = await deleteSavedCompetitorFromAccount(storageSlug, cacheDomain, activeBrand.id);
 
       setRemovingCompetitorSlug(null);
 
@@ -525,17 +767,20 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         competitorRowMatchesActivePath(competitor, activeCompetitorSlug, rowSlugNav);
 
       removeSidebarCompetitor(competitor);
+      setCompetitorRemoveError(null);
       refreshSavedCompetitors();
+      refreshBillingUsage();
 
       if (viewingDeleted) {
         router.replace("/dashboard/spy", { scroll: false });
       }
     },
-    [pathname, activeCompetitorSlug, refreshSavedCompetitors, router],
+    [pathname, activeCompetitorSlug, activeBrand.id, refreshBillingUsage, refreshSavedCompetitors, router],
   );
 
   const handleSignOut = async () => {
     clearSidebarCompetitorsStorageForSignOut();
+    clearClientCompetitorSlotUsage();
     try {
       await fetch("/auth/sign-out", { method: "POST", credentials: "same-origin" });
     } catch {
@@ -625,14 +870,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           {collapsed ? (
             <button
               type="button"
-              onClick={() => {
-                if (canSwitchBrand) {
-                  setSidebarCollapsed(false);
-                  setIsBrandMenuOpen(true);
-                  return;
-                }
-                goToBrandHub(activeBrand);
-              }}
+              onClick={() => goToBrandHub(activeBrand)}
               className="size-11 shrink-0 rounded-xl overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[#DDF1FD] active:scale-[0.97] transition-all mx-auto shadow-sm"
               title={activeBrand.name}
             >
@@ -654,12 +892,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               )}
             </button>
           ) : canSwitchBrand ? (
-            <button
-              type="button"
-              onClick={() => setIsBrandMenuOpen((p) => !p)}
-              className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl bg-white/50 border border-white/60 hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all text-left group shadow-[0_2px_8px_rgba(0,0,0,0.03)]"
-            >
-              <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center justify-between w-full rounded-xl bg-white/50 border border-white/60 hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all text-left group shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
+              <button
+                type="button"
+                onClick={() => goToBrandHub(activeBrand)}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-l-xl px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/35"
+              >
                 {activeBrand.logoUrl || activeBrand.domain ? (
                   <div className="h-[36px] w-[36px] shrink-0 overflow-hidden rounded-[10px] border border-white/60 shadow-sm">
                     <CompetitorLogo
@@ -680,11 +918,19 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 )}
                 <div className="min-w-0 flex-1">
                   <span className="block text-[14px] font-semibold text-[#343434] truncate">{activeBrand.name}</span>
-                  <span className="block text-[11px] text-[#808080] truncate">Switch brand</span>
+                  <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
                 </div>
-              </div>
-              <ChevronDown className={`w-4 h-4 shrink-0 transition-transform text-[color:var(--rival-muted)] ${isBrandMenuOpen ? "rotate-180" : ""}`} />
-            </button>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBrandMenuOpen((p) => !p)}
+                className="flex min-h-[56px] w-11 shrink-0 items-center justify-center rounded-r-xl text-[color:var(--rival-muted)] outline-none transition-colors hover:bg-[#DDF1FD]/30 focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/35"
+                aria-label="Switch brand"
+                aria-expanded={isBrandMenuOpen}
+              >
+                <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${isBrandMenuOpen ? "rotate-180" : ""}`} />
+              </button>
+            </div>
           ) : (
             <button
               type="button"
@@ -729,48 +975,76 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </div>
               <div className="max-h-[min(40vh,200px)] overflow-y-auto overflow-x-hidden overscroll-contain">
                 {brands.map((b) => (
-                  <button
+                  <div
                     key={b.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveBrandId(b.id);
-                      setIsBrandMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 mx-2 rounded-xl text-left transition-all min-w-0 ${
+                    className={`group/brandrow mx-2 flex items-center rounded-xl transition-all min-w-0 ${
                       activeBrandId === b.id
                         ? "bg-[#DDF1FD]/50 text-[#343434] ring-1 ring-[#DDF1FD]"
                         : "hover:bg-[#DDF1FD]/20 text-[#52525b] hover:text-[#343434]"
                     }`}
                   >
-                    {b.logoUrl || b.domain ? (
-                      <div className="h-[32px] w-[32px] shrink-0 overflow-hidden rounded-[8px] border border-white/60">
-                        <CompetitorLogo
-                          sources={{ primary: b.logoUrl, domain: b.domain }}
-                          name={b.name}
-                          size="sm"
-                          shape="rounded"
-                          className="h-8 w-8 rounded-[8px] border-0 shadow-none"
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className="w-[32px] h-[32px] rounded-[8px] text-white flex items-center justify-center text-[11px] font-bold shrink-0"
-                        style={{ backgroundColor: b.color ?? "#343434" }}
-                      >
-                        {b.badge}
-                      </div>
-                    )}
-                    <span className="text-[13px] font-medium truncate flex-1 min-w-0">{b.name}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveBrandId(b.id);
+                        localStorage.setItem("rival_active_brand", b.id);
+                        goToBrandHub(b);
+                      }}
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left"
+                    >
+                      {b.logoUrl || b.domain ? (
+                        <div className="h-[32px] w-[32px] shrink-0 overflow-hidden rounded-[8px] border border-white/60">
+                          <CompetitorLogo
+                            sources={{ primary: b.logoUrl, domain: b.domain }}
+                            name={b.name}
+                            size="sm"
+                            shape="rounded"
+                            className="h-8 w-8 rounded-[8px] border-0 shadow-none"
+                          />
+                        </div>
+                      ) : (
+                        <div
+                          className="w-[32px] h-[32px] rounded-[8px] text-white flex items-center justify-center text-[11px] font-bold shrink-0"
+                          style={{ backgroundColor: b.color ?? "#343434" }}
+                        >
+                          {b.badge}
+                        </div>
+                      )}
+                      <span className="text-[13px] font-medium truncate flex-1 min-w-0">{b.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={brands.length <= 1 || removingBrandId === b.id}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void handleDeleteBrand(b);
+                      }}
+                      className="mr-2 flex size-7 shrink-0 items-center justify-center rounded-lg text-[#a1a1aa] opacity-0 transition-[opacity,color,background-color] hover:bg-red-50 hover:text-[#b42318] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/40 disabled:pointer-events-none disabled:opacity-25 group-hover/brandrow:opacity-100"
+                      title={`Delete ${b.name}`}
+                      aria-label={`Delete ${b.name} brand workspace`}
+                    >
+                      {removingBrandId === b.id ? (
+                        <span className="size-3.5 animate-pulse rounded-full bg-[#d4d4d8]" aria-hidden />
+                      ) : (
+                        <Trash2 className="size-3.5" strokeWidth={2} />
+                      )}
+                    </button>
+                  </div>
                 ))}
               </div>
+              {brandRemoveError && (
+                <p className="mx-4 mt-1 text-[11px] leading-snug text-[#b42318]">{brandRemoveError}</p>
+              )}
               <div className="mx-2 mt-1 border-t border-[#e8e8e8]/90 pt-1.5">
                 <button
                   type="button"
-                  onClick={() => goToBrandHub(activeBrand)}
-                  className="w-full rounded-xl px-3 py-2 text-left text-[12px] font-medium text-[#52525b] transition-colors hover:bg-[#DDF1FD]/20 hover:text-[#343434]"
+                  onClick={handleAddBrand}
+                  disabled={brands.length >= maxOwnBrandWorkspaces}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] font-semibold text-[#343434] transition-colors hover:bg-[#DDF1FD]/25 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  Brand workspace
+                  <Plus className="size-3.5" />
+                  Add brand
                 </button>
               </div>
             </div>
@@ -807,8 +1081,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--rival-muted)]">
                 Competitors
               </p>
-              <span className="text-[10px] font-semibold tabular-nums shrink-0 text-[#b4b4b8]" title="Watched competitors">
-                {sidebarCompetitorRows.length}/{maxWatchedCompetitorsCap}
+              <span className="text-[10px] font-semibold tabular-nums shrink-0 text-[#b4b4b8]" title="Watched competitor slots across all your brands">
+                {globalCompetitorsUsed ?? sidebarCompetitorRows.length}/{maxWatchedCompetitorsCap}
               </span>
             </div>
           )}
@@ -1083,6 +1357,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             setRemoveCompetitorDialog(null);
             if (pending) void handleRemoveWatchedCompetitor(pending.competitor, pending.rowSlugNav);
           }}
+        />
+      ) : null}
+      {brandWorkspaceLimitDialog ? (
+        <BrandWorkspaceLimitDialog
+          variant={brandWorkspaceLimitDialog}
+          onDismiss={() => setBrandWorkspaceLimitDialog(null)}
         />
       ) : null}
       <RecentPlatformRefreshNotice />

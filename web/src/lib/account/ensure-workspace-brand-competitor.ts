@@ -125,17 +125,18 @@ async function findSavedRowForDomain(
   };
 }
 
-async function clearWorkspaceBrandFlagExcept(
+async function linkWorkspaceCompetitorToBrand(
   supabase: SupabaseClient<Database>,
   userId: string,
-  keepId: string,
+  brandId: string | null | undefined,
+  competitorId: string,
 ): Promise<void> {
+  if (!brandId?.trim() || brandId === "default" || brandId === "_workspace") return;
   await supabase
-    .from("saved_competitors")
-    .update({ is_workspace_brand: false, updated_at: new Date().toISOString() })
-    .eq("user_id", userId)
-    .eq("is_workspace_brand", true)
-    .neq("id", keepId);
+    .from("brands")
+    .update({ workspace_competitor_id: competitorId })
+    .eq("id", brandId)
+    .eq("user_id", userId);
 }
 
 /**
@@ -145,6 +146,8 @@ async function clearWorkspaceBrandFlagExcept(
 export type EnsureWorkspaceBrandSavedCompetitorOptions = {
   /** When false, skip copying `ads_cache` → `scraped_ads` (fast read paths like workspace-last-scrape). */
   persistAds?: boolean;
+  /** Active own brand workspace to link to the canonical saved competitor row. */
+  brandId?: string | null;
 };
 
 export async function ensureWorkspaceBrandSavedCompetitor(
@@ -214,7 +217,6 @@ export async function ensureWorkspaceBrandSavedCompetitor(
   const id = row.id;
 
   if (columnFlags.workspaceBrand) {
-    await clearWorkspaceBrandFlagExcept(supabase, userId, id);
     const patch: Database["public"]["Tables"]["saved_competitors"]["Update"] = {
       is_workspace_brand: true,
       updated_at: new Date().toISOString(),
@@ -227,6 +229,7 @@ export async function ensureWorkspaceBrandSavedCompetitor(
       .eq("user_id", userId);
     if (promoteErr) throw promoteErr;
   }
+  await linkWorkspaceCompetitorToBrand(supabase, userId, options?.brandId, id);
 
   const { readDomains } = await resolveAdsCacheDomainForUser(supabase, userId, cleaned);
 

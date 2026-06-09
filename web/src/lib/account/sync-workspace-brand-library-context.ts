@@ -13,12 +13,14 @@ export async function syncWorkspaceBrandLibraryContextFromSetup(
   domainHint: string,
   setup: AdsProfileSetup,
   brandNameHint?: string | null,
+  brandId?: string | null,
 ): Promise<string | null> {
   const ensured = await ensureWorkspaceBrandSavedCompetitor(
     supabase,
     userId,
     domainHint,
     brandNameHint,
+    { brandId },
   );
   if (!ensured?.id) return null;
 

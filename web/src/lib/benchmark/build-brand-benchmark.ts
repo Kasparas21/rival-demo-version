@@ -88,6 +88,67 @@ function buildCombinedFingerprint(fingerprints: string[]): string {
   return fingerprints.slice().sort().join("|");
 }
 
+async function loadBenchmarkSavedRows(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  brandId?: string | null,
+): Promise<{ rows: SavedRow[]; ownCompetitorId: string | null }> {
+  const selectCols =
+    "id, name, brand_name, brand_domain, logo_url, brand_logo_url, slug, last_scraped_at, is_workspace_brand";
+  const requested = brandId?.trim();
+
+  if (requested && requested !== "default" && requested !== "_workspace") {
+    const { data: brand, error: brandError } = await supabase
+      .from("brands")
+      .select("workspace_competitor_id")
+      .eq("user_id", userId)
+      .eq("id", requested)
+      .maybeSingle();
+    if (brandError) throw new Error(brandError.message);
+
+    const { data: mappings, error: mappingError } = await supabase
+      .from("brand_competitors")
+      .select("competitor_id")
+      .eq("user_id", userId)
+      .eq("brand_id", requested);
+    if (mappingError) throw new Error(mappingError.message);
+
+    const ownCompetitorId = brand?.workspace_competitor_id ?? null;
+    const ids = [
+      ...(ownCompetitorId ? [ownCompetitorId] : []),
+      ...(mappings ?? []).map((m) => m.competitor_id).filter(Boolean),
+    ];
+
+    if (ids.length === 0) return { rows: [], ownCompetitorId };
+
+    const { data: rows, error } = await supabase
+      .from("saved_competitors")
+      .select(selectCols)
+      .eq("user_id", userId)
+      .in("id", [...new Set(ids)]);
+    if (error) throw new Error(error.message);
+
+    return {
+      rows: ((rows ?? []) as SavedRow[]).map((row) => ({
+        ...row,
+        is_workspace_brand: row.id === ownCompetitorId,
+      })),
+      ownCompetitorId,
+    };
+  }
+
+  const { data: rows, error } = await supabase
+    .from("saved_competitors")
+    .select(selectCols)
+    .eq("user_id", userId)
+    .order("is_workspace_brand", { ascending: false })
+    .order("updated_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  const ownCompetitorId = (rows ?? []).find((r) => r.is_workspace_brand)?.id ?? null;
+  return { rows: (rows ?? []) as SavedRow[], ownCompetitorId };
+}
+
 async function loadEntityMetrics(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -313,14 +374,10 @@ function buildFallbackAiSummary(
 export async function computeBenchmarkCombinedFingerprint(
   supabase: SupabaseClient<Database>,
   userId: string,
+  brandId?: string | null,
 ): Promise<string> {
-  const { data: rows, error } = await supabase
-    .from("saved_competitors")
-    .select("id")
-    .eq("user_id", userId);
-
-  if (error) throw new Error(error.message);
-  const ids = (rows ?? []).map((r) => r.id);
+  const { rows } = await loadBenchmarkSavedRows(supabase, userId, brandId);
+  const ids = rows.map((r) => r.id);
   if (!ids.length) return "";
 
   const fingerprints = await Promise.all(
@@ -332,21 +389,16 @@ export async function computeBenchmarkCombinedFingerprint(
 export async function buildBrandBenchmarkPayload(params: {
   supabase: SupabaseClient<Database>;
   userId: string;
+  brandId?: string | null;
   skipLlm?: boolean;
 }): Promise<{ payload: BenchmarkPayload; aiModel: string | null }> {
-  const { supabase, userId, skipLlm = false } = params;
+  const { supabase, userId, brandId, skipLlm = false } = params;
 
-  const { data: rows, error } = await supabase
-    .from("saved_competitors")
-    .select("id, name, brand_name, brand_domain, logo_url, brand_logo_url, slug, last_scraped_at, is_workspace_brand")
-    .eq("user_id", userId)
-    .order("is_workspace_brand", { ascending: false })
-    .order("updated_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-
-  const ownRow = (rows ?? []).find((r) => r.is_workspace_brand) ?? null;
-  const rivalRows = (rows ?? []).filter((r) => !r.is_workspace_brand);
+  const { rows, ownCompetitorId } = await loadBenchmarkSavedRows(supabase, userId, brandId);
+  const ownRow = ownCompetitorId
+    ? (rows ?? []).find((r) => r.id === ownCompetitorId) ?? null
+    : (rows ?? []).find((r) => r.is_workspace_brand) ?? null;
+  const rivalRows = (rows ?? []).filter((r) => r.id !== ownRow?.id);
 
   if (!ownRow) {
     throw new Error("Workspace brand not found");

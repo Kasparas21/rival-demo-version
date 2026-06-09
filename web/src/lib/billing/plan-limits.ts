@@ -5,6 +5,8 @@ export type DevPlanOverride = PlanTier;
 
 export type PlanLimits = {
   maxWatchedCompetitors: number;
+  /** Max own-brand workspaces (`brands` rows) per account. Shared across tiers except free trial (1). */
+  maxOwnBrandWorkspaces: number;
   /** Monthly ads processed via Apify (incremented in monthly_scrape_usage.ads_scraped). */
   maxAdsProcessedPerMonth: number;
   /** Lifetime cap on fresh Apify scrape runs (null = no lifetime cap). */
@@ -35,6 +37,7 @@ export type PlanLimits = {
 /** Three competitors, one initial discovery scrape, then upgrade. */
 const FREE_TRIAL_LIMITS: PlanLimits = {
   maxWatchedCompetitors: 3,
+  maxOwnBrandWorkspaces: 1,
   maxAdsProcessedPerMonth: 15_000,
   maxTotalScrapeOperations: 1,
   maxSwapsPerMonth: 0,
@@ -56,6 +59,7 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
 
 const STARTER_LIMITS: PlanLimits = {
   maxWatchedCompetitors: 5,
+  maxOwnBrandWorkspaces: 5,
   maxAdsProcessedPerMonth: 50_000,
   maxTotalScrapeOperations: null,
   maxSwapsPerMonth: 15,
@@ -77,6 +81,7 @@ const STARTER_LIMITS: PlanLimits = {
 
 const PRO_LIMITS: PlanLimits = {
   maxWatchedCompetitors: 15,
+  maxOwnBrandWorkspaces: 5,
   maxAdsProcessedPerMonth: 150_000,
   maxTotalScrapeOperations: null,
   maxSwapsPerMonth: 50,
@@ -98,6 +103,7 @@ const PRO_LIMITS: PlanLimits = {
 
 const ADMIN_LIMITS: PlanLimits = {
   maxWatchedCompetitors: 1_000_000,
+  maxOwnBrandWorkspaces: 5,
   maxAdsProcessedPerMonth: 1_000_000,
   maxTotalScrapeOperations: null,
   maxSwapsPerMonth: 1_000_000,

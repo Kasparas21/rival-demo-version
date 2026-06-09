@@ -6,8 +6,8 @@ import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quot
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import { collectAdsCacheDomainVariantsForSavedCompetitorRow } from "@/lib/ad-library/competitor-cache-domain";
 import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
+import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -89,33 +89,186 @@ async function getAuthenticatedUser() {
   return { supabase, user };
 }
 
-export async function GET() {
+async function resolveBrandId(
+  supabase: ServerSupabase,
+  userId: string,
+  requestedBrandId?: string | null,
+): Promise<string | null> {
+  const requested = requestedBrandId?.trim();
+  if (requested && requested !== "default" && requested !== "_workspace") {
+    const { data, error } = await supabase
+      .from("brands")
+      .select("id")
+      .eq("id", requested)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data?.id ?? null;
+  }
+
+  const { data, error } = await supabase
+    .from("brands")
+    .select("id")
+    .eq("user_id", userId)
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
+async function loadMappedCompetitorIds(
+  supabase: ServerSupabase,
+  userId: string,
+  brandId: string | null,
+): Promise<{ supported: boolean; ids: string[] }> {
+  if (!brandId) return { supported: false, ids: [] };
+
+  const { data, error } = await supabase
+    .from("brand_competitors")
+    .select("competitor_id")
+    .eq("user_id", userId)
+    .eq("brand_id", brandId);
+
+  if (error) {
+    if (isMissingDbColumnError(error.message, "brand_competitors") || /brand_competitors/i.test(error.message)) {
+      return { supported: false, ids: [] };
+    }
+    throw error;
+  }
+
+  return {
+    supported: true,
+    ids: (data ?? []).map((r) => String(r.competitor_id ?? "")).filter(Boolean),
+  };
+}
+
+async function ensurePrimaryBrandBackfillIfNeeded(
+  supabase: ServerSupabase,
+  userId: string,
+  brandId: string | null,
+): Promise<void> {
+  if (!brandId) return;
+
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("is_primary")
+    .eq("id", brandId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!brand?.is_primary) return;
+
+  const { data: existingMappings, error: existingMappingsError } = await supabase
+    .from("brand_competitors")
+    .select("id")
+    .eq("user_id", userId)
+    .limit(1);
+  if (existingMappingsError || existingMappings?.length) return;
+
+  const { data: rows, error: rowsError } = await supabase
+    .from("saved_competitors")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("is_workspace_brand", false);
+  if (rowsError || !rows?.length) return;
+
+  await insertBrandCompetitorMappings(
+    supabase,
+    userId,
+    brandId,
+    rows.map((row) => row.id).filter(Boolean),
+  );
+}
+
+async function insertBrandCompetitorMappings(
+  supabase: ServerSupabase,
+  userId: string,
+  brandId: string | null,
+  competitorIds: string[],
+): Promise<void> {
+  if (!brandId || competitorIds.length === 0) return;
+  const now = new Date().toISOString();
+  const rows = [...new Set(competitorIds)].map((competitorId) => ({
+    user_id: userId,
+    brand_id: brandId,
+    competitor_id: competitorId,
+    updated_at: now,
+  }));
+  const { error } = await supabase.from("brand_competitors").upsert(rows, {
+    onConflict: "user_id,brand_id,competitor_id",
+  });
+  if (error && !/brand_competitors/i.test(error.message)) throw error;
+}
+
+export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ competitors: [] });
   }
 
-  const { data, error } = await supabase
+  const url = new URL(request.url);
+  const requestedBrandId = url.searchParams.get("brandId");
+  const hasScopedBrandRequest = Boolean(
+    requestedBrandId?.trim() && requestedBrandId !== "default" && requestedBrandId !== "_workspace",
+  );
+  let brandId: string | null = null;
+  try {
+    brandId = await resolveBrandId(supabase, user.id, requestedBrandId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not resolve brand";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
+  if (hasScopedBrandRequest && !brandId) {
+    return NextResponse.json({ competitors: [] });
+  }
+
+  const mapped = await loadMappedCompetitorIds(supabase, user.id, brandId);
+  if (hasScopedBrandRequest && !mapped.supported) {
+    return NextResponse.json(
+      { error: "Brand competitor mappings are not available. Run the multi-brand workspace migration." },
+      { status: 500 },
+    );
+  }
+  if (hasScopedBrandRequest && mapped.supported && mapped.ids.length === 0) {
+    await ensurePrimaryBrandBackfillIfNeeded(supabase, user.id, brandId);
+  }
+  const mappedAfterBackfill =
+    hasScopedBrandRequest && mapped.supported && mapped.ids.length === 0
+      ? await loadMappedCompetitorIds(supabase, user.id, brandId)
+      : mapped;
+  const baseQuery = supabase
     .from("saved_competitors")
     .select("*")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(MAX_WATCHED_COMPETITORS + 4);
 
+  const { data, error } = mappedAfterBackfill.supported
+    ? mappedAfterBackfill.ids.length > 0
+      ? await baseQuery.in("id", mappedAfterBackfill.ids)
+      : { data: [], error: null }
+    : await baseQuery;
+
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const { data: primaryBrand } = await supabase
+  const brandDomainQuery = supabase
     .from("brands")
     .select("domain")
-    .eq("user_id", user.id)
-    .order("is_primary", { ascending: false })
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .eq("user_id", user.id);
 
-  const workspaceDomain = primaryBrand?.domain?.trim() || null;
+  const { data: activeBrand } = brandId
+    ? await brandDomainQuery.eq("id", brandId).maybeSingle()
+    : await brandDomainQuery
+        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+  const workspaceDomain = activeBrand?.domain?.trim() || null;
 
   const rows = data ?? [];
   const competitorIdsForWeekly = rows.map((r) => r.id).filter(Boolean);
@@ -174,6 +327,7 @@ export async function GET() {
 }
 
 type ExistingRowMeta = {
+  id: string;
   slug: string;
   logo_url: string | null;
   brand_logo_url: string | null;
@@ -203,7 +357,7 @@ async function fetchExistingSavedRows(
 > {
   const full = await supabase
     .from("saved_competitors")
-    .select("slug, logo_url, brand_logo_url, is_workspace_brand, ads_library_context")
+    .select("id, slug, logo_url, brand_logo_url, is_workspace_brand, ads_library_context")
     .eq("user_id", userId);
 
   if (!full.error) {
@@ -218,7 +372,7 @@ async function fetchExistingSavedRows(
   if (isMissingDbColumnError(full.error.message, "ads_library_context")) {
     const mid = await supabase
       .from("saved_competitors")
-      .select("slug, logo_url, brand_logo_url, is_workspace_brand")
+      .select("id, slug, logo_url, brand_logo_url, is_workspace_brand")
       .eq("user_id", userId);
     if (!mid.error) {
       return {
@@ -231,7 +385,7 @@ async function fetchExistingSavedRows(
     if (!isMissingDbColumnError(mid.error.message, "is_workspace_brand")) {
       return { ok: false, error: mid.error.message };
     }
-    const leg = await supabase.from("saved_competitors").select("slug, logo_url, brand_logo_url").eq("user_id", userId);
+    const leg = await supabase.from("saved_competitors").select("id, slug, logo_url, brand_logo_url").eq("user_id", userId);
     if (leg.error) return { ok: false, error: leg.error.message };
     return {
       ok: true,
@@ -246,7 +400,7 @@ async function fetchExistingSavedRows(
   }
 
   if (isMissingDbColumnError(full.error.message, "is_workspace_brand")) {
-    const leg = await supabase.from("saved_competitors").select("slug, logo_url, brand_logo_url").eq("user_id", userId);
+    const leg = await supabase.from("saved_competitors").select("id, slug, logo_url, brand_logo_url").eq("user_id", userId);
     if (leg.error) return { ok: false, error: leg.error.message };
     return {
       ok: true,
@@ -353,6 +507,7 @@ export async function POST(request: Request) {
   }
 
   const body = (await request.json()) as {
+    brandId?: unknown;
     competitor?: SavedCompetitorPayload;
     competitors?: SavedCompetitorPayload[];
   };
@@ -373,7 +528,47 @@ export async function POST(request: Request) {
   }
 
   const workspaceItems = normalizedRaw.filter((item) => item.isWorkspaceBrand === true);
-  const competitorItemsRaw = normalizedRaw.filter((item) => item.isWorkspaceBrand !== true);
+  let competitorItemsRaw = normalizedRaw.filter((item) => item.isWorkspaceBrand !== true);
+
+  const requestedBrandId = typeof body.brandId === "string" ? body.brandId : null;
+  const hasScopedBrandRequest = Boolean(
+    requestedBrandId?.trim() && requestedBrandId !== "default" && requestedBrandId !== "_workspace",
+  );
+  let brandId: string | null = null;
+  try {
+    brandId = await resolveBrandId(
+      supabase,
+      user.id,
+      requestedBrandId,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not resolve brand";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+  if (hasScopedBrandRequest && !brandId) {
+    return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+  }
+
+  let activeBrandDomain: string | null = null;
+  if (brandId) {
+    const { data: activeBrand } = await supabase
+      .from("brands")
+      .select("domain")
+      .eq("id", brandId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    activeBrandDomain = activeBrand?.domain?.trim() || null;
+  }
+  if (activeBrandDomain) {
+    const activeBrandSlug = normalizeCompetitorSlug(activeBrandDomain);
+    competitorItemsRaw = competitorItemsRaw.filter(
+      (item) => normalizeCompetitorSlug(item.slug) !== activeBrandSlug,
+    );
+  }
+
+  if (workspaceItems.length === 0 && competitorItemsRaw.length === 0) {
+    return NextResponse.json({ ok: true, competitors: [] });
+  }
 
   if (workspaceItems.length > 1) {
     return NextResponse.json({ error: "At most one workspace brand competitor is allowed." }, { status: 400 });
@@ -402,28 +597,18 @@ export async function POST(request: Request) {
   const { rows: existingList, workspaceBrandColumnSupported, adsLibraryContextColumnSupported } =
     existingResult;
 
-  /** Watched rivals only (workspace slug does not consume a competitor slot once `is_workspace_brand` exists). */
-  const slugCountIfApplied = (): number => {
+  const mappedForBrand = await loadMappedCompetitorIds(supabase, user.id, brandId);
+  const brandMappingsUnavailable = hasScopedBrandRequest && !mappedForBrand.supported;
+  /** Legacy: watched rivals only for the active own brand (when `brand_competitors` is unavailable). */
+  const slugCountIfLegacy = (): number => {
     const s = new Set<string>();
-    for (const r of existingList) {
-      if (!(workspaceBrandColumnSupported && r.is_workspace_brand)) {
-        s.add(normalizeCompetitorSlug(String(r.slug ?? "")));
-      }
-    }
-    for (const c of competitorItemsRaw) {
-      s.add(normalizeCompetitorSlug(c.slug));
-    }
+    const existingForBrand = mappedForBrand.supported
+      ? existingList.filter((r) => mappedForBrand.ids.includes(r.id))
+      : existingList.filter((r) => !(workspaceBrandColumnSupported && r.is_workspace_brand));
+    for (const r of existingForBrand) s.add(normalizeCompetitorSlug(String(r.slug ?? "")));
+    for (const c of competitorItemsRaw) s.add(normalizeCompetitorSlug(c.slug));
     return s.size;
   };
-
-  if (!entitlement.isUnlimited && slugCountIfApplied() > maxWatchedCompetitors) {
-    return NextResponse.json(
-      {
-        error: competitorWatchLimitReachedMessage(maxWatchedCompetitors),
-      },
-      { status: 400 }
-    );
-  }
 
   let mergeRowsAgainst: ExistingRowMeta[] = existingList;
   const slugIdsToReturn = new Set<string>();
@@ -431,30 +616,19 @@ export async function POST(request: Request) {
   if (workspaceItems.length === 1) {
     const wsSlug = normalizeCompetitorSlug(workspaceItems[0]!.slug);
     await deleteWorkspaceBrandPlaceholderRows(supabase, user.id);
-    let delWs;
-    if (workspaceBrandColumnSupported) {
-      delWs = await supabase
-        .from("saved_competitors")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("is_workspace_brand", true);
-    } else {
-      delWs = await supabase.from("saved_competitors").delete().eq("user_id", user.id).eq("slug", wsSlug);
-    }
-    if (delWs.error) {
-      return NextResponse.json({ error: delWs.error.message }, { status: 500 });
-    }
 
     const rows = buildUpsertRows({
       items: [workspaceItems[0]!],
-      existingRows: [],
+      existingRows: mergeRowsAgainst,
       userId: user.id,
       workspaceBrandColumnSupported,
       adsLibraryContextColumnSupported,
     });
-    const insertRes = await supabase.from("saved_competitors").insert(rows);
-    if (insertRes.error) {
-      return NextResponse.json({ error: insertRes.error.message }, { status: 500 });
+    const upsertRes = await supabase.from("saved_competitors").upsert(rows, {
+      onConflict: "user_id,slug",
+    });
+    if (upsertRes.error) {
+      return NextResponse.json({ error: upsertRes.error.message }, { status: 500 });
     }
 
     const refetch = await fetchExistingSavedRows(supabase, user.id);
@@ -462,7 +636,47 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: refetch.error }, { status: 500 });
     }
     mergeRowsAgainst = refetch.rows;
-    slugIdsToReturn.add(wsSlug);
+    const wsRow = refetch.rows.find((r) => normalizeCompetitorSlug(r.slug) === wsSlug);
+    if (brandId && wsRow?.id) {
+      await supabase
+        .from("brands")
+        .update({ workspace_competitor_id: wsRow.id })
+        .eq("id", brandId)
+        .eq("user_id", user.id);
+    }
+  }
+
+  if (competitorItemsRaw.length > 0 && !entitlement.isUnlimited) {
+    const useGlobalMappings = Boolean(brandId && mappedForBrand.supported);
+    if (useGlobalMappings) {
+      const existingMapped = new Set(mappedForBrand.ids);
+      let newMappingCount = 0;
+      for (const item of competitorItemsRaw) {
+        const slug = normalizeCompetitorSlug(item.slug);
+        const row = mergeRowsAgainst.find((r) => normalizeCompetitorSlug(String(r.slug ?? "")) === slug);
+        if (row?.id) {
+          if (!existingMapped.has(row.id)) newMappingCount += 1;
+        } else {
+          newMappingCount += 1;
+        }
+      }
+      const { count: currentSlots } = await countWatchedCompetitorSlotsForUser(supabase, user.id);
+      if (currentSlots + newMappingCount > maxWatchedCompetitors) {
+        return NextResponse.json(
+          {
+            error: competitorWatchLimitReachedMessage(maxWatchedCompetitors),
+          },
+          { status: 400 },
+        );
+      }
+    } else if (slugCountIfLegacy() > maxWatchedCompetitors) {
+      return NextResponse.json(
+        {
+          error: competitorWatchLimitReachedMessage(maxWatchedCompetitors),
+        },
+        { status: 400 },
+      );
+    }
   }
 
   if (competitorItemsRaw.length > 0) {
@@ -490,7 +704,16 @@ export async function POST(request: Request) {
     [...slugIdsToReturn],
   );
 
-  return NextResponse.json({ ok: true, competitors });
+  await insertBrandCompetitorMappings(
+    supabase,
+    user.id,
+    brandId,
+    competitors
+      .filter((c) => !workspaceItems.some((w) => normalizeCompetitorSlug(w.slug) === c.slug))
+      .map((c) => c.savedCompetitorDbId),
+  );
+
+  return NextResponse.json({ ok: true, competitors, mappingUnavailable: brandMappingsUnavailable });
 }
 
 export async function DELETE(request: Request) {
@@ -499,9 +722,9 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { slug?: unknown; cacheDomain?: unknown };
+  let body: { slug?: unknown; cacheDomain?: unknown; brandId?: unknown };
   try {
-    body = (await request.json()) as { slug?: unknown; cacheDomain?: unknown };
+    body = (await request.json()) as { slug?: unknown; cacheDomain?: unknown; brandId?: unknown };
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
@@ -511,15 +734,34 @@ export async function DELETE(request: Request) {
   }
 
   const slug = normalizeCompetitorSlug(body.slug);
+  const requestedBrandId = typeof body.brandId === "string" ? body.brandId : null;
+  const hasScopedBrandRequest = Boolean(
+    requestedBrandId?.trim() && requestedBrandId !== "default" && requestedBrandId !== "_workspace",
+  );
+  let brandId: string | null = null;
+  try {
+    brandId = await resolveBrandId(
+      supabase,
+      user.id,
+      requestedBrandId,
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not resolve brand";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+  if (hasScopedBrandRequest && !brandId) {
+    return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+  }
 
   const selWs = await supabase
     .from("saved_competitors")
-    .select("slug, brand_domain, is_workspace_brand")
+    .select("id, slug, brand_domain, is_workspace_brand")
     .eq("user_id", user.id)
     .eq("slug", slug)
     .maybeSingle();
 
   let existing: {
+    id?: string;
     slug?: string;
     brand_domain?: string | null;
     is_workspace_brand?: boolean;
@@ -530,7 +772,7 @@ export async function DELETE(request: Request) {
   } else if (isMissingDbColumnError(selWs.error.message, "is_workspace_brand")) {
     const selLegacy = await supabase
       .from("saved_competitors")
-      .select("slug, brand_domain")
+      .select("id, slug, brand_domain")
       .eq("user_id", user.id)
       .eq("slug", slug)
       .maybeSingle();
@@ -565,58 +807,34 @@ export async function DELETE(request: Request) {
     }
   }
 
-  const bodyCacheDomain = typeof body.cacheDomain === "string" && body.cacheDomain.trim() ? body.cacheDomain : undefined;
-  let purgeDomains: string[] =
-    existing?.slug || existing?.brand_domain
-      ? collectAdsCacheDomainVariantsForSavedCompetitorRow(
-          { slug: existing?.slug, brand_domain: existing?.brand_domain ?? null },
-          bodyCacheDomain ?? null
-        )
-      : [];
-  if (purgeDomains.length === 0) {
-    purgeDomains = [
-      slug,
-      ...(bodyCacheDomain ? [normalizeCompetitorSlug(bodyCacheDomain)] : []),
-    ].filter((x, i, a) => Boolean(x?.length) && a.indexOf(x) === i);
-  }
+  if (existing?.id && brandId) {
+    const { error: delMapError } = await supabase
+      .from("brand_competitors")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("brand_id", brandId)
+      .eq("competitor_id", existing.id);
 
-  const { error: delSavedError } = await supabase
-    .from("saved_competitors")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("slug", slug);
-
-  if (delSavedError) {
-    return NextResponse.json({ error: delSavedError.message }, { status: 500 });
+    if (delMapError && !/brand_competitors/i.test(delMapError.message)) {
+      return NextResponse.json({ error: delMapError.message }, { status: 500 });
+    }
+    if (hasScopedBrandRequest && delMapError) {
+      return NextResponse.json({
+        ok: true,
+        hadSavedRow: Boolean(existing),
+        mappingUnavailable: true,
+        cacheDomainsPurged: [],
+      });
+    }
   }
 
   if (existing && !entitlement.isUnlimited) {
     await supabase.rpc("increment_competitor_swap_usage");
   }
 
-  let adsRes: { error: { message: string } | null } = { error: null };
-  let stratRes: { error: { message: string } | null } = { error: null };
-  if (purgeDomains.length > 0) {
-    const results = await Promise.all([
-      supabase.from("ads_cache").delete().eq("user_id", user.id).in("competitor_domain", purgeDomains),
-      supabase
-        .from("strategy_overview_cache")
-        .delete()
-        .eq("user_id", user.id)
-        .in("competitor_domain", purgeDomains),
-    ]);
-    adsRes = results[0];
-    stratRes = results[1];
-  }
-
-  const warnings: string[] = [];
-  if (adsRes.error) warnings.push(adsRes.error.message);
-  if (stratRes.error) warnings.push(stratRes.error.message);
-
   return NextResponse.json({
     ok: true,
     hadSavedRow: Boolean(existing),
-    cacheDomainsPurged: purgeDomains,
-    ...(warnings.length > 0 ? { warnings } : {}),
+    cacheDomainsPurged: [],
   });
 }

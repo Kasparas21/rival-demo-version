@@ -38,9 +38,10 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";
+  const brandId = url.searchParams.get("brandId");
 
   try {
-    const fingerprint = await computeBenchmarkCombinedFingerprint(supabase, user.id);
+    const fingerprint = await computeBenchmarkCombinedFingerprint(supabase, user.id, brandId);
     if (!fingerprint) {
       return NextResponse.json({ ok: false, error: "Workspace brand not found" }, { status: 404 });
     }
@@ -73,6 +74,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const { payload, aiModel } = await buildBrandBenchmarkPayload({
       supabase,
       userId: user.id,
+      brandId,
       skipLlm: false,
     });
 

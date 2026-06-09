@@ -16,6 +16,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 type Body = {
+  brandId?: string;
   yourBrandId?: string;
   competitorId?: string;
   competitor?: { name?: string; domain?: string };
@@ -43,10 +44,24 @@ async function resolveComparisonIds(params: {
   competitorDomain: string;
   bodyYourBrandId?: string;
   bodyCompetitorId?: string;
+  bodyBrandId?: string;
 }): Promise<{ yourBrandId: string; competitorId: string } | null> {
-  const { supabase, userId, competitorDomain, bodyYourBrandId, bodyCompetitorId } = params;
+  const { supabase, userId, competitorDomain, bodyYourBrandId, bodyCompetitorId, bodyBrandId } = params;
   let yourBrandId = bodyYourBrandId?.trim() ?? "";
   let competitorId = bodyCompetitorId?.trim() ?? "";
+
+  if (!yourBrandId) {
+    const requestedBrandId = bodyBrandId?.trim();
+    if (requestedBrandId && requestedBrandId !== "default" && requestedBrandId !== "_workspace") {
+      const { data: brand } = await supabase
+        .from("brands")
+        .select("workspace_competitor_id")
+        .eq("user_id", userId)
+        .eq("id", requestedBrandId)
+        .maybeSingle();
+      yourBrandId = brand?.workspace_competitor_id ?? "";
+    }
+  }
 
   if (!yourBrandId) {
     const { data } = await supabase
@@ -106,6 +121,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     competitorDomain,
     bodyYourBrandId: body.yourBrandId,
     bodyCompetitorId: body.competitorId,
+    bodyBrandId: body.brandId,
   });
   if (!pair) {
     return NextResponse.json(

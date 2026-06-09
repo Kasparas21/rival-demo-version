@@ -9,6 +9,7 @@ import { saveSearchToAccount } from "@/lib/account/client";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
 import {
+  readClientGlobalCompetitorsUsed,
   readClientMaxWatchedCompetitors,
   syncClientMaxWatchedCompetitorsFromUsage,
 } from "@/lib/billing/client-plan-cap";
@@ -65,11 +66,10 @@ export default function SpyOnCompetitorPage() {
   }, []);
 
   const reportCompetitorCapReached = () => {
-    setCompetitorLimitError(
-      competitorWatchLimitReachedMessage(
-        countWatchedSidebarCompetitors(activeBrand.domain),
-      ),
-    );
+    const usedGlobal = readClientGlobalCompetitorsUsed();
+    const watchedCount =
+      usedGlobal ?? countWatchedSidebarCompetitors(activeBrand.domain);
+    setCompetitorLimitError(competitorWatchLimitReachedMessage(watchedCount));
   };
 
   const wouldExceedCompetitorCap = (query: string): boolean =>

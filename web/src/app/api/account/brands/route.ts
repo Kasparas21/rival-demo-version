@@ -5,6 +5,7 @@ import { adsProfileSetupV1, parseAdsProfileSetup } from "@/lib/onboarding/worksp
 import { syncWorkspaceBrandLibraryContextFromSetup } from "@/lib/account/sync-workspace-brand-library-context";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Json } from "@/lib/supabase/types";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 
 const MISSING_ADS_PROFILE_SETUP_HELP =
   "The database is missing column brands.ads_profile_setup. In the Supabase dashboard open SQL Editor and run: alter table public.brands add column if not exists ads_profile_setup jsonb; Wait a few seconds for the API schema cache to refresh (or reload the project). Full migration: supabase/migrations/20260511120000_brands_ads_workspace_competitor.sql";
@@ -53,14 +54,21 @@ export async function POST(req: Request) {
   }
 
   const admin = createSupabaseAdminClient();
+  const entitlement = await getBillingEntitlement(supabase, user.id);
+  const maxBrands = entitlement.limits.maxOwnBrandWorkspaces;
+
   const { count, error: countError } = await admin
     .from("brands")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  if (!countError && (count ?? 0) >= 1) {
+  if (!countError && (count ?? 0) >= maxBrands) {
+    const message =
+      entitlement.planTier === "free_trial"
+        ? "Free trial includes one brand workspace. Upgrade to add more brands."
+        : `You can add up to ${maxBrands} brand workspaces.`;
     return NextResponse.json(
-      { error: "Only one brand workspace is allowed right now. Manage it in account settings." },
+      { error: message, code: "brand_workspace_limit" },
       { status: 400 }
     );
   }
@@ -236,6 +244,7 @@ export async function PATCH(req: Request) {
           domainHint,
           parsedAdsSetup,
           brandRow?.name ?? rowPatch.name,
+          targetId,
         );
       } catch (syncErr) {
         console.error("[brands PATCH] sync workspace library context", syncErr);
@@ -244,4 +253,66 @@ export async function PATCH(req: Request) {
   }
 
   return NextResponse.json({ ok: true });
+}
+
+export async function DELETE(req: Request) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let body: { id?: unknown };
+  try {
+    body = (await req.json()) as { id?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const targetId = typeof body.id === "string" && body.id.trim() ? body.id.trim() : null;
+  if (!targetId) {
+    return NextResponse.json({ error: "Brand id is required" }, { status: 400 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { data: brands, error: brandsError } = await admin
+    .from("brands")
+    .select("id, is_primary, created_at")
+    .eq("user_id", user.id)
+    .order("is_primary", { ascending: false })
+    .order("created_at", { ascending: true });
+
+  if (brandsError) {
+    return brandsDbErrorResponse(brandsError.message);
+  }
+
+  const rows = brands ?? [];
+  const target = rows.find((brand) => brand.id === targetId);
+  if (!target) {
+    return NextResponse.json({ error: "Brand not found" }, { status: 404 });
+  }
+  if (rows.length <= 1) {
+    return NextResponse.json({ error: "You need at least one brand workspace." }, { status: 400 });
+  }
+
+  const replacement = rows.find((brand) => brand.id !== targetId);
+  const { error: deleteError } = await admin.from("brands").delete().eq("id", targetId).eq("user_id", user.id);
+  if (deleteError) {
+    return brandsDbErrorResponse(deleteError.message);
+  }
+
+  if (target.is_primary && replacement?.id) {
+    const { error: promoteError } = await admin
+      .from("brands")
+      .update({ is_primary: true })
+      .eq("id", replacement.id)
+      .eq("user_id", user.id);
+    if (promoteError) {
+      return brandsDbErrorResponse(promoteError.message);
+    }
+  }
+
+  return NextResponse.json({ ok: true, nextBrandId: replacement?.id ?? null });
 }

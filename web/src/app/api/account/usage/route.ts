@@ -5,6 +5,7 @@ import {
 } from "@/lib/billing/entitlements";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
 
 export async function GET() {
   const supabase = await createSupabaseServerClient();
@@ -18,12 +19,7 @@ export async function GET() {
   const userId = user.id;
   const yearMonthUtc = utcYearMonth();
 
-  const [competitorsRes, scrapedAdsRes, cacheRowsRes, overviewRes, billing, monthlyUsage] = await Promise.all([
-    supabase
-      .from("saved_competitors")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_workspace_brand", false),
+  const [scrapedAdsRes, cacheRowsRes, overviewRes, billing, monthlyUsage, slotCount] = await Promise.all([
     supabase
       .from("scraped_ads")
       .select("id", { count: "exact", head: true })
@@ -33,9 +29,10 @@ export async function GET() {
     supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
     getBillingEntitlement(supabase, userId),
     loadMonthlyUsageSnapshot(supabase, userId, yearMonthUtc),
+    countWatchedCompetitorSlotsForUser(supabase, userId),
   ]);
 
-  const competitorsWatched = competitorsRes.count ?? 0;
+  const competitorsWatched = slotCount.count;
   const scrapedAdsTotal = scrapedAdsRes.count ?? 0;
   const adLibraryRefreshes = cacheRowsRes.count ?? 0;
 

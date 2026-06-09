@@ -54,14 +54,15 @@ function normalizeForAccountApi(h: SidebarCompetitor): SavedCompetitorPayload {
 }
 
 export async function saveCompetitorToAccount(
-  competitor: SavedCompetitorPayload
+  competitor: SavedCompetitorPayload,
+  brandId?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const hoisted = hoistLogoOntoRow(competitor as SidebarCompetitor);
     const response = await fetch("/api/account/saved-competitors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitor: normalizeForAccountApi(hoisted) }),
+      body: JSON.stringify({ competitor: normalizeForAccountApi(hoisted), ...(brandId ? { brandId } : {}) }),
     });
     const payload = await safeJson(response);
     if (!response.ok) {
@@ -70,14 +71,16 @@ export async function saveCompetitorToAccount(
         error: typeof payload?.error === "string" ? payload.error : "Could not save competitor.",
       };
     }
-    patchSidebarSavedCompetitorDbIds(payload);
+    if (competitor.isWorkspaceBrand !== true) {
+      patchSidebarSavedCompetitorDbIds(payload);
+    }
     return { ok: true };
   } catch {
     return { ok: false, error: "Network error while saving competitor." };
   }
 }
 
-export async function syncCompetitorsToAccount(competitors: SavedCompetitorPayload[]) {
+export async function syncCompetitorsToAccount(competitors: SavedCompetitorPayload[], brandId?: string) {
   try {
     const hoisted = competitors.map((c) =>
       normalizeForAccountApi(hoistLogoOntoRow(c as SidebarCompetitor)),
@@ -85,7 +88,7 @@ export async function syncCompetitorsToAccount(competitors: SavedCompetitorPaylo
     const response = await fetch("/api/account/saved-competitors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ competitors: hoisted }),
+      body: JSON.stringify({ competitors: hoisted, ...(brandId ? { brandId } : {}) }),
     });
     const payload = await safeJson(response);
     if (response.ok) patchSidebarSavedCompetitorDbIds(payload);
@@ -94,9 +97,10 @@ export async function syncCompetitorsToAccount(competitors: SavedCompetitorPaylo
   }
 }
 
-export async function fetchSavedCompetitorsFromAccount() {
+export async function fetchSavedCompetitorsFromAccount(brandId?: string) {
   try {
-    const response = await fetch("/api/account/saved-competitors", {
+    const qs = brandId ? `?brandId=${encodeURIComponent(brandId)}` : "";
+    const response = await fetch(`/api/account/saved-competitors${qs}`, {
       method: "GET",
       cache: "no-store",
     });
@@ -110,14 +114,15 @@ export async function fetchSavedCompetitorsFromAccount() {
 
 export async function deleteSavedCompetitorFromAccount(
   slug: string,
-  cacheDomain: string
+  cacheDomain: string,
+  brandId?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const response = await fetch("/api/account/saved-competitors", {
       method: "DELETE",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug, cacheDomain }),
+      body: JSON.stringify({ slug, cacheDomain, ...(brandId ? { brandId } : {}) }),
     });
     const payload = await safeJson(response);
     if (!response.ok || !payload?.ok) {

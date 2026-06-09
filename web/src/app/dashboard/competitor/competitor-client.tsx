@@ -12,6 +12,7 @@ import {
   Video,
   Check,
   Lock,
+  X,
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
@@ -144,6 +145,7 @@ import {
   scrapeHintsToPlatformIds,
 } from "@/lib/onboarding/workspace-ads-setup";
 import type { AdsProfileSetup, WorkspaceAdsScrapeHints } from "@/lib/onboarding/workspace-ads-setup";
+import { hostToBrandLabel } from "@/lib/onboarding/host";
 import {
   hoistLogoOntoRow,
   loadSidebarCompetitors,
@@ -154,6 +156,7 @@ import {
   SIDEBAR_COMPETITORS_EVENT,
   shouldSuppressSidebarUpsertForSlug,
   slugsLikelySameCompany,
+  WORKSPACE_BRAND_PLACEHOLDER_SLUG,
   type SidebarCompetitor,
   upsertSidebarCompetitor,
 } from "@/lib/sidebar-competitors";
@@ -168,11 +171,8 @@ import {
 } from "@/lib/cache/prefetch-competitor-features";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
 import { normalizeComparisonPayloadJson } from "@/lib/comparison/normalize-comparison-payload-json";
-import {
-  fetchSavedCompetitorsFromAccount,
-  saveCompetitorToAccount,
-  sidebarCompetitorToAccountPayload,
-} from "@/lib/account/client";
+import { fetchSavedCompetitorsFromAccount } from "@/lib/account/client";
+import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { CompetitorPageBrand } from "@/lib/competitor-view-resolve";
 import type { MarketingImprovementLlmResult } from "@/lib/workspace/run-marketing-improvement-llm";
 import {
@@ -1116,6 +1116,70 @@ function workspacePreviewHrefForChannel(
   }
 }
 
+function AiAdAnalysisNotice({
+  running,
+  enrichmentRate,
+  enrichedCount,
+  totalCount,
+  complete = false,
+  onDismiss,
+}: {
+  running: boolean;
+  enrichmentRate?: number | null;
+  enrichedCount?: number | null;
+  totalCount?: number | null;
+  complete?: boolean;
+  onDismiss: () => void;
+}) {
+  const hasProgress =
+    typeof enrichedCount === "number" &&
+    typeof totalCount === "number" &&
+    totalCount > 0;
+  const pct =
+    typeof enrichmentRate === "number"
+      ? Math.max(0, Math.min(100, Math.round(enrichmentRate * 100)))
+      : hasProgress
+        ? Math.max(0, Math.min(100, Math.round((enrichedCount / totalCount) * 100)))
+        : null;
+
+  return (
+    <div className="mb-5 overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50 via-white to-amber-50/70 px-4 py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-800">
+          {complete ? <Check className="h-4 w-4" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-slate-900">
+            {complete ? "All ads have been analyzed" : "AI is still analyzing this ad library"}
+          </p>
+          <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
+            {complete
+              ? "The latest strategy, tests, audience, copy, and comparison results are now based on the completed analysis."
+              : "Right after a scrape, Rival can show the ads immediately, but strategy, tests, audience, copy, and comparison improve as each ad is classified in the background."}
+          </p>
+          {!complete ? (
+            <p className="mt-2 text-[11px] font-medium text-sky-800">
+              {running
+                ? "Analysis is running now. You can keep browsing; this page will refresh as richer results become available."
+                : "Some results are early estimates and may sharpen after the background analysis catches up."}
+              {pct !== null ? ` About ${pct}% analyzed so far.` : ""}
+            </p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="-mr-1 -mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-white/80 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+          aria-label="Dismiss AI analysis notice"
+          title="Dismiss"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function WorkspaceAdSourcesPanel({
   brandId,
   brandName,
@@ -1130,6 +1194,7 @@ function WorkspaceAdSourcesPanel({
   /** When embedded in a full tab, avoid extra bottom margin. */
   noBottomMargin?: boolean;
 }) {
+  const router = useRouter();
   const baseDomain = normalizeCompetitorSlug(domain);
   const [channels, setChannels] = useState<ChannelId[]>(() => {
     const c = initialSetup?.channels;
@@ -1208,6 +1273,41 @@ function WorkspaceAdSourcesPanel({
     setScrape((s) => ({ ...s, ...patch }));
   };
 
+  const shouldAutoNameBrand = (name: string): boolean => {
+    const trimmed = name.trim();
+    return (
+      /^brand\s+\d+$/i.test(trimmed) ||
+      /^(new brand|my brand|brand|your workspace)$/i.test(trimmed)
+    );
+  };
+
+  const resolveWorkspaceBrandIdentity = async (
+    savedDomain: string,
+  ): Promise<{ name: string; logoUrl?: string } | null> => {
+    const fallbackName = hostToBrandLabel(savedDomain);
+    try {
+      const res = await fetch("/api/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: savedDomain, channels }),
+      });
+      const json = (await res.json().catch(() => null)) as {
+        success?: boolean;
+        brand?: { name?: string; domain?: string; logoUrl?: string };
+      } | null;
+      if (!res.ok || !json?.success) {
+        return { name: fallbackName };
+      }
+      const discoveredName = json.brand?.name?.trim();
+      return {
+        name: discoveredName && !shouldAutoNameBrand(discoveredName) ? discoveredName : fallbackName,
+        ...(json.brand?.logoUrl?.trim() ? { logoUrl: json.brand.logoUrl.trim() } : {}),
+      };
+    } catch {
+      return { name: fallbackName };
+    }
+  };
+
   const persistSetup = async (): Promise<boolean> => {
     const adMarketCountryCodes = marketsAuto
       ? [...ONBOARDING_AD_MARKET_CODES]
@@ -1225,11 +1325,26 @@ function WorkspaceAdSourcesPanel({
       adMarketCountryCodes: [...adMarketCountryCodes].sort(),
       scrape: { ...scrape },
     };
-    const body: { id?: string; ads_profile_setup: Record<string, unknown> } = {
+    const body: {
+      id?: string;
+      ads_profile_setup: Record<string, unknown>;
+      domain?: string;
+      name?: string;
+      logo_url?: string;
+    } = {
       ads_profile_setup: adsProfileSetupV1(payload),
     };
     if (brandId && brandId !== "_workspace") {
       body.id = brandId;
+    }
+    const savedDomain = normalizeCompetitorSlug(scrape.websiteUrl);
+    if (savedDomain && savedDomain !== WORKSPACE_BRAND_PLACEHOLDER_SLUG) {
+      body.domain = savedDomain;
+      if (shouldAutoNameBrand(brandName)) {
+        const identity = await resolveWorkspaceBrandIdentity(savedDomain);
+        if (identity?.name) body.name = identity.name;
+        if (identity?.logoUrl) body.logo_url = identity.logoUrl;
+      }
     }
     const res = await fetch("/api/account/brands", {
       method: "PATCH",
@@ -1248,11 +1363,13 @@ function WorkspaceAdSourcesPanel({
     return true;
   };
 
-  const onSave = async () => {
+  const onSaveAndStartScrape = async () => {
     setSaving(true);
     setError(null);
     try {
-      await persistSetup();
+      const saved = await persistSetup();
+      if (!saved) return;
+      router.push(buildWorkspaceBrandScrapeHref(brandId), { scroll: false });
     } catch {
       setError("Network error");
     } finally {
@@ -1274,9 +1391,10 @@ function WorkspaceAdSourcesPanel({
       const adMarketCountryCodes = marketsAuto
         ? [...ONBOARDING_AD_MARKET_CODES]
         : [...selectedMarketCodes];
+      const effectiveWorkspaceDomain = normalizeCompetitorSlug(scrape.websiteUrl) || baseDomain;
       const mergedIds = scrapeHintsToPlatformIds({
         scrape,
-        workspaceDomain: baseDomain,
+        workspaceDomain: effectiveWorkspaceDomain,
         channels,
       });
       const platforms = channelsQueryToAdsPlatforms(channels);
@@ -1296,7 +1414,10 @@ function WorkspaceAdSourcesPanel({
       const pinterestCountry = normalizePinterestAdsCountry(readStoredPinterestCountry());
 
       const hookPayload = buildClientAdsLibraryPayload({
-        brand: { name: brandName.trim() || baseDomain, domain: baseDomain },
+        brand: {
+          name: brandName.trim() || effectiveWorkspaceDomain,
+          domain: effectiveWorkspaceDomain,
+        },
         ids: mergedIds,
         adsPlatforms: platforms,
         scrapeFields,
@@ -1777,11 +1898,11 @@ function WorkspaceAdSourcesPanel({
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
             <button
               type="button"
-              onClick={() => void onSave()}
+              onClick={() => void onSaveAndStartScrape()}
               disabled={saving || rescraping}
               className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-sky-800 px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(14,116,144,0.25)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 sm:w-auto"
             >
-              {saving ? "Saving…" : "Save connections"}
+              {saving ? "Starting scrape…" : "Save and start scraping"}
             </button>
             {showDebugRescrapeAds ? (
               <button
@@ -1834,17 +1955,21 @@ function CompetitorDashboardBody({
   channelsQuery,
   confirmedParam,
 }: CompetitorDashboardBodyProps) {
+  const myBrand = useActiveBrand();
   const [sidebarSnapshot, setSidebarSnapshot] = useState<SidebarCompetitor[] | undefined>(undefined);
+  const [sidebarSnapshotBrandId, setSidebarSnapshotBrandId] = useState<string | null>(null);
   useEffect(() => {
-    const load = () => setSidebarSnapshot(loadSidebarCompetitors());
+    const load = () => {
+      setSidebarSnapshot(loadSidebarCompetitors());
+      setSidebarSnapshotBrandId(myBrand.id);
+    };
     load();
     window.addEventListener(SIDEBAR_COMPETITORS_EVENT, load);
     return () => window.removeEventListener(SIDEBAR_COMPETITORS_EVENT, load);
-  }, [canonicalHost, sidebarEpoch]);
-
-  const myBrand = useActiveBrand();
+  }, [canonicalHost, sidebarEpoch, myBrand.id]);
 
   const { brand, platformIds, channelsFromResolver, isConfirmed, isOwnWorkspace } = useMemo(() => {
+    const snapshotForActiveBrand = sidebarSnapshotBrandId === myBrand.id ? sidebarSnapshot : undefined;
     const base = resolveCompetitorViewFromSidebar(
       canonicalHost,
       {
@@ -1853,12 +1978,14 @@ function CompetitorDashboardBody({
         channelsParam: channelsQuery,
         confirmedParam,
       },
-      sidebarSnapshot === undefined ? [] : sidebarSnapshot
+      snapshotForActiveBrand === undefined ? [] : snapshotForActiveBrand
     );
 
+    const canonicalSlug = normalizeCompetitorSlug(canonicalHost);
     const own =
-      Boolean(myBrand.domain?.trim()) &&
-      normalizeCompetitorSlug(canonicalHost) === normalizeCompetitorSlug(myBrand.domain ?? "");
+      (Boolean(myBrand.domain?.trim()) &&
+        canonicalSlug === normalizeCompetitorSlug(myBrand.domain ?? "")) ||
+      canonicalSlug === WORKSPACE_BRAND_PLACEHOLDER_SLUG;
 
     if (!own) {
       return {
@@ -1871,8 +1998,8 @@ function CompetitorDashboardBody({
     }
 
     const adsSetup = myBrand.adsSetup ?? null;
-    const wsDomain = myBrand.domain!.trim();
-    const normDomain = normalizeCompetitorSlug(wsDomain);
+    const wsDomain = myBrand.domain?.trim() || "";
+    const normDomain = normalizeCompetitorSlug(wsDomain || WORKSPACE_BRAND_PLACEHOLDER_SLUG);
 
     let nextPlatformIds: Record<string, string> | null =
       base.platformIds && Object.keys(base.platformIds).length > 0 ? { ...base.platformIds } : null;
@@ -1936,6 +2063,7 @@ function CompetitorDashboardBody({
     confirmedParam,
     sidebarEpoch,
     sidebarSnapshot,
+    sidebarSnapshotBrandId,
     myBrand.id,
     myBrand.domain,
     myBrand.name,
@@ -2406,14 +2534,13 @@ function CompetitorDashboardBody({
     return JSON.stringify(entries);
   }, [platformIds]);
 
-  const lastSavedCompetitorToAccountKeyRef = useRef("");
-
   useEffect(() => {
     // Before hydration, `sidebarSnapshot` is undefined and we intentionally pass `[]` into the resolver
     // so SSR matches the first client paint. Running `upsertSidebarCompetitor` in that state would merge
     // `confirmed: false` (and drop ids) into the real localStorage row — permanently disabling Ad Library.
     if (sidebarSnapshot === undefined) return;
     if (isOwnWorkspace) return;
+    if (!competitorSidebarMatch) return;
 
     const domainSlug = normalizeCompetitorSlug(brand.domain);
     if (shouldSuppressSidebarUpsertForSlug(domainSlug)) return;
@@ -2439,21 +2566,9 @@ function CompetitorDashboardBody({
     const hoisted = hoistLogoOntoRow(row);
     const upsert = upsertSidebarCompetitor(hoisted);
     if (!upsert.ok) return;
-    const acct = sidebarCompetitorToAccountPayload(hoisted);
-    const accountKey = JSON.stringify({
-      slug: acct.slug,
-      name: acct.name,
-      logoUrl: acct.logoUrl ?? null,
-      brandDomain: acct.brand?.domain ?? null,
-      brandName: acct.brand?.name ?? null,
-      brandLogoUrl: acct.brand?.logoUrl ?? null,
-      adsLibraryContext: acct.adsLibraryContext ?? null,
-    });
-    if (lastSavedCompetitorToAccountKeyRef.current === accountKey) return;
-    lastSavedCompetitorToAccountKeyRef.current = accountKey;
-    void saveCompetitorToAccount(acct);
   }, [
     sidebarSnapshot,
+    competitorSidebarMatch,
     brand.domain,
     brand.logoUrl,
     brand.name,
@@ -2765,16 +2880,19 @@ function CompetitorDashboardBody({
   }, [accountLastScrapedAt]);
 
   const syncSavedCompetitorsFromAccount = useCallback(async () => {
+    localStorage.setItem("rival_active_brand", myBrand.id);
     const localPrev = loadSidebarCompetitors();
-    const list = await fetchSavedCompetitorsFromAccount();
+    const list = await fetchSavedCompetitorsFromAccount(myBrand.id);
     if (list.length > 0) {
       const visible = sidebarCompetitorsWithoutWorkspaceRow(
         list as SidebarCompetitor[],
         myBrand.domain?.trim() || null,
       );
       saveSidebarCompetitors(mergeAccountSidebarRowsWithLocalLibraryContext(visible, localPrev));
+      return;
     }
-  }, [myBrand.domain]);
+    saveSidebarCompetitors([]);
+  }, [myBrand.domain, myBrand.id]);
 
   const fetchMeta = adsPlatforms.includes("meta");
   const fetchGoogle = adsPlatforms.includes("google");
@@ -3048,7 +3166,6 @@ function CompetitorDashboardBody({
 
   const adsLibraryShowsCreativesOnScreen = useMemo(
     () =>
-      !adLibLoading &&
       !adLibFetchError &&
       filteredMetaAds.length +
         filteredGoogleRows.length +
@@ -3058,7 +3175,6 @@ function CompetitorDashboardBody({
         filteredSnapchatAds.length >
         0,
     [
-      adLibLoading,
       adLibFetchError,
       filteredMetaAds.length,
       filteredGoogleRows.length,
@@ -3081,10 +3197,13 @@ function CompetitorDashboardBody({
     !isOwnWorkspace || workspaceLibraryLinkState === "ready";
 
   const showAdLibraryAnalyticsPanel =
-    Boolean(competitorDbIdForSaved.trim()) && workspaceLibraryInteractive;
+    workspaceLibraryInteractive &&
+    (Boolean(competitorDbIdForSaved.trim()) || adsLibraryShowsCreativesOnScreen);
 
   const comparisonPayloadScrapeStamp = accountLastScrapedAt ?? "none";
-  const comparisonPayloadCacheKey = `${cacheDomainNorm}:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
+  const comparisonPayloadCacheKey = `${myBrand.id}:${
+    cacheDomainNorm
+  }:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
   const comparisonPayloadFetchEnabled =
     Boolean(cacheDomainNorm.trim()) && navTab === "comparison";
@@ -3113,8 +3232,10 @@ function CompetitorDashboardBody({
       Boolean(c.competitor?.payload?.map) &&
       typeof c.competitor?.derivedStats?.avgAdAgeDays === "number",
     fetcher: async () => {
+      const params = new URLSearchParams({ competitorDomain: brand.domain });
+      if (myBrand.id && myBrand.id !== "_workspace") params.set("brandId", myBrand.id);
       const res = await fetch(
-        `/api/comparison/payload?competitorDomain=${encodeURIComponent(brand.domain)}`,
+        `/api/comparison/payload?${params.toString()}`,
         { credentials: "include" }
       );
       const json = (await res.json()) as ComparisonPayloadJson;
@@ -3129,6 +3250,68 @@ function CompetitorDashboardBody({
     () => normalizeComparisonPayloadJson(comparisonPayloadData),
     [comparisonPayloadData]
   );
+
+  const competitorStrategyPayload = comparisonPayload?.competitor?.payload ?? null;
+  const [aiAnalysisNoticeDismissed, setAiAnalysisNoticeDismissed] = useState(false);
+  const [aiAnalysisCompleteNoticeVisible, setAiAnalysisCompleteNoticeVisible] = useState(false);
+  const aiAnalysisWasActiveRef = useRef(false);
+  const aiAnalysisNoticeActive = useMemo(() => {
+    if (!isConfirmed) return false;
+    if (recomputePollState.recomputeRunning) return true;
+    if (comparisonPayload?.competitor?.recomputing === true) return true;
+    if (!competitorStrategyPayload) return false;
+    if (competitorStrategyPayload.derivedFastPath === true) return true;
+    if (competitorStrategyPayload.lowEnrichmentConfidence === true) return true;
+    if (competitorStrategyPayload.insufficientEnrichedAds === true) return true;
+    const rate = competitorStrategyPayload.enrichmentRate;
+    const total = competitorStrategyPayload.totalAdCount ?? 0;
+    return typeof rate === "number" && total > 0 && rate < 0.7;
+  }, [
+    comparisonPayload?.competitor?.recomputing,
+    competitorStrategyPayload,
+    isConfirmed,
+    recomputePollState.recomputeRunning,
+  ]);
+
+  useEffect(() => {
+    if (aiAnalysisNoticeActive) {
+      aiAnalysisWasActiveRef.current = true;
+      setAiAnalysisNoticeDismissed(false);
+      setAiAnalysisCompleteNoticeVisible(false);
+      return;
+    }
+
+    if (!aiAnalysisWasActiveRef.current) return;
+    aiAnalysisWasActiveRef.current = false;
+    setAiAnalysisNoticeDismissed(false);
+    setAiAnalysisCompleteNoticeVisible(true);
+    const id = window.setTimeout(() => {
+      setAiAnalysisCompleteNoticeVisible(false);
+    }, 8000);
+    return () => window.clearTimeout(id);
+  }, [aiAnalysisNoticeActive]);
+
+  const renderAiAnalysisNotice = () =>
+    !aiAnalysisNoticeDismissed && aiAnalysisNoticeActive ? (
+      <AiAdAnalysisNotice
+        running={recomputePollState.recomputeRunning || comparisonPayload?.competitor?.recomputing === true}
+        enrichmentRate={competitorStrategyPayload?.enrichmentRate ?? null}
+        enrichedCount={competitorStrategyPayload?.enrichedAdCount ?? null}
+        totalCount={competitorStrategyPayload?.totalAdCount ?? null}
+        onDismiss={() => setAiAnalysisNoticeDismissed(true)}
+      />
+    ) : aiAnalysisCompleteNoticeVisible ? (
+      <AiAdAnalysisNotice
+        running={false}
+        complete
+        enrichmentRate={competitorStrategyPayload?.enrichmentRate ?? null}
+        enrichedCount={competitorStrategyPayload?.enrichedAdCount ?? null}
+        totalCount={competitorStrategyPayload?.totalAdCount ?? null}
+        onDismiss={() => setAiAnalysisCompleteNoticeVisible(false)}
+      />
+    ) : null;
+  const shouldRenderAiAnalysisNotice =
+    (!aiAnalysisNoticeDismissed && aiAnalysisNoticeActive) || aiAnalysisCompleteNoticeVisible;
 
   const comparisonPayloadErrorMessage = comparisonPayloadCacheError?.message ?? null;
 
@@ -4031,7 +4214,7 @@ function CompetitorDashboardBody({
             <WorkspaceAdSourcesPanel
               brandId={myBrand.id}
               brandName={myBrand.name}
-              domain={myBrand.domain ?? brand.domain}
+              domain={myBrand.domain ?? ""}
               initialSetup={myBrand.adsSetup ?? null}
               noBottomMargin
             />
@@ -4043,6 +4226,7 @@ function CompetitorDashboardBody({
         <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
           <BenchmarkTab
             fetchEnabled={navTab === "benchmark" && isOwnWorkspace}
+            brandId={myBrand.id}
             cacheDomainNorm={cacheDomainNorm}
             lastScrapedAt={accountLastScrapedAt}
             onNavigate={navigateFromBenchmark}
@@ -4204,6 +4388,7 @@ function CompetitorDashboardBody({
               />
             ) : (
               <>
+            {renderAiAnalysisNotice()}
             {showAdLibraryAnalyticsPanel ? (
               <FeatureSectionHeader
                 className="mb-6"
@@ -5113,6 +5298,9 @@ function CompetitorDashboardBody({
 
       <KeepMountedTab active={navTab === "insights"} className="min-h-0">
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+          {shouldRenderAiAnalysisNotice ? (
+            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
+          ) : null}
           <Suspense
             fallback={
               <RivalLoadingBlock padded className="py-14" />
@@ -5146,6 +5334,9 @@ function CompetitorDashboardBody({
 
       <KeepMountedTab active={navTab === "tests"} className="min-h-0">
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+          {shouldRenderAiAnalysisNotice ? (
+            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
+          ) : null}
           <KeepMountedTab active={navSub === "creative-tests"} className="min-h-0">
             <CreativeTestsTab
               competitorId={competitorDbIdForSaved}
@@ -5185,8 +5376,12 @@ function CompetitorDashboardBody({
 
       <KeepMountedTab active={navTab === "audience-copy"} className="min-h-0">
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+          {shouldRenderAiAnalysisNotice ? (
+            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
+          ) : null}
           <KeepMountedTab active={navSub === "audience"} className="min-h-0">
             <AudienceTab
+              brandId={myBrand.id}
               competitorDomain={brand.domain}
               workspaceName={myBrand.name}
               workspaceLogoUrl={myBrand.logoUrl ?? null}
@@ -5217,6 +5412,9 @@ function CompetitorDashboardBody({
       <KeepMountedTab active={navTab === "comparison" && !isOwnWorkspace} className="min-h-0">
         <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
           <div className="animate-in fade-in duration-200">
+            {shouldRenderAiAnalysisNotice ? (
+              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
+            ) : null}
             <ComparisonPage
               isConfirmed={isConfirmed}
               competitorDisplayLabel={competitorDisplayLabel}

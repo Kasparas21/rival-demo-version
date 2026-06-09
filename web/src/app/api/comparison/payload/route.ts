@@ -184,8 +184,29 @@ async function countActiveAdsForCompetitor(
 
 async function loadWorkspaceBrandRow(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
-  userId: string
+  userId: string,
+  brandId?: string | null,
 ): Promise<Database["public"]["Tables"]["saved_competitors"]["Row"] | null> {
+  const requested = brandId?.trim();
+  if (requested && requested !== "default" && requested !== "_workspace") {
+    const { data: brand } = await supabase
+      .from("brands")
+      .select("workspace_competitor_id")
+      .eq("user_id", userId)
+      .eq("id", requested)
+      .maybeSingle();
+
+    if (brand?.workspace_competitor_id) {
+      const { data } = await supabase
+        .from("saved_competitors")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("id", brand.workspace_competitor_id)
+        .maybeSingle();
+      if (data) return data;
+    }
+  }
+
   const { data } = await supabase
     .from("saved_competitors")
     .select("*")
@@ -344,11 +365,12 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
+  const brandId = url.searchParams.get("brandId");
   if (!competitorDomain) {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  const wsRow = await loadWorkspaceBrandRow(supabase, user.id);
+  const wsRow = await loadWorkspaceBrandRow(supabase, user.id, brandId);
   if (!wsRow) {
     return NextResponse.json(
       { ok: false, error: "Workspace brand not configured. Complete onboarding or link a workspace competitor." },

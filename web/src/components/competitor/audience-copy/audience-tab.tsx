@@ -32,6 +32,7 @@ type AudienceSummaryJson = {
 };
 
 type Props = {
+  brandId: string;
   competitorDomain: string;
   workspaceName: string;
   workspaceLogoUrl: string | null;
@@ -47,6 +48,7 @@ type Props = {
 };
 
 export function AudienceTab({
+  brandId,
   competitorDomain,
   workspaceName,
   workspaceLogoUrl,
@@ -62,15 +64,17 @@ export function AudienceTab({
 }: Props) {
   const stamp = lastScrapedAt ?? "none";
   const dom = cacheDomainNorm.trim().toLowerCase();
-  const cacheKey = `${dom}:audience-summary:v1:${stamp}`;
+  const cacheKey = `${brandId}:${dom}:audience-summary:v1:${stamp}`;
 
   const { data, loading, error, refetch } = useScrapeKeyedCache<AudienceSummaryJson>({
     cacheKey,
     enabled: Boolean(dom && competitorDomain.trim() && fetchEnabled),
     validateCached: (c) => c.ok === true && Boolean(c.competitor),
     fetcher: async () => {
+      const params = new URLSearchParams({ competitorDomain });
+      if (brandId && brandId !== "_workspace") params.set("brandId", brandId);
       const res = await fetch(
-        `/api/competitor/audience-summary?competitorDomain=${encodeURIComponent(competitorDomain)}`,
+        `/api/competitor/audience-summary?${params.toString()}`,
         { credentials: "include" }
       );
       const json = (await res.json()) as AudienceSummaryJson;

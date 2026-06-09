@@ -15,6 +15,7 @@ export type WorkspaceBrandScrapeContext = {
 };
 
 type BrandRow = {
+  id?: string | null;
   name?: string | null;
   domain?: string | null;
   logo_url?: string | null;
@@ -32,13 +33,19 @@ function normalizeWorkspaceDomain(raw: string): string {
 }
 
 /** Load onboarding workspace brand + platform identifiers for the initial 500-ad discovery scrape. */
-export async function loadWorkspaceBrandScrapeContext(): Promise<WorkspaceBrandScrapeContext | null> {
+export async function loadWorkspaceBrandScrapeContext(
+  brandId?: string | null,
+): Promise<WorkspaceBrandScrapeContext | null> {
   const res = await fetch("/api/account/brands", { credentials: "include", cache: "no-store" });
   if (!res.ok) return null;
 
   const json = (await res.json()) as { ok?: boolean; brands?: BrandRow[] };
   const rows = json.brands ?? [];
-  const row = rows.find((b) => b.is_primary) ?? rows[0];
+  const requested = brandId?.trim();
+  const row =
+    requested && requested !== "_workspace"
+      ? rows.find((b) => b.id === requested)
+      : rows.find((b) => b.is_primary) ?? rows[0];
   if (!row) return null;
 
   const setup = parseAdsProfileSetup(row.ads_profile_setup ?? null);
@@ -90,8 +97,10 @@ export function platformIdentifierFromScrapeIds(ids: Record<string, string>): Pl
 
 export const WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM = "workspaceBrandScrape";
 
-export function buildWorkspaceBrandScrapeHref(): string {
-  return `/dashboard/searching?${WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM}=1`;
+export function buildWorkspaceBrandScrapeHref(brandId?: string | null): string {
+  const params = new URLSearchParams({ [WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM]: "1" });
+  if (brandId?.trim() && brandId !== "_workspace") params.set("brandId", brandId.trim());
+  return `/dashboard/searching?${params.toString()}`;
 }
 
 /** Post-onboarding workspace scrape: max 500 per platform, active-only date windows (not competitor discovery). */
