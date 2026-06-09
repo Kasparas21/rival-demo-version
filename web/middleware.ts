@@ -1,10 +1,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
-import {
-  isPostHogServerConfigured,
-  POSTHOG_DISTINCT_ID_HEADER,
-} from "@/lib/analytics/posthog-config";
+import { POSTHOG_DISTINCT_ID_HEADER } from "@/lib/analytics/posthog-config";
 import {
   POSTHOG_DISTINCT_ID_COOKIE,
   readPostHogDistinctIdCookie,
@@ -13,9 +10,8 @@ import { resolveLocale } from "@/lib/i18n/resolve-locale";
 import { isLocale, LOCALE_COOKIE, LOCALE_HEADER } from "@/lib/i18n/locale";
 import { updateSession } from "@/lib/supabase/middleware";
 
-function resolvePostHogDistinctId(request: NextRequest): string | null {
-  if (!isPostHogServerConfigured()) return null;
-
+/** Always assign a stable ID — Edge middleware cannot read server-only PostHog env vars. */
+function resolvePostHogDistinctId(request: NextRequest): string {
   return (
     readPostHogDistinctIdCookie(request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value) ??
     crypto.randomUUID()
@@ -28,8 +24,6 @@ function attachPostHogDistinctId(
   requestHeaders: Headers,
 ) {
   const distinctId = resolvePostHogDistinctId(request);
-  if (!distinctId) return;
-
   requestHeaders.set(POSTHOG_DISTINCT_ID_HEADER, distinctId);
 
   const hasCookie = readPostHogDistinctIdCookie(
@@ -47,7 +41,6 @@ function attachPostHogDistinctId(
 
 function applyPostHogDistinctIdCookie(request: NextRequest, response: NextResponse) {
   const distinctId = resolvePostHogDistinctId(request);
-  if (!distinctId) return response;
 
   const hasCookie = readPostHogDistinctIdCookie(
     request.cookies.get(POSTHOG_DISTINCT_ID_COOKIE)?.value,
