@@ -10,7 +10,6 @@ import {
 } from "react";
 
 import { useOptionalMarketingConsent } from "@/components/analytics/marketing-consent-provider";
-import { reportLandingHeroExperimentExposure } from "@/lib/analytics/posthog-report-exposure";
 import {
   getPostHogPublicKey,
   isPostHogConfigured,
@@ -95,9 +94,6 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
                   maskAllInputs: true,
                 },
             advanced_disable_feature_flags: false,
-            loaded: (client) => {
-              reportLandingHeroExperimentExposure(client);
-            },
           });
 
           initializedRef.current = true;

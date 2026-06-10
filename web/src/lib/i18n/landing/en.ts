@@ -145,12 +145,6 @@ export const landingCopyEn: LandingCopy = {
   },
   hero: {
     headline: {
-      line1Prefix: "see ",
-      highlight: "every ad",
-      line2: "your competitors run.",
-      subline: "across all 6 platforms, in one dashboard",
-    },
-    testHeadline: {
       line1Prefix: "the ",
       highlight: "ultimate ad spy tool",
       line2: "",

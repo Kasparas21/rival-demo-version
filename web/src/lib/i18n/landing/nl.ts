@@ -33,12 +33,6 @@ export const landingCopyNl: LandingCopy = {
   },
   hero: {
     headline: {
-      line1Prefix: "zie ",
-      highlight: "elke ad",
-      line2: "die uw concurrenten draaien.",
-      subline: "over alle 6 platformen, in één dashboard",
-    },
-    testHeadline: {
       line1Prefix: "de ",
       highlight: "ultieme ad-spy-tool",
       line2: "",

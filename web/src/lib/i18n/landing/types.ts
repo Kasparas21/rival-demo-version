@@ -79,8 +79,6 @@ export type LandingCopy = {
   };
   hero: {
     headline: LandingHeroHeadlineCopy;
-    /** PostHog variant B hero — localized per locale. */
-    testHeadline: LandingHeroHeadlineCopy;
     trialCta: string;
     platformTrialAria: string;
     marketersPillAria: string;

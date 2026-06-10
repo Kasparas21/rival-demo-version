@@ -3,11 +3,6 @@ import { redirect } from "next/navigation";
 
 import LandingHome from "@/components/marketing/landing-home";
 import { JsonLd } from "@/components/seo/JsonLd";
-import {
-  applyLandingHeroHeadlineExperiment,
-  parseDevHeroVariantPreview,
-} from "@/lib/analytics/landing-hero-experiment";
-import { getLandingHeroHeadlineVariant } from "@/lib/analytics/posthog-server";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getLandingCopy } from "@/lib/i18n/landing";
 import { homePageJsonLdBlocks } from "@/lib/seo/home-json-ld";
@@ -47,15 +42,6 @@ export default async function Home({
   const params = (await searchParams) ?? {};
   const locale = await getRequestLocale();
   const copy = getLandingCopy(locale);
-  const devHeroVariant = parseDevHeroVariantPreview(firstParam(params.hero));
-  const heroVariant = devHeroVariant ?? (await getLandingHeroHeadlineVariant());
-  const landingCopy = {
-    ...copy,
-    hero: {
-      ...copy.hero,
-      headline: applyLandingHeroHeadlineExperiment(copy.hero, heroVariant),
-    },
-  };
   const hasAuthParams = Boolean(
     firstParam(params.code) ||
       firstParam(params.token_hash) ||
@@ -74,10 +60,10 @@ export default async function Home({
 
   return (
     <>
-      {homePageJsonLdBlocks(landingCopy).map((block, index) => (
+      {homePageJsonLdBlocks(copy).map((block, index) => (
         <JsonLd key={`${String(block["@type"])}-${index}`} data={block} />
       ))}
-      <LandingHome copy={landingCopy} locale={locale} heroVariant={heroVariant} />
+      <LandingHome copy={copy} locale={locale} />
     </>
   );
 }
