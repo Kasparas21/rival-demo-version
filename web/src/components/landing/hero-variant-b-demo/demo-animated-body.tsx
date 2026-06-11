@@ -2,11 +2,31 @@
 
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+
+const MOBILE_DEMO_MQ = "(max-width: 767px)";
+
+function useMobileDemoLayout(): boolean {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia(MOBILE_DEMO_MQ).matches;
+  });
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_DEMO_MQ);
+    const sync = () => setIsMobile(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  return isMobile;
+}
 
 function getBodyMaxHeightPx(): number {
   if (typeof window === "undefined") return 680;
@@ -24,10 +44,25 @@ type Props = {
 };
 
 /**
- * Top-anchored height transition — card header stays put; only the bottom edge moves.
+ * Mobile: natural height inside the zoomed-out card; host clips overflow (no inner scroll).
+ */
+function DemoAnimatedBodyMobile({ children }: { children: ReactNode }) {
+  return (
+    <div className="hero-variant-b-demo-body hero-variant-b-demo-body--mobile relative touch-pan-y overflow-hidden bg-[#fafbfc]">
+      <div className="hero-variant-b-demo-body-inner overflow-hidden overscroll-none">{children}</div>
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-[#fafbfc] via-[#fafbfc]/90 to-transparent"
+      />
+    </div>
+  );
+}
+
+/**
+ * Desktop: top-anchored height transition — card header stays put; only the bottom edge moves.
  * ResizeObserver + rAF batching; respects prefers-reduced-motion.
  */
-export function DemoAnimatedBody({ children, contentKey }: Props) {
+function DemoAnimatedBodyDesktop({ children, contentKey }: Props) {
   const shellRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const heightRef = useRef(0);
@@ -115,5 +150,17 @@ export function DemoAnimatedBody({ children, contentKey }: Props) {
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t from-[#fafbfc] to-transparent sm:h-10"
       />
     </div>
+  );
+}
+
+export function DemoAnimatedBody({ children, contentKey }: Props) {
+  const isMobile = useMobileDemoLayout();
+
+  if (isMobile) {
+    return <DemoAnimatedBodyMobile>{children}</DemoAnimatedBodyMobile>;
+  }
+
+  return (
+    <DemoAnimatedBodyDesktop contentKey={contentKey}>{children}</DemoAnimatedBodyDesktop>
   );
 }

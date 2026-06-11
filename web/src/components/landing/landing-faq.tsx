@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { Minus, Plus } from "lucide-react";
 
-import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import {
+  LandingHeadlineHighlight,
+  landingSectionHeadlineClasses,
+} from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import type { FaqItem, LandingCopy } from "@/lib/i18n/landing/types";
@@ -133,7 +136,7 @@ export function LandingFAQ({ copy }: Props) {
         <p className="text-xs font-semibold lowercase tracking-widest text-[#4a7fa5]">{copy.eyebrow}</p>
         <h2
           id="faq"
-          className={`${landingNavAnchorScrollClasses} mt-2 text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}
+          className={`${landingNavAnchorScrollClasses} mt-2 ${landingSectionHeadlineClasses}`}
         >
           {copy.titleLine1}
           <br />

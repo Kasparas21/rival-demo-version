@@ -303,14 +303,14 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave }: Props) {
           {analyticsOpen ? <ChevronUp className="size-4 text-[#64748b]" /> : <ChevronDown className="size-4 text-[#64748b]" />}
         </button>
         {analyticsOpen ? (
-          <div className="grid grid-cols-1 border-t border-[#e2e8f0]/90 lg:grid-cols-3">
+          <div className="hero-demo-analytics-panel grid grid-cols-1 border-t border-[#e2e8f0]/90 lg:grid-cols-3">
             <div className="border-b border-[#e2e8f0]/90 p-4 lg:border-b-0 lg:border-r">
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
                 Active ads · platform mix
               </p>
               <DemoGauge activeCounts={DEMO_PLATFORM_ACTIVE_COUNTS} total={totalActive} totalAll={totalAll} />
             </div>
-            <div className="grid grid-cols-1 lg:col-span-2 lg:grid-cols-2">
+            <div className="hero-demo-analytics-side grid grid-cols-1 lg:col-span-2 lg:grid-cols-2">
               <div className="border-b border-[#e2e8f0]/90 p-4 lg:border-b-0 lg:border-r">
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">Activity score</p>
                 <div className="flex flex-wrap items-baseline gap-2">
@@ -414,7 +414,7 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave }: Props) {
                     View all {DEMO_PLATFORM_ACTIVE_COUNTS[id]} ads
                   </span>
                 </div>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="hero-demo-ad-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {ads.map((ad) => (
                     <DemoAdCard
                       key={ad.id}

@@ -400,6 +400,70 @@ export const DEMO_COMPARISON = {
   ],
 } as const;
 
+/** Looped toast copy for the hero product demo — cycles every 4s. */
+export const DEMO_LIVE_NOTIFICATIONS = [
+  {
+    id: "live-1",
+    type: "New ads",
+    title: "8 new Meta ads detected",
+    detail: "Fresh creatives added in the last scrape — mostly TOFU video.",
+  },
+  {
+    id: "live-2",
+    type: "New platform",
+    title: "Competitor A launched on TikTok",
+    detail: "6 active TikTok ads found for the first time.",
+  },
+  {
+    id: "live-3",
+    type: "Spend shift",
+    title: "Google Search share up 12%",
+    detail: "More budget moving into search capture vs last snapshot.",
+  },
+  {
+    id: "live-4",
+    type: "Landing page",
+    title: "New /spring-sale page live",
+    detail: "14 active ads now point to the new landing page.",
+  },
+  {
+    id: "live-5",
+    type: "Ad killed",
+    title: "4 Pinterest ads retired",
+    detail: "Style-edit promos ended after a 19-day run.",
+  },
+  {
+    id: "live-6",
+    type: "Format shift",
+    title: "Video share up 22% on Meta",
+    detail: "More Reels-style creatives vs image statics this week.",
+  },
+  {
+    id: "live-7",
+    type: "Funnel move",
+    title: "3 new BOFU retargeting ads",
+    detail: "Bottom-funnel offers added on Meta and Google.",
+  },
+  {
+    id: "live-8",
+    type: "Angle test",
+    title: "Discount urgency angle testing",
+    detail: "5 new limited-time hooks spotted across Meta.",
+  },
+  {
+    id: "live-9",
+    type: "Activity spike",
+    title: "Meta refresh velocity up 34%",
+    detail: "14 new Meta ads in 7 days vs prior week average.",
+  },
+  {
+    id: "live-10",
+    type: "Score change",
+    title: "Activity score rose to 68/100",
+    detail: "Tier 4 — stronger creative diversity across platforms.",
+  },
+] as const;
+
 export const DEMO_ALERTS = [
   {
     id: "alert-1",

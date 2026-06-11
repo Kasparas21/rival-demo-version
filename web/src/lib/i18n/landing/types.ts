@@ -102,6 +102,9 @@ export type LandingCopy = {
     withoutBadge: string;
     withoutIntro: string;
     withoutIntroMobile: string;
+    withoutStatTools: string;
+    withoutStatLogins: string;
+    withoutStatGlue: string;
     /** Template: `{count}` */
     toolsSummary: string;
     toolsSummaryMobile: string;

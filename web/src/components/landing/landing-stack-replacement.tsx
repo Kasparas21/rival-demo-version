@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Clock3, FileSpreadsheet, HelpCircle, KeyRound, LayoutGrid, X } from "lucide-react";
 
-import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import {
+  LandingHeadlineHighlight,
+  landingSectionHeadlineClasses,
+} from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import {
@@ -32,51 +35,183 @@ const PLATFORM_ICONS: Record<string, ReactNode> = {
   Reddit: <RedditLogo className="mx-auto block size-[15px]" />,
 };
 
-function StackToolChip({
+const PAIN_CHIP_ICONS = [FileSpreadsheet, LayoutGrid, HelpCircle] as const;
+
+function StackToolIconTile({
   name,
   iconClass,
   iconBg,
   iconKey,
-}: LandingCopy["stackReplacement"]["stackTools"][number]) {
+  compact = false,
+}: LandingCopy["stackReplacement"]["stackTools"][number] & { compact?: boolean }) {
   const Icon = stackToolIcon({ name, iconClass, iconBg, iconKey });
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-white/75 bg-white/62 px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_4px_14px_-8px_rgba(239,68,68,0.12)] backdrop-blur-md sm:px-4 sm:py-3.5">
-      <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
-        <Icon className={`size-[18px] ${iconClass}`} strokeWidth={2.25} aria-hidden />
+    <div
+      className={`flex flex-col items-center justify-center rounded-xl border border-dashed border-[#ef4444]/25 bg-white/75 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.94)] backdrop-blur-md ${
+        compact ? "gap-1 px-1 py-2" : "gap-2 px-2 py-3 sm:py-3.5"
+      }`}
+      title={name}
+    >
+      <span
+        className={`flex shrink-0 items-center justify-center rounded-xl ${iconBg} ${
+          compact ? "size-8 rounded-lg" : "size-11 sm:size-12"
+        }`}
+      >
+        <Icon
+          className={`${iconClass} ${compact ? "size-3.5" : "size-5 sm:size-[22px]"}`}
+          strokeWidth={2.25}
+          aria-hidden
+        />
       </span>
-      <span className="text-[13px] font-semibold leading-tight text-[#1a1a1a] sm:text-sm">{name}</span>
+      <span
+        className={`line-clamp-2 font-semibold leading-tight text-[#1a1a1a] ${
+          compact ? "text-[8px]" : "text-[10px] sm:text-[11px]"
+        }`}
+      >
+        {name}
+      </span>
     </div>
   );
 }
 
-function StackToolChipMobile({
-  name,
-  iconClass,
-  iconBg,
-  iconKey,
-}: LandingCopy["stackReplacement"]["stackTools"][number]) {
-  const Icon = stackToolIcon({ name, iconClass, iconBg, iconKey });
+function WithoutStatPill({
+  value,
+  icon: Icon,
+  label,
+  compact = false,
+}: {
+  value: string;
+  icon: typeof KeyRound;
+  label: string;
+  compact?: boolean;
+}) {
   return (
-    <div className="flex min-w-0 items-center gap-1.5 rounded-lg border border-white/75 bg-white/62 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_2px_8px_-6px_rgba(239,68,68,0.12)] backdrop-blur-md">
-      <span className={`flex size-6 shrink-0 items-center justify-center rounded-md ${iconBg}`}>
-        <Icon className={`size-3 ${iconClass}`} strokeWidth={2.25} aria-hidden />
-      </span>
-      <span className="truncate text-[9px] font-semibold leading-tight text-[#1a1a1a]">{name}</span>
+    <div
+      className={`flex flex-col items-center justify-center rounded-xl border border-[#ef4444]/20 bg-white/70 text-center ${
+        compact ? "px-1.5 py-2" : "px-3 py-3 sm:py-3.5"
+      }`}
+    >
+      <Icon className={`text-[#ef4444] ${compact ? "size-3.5" : "size-4"}`} strokeWidth={2.25} aria-hidden />
+      <p className={`mt-1 font-bold leading-none text-[#dc2626] ${compact ? "text-lg" : "text-2xl sm:text-[1.75rem]"}`}>
+        {value}
+      </p>
+      <p className={`mt-0.5 font-semibold uppercase tracking-[0.08em] text-[#b91c1c] ${compact ? "text-[8px]" : "text-[9px] sm:text-[10px]"}`}>
+        {label}
+      </p>
     </div>
   );
 }
 
-/** Desktop — unchanged. */
+function WithoutPainChips({
+  points,
+  compact = false,
+}: {
+  points: string[];
+  compact?: boolean;
+}) {
+  return (
+    <div className={`grid grid-cols-3 ${compact ? "gap-1.5" : "gap-2 sm:gap-2.5"}`}>
+      {points.map((point, index) => {
+        const Icon = PAIN_CHIP_ICONS[index] ?? HelpCircle;
+        return (
+          <div
+            key={point}
+            className={`flex flex-col items-center rounded-xl border border-[#ef4444]/15 bg-[#fef2f2]/55 text-center ${
+              compact ? "gap-1 px-1.5 py-2" : "gap-1.5 px-2 py-2.5 sm:px-2.5 sm:py-3"
+            }`}
+          >
+            <span
+              className={`flex items-center justify-center rounded-full bg-[#ef4444]/10 ring-1 ring-[#ef4444]/20 ${
+                compact ? "size-6" : "size-7 sm:size-8"
+              }`}
+            >
+              <Icon className={`text-[#ef4444] ${compact ? "size-3" : "size-3.5 sm:size-4"}`} strokeWidth={2.5} aria-hidden />
+            </span>
+            <span className={`font-semibold leading-tight text-[#991b1b] ${compact ? "text-[9px]" : "text-[10px] sm:text-[11px]"}`}>
+              {point}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WithRivalPriceHero({ copy, compact = false }: { copy: LandingCopy["stackReplacement"]; compact?: boolean }) {
+  return (
+    <div
+      className={`rounded-2xl border-2 border-[#4a7fa5]/35 bg-gradient-to-b from-[#eff6ff] via-white to-[#dbeafe]/60 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.98),0_14px_36px_-12px_rgba(74,127,165,0.4)] ring-1 ring-[#4a7fa5]/10 ${
+        compact ? "px-3 py-3" : "px-4 py-4 sm:px-5 sm:py-5"
+      }`}
+    >
+      <p
+        className={`font-bold uppercase tracking-[0.12em] text-[#2563eb] ${
+          compact ? "text-[9px]" : "text-[10px] sm:text-[11px]"
+        }`}
+      >
+        {copy.onePlanLabel}
+      </p>
+      <p
+        className={`mt-1 font-bold leading-none tracking-tight text-[#0f172a] ${
+          compact ? "text-3xl" : "text-[2.75rem] sm:text-5xl"
+        }`}
+      >
+        {copy.price}
+        <span className={`font-bold text-[#2563eb] ${compact ? "text-xl" : "text-2xl sm:text-4xl"}`}>
+          {copy.priceSuffix}
+        </span>
+      </p>
+      <p className={`mt-1 font-semibold text-[#4a7fa5] ${compact ? "text-[10px]" : "text-xs sm:text-sm"}`}>
+        {copy.zeroGlue}
+      </p>
+      <div
+        className={`mt-2 flex flex-wrap items-center justify-center gap-1.5 border-t border-[#4a7fa5]/15 ${
+          compact ? "pt-2" : "pt-3"
+        }`}
+      >
+        <span className="rounded-full border border-[#95C14B]/45 bg-[#ecfccb] px-2.5 py-0.5 text-[9px] font-bold text-[#3f6212] sm:text-[10px]">
+          {compact ? copy.saveSubMobile : copy.saveLabel}
+        </span>
+        {!compact ? <span className="text-[11px] text-[#5a7f2e]/90 sm:text-xs">{copy.saveSub}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function WithoutCostHero({ copy, compact = false }: { copy: LandingCopy["stackReplacement"]; compact?: boolean }) {
+  return (
+    <div
+      className={`rounded-2xl border border-[#ef4444]/25 bg-gradient-to-b from-[#fff1f2] to-[#fef2f2]/80 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] ${
+        compact ? "px-3 py-2.5" : "px-4 py-4 sm:px-5 sm:py-5"
+      }`}
+    >
+      <p className={`font-bold uppercase tracking-[0.12em] text-[#b91c1c] ${compact ? "text-[9px]" : "text-[10px] sm:text-[11px]"}`}>
+        {copy.payTodayLabel}
+      </p>
+      <p className={`mt-1 font-bold leading-none tracking-tight text-[#dc2626] ${compact ? "text-3xl" : "text-[2.75rem] sm:text-5xl"}`}>
+        {copy.payTodayAmount}
+      </p>
+      <p className={`mt-1 font-semibold text-[#991b1b]/90 ${compact ? "text-[10px]" : "text-xs sm:text-sm"}`}>{copy.payTodaySub}</p>
+      <div
+        className={`mt-2 flex flex-wrap items-center justify-center gap-1.5 border-t border-[#ef4444]/15 text-[#991b1b] ${
+          compact ? "pt-2 text-[9px]" : "pt-3 text-[11px] sm:text-xs"
+        }`}
+      >
+        <span className="rounded-full bg-[#ef4444]/10 px-2 py-0.5 font-bold">{copy.payTodayFooter}</span>
+        <span className="text-[#b91c1c]/85">{copy.payTodayFooterSub}</span>
+      </div>
+    </div>
+  );
+}
+
 function WithoutRivalCard({ copy }: { copy: LandingCopy["stackReplacement"] }) {
+  const toolCount = String(copy.stackTools.length);
+
   return (
     <article className={`relative flex h-full flex-col overflow-hidden ${withoutRivalGlassCardClass} p-5 sm:p-7`}>
       <div
         aria-hidden
         className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-[#ef4444]/16 blur-3xl"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-10 -left-10 h-28 w-28 rounded-full bg-[#fca5a5]/20 blur-3xl"
       />
       <div
         aria-hidden
@@ -88,69 +223,52 @@ function WithoutRivalCard({ copy }: { copy: LandingCopy["stackReplacement"] }) {
           <span className="flex size-9 items-center justify-center rounded-full bg-[#ef4444]/14 ring-1 ring-[#ef4444]/28">
             <X className="size-5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
           </span>
-          <h3 className="text-xl font-bold text-[#1a1a1a]">{copy.withoutTitle}</h3>
+          <div>
+            <h3 className="text-xl font-bold text-[#1a1a1a]">{copy.withoutTitle}</h3>
+            <p className="mt-0.5 text-sm text-[#7f1d1d]/90">{copy.withoutIntro}</p>
+          </div>
         </div>
-        <span className="rounded-full border border-[#ef4444]/30 bg-[#ef4444]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#b91c1c] backdrop-blur-sm">
+        <span className="shrink-0 rounded-full border border-[#ef4444]/30 bg-[#ef4444]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">
           {copy.withoutBadge}
         </span>
       </header>
 
-      <p className="relative mt-4 text-[13px] leading-relaxed text-[#7f1d1d]/90 sm:text-sm">{copy.withoutIntro}</p>
+      <div className="relative mt-5 flex flex-1 flex-col gap-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+          <WithoutStatPill value={toolCount} icon={LayoutGrid} label={copy.withoutStatTools} />
+          <WithoutStatPill value={toolCount} icon={KeyRound} label={copy.withoutStatLogins} />
+          <WithoutStatPill value="4h" icon={Clock3} label={copy.withoutStatGlue} />
+        </div>
 
-      <div className="relative mt-6 flex flex-1 flex-col">
-        <div className="rounded-2xl border border-white/70 bg-white/45 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md sm:px-5 sm:py-5">
-          <p className="text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#b91c1c] sm:text-xs">
-            {fillCopyTemplate(copy.toolsSummary, { count: copy.stackTools.length })}
+        <div className="rounded-2xl border border-dashed border-[#ef4444]/30 bg-white/40 px-3 py-4 sm:px-4 sm:py-5">
+          <p className="text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#b91c1c] sm:text-[11px]">
+            {fillCopyTemplate(copy.toolsSummaryMobile, { count: copy.stackTools.length })}
           </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-2.5">
             {copy.stackTools.map((tool) => (
-              <StackToolChip key={tool.name} {...tool} />
+              <StackToolIconTile key={tool.name} {...tool} />
             ))}
           </div>
         </div>
 
-        <div className="mt-6 flex flex-1 flex-col rounded-2xl border border-[#ef4444]/20 bg-[#fef2f2]/45 px-4 py-4 backdrop-blur-md sm:px-5 sm:py-5">
-          <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#b91c1c] sm:text-xs">{copy.manualLabel}</p>
-          <ul className="mt-4 flex-1 space-y-3.5 sm:space-y-4">
-            {copy.painPoints.map((point) => (
-              <li key={point} className="flex items-start gap-3 text-[13px] leading-snug text-[#7f1d1d]/90 sm:text-sm">
-                <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-[#ef4444]/10 ring-1 ring-[#ef4444]/20">
-                  <X className="size-3.5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
-                </span>
-                {point}
-              </li>
-            ))}
-          </ul>
+        <div>
+          <p className="mb-2.5 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#b91c1c] sm:text-[11px]">
+            {copy.manualLabel}
+          </p>
+          <WithoutPainChips points={copy.painPoints} />
         </div>
 
-        <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
-          <div className="rounded-xl border border-[#ef4444]/25 bg-[#fef2f2]/70 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-md sm:py-4">
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#b91c1c]">{copy.payTodayLabel}</p>
-            <p className="mt-1 text-lg font-bold text-[#dc2626] sm:text-xl">{copy.payTodayAmount}</p>
-            <p className="mt-1.5 text-[12px] font-medium text-[#991b1b]/85 sm:text-[13px]">{copy.payTodaySub}</p>
-            <div className="mt-3 space-y-1.5 border-t border-[#ef4444]/15 pt-3 text-[12px] leading-snug text-[#991b1b]/80 sm:text-[13px]">
-              {copy.payTodayBullets.map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-[#ef4444]/25 bg-[#fef2f2]/60 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-sm">
-            <p className="text-sm font-bold text-[#991b1b] sm:text-[15px]">{copy.payTodayFooter}</p>
-            <p className="mt-1 text-xs text-[#b91c1b]/85 sm:text-[13px]">{copy.payTodayFooterSub}</p>
-          </div>
-
-          <div className="flex min-h-[52px] items-center justify-center rounded-full border border-[#ef4444]/25 bg-[#ef4444]/8 px-6 text-sm font-bold text-[#991b1b]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] backdrop-blur-sm">
-            {copy.bottomBadge}
-          </div>
+        <div className="mt-auto">
+          <WithoutCostHero copy={copy} />
         </div>
       </div>
     </article>
   );
 }
 
-/** Mobile-only compact card. */
 function WithoutRivalCardMobile({ copy }: { copy: LandingCopy["stackReplacement"] }) {
+  const toolCount = String(copy.stackTools.length);
+
   return (
     <article className={`relative overflow-hidden ${withoutRivalGlassCardClass} p-3.5`}>
       <header className="relative flex items-center justify-between gap-2">
@@ -158,44 +276,36 @@ function WithoutRivalCardMobile({ copy }: { copy: LandingCopy["stackReplacement"
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[#ef4444]/14 ring-1 ring-[#ef4444]/28">
             <X className="size-3.5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
           </span>
-          <h3 className="text-base font-bold text-[#1a1a1a]">{copy.withoutTitle}</h3>
+          <div className="min-w-0">
+            <h3 className="text-base font-bold text-[#1a1a1a]">{copy.withoutTitle}</h3>
+            <p className="text-[10px] leading-snug text-[#7f1d1d]/90">{copy.withoutIntroMobile}</p>
+          </div>
         </div>
         <span className="shrink-0 rounded-full border border-[#ef4444]/30 bg-[#ef4444]/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.08em] text-[#b91c1c]">
           {copy.withoutBadge}
         </span>
       </header>
 
-      <p className="relative mt-2 text-[11px] leading-snug text-[#7f1d1d]/90">{copy.withoutIntroMobile}</p>
+      <div className="relative mt-3 grid grid-cols-3 gap-1.5">
+        <WithoutStatPill value={toolCount} icon={LayoutGrid} label={copy.withoutStatTools} compact />
+        <WithoutStatPill value={toolCount} icon={KeyRound} label={copy.withoutStatLogins} compact />
+        <WithoutStatPill value="4h" icon={Clock3} label={copy.withoutStatGlue} compact />
+      </div>
 
-      <div className="relative mt-3 rounded-xl border border-white/70 bg-white/45 px-2.5 py-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md">
-        <p className="text-center text-[9px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">{copy.toolsSummaryMobile}</p>
-        <div className="mt-2 grid grid-cols-2 gap-1.5">
+      <div className="relative mt-3 rounded-xl border border-dashed border-[#ef4444]/30 bg-white/40 px-2 py-2.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {copy.stackTools.map((tool) => (
-            <StackToolChipMobile key={tool.name} {...tool} />
+            <StackToolIconTile key={tool.name} {...tool} compact />
           ))}
         </div>
       </div>
 
-      <div className="relative mt-3 rounded-xl border border-[#ef4444]/20 bg-[#fef2f2]/45 px-2.5 py-2.5 backdrop-blur-md">
-        <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">{copy.manualLabelMobile}</p>
-        <ul className="mt-2 space-y-1.5">
-          {copy.painPointsMobile.map((point) => (
-            <li key={point} className="flex items-start gap-2 text-[10px] leading-snug text-[#7f1d1d]/90">
-              <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[#ef4444]/10 ring-1 ring-[#ef4444]/20">
-                <X className="size-2.5 text-[#ef4444]" strokeWidth={2.75} aria-hidden />
-              </span>
-              {point}
-            </li>
-          ))}
-        </ul>
+      <div className="relative mt-3">
+        <WithoutPainChips points={copy.painPointsMobile} compact />
       </div>
 
-      <div className="relative mt-3 rounded-xl border border-[#ef4444]/25 bg-[#fef2f2]/70 px-3 py-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-md">
-        <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#b91c1c]">{copy.payTodayLabel}</p>
-        <p className="mt-0.5 text-base font-bold text-[#dc2626]">{copy.payTodayAmount}</p>
-        <p className="mt-1 text-[10px] font-medium leading-snug text-[#991b1b]/85">
-          {copy.payTodaySub} · {copy.payTodayFooter} · {copy.payTodayFooterSub}
-        </p>
+      <div className="relative mt-3">
+        <WithoutCostHero copy={copy} compact />
       </div>
     </article>
   );
@@ -285,19 +395,7 @@ function WithRivalCard({ copy }: { copy: LandingCopy["stackReplacement"] }) {
         </ul>
 
         <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
-          <div className="overflow-hidden rounded-2xl border border-[#4a7fa5]/40 bg-[#eff6ff]/85 px-5 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_14px_44px_-16px_rgba(74,127,165,0.38)] backdrop-blur-md sm:px-6 sm:py-6">
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:text-xs">{copy.onePlanLabel}</p>
-            <p className="mt-2 text-[2.75rem] font-bold leading-none tracking-tight text-[#1a1a1a] sm:text-[3rem]">
-              {copy.price}
-              <span className="text-2xl font-bold text-[#4a7fa5] sm:text-[2.25rem]">{copy.priceSuffix}</span>
-            </p>
-            <p className="mt-2 text-sm font-semibold text-[#4a7fa5] sm:text-base">{copy.zeroGlue}</p>
-          </div>
-
-          <div className="rounded-xl border border-[#95C14B]/30 bg-[#f3f9e8]/75 px-4 py-3.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-sm">
-            <p className="text-sm font-bold text-[#4a6b24] sm:text-[15px]">{copy.saveLabel}</p>
-            <p className="mt-1 text-xs text-[#5a7f2e]/90 sm:text-[13px]">{copy.saveSub}</p>
-          </div>
+          <WithRivalPriceHero copy={copy} />
 
           <LandingTrialCta href="/onboarding" size="lg">
             {copy.trialCta}
@@ -323,6 +421,10 @@ function WithRivalCardMobile({ copy }: { copy: LandingCopy["stackReplacement"] }
         <RivalLogoImg className="h-5 w-auto max-w-[72px] shrink-0 object-contain" />
       </header>
 
+      <div className="mt-3">
+        <WithRivalPriceHero copy={copy} compact />
+      </div>
+
       <WithRivalPlatformStripMobile copy={copy} />
 
       <ul className="mt-3 space-y-1.5">
@@ -336,16 +438,7 @@ function WithRivalCardMobile({ copy }: { copy: LandingCopy["stackReplacement"] }
         ))}
       </ul>
 
-      <div className="mt-3 space-y-2">
-        <div className="rounded-xl border border-[#4a7fa5]/40 bg-[#eff6ff]/85 px-3 py-2.5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-12px_rgba(74,127,165,0.3)] backdrop-blur-md">
-          <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#4a7fa5]">{copy.onePlanLabel}</p>
-          <p className="mt-1 text-2xl font-bold leading-none tracking-tight text-[#1a1a1a]">
-            {copy.price}
-            <span className="text-lg font-bold text-[#4a7fa5]">{copy.priceSuffix}</span>
-          </p>
-          <p className="mt-1 text-[10px] font-semibold text-[#4a7fa5]">{copy.saveSubMobile}</p>
-        </div>
-
+      <div className="mt-3">
         <LandingTrialCta href="/onboarding" size="lg" className="w-full">
           {copy.trialCta}
           <span aria-hidden>→</span>
@@ -377,7 +470,7 @@ export function LandingStackReplacement({ copy }: Props) {
 
       <LandingScrollReveal className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="text-center">
-          <h2 className="text-[clamp(2rem,6.5vw,3.25rem)] font-bold lowercase leading-[1.08] tracking-tight text-[#1a1a1a]">
+          <h2 className={landingSectionHeadlineClasses}>
             {copy.titlePrefix}
             <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
             {copy.titleSuffix}

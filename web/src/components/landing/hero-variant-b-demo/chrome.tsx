@@ -8,6 +8,7 @@ import {
   type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { DemoAnimatedBody } from "@/components/landing/hero-variant-b-demo/demo-animated-body";
+import { DemoLiveNotifications } from "@/components/landing/hero-variant-b-demo/demo-live-notifications";
 import { DemoMobileScrollRow } from "@/components/landing/hero-variant-b-demo/demo-mobile-scroll-row";
 import { DEMO_COMPETITOR } from "@/lib/landing/hero-variant-b-demo-data";
 
@@ -42,7 +43,7 @@ export function HeroVariantBDemoShell({
   return (
     <div className="hero-variant-b-product-demo relative mx-auto w-full max-w-6xl px-2 sm:px-4 md:px-6">
       <div className="relative overflow-hidden rounded-xl border border-[#e5e7eb]/90 bg-white shadow-[0_0_0_1px_rgba(74,127,165,0.06),0_20px_56px_-14px_rgba(26,26,26,0.14)] sm:rounded-2xl md:rounded-[1.25rem]">
-        <div className="border-b border-[#e5e7eb] bg-white px-3 py-3 text-left sm:px-5 sm:py-3.5">
+        <div className="hero-variant-b-demo-chrome-header border-b border-[#e5e7eb] bg-white px-3 py-3 text-left sm:px-5 sm:py-3.5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <GenericLogo className="size-9 rounded-xl text-sm sm:size-10" />
@@ -91,12 +92,9 @@ export function HeroVariantBDemoShell({
             })}
           </DemoMobileScrollRow>
 
-        </div>
-
-        <DemoAnimatedBody contentKey={`${mainTab}:${subTab}`}>
           {tabDef?.subTabs?.length ? (
             <DemoMobileScrollRow
-              className="border-b border-[#e5e7eb]/80 bg-white px-3 py-2.5 sm:px-5"
+              className="mt-3 border-t border-[#e5e7eb]/80 pt-3"
               desktopClassName="md:flex-wrap md:overflow-visible"
             >
               {tabDef.subTabs.map((st) => {
@@ -123,8 +121,18 @@ export function HeroVariantBDemoShell({
               })}
             </DemoMobileScrollRow>
           ) : null}
-          <div className="px-3 py-4 text-left sm:px-5 sm:py-6 md:px-6">{children}</div>
-        </DemoAnimatedBody>
+        </div>
+
+        <div className="relative">
+          <DemoLiveNotifications />
+          <DemoAnimatedBody contentKey={`${mainTab}:${subTab}`}>
+            <div className="hero-variant-b-demo-content-zoom-host">
+              <div className="hero-variant-b-demo-content-zoom px-3 py-4 text-left sm:px-5 sm:py-6 md:px-6">
+                {children}
+              </div>
+            </div>
+          </DemoAnimatedBody>
+        </div>
       </div>
     </div>
   );

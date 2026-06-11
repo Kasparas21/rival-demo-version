@@ -6,6 +6,9 @@ export const DEFAULT_LOCALE: Locale = "en";
 
 export const LOCALE_COOKIE = "rival_locale";
 
+/** Set when the visitor picks a language (switcher or `?lang=`). */
+export const LOCALE_USER_PICKED_COOKIE = "rival_locale_user";
+
 export const LOCALE_HEADER = "x-rival-locale";
 
 export function isLocale(value: string | null | undefined): value is Locale {

@@ -78,7 +78,7 @@ export function DemoMobileScrollRow({
         ref={scrollerRef}
         role={role}
         aria-label={ariaLabel}
-        className={`flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden ${canScrollLeft ? "pl-9 md:pl-0" : ""} ${canScrollRight ? "pr-9 md:pr-0" : ""} ${desktopClassName}`.trim()}
+        className={`flex touch-pan-x gap-1.5 overflow-x-auto overflow-y-visible pb-0.5 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden ${canScrollLeft ? "pl-9 md:pl-0" : ""} ${canScrollRight ? "pr-9 md:pr-0" : ""} ${desktopClassName}`.trim()}
       >
         {children}
       </div>

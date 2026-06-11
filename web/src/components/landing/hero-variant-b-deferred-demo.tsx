@@ -18,7 +18,7 @@ function HeroVariantBDemoPlaceholder() {
   return (
     <div
       aria-hidden
-      className="mx-auto h-[min(52vh,420px)] max-w-6xl overflow-hidden rounded-2xl border border-white/50 bg-white/70 shadow-[0_24px_60px_rgba(15,23,42,0.12)] md:bg-white/40 md:backdrop-blur-sm"
+      className="mx-auto h-[min(52vh,440px)] max-w-6xl overflow-hidden rounded-2xl border border-white/50 bg-white/70 shadow-[0_24px_60px_rgba(15,23,42,0.12)] md:h-[min(52vh,420px)] md:bg-white/40 md:backdrop-blur-sm"
     >
       <div className="flex h-11 items-center gap-2 border-b border-[#e5e7eb]/80 bg-white/90 px-4">
         <div className="h-2.5 w-2.5 rounded-full bg-[#95C14B]/70" />

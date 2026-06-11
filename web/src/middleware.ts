@@ -7,7 +7,12 @@ import {
   readPostHogDistinctIdCookie,
 } from "@/lib/analytics/posthog-distinct-id";
 import { resolveLocale } from "@/lib/i18n/resolve-locale";
-import { isLocale, LOCALE_COOKIE, LOCALE_HEADER } from "@/lib/i18n/locale";
+import {
+  isLocale,
+  LOCALE_COOKIE,
+  LOCALE_HEADER,
+  LOCALE_USER_PICKED_COOKIE,
+} from "@/lib/i18n/locale";
 import { updateSession } from "@/lib/supabase/middleware";
 
 /** Always assign a stable ID — Edge middleware cannot read server-only PostHog env vars. */
@@ -60,9 +65,15 @@ function applyPostHogDistinctIdCookie(request: NextRequest, response: NextRespon
 function handleHomeLocale(request: NextRequest) {
   const langParam = request.nextUrl.searchParams.get("lang");
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value;
+  const userPickedLocale = request.cookies.get(LOCALE_USER_PICKED_COOKIE)?.value === "1";
   const country = request.headers.get("x-vercel-ip-country");
 
-  const locale = resolveLocale({ langParam, cookie: cookieLocale, country });
+  const locale = resolveLocale({
+    langParam,
+    cookie: cookieLocale,
+    userPickedLocale,
+    country,
+  });
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(LOCALE_HEADER, locale);
@@ -73,6 +84,11 @@ function handleHomeLocale(request: NextRequest) {
 
   if (isLocale(langParam)) {
     response.cookies.set(LOCALE_COOKIE, langParam, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
+    response.cookies.set(LOCALE_USER_PICKED_COOKIE, "1", {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       sameSite: "lax",

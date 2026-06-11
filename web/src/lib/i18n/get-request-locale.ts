@@ -1,7 +1,13 @@
 import { cookies, headers } from "next/headers";
 
 import { resolveLocale } from "@/lib/i18n/resolve-locale";
-import { LOCALE_COOKIE, LOCALE_HEADER, parseLocale, type Locale } from "@/lib/i18n/locale";
+import {
+  LOCALE_COOKIE,
+  LOCALE_HEADER,
+  LOCALE_USER_PICKED_COOKIE,
+  parseLocale,
+  type Locale,
+} from "@/lib/i18n/locale";
 
 /** Server-side locale for the current request (middleware header, then cookie, then geo). */
 export async function getRequestLocale(): Promise<Locale> {
@@ -11,7 +17,8 @@ export async function getRequestLocale(): Promise<Locale> {
 
   const cookieStore = await cookies();
   const cookie = cookieStore.get(LOCALE_COOKIE)?.value;
+  const userPickedLocale = cookieStore.get(LOCALE_USER_PICKED_COOKIE)?.value === "1";
   const country = headerStore.get("x-vercel-ip-country");
 
-  return resolveLocale({ cookie, country });
+  return resolveLocale({ cookie, userPickedLocale, country });
 }

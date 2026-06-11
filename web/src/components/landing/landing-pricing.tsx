@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, ShieldCheck, User, Users } from "lucide-react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import { landingSectionHeadlineClasses } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import type { BillingPeriod } from "@/lib/billing/config";
@@ -136,19 +137,25 @@ export function LandingPricing({ copy }: Props) {
       <LandingScrollReveal className="relative mx-auto w-full max-w-5xl px-4 text-center sm:px-6">
         <h2
           id="pricing"
-          className={`${landingNavAnchorScrollClasses} text-[clamp(2rem,6vw,2.75rem)] font-bold lowercase tracking-tight text-[#1a1a1a]`}
+          className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
         >
           {copy.title}
         </h2>
 
-        <div className="relative mx-auto mt-6 max-w-2xl overflow-hidden rounded-[1.75rem] border border-[#95C14B]/30 bg-[#f3f9e8]/78 px-5 py-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_14px_44px_-18px_rgba(149,193,75,0.28)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-[#95C14B]/15 sm:px-7 sm:py-6 sm:text-center">
-          <div className="relative flex flex-col items-start gap-3 sm:items-center">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/18 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-[#4a6b24] shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_4px_14px_-8px_rgba(149,193,75,0.25)] backdrop-blur-md">
-              <ShieldCheck className="size-3.5 text-[#5a7f2e]" strokeWidth={2.5} aria-hidden />
-              {copy.riskFreeBadge}
-            </span>
-            <p className="text-base font-bold tracking-tight text-[#1a1a1a] sm:text-lg">{copy.guaranteeTitle}</p>
-            <p className="max-w-xl text-[13px] leading-relaxed text-[#4a5c3a] sm:text-sm">{copy.guaranteeBody}</p>
+        <div className="relative mx-auto mt-4 max-w-2xl overflow-hidden rounded-2xl border border-[#95C14B]/30 bg-[#f3f9e8]/78 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_10px_32px_-16px_rgba(149,193,75,0.22)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-[#95C14B]/15 sm:px-5 sm:py-3.5 sm:text-center">
+          <div className="relative flex flex-col items-start gap-1.5 sm:items-center sm:gap-2">
+            <div className="flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:justify-center sm:gap-2">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/18 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] text-[#4a6b24] shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] backdrop-blur-md">
+                <ShieldCheck className="size-3 text-[#5a7f2e]" strokeWidth={2.5} aria-hidden />
+                {copy.riskFreeBadge}
+              </span>
+              <p className="text-sm font-bold leading-snug tracking-tight text-[#1a1a1a] sm:text-[15px]">
+                {copy.guaranteeTitle}
+              </p>
+            </div>
+            <p className="max-w-xl text-xs leading-snug text-[#4a5c3a] sm:text-[13px] sm:leading-relaxed">
+              {copy.guaranteeBody}
+            </p>
           </div>
         </div>
 

@@ -1,5 +1,8 @@
 import Image from "next/image";
-import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import {
+  LandingHeadlineHighlight,
+  landingSectionHeadlineClasses,
+} from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
@@ -48,7 +51,7 @@ export function LandingFeatures({ copy }: Props) {
       <LandingScrollReveal className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h2
           id="solution"
-          className={`${landingNavAnchorScrollClasses} text-[clamp(2.5rem,11vw,3.75rem)] font-bold lowercase leading-[1.05] text-[#1a1a1a]`}
+          className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
         >
           {copy.titleLine1}
           <br />

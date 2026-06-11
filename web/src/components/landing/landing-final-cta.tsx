@@ -1,5 +1,8 @@
 import { LandingFinalCtaPricing } from "@/components/landing/landing-final-cta-pricing";
-import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import {
+  LandingHeadlineHighlight,
+  landingSectionHeadlineClasses,
+} from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
@@ -15,7 +18,7 @@ export function LandingFinalCTA({ copy }: Props) {
         <LandingScrollReveal>
           <div className="relative overflow-visible rounded-[2rem] border border-white/70 bg-white/45 px-6 py-10 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_24px_64px_-24px_rgba(74,127,165,0.35)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-white/50 sm:rounded-[2.25rem] sm:px-10 sm:py-12">
             <div className="relative">
-              <h2 className="text-[clamp(2.25rem,10vw,3.75rem)] font-bold lowercase leading-[1.06] tracking-[-0.04em] text-[#1a1a1a]">
+              <h2 className={landingSectionHeadlineClasses}>
                 {copy.titleLine1}
                 <br />
                 <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
@@ -23,7 +26,7 @@ export function LandingFinalCTA({ copy }: Props) {
 
               <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-gray-500 sm:text-base">{copy.subtitle}</p>
 
-              <div className="mx-auto mt-8 flex justify-center px-1 pt-2">
+              <div className="mx-auto mt-8 flex justify-center px-1">
                 <LandingFinalCtaPricing
                   monthlyPrice={copy.monthlyPrice}
                   annualPrice={copy.annualPrice}

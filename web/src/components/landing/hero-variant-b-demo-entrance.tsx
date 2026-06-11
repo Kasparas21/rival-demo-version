@@ -11,7 +11,7 @@ type Props = {
 export function HeroVariantBDemoEntrance({ children, className = "" }: Props) {
   return (
     <div
-      className={`hero-variant-b-demo-enter min-h-[min(52vh,420px)] ${className}`.trim()}
+      className={`hero-variant-b-demo-enter min-h-0 max-md:min-h-[min(62vh,520px)] md:min-h-[min(52vh,420px)] ${className}`.trim()}
     >
       {children}
     </div>

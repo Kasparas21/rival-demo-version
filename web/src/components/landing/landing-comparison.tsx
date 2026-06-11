@@ -1,6 +1,9 @@
 import { Check, X } from "lucide-react";
 
-import { LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
+import {
+  LandingHeadlineHighlight,
+  landingSectionHeadlineClasses,
+} from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import { RivalLogoImg } from "@/components/rival-logo";
@@ -195,7 +198,7 @@ export function LandingComparison({ copy }: Props) {
         <div className="text-center">
           <h2
             id="compare"
-            className={`${landingNavAnchorScrollClasses} text-[clamp(1.875rem,5.5vw,2.75rem)] font-bold lowercase leading-[1.08] tracking-tight text-[#1a1a1a]`}
+            className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
           >
             {copy.titleLine1}
             <br />

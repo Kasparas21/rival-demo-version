@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 
 import { glassPillMenuClass } from "@/components/ui/glass-styles";
-import { LOCALE_COOKIE, type Locale } from "@/lib/i18n/locale";
+import { LOCALE_COOKIE, LOCALE_USER_PICKED_COOKIE, type Locale } from "@/lib/i18n/locale";
 
 const OPTIONS: { locale: Locale; label: string }[] = [
   { locale: "en", label: "EN" },
@@ -41,7 +41,9 @@ export function LandingLocaleSwitcher({ currentLocale, ariaLabel, variant = "def
   const setLocale = (locale: Locale) => {
     setOpen(false);
     if (locale === currentLocale) return;
-    document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
+    const maxAge = 60 * 60 * 24 * 365;
+    document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${maxAge}; samesite=lax`;
+    document.cookie = `${LOCALE_USER_PICKED_COOKIE}=1; path=/; max-age=${maxAge}; samesite=lax`;
     router.refresh();
   };
 

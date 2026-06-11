@@ -684,6 +684,99 @@ html:has([data-dashboard-app]) body {
   backface-visibility: hidden;
 }
 
+@keyframes hero-demo-live-notif-in {
+  from {
+    opacity: 0;
+    transform: translate3d(10px, -8px, 0) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes hero-demo-live-notif-out {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(8px, -6px, 0) scale(0.98);
+  }
+}
+
+.hero-demo-live-notif {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+.hero-demo-live-notif--enter {
+  animation: hero-demo-live-notif-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero-demo-live-notif--exit {
+  animation: hero-demo-live-notif-out 0.24s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+/* Mobile demo — full-size chrome header; zoomed-out body like desktop density */
+@media (max-width: 767px) {
+  .hero-variant-b-product-demo {
+    touch-action: pan-y;
+  }
+
+  .hero-variant-b-demo-chrome-header {
+    flex-shrink: 0;
+  }
+
+  .hero-variant-b-demo-body--mobile {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-y;
+  }
+
+  .hero-variant-b-demo-body--mobile .hero-variant-b-demo-body-inner {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  .hero-variant-b-demo-content-zoom-host {
+    overflow: hidden;
+    max-height: min(44vh, 360px);
+    touch-action: pan-y;
+  }
+
+  .hero-variant-b-demo-content-zoom {
+    transform: scale(0.58);
+    transform-origin: top left;
+    width: 172.41%;
+  }
+
+  /* Desktop-like analytics + ad grid inside the zoomed preview */
+  .hero-variant-b-demo-content-zoom .hero-demo-analytics-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .hero-variant-b-demo-content-zoom .hero-demo-analytics-panel > div:first-child {
+    border-bottom: 0;
+    border-right: 1px solid rgb(226 232 240 / 0.9);
+  }
+
+  .hero-variant-b-demo-content-zoom .hero-demo-analytics-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-variant-b-demo-content-zoom .hero-demo-analytics-side > div:first-child {
+    border-bottom: 0;
+    border-right: 1px solid rgb(226 232 240 / 0.9);
+  }
+
+  .hero-variant-b-demo-content-zoom .hero-demo-ad-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @keyframes hero-variant-b-accent-color {
   0%,
   100% {
@@ -784,6 +877,13 @@ html:has([data-dashboard-app]) body {
   }
 
   .hero-variant-b-demo-enter {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .hero-demo-live-notif--enter,
+  .hero-demo-live-notif--exit {
     animation: none;
     opacity: 1;
     transform: none;
