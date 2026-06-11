@@ -191,27 +191,27 @@ export function MarketingProductDemo(props: Props) {
     );
 
   if (props.mode === "feature" && !config.useShell) {
-    return <div className="w-full">{inner}</div>;
+    return (
+      <div className="w-full" data-marketing-demo>
+        {inner}
+      </div>
+    );
   }
 
-  const lockToAdLibrary = props.mode === "adspy";
-
   return (
-    <HeroVariantBDemoShell
-      mainTab={lockToAdLibrary ? "ads library" : mainTab}
-      subTab={lockToAdLibrary ? "all" : subTab}
-      onMainTab={(tab) => {
-        if (lockToAdLibrary) return;
-        setMainTab(tab);
-        const def = COMPETITOR_PAGE_TABS.find((t) => t.id === tab);
-        setSubTab(def?.defaultSubTab ?? "all");
-      }}
-      onSubTab={(tab) => {
-        if (lockToAdLibrary && tab !== "all" && tab !== "saved") return;
-        setSubTab(tab);
-      }}
-    >
-      {inner}
-    </HeroVariantBDemoShell>
+    <div data-marketing-demo className="w-full">
+      <HeroVariantBDemoShell
+        mainTab={mainTab}
+        subTab={subTab}
+        onMainTab={(tab) => {
+          setMainTab(tab);
+          const def = COMPETITOR_PAGE_TABS.find((t) => t.id === tab);
+          setSubTab(def?.defaultSubTab ?? "all");
+        }}
+        onSubTab={setSubTab}
+      >
+        {inner}
+      </HeroVariantBDemoShell>
+    </div>
   );
 }

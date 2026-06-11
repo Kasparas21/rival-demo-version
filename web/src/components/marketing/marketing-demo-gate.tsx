@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { MarketingSignupWall } from "@/components/marketing/marketing-signup-wall";
 import { TRIAL_PREVIEW_SECONDS } from "@/components/marketing/marketing-trial-countdown";
@@ -8,50 +8,57 @@ import { MarketingTrialCountdownWidget } from "@/components/marketing/marketing-
 
 type Props = {
   children: ReactNode;
-  /** Feature pages — wall opens immediately on load. */
+  /** Feature / AdSpy pages — wall opens immediately on load. */
   showOnMount?: boolean;
 };
 
-const INTERACTIONS_AFTER_DISMISS = 3;
-
-function isInteractiveTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  if (target.closest("[data-demo-wall-ignore]")) return false;
-  return Boolean(
-    target.closest(
-      'button, a[href], input, select, textarea, [role="button"], [role="tab"], [role="menuitem"], [data-demo-interactive]',
-    ),
-  );
-}
+/** Free demo time after the first dismiss before the trial-countdown wall returns. */
+const SECOND_WALL_DELAY_MS = 45_000;
 
 export function MarketingDemoGate({ children, showOnMount = false }: Props) {
   const [wallOpen, setWallOpen] = useState(showOnMount);
   const [showCount, setShowCount] = useState(showOnMount ? 1 : 0);
-  const [interactionsLeft, setInteractionsLeft] = useState<number | null>(null);
 
   const [trialStarted, setTrialStarted] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(TRIAL_PREVIEW_SECONDS);
   const [trialExpired, setTrialExpired] = useState(false);
   const [clockMinimized, setClockMinimized] = useState(false);
 
+  const secondWallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const showTrialCountdown = showCount >= 2;
 
   const openWall = useCallback(() => {
     setShowCount((count) => count + 1);
-    setInteractionsLeft(null);
     setClockMinimized(false);
     setWallOpen(true);
   }, []);
 
+  const clearSecondWallTimer = useCallback(() => {
+    if (secondWallTimerRef.current !== null) {
+      window.clearTimeout(secondWallTimerRef.current);
+      secondWallTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleSecondWall = useCallback(() => {
+    clearSecondWallTimer();
+    secondWallTimerRef.current = window.setTimeout(() => {
+      secondWallTimerRef.current = null;
+      openWall();
+    }, SECOND_WALL_DELAY_MS);
+  }, [clearSecondWallTimer, openWall]);
+
   const handleDismiss = useCallback(() => {
     setWallOpen(false);
-    setInteractionsLeft(INTERACTIONS_AFTER_DISMISS);
-  }, []);
+    if (showCount === 1 && !trialStarted) {
+      scheduleSecondWall();
+    }
+  }, [scheduleSecondWall, showCount, trialStarted]);
 
   const handleMinimize = useCallback(() => {
     setWallOpen(false);
     setClockMinimized(true);
-    setInteractionsLeft(null);
   }, []);
 
   useEffect(() => {
@@ -61,12 +68,15 @@ export function MarketingDemoGate({ children, showOnMount = false }: Props) {
     }
   }, [showOnMount]);
 
+  useEffect(() => clearSecondWallTimer, [clearSecondWallTimer]);
+
   useEffect(() => {
     if (!wallOpen || !showTrialCountdown || trialStarted) return;
+    clearSecondWallTimer();
     setTrialStarted(true);
     setSecondsLeft(TRIAL_PREVIEW_SECONDS);
     setTrialExpired(false);
-  }, [wallOpen, showTrialCountdown, trialStarted]);
+  }, [clearSecondWallTimer, showTrialCountdown, trialStarted, wallOpen]);
 
   useEffect(() => {
     if (!trialStarted || trialExpired) return;
@@ -83,31 +93,6 @@ export function MarketingDemoGate({ children, showOnMount = false }: Props) {
 
     return () => window.clearInterval(interval);
   }, [trialStarted, trialExpired]);
-
-  const handleInteraction = useCallback(
-    (event: SyntheticEvent) => {
-      if (!wallOpen && trialStarted) return;
-      if (wallOpen) return;
-      if (!isInteractiveTarget(event.target)) return;
-
-      if (interactionsLeft !== null) {
-        if (interactionsLeft > 0) {
-          setInteractionsLeft(interactionsLeft - 1);
-          return;
-        }
-
-        event.preventDefault();
-        event.stopPropagation();
-        openWall();
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      openWall();
-    },
-    [interactionsLeft, openWall, trialStarted, wallOpen],
-  );
 
   const showFloatingWidget =
     trialStarted && !wallOpen && (clockMinimized || trialExpired);
@@ -127,15 +112,7 @@ export function MarketingDemoGate({ children, showOnMount = false }: Props) {
         <MarketingTrialCountdownWidget secondsLeft={secondsLeft} expired={trialExpired} />
       ) : null}
 
-      <div
-        className={wallOpen ? "pointer-events-none select-none" : undefined}
-        onClickCapture={handleInteraction}
-        onKeyDownCapture={(e) => {
-          if (e.key === "Enter" || e.key === " ") handleInteraction(e);
-        }}
-      >
-        {children}
-      </div>
+      <div className={wallOpen ? "pointer-events-none select-none" : undefined}>{children}</div>
     </>
   );
 }

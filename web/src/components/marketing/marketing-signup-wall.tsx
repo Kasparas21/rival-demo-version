@@ -20,6 +20,9 @@ type Props = {
 const GLASS_SECONDARY_BTN =
   "rounded-full border border-white/75 bg-white/58 px-5 py-2.5 text-sm font-semibold text-[#4a7fa5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_8px_24px_-10px_rgba(74,127,165,0.2)] backdrop-blur-md ring-1 ring-white/55 transition hover:border-white/90 hover:bg-white/72";
 
+const GLASS_DISMISS_BTN =
+  "shrink-0 whitespace-nowrap rounded-full border border-white/75 bg-white/58 px-3.5 py-1.5 text-xs font-semibold text-[#4a7fa5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_6px_18px_-8px_rgba(74,127,165,0.18)] backdrop-blur-md ring-1 ring-white/55 transition hover:border-white/90 hover:bg-white/72";
+
 function TrialCountdownBanner({ secondsLeft, expired }: { secondsLeft: number; expired: boolean }) {
   return (
     <div
@@ -116,28 +119,31 @@ export function MarketingSignupWall({
 
         {isTrialMode ? <TrialCountdownBanner secondsLeft={secondsLeft} expired={trialExpired} /> : null}
 
-        <div className={`${isTrialMode ? "mt-6" : "mt-7"} flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end`}>
-          {!isTrialMode ? (
+        {!isTrialMode ? (
+          <div className="mt-7 flex items-center gap-2.5 sm:gap-3">
             <button
               type="button"
               onClick={onDismiss}
-              className={GLASS_SECONDARY_BTN}
+              className={GLASS_DISMISS_BTN}
               data-demo-wall-ignore
             >
               Maybe later
             </button>
-          ) : null}
-
-          <div className="flex w-full justify-stretch sm:justify-end" data-demo-wall-ignore>
-            <LandingTrialCta
-              href="/onboarding"
-              size={isTrialMode ? "lg" : "md"}
-              className="w-full sm:min-w-[12.5rem] sm:w-auto"
-            >
-              {isTrialMode ? (trialExpired ? "TRY FOR FREE NOW" : "GIVE ME MY FREE TRIAL") : "TRY FOR FREE"}
-            </LandingTrialCta>
+            <div className="min-w-0 flex-1" data-demo-wall-ignore>
+              <LandingTrialCta href="/onboarding" size="md" className="w-full min-w-0 sm:min-w-[17rem]">
+                TRY FOR FREE
+              </LandingTrialCta>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-6 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+            <div className="flex w-full justify-stretch sm:justify-end" data-demo-wall-ignore>
+              <LandingTrialCta href="/onboarding" size="lg" className="w-full sm:min-w-[12.5rem] sm:w-auto">
+                {trialExpired ? "TRY FOR FREE NOW" : "GIVE ME MY FREE TRIAL"}
+              </LandingTrialCta>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

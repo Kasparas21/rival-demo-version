@@ -43,6 +43,7 @@ export default async function AdspyPlatformPage({ params }: Props) {
     <MarketingInteractivePage
       copy={copy}
       locale={locale}
+      wallOnMount
       breadcrumbs={[
         { label: "Home", href: "/" },
         { label: "AdSpy", href: `/adspy/${ADSPY_PAGE_DEFINITIONS[0]?.slug ?? "meta"}` },
