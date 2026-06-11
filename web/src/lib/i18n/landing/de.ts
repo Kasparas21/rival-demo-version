@@ -5,9 +5,9 @@ export const landingCopyDe: LandingCopy = {
   ...landingCopyEn,
   locale: "de",
   meta: {
-    title: "Spy Rival | KI-Wettbewerber-Anzeigen-Intelligence",
+    title: "Spy Rival - #1 kostenloses Adspy-Tool",
     description:
-      "Spy Rival ist eine KI-Anzeigen-Intelligence-Plattform: Wettbewerber-Anzeigen finden, Creative-Strategie verfolgen und Full-Funnel-Kampagnen über alle großen Ad Libraries hinweg.",
+      "Spy Rival ist das #1 kostenlose Adspy-Tool für Wettbewerber-Anzeigen — Meta, Google, YouTube, TikTok, LinkedIn, Pinterest und Snapchat in einem Dashboard.",
   },
   consent: {
     title: "Cookies & Analyse",
@@ -33,13 +33,13 @@ export const landingCopyDe: LandingCopy = {
   },
   hero: {
     headline: {
-      line1Prefix: "das ",
-      highlight: "ultimative ad-spy-tool",
+      line1Prefix: "#1 kostenloses ",
+      highlight: "adspy-tool",
       line2: "",
       subline:
-        "Sehen Sie jede Anzeige Ihrer Wettbewerber auf Meta, Google, TikTok, LinkedIn, Pinterest und Snapchat – in einem Dashboard.",
+        "Spy Rival ist das beste Adspy-Tool, um jede Wettbewerber-Anzeige auf Meta, Google, TikTok, LinkedIn, Pinterest und Snapchat zu verfolgen — alles in einem Dashboard.",
     },
-    trialCta: "7-Tage-Test starten →",
+    trialCta: "KOSTENLOS TESTEN",
     platformTrialAria: "Test mit {platform} starten",
     marketersPillAria: "Für Performance-Marketer gebaut",
     marketersPill: "Für Performance-Marketer gebaut",
@@ -121,7 +121,7 @@ export const landingCopyDe: LandingCopy = {
     saveLabel: "€270+/Monat sparen vs. 6-Tool-Stack",
     saveSub: "7-Tage-Test · 1 Wettbewerber · jederzeit kündbar",
     saveSubMobile: "€270+/Monat sparen · 7-Tage-Test",
-    trialCta: "7-Tage-Test starten",
+    trialCta: "KOSTENLOS TESTEN",
   },
   reviews: {
     titleLine1: "das bevorzugte tool",
@@ -130,12 +130,12 @@ export const landingCopyDe: LandingCopy = {
     photoAlt: "Foto von {name}",
     items: landingCopyEn.reviews.items.map((item, i) => {
       const deTexts = [
-        "Rival hat vier separate Abos für meine Agentur ersetzt — Foreplay, ein Google-Spy-Tool und zwei native Libraries parallel. Der Three-Moves-Report rechtfertigt sich allein: Statt vagen „mehr Video testen“ füge ich die konkrete Wettbewerber-Anzeige ein, die 90+ Tage läuft. Kunden stellen den Retainer nicht mehr in Frage.",
-        "Ich zahlte für Foreplay und AdSpy, weil keines alles abdeckte — Foreplay nur Meta, AdSpy nur bis Google. Rival bündelt Meta, Google, TikTok, LinkedIn, Pinterest und Snapchat, und der Activity Feed fängt Moves, die ich früher verpasste. Die €79 haben sich vor dem Montags-Mittagessen amortisiert.",
-        "Stealable Angles hat mein Creative-Testing umgestellt. Früher rät ich, welche Angles ich teste — jetzt sehe ich im Vergleich, welche Angles der Wettbewerber skaliert und wir nicht. Win-Rate bei neuem Creative ist spürbar gestiegen.",
-        "7-Tage-Test mit einem Wettbewerber, am Nachmittag abonniert. Drei Moves, die ich trotz wöchentlichem Check verpasst hatte — neuer TikTok-Angle, Budget-Shift zu Google, unbekannte Landing Page.",
-        "Ich mache Wettbewerber-Research für sechs Kunden in verschiedenen Branchen. Rival skaliert wirklich — 15 Wettbewerber im Pro-Plan, alle sechs Plattformen, kein Jonglieren mit vier Logins. Die Strategy Map landet in Kunden-Decks.",
-        "Ein Stern, und warum: Vor Rival hatte ich Montags „Wettbewerber-Research“ mit Kaffee und Ad Libraries bis 11 Uhr. Jetzt liegt der Three-Moves-Report um 7 Uhr fertig im Postfach — ich muss wirklich arbeiten. Montag ruiniert. (Kampagnen laufen besser, also kann ich nicht kündigen.)",
+        "Vier Tools durch eines ersetzt. Three Moves liefert Kunden Belege statt vager Tipps.",
+        "Alle sechs Plattformen an einem Ort. Activity Feed fängt Moves, die Foreplay und AdSpy verpassten.",
+        "Stealable Angles zeigt Lücken, die wir nicht testen. Win-Rate bei neuem Creative ist höher.",
+        "Nach dem Test am selben Tag abonniert. Moves gefunden, die ich wochenlang übersehen hatte.",
+        "15 Wettbewerber, sechs Kunden, ein Login. Strategy Map direkt ins Deck.",
+        "Montags-Kaffee-Routine ruiniert. Three Moves um 7 Uhr — ich muss wirklich arbeiten. (Kampagnen laufen besser.)",
       ];
       return { ...item, text: deTexts[i] ?? item.text };
     }),
@@ -151,7 +151,7 @@ export const landingCopyDe: LandingCopy = {
     yearly: "Jährlich",
     planIncludes: "Plan enthält:",
     footnote: "Alle Pläne mit 7-Tage-Test · 1 Wettbewerber · Karte nötig · jederzeit kündbar",
-    trialCta: "7-Tage-Test starten",
+    trialCta: "KOSTENLOS TESTEN",
     popular: "Beliebt",
     perMonth: "/Monat",
     billedMonthly: "Monatlich abgerechnet",
@@ -242,7 +242,7 @@ export const landingCopyDe: LandingCopy = {
     featureColumn: "Feature",
     yesAria: "Ja",
     noAria: "Nein",
-    cta: "7-Tage-Test starten",
+    cta: "KOSTENLOS TESTEN",
     ctaFootnote: "Das einzige Cross-Platform-Wettbewerber-OS für wöchentliche Moves.",
     sections: landingCopyEn.comparison.sections.map((section) => ({
       ...section,
@@ -272,7 +272,7 @@ export const landingCopyDe: LandingCopy = {
     annualLabel: "Jährlich",
     annualSaveBadge: "25 % sparen",
     billingAria: "Abrechnungszeitraum wählen",
-    trialCta: "7-Tage-Test starten",
+    trialCta: "KOSTENLOS TESTEN",
     cancelNote: "jederzeit kündbar",
   },
   footer: {
@@ -308,7 +308,7 @@ export const landingCopyDe: LandingCopy = {
   },
   jsonLd: {
     appDescription:
-      "KI-Wettbewerber-Anzeigen-Intelligence für Meta, Google, TikTok, LinkedIn, Pinterest und Snapchat.",
+      "#1 kostenloses Adspy-Tool für Wettbewerber-Anzeigen auf Meta, Google, TikTok, LinkedIn, Pinterest und Snapchat.",
     starterName: "Starter",
     proName: "Pro",
   },

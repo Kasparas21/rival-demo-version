@@ -5,9 +5,9 @@ export const landingCopyNl: LandingCopy = {
   ...landingCopyEn,
   locale: "nl",
   meta: {
-    title: "Spy Rival | AI concurrent-ad intelligence",
+    title: "Spy Rival - #1 gratis adspy-tool",
     description:
-      "Spy Rival is een AI ad intelligence-platform om concurrent-ads te vinden, creative strategie te volgen en full-funnel campagnes over grote ad libraries te mappen.",
+      "Spy Rival is het #1 gratis adspy-tool voor concurrent-ads — Meta, Google, YouTube, TikTok, LinkedIn, Pinterest en Snapchat in één dashboard.",
   },
   consent: {
     title: "Cookies & analytics",
@@ -33,13 +33,13 @@ export const landingCopyNl: LandingCopy = {
   },
   hero: {
     headline: {
-      line1Prefix: "de ",
-      highlight: "ultieme ad-spy-tool",
+      line1Prefix: "#1 gratis ",
+      highlight: "adspy-tool",
       line2: "",
       subline:
-        "Bekijk elke ad die je concurrenten draaien op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat – in één dashboard.",
+        "Spy Rival is het beste adspy-tool om elke concurrent-ad te volgen op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat — alles in één dashboard.",
     },
-    trialCta: "Start je 7-daagse proef →",
+    trialCta: "GRATIS PROBEREN",
     platformTrialAria: "Start proef met {platform}",
     marketersPillAria: "Gebouwd voor performance marketeers",
     marketersPill: "Gebouwd voor performance marketeers",
@@ -121,7 +121,7 @@ export const landingCopyNl: LandingCopy = {
     saveLabel: "Bespaar €270+/maand vs. 6-tool stack",
     saveSub: "7-daagse proef · 1 concurrent · altijd opzegbaar",
     saveSubMobile: "Bespaar €270+/maand · 7-daagse proef",
-    trialCta: "Start 7-daagse gratis proef",
+    trialCta: "GRATIS PROBEREN",
   },
   reviews: {
     titleLine1: "de voorkeurstool",
@@ -130,12 +130,12 @@ export const landingCopyNl: LandingCopy = {
     photoAlt: "Foto van {name}",
     items: landingCopyEn.reviews.items.map((item, i) => {
       const nlTexts = [
-        "Rival verving vier aparte abonnementen voor mijn bureau — Foreplay, een Google-spytool en twee native libraries naast elkaar. Het Three Moves-rapport verdient zichzelf terug: in plaats van vage \"test meer video\" plak ik de concrete concurrent-ad die 90+ dagen draait. Klanten twijfelden niet meer aan de retainer.",
-        "Ik betaalde voor Foreplay en AdSpy omdat geen van beiden alles dekte — Foreplay alleen Meta, AdSpy tot Google. Rival bundelt Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat, en de Activity Feed vangt moves die ik miste. De €79 zijn maandag voor de lunch terugverdiend.",
-        "Stealable Angles veranderde hoe ik creative testing plan. Vroeger gokte ik welke angles — nu zie ik in Vergelijk welke angles de concurrent opschaalt en wij niet. Win-rate op nieuwe creative is merkbaar omhoog.",
-        "7-daagse proef met één concurrent, diezelfde middag geabonneerd. Drie moves die ik miste ondanks wekelijks checken — nieuwe TikTok-angle, budgetshift naar Google, onbekende landingpage.",
-        "Ik doe concurrentonderzoek voor zes klanten in verschillende sectoren. Rival schaalt echt — 15 concurrenten op Pro, alle zes platformen, geen vier logins jongleren. De Strategy Map gaat in klantdecks.",
-        "Eén ster, en waarom: voor Rival had ik maandag \"concurrentonderzoek\" met koffie en ad libraries tot 11 uur. Nu ligt Three Moves om 7 uur klaar — ik moet echt werken. Maandag kapot. (Campagnes presteren beter, dus opzeggen kan niet.)",
+        "Vier tools vervangen door één. Three Moves geeft klanten bewijs, geen vage tips.",
+        "Alle zes platformen op één plek. Activity Feed vangt moves die Foreplay en AdSpy misten.",
+        "Stealable Angles toont gaten die we niet testen. Win-rate op nieuwe creative is omhoog.",
+        "Na proef met één concurrent dezelfde dag geabonneerd. Moves gevonden die ik weken miste.",
+        "15 concurrenten, zes klanten, één login. Strategy Map direct in decks.",
+        "Maandag-koffieroutine kapot. Three Moves om 7 uur — ik moet echt werken. (Campagnes presteren beter.)",
       ];
       return { ...item, text: nlTexts[i] ?? item.text };
     }),
@@ -151,7 +151,7 @@ export const landingCopyNl: LandingCopy = {
     yearly: "Jaarlijks",
     planIncludes: "Plan bevat:",
     footnote: "Alle plannen met 7-daagse proef · 1 concurrent · kaart vereist · altijd opzegbaar",
-    trialCta: "Start 7-daagse gratis proef",
+    trialCta: "GRATIS PROBEREN",
     popular: "Populair",
     perMonth: "/maand",
     billedMonthly: "Maandelijks gefactureerd",
@@ -242,7 +242,7 @@ export const landingCopyNl: LandingCopy = {
     featureColumn: "Feature",
     yesAria: "Ja",
     noAria: "Nee",
-    cta: "Start je 7-daagse proef",
+    cta: "GRATIS PROBEREN",
     ctaFootnote: "Het enige cross-platform concurrent-OS voor wekelijkse moves.",
     sections: landingCopyEn.comparison.sections.map((section) => ({
       ...section,
@@ -272,7 +272,7 @@ export const landingCopyNl: LandingCopy = {
     annualLabel: "Jaarlijks",
     annualSaveBadge: "Bespaar 25%",
     billingAria: "Kies factureringsperiode",
-    trialCta: "Start je 7-daagse proef",
+    trialCta: "GRATIS PROBEREN",
     cancelNote: "altijd opzegbaar",
   },
   footer: {
@@ -308,7 +308,7 @@ export const landingCopyNl: LandingCopy = {
   },
   jsonLd: {
     appDescription:
-      "AI concurrent-ad intelligence voor Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat.",
+      "#1 gratis adspy-tool voor concurrent-ads op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat.",
     starterName: "Starter",
     proName: "Pro",
   },

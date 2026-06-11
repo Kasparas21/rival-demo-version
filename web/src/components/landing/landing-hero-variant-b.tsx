@@ -21,7 +21,7 @@ type Props = {
 };
 
 /** Centered hero for PostHog variant B — blue top wash fading into section 2. */
-export function LandingHeroVariantB({ headline, trialCtaLabel = "Start your 7-day trial →" }: Props) {
+export function LandingHeroVariantB({ headline, trialCtaLabel = "TRY FOR FREE" }: Props) {
   return (
     <section className="landing-hero-variant-b relative isolate overflow-x-clip bg-white pb-10 text-[#1a1a1a] sm:pb-14 md:flex md:min-h-svh md:flex-col md:pb-0">
       <div className="relative z-10 flex flex-1 flex-col">

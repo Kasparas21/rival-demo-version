@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 
 import LandingHome from "@/components/marketing/landing-home";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getLandingCopy } from "@/lib/i18n/landing";
+import { DEFAULT_LOCALE } from "@/lib/i18n/locale";
 import { homePageJsonLdBlocks } from "@/lib/seo/home-json-ld";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -15,8 +15,7 @@ function firstParam(value: string | string[] | undefined): string | null {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
-  const locale = await getRequestLocale();
-  const copy = getLandingCopy(locale);
+  const copy = getLandingCopy(DEFAULT_LOCALE);
 
   return {
     title: copy.meta.title,
@@ -40,8 +39,7 @@ export default async function Home({
   searchParams?: Promise<SearchParams>;
 }) {
   const params = (await searchParams) ?? {};
-  const locale = await getRequestLocale();
-  const copy = getLandingCopy(locale);
+  const copy = getLandingCopy(DEFAULT_LOCALE);
   const hasAuthParams = Boolean(
     firstParam(params.code) ||
       firstParam(params.token_hash) ||
@@ -63,7 +61,7 @@ export default async function Home({
       {homePageJsonLdBlocks(copy).map((block, index) => (
         <JsonLd key={`${String(block["@type"])}-${index}`} data={block} />
       ))}
-      <LandingHome copy={copy} locale={locale} />
+      <LandingHome copy={copy} locale={DEFAULT_LOCALE} />
     </>
   );
 }

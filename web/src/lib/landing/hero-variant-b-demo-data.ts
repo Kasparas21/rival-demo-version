@@ -18,12 +18,13 @@ export const DEMO_YOUR_BRAND = {
   domain: "your-brand.com",
 } as const;
 
-export type DemoPlatform = "meta" | "google" | "tiktok" | "pinterest" | "snapchat";
+export type DemoPlatform = "meta" | "google" | "tiktok" | "linkedin" | "pinterest" | "snapchat";
 
 export const DEMO_PLATFORM_ACTIVE_COUNTS: Record<DemoPlatform, number> = {
   meta: 205,
   google: 108,
   tiktok: 28,
+  linkedin: 18,
   pinterest: 12,
   snapchat: 4,
 };
@@ -32,6 +33,7 @@ export const DEMO_PLATFORM_TOTAL_COUNTS: Record<DemoPlatform, number> = {
   meta: 248,
   google: 132,
   tiktok: 31,
+  linkedin: 22,
   pinterest: 14,
   snapchat: 6,
 };
@@ -190,6 +192,38 @@ export const DEMO_ADS: DemoAd[] = [
     format: "Video",
     lifespanDays: 28,
     angle: "Creator-style UGC",
+  },
+  {
+    id: "linkedin-1",
+    platform: "linkedin",
+    pageName: "Competitor A",
+    body: "How we cut CAC 22% in Q1 — the playbook our growth team used across paid social.",
+    headline: "Case study: 22% lower CAC",
+    linkDescription: "Read the breakdown",
+    cta: "Learn more",
+    siteLabel: "competitor-a.com/case-study",
+    activeDays: 31,
+    gradient: "linear-gradient(135deg, #0a66c2 0%, #004182 55%, #1e3a5f 100%)",
+    funnel: "middle",
+    format: "Image",
+    lifespanDays: 48,
+    angle: "Social proof",
+  },
+  {
+    id: "linkedin-2",
+    platform: "linkedin",
+    pageName: "Competitor A",
+    body: "Join 12,000+ marketers who get our weekly competitive intel brief.",
+    headline: "Free competitive intel brief",
+    linkDescription: "Subscribe",
+    cta: "Sign up",
+    siteLabel: "competitor-a.com/brief",
+    activeDays: 19,
+    gradient: "linear-gradient(135deg, #e8f4fc 0%, #0a66c2 100%)",
+    funnel: "top",
+    format: "Image",
+    lifespanDays: 36,
+    angle: "Lead gen",
   },
 ];
 

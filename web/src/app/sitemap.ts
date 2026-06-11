@@ -1,9 +1,19 @@
 import type { MetadataRoute } from "next";
 
 import { getAllPostSlugs, normalizeBlogSlug } from "@/lib/sanity/posts";
+import { getMarketingStaticPaths } from "@/lib/marketing/site-nav";
 import { SITE_URL } from "@/lib/seo/site";
 
-const STATIC_ROUTES = ["", "/blog", "/about", "/features", "/privacy", "/terms", "/cookies"];
+const STATIC_ROUTES = [
+  "",
+  "/blog",
+  "/about",
+  "/features",
+  "/privacy",
+  "/terms",
+  "/cookies",
+  ...getMarketingStaticPaths(),
+];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();

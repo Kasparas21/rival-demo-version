@@ -9,19 +9,23 @@ import { isCheckoutNavigationHref } from "@/lib/analytics/meta-pixel";
 const GLOW_SIZE_CLASS = {
   sm: {
     wrapper: "inline-flex",
-    label: "px-5 py-2 text-xs sm:px-5 sm:py-2 sm:text-sm",
+    label:
+      "px-5 py-2 text-xs font-bold tracking-[0.05em] sm:min-w-[9.5rem] sm:px-7 sm:py-2.5 sm:text-sm",
   },
   md: {
-    wrapper: "inline-flex",
-    label: "px-6 py-3 text-sm sm:text-[15px]",
+    wrapper: "inline-flex sm:min-w-[12rem] md:min-w-[14rem]",
+    label: "px-7 py-3 text-[15px] font-bold tracking-[0.04em] sm:px-9 sm:py-3.5 sm:text-base",
   },
   lg: {
-    wrapper: "flex w-full",
-    label: "w-full px-6 py-4 text-base sm:py-[1.125rem] sm:text-[17px]",
+    wrapper: "flex w-full md:max-w-md md:mx-auto",
+    label:
+      "w-full px-6 py-4 text-base font-bold tracking-[0.04em] sm:py-[1.125rem] sm:text-lg md:px-10",
   },
   hero: {
-    wrapper: "inline-flex min-w-[12.5rem] sm:min-w-[15rem]",
-    label: "px-8 py-3.5 text-sm sm:px-10 sm:py-4 sm:text-[15px]",
+    wrapper:
+      "flex w-full max-w-[21rem] sm:inline-flex sm:w-auto sm:max-w-none sm:min-w-[18rem] md:min-w-[21rem]",
+    label:
+      "w-full px-12 py-3.5 text-[15px] font-bold tracking-[0.06em] sm:w-auto sm:px-12 sm:py-4 sm:text-[17px] md:px-14 md:text-lg",
   },
 } as const;
 
@@ -29,22 +33,25 @@ const PLAIN_SIZE_CLASS = {
   sm: {
     wrapper: "inline-block",
     glow: "-inset-1",
-    face: "px-3 py-1.5 text-xs sm:px-5 sm:py-2 sm:text-sm",
+    face:
+      "px-4 py-1.5 text-xs font-bold tracking-[0.05em] sm:min-w-[9.5rem] sm:px-7 sm:py-2.5 sm:text-sm",
   },
   md: {
     wrapper: "inline-block",
     glow: "-inset-1.5",
-    face: "px-6 py-3 text-sm sm:text-[15px]",
+    face: "px-7 py-3 text-[15px] font-bold tracking-[0.04em] sm:min-w-[12rem] sm:px-9 sm:py-3.5 sm:text-base",
   },
   lg: {
-    wrapper: "block w-full",
+    wrapper: "block w-full md:max-w-md md:mx-auto",
     glow: "-inset-2",
-    face: "w-full px-6 py-4 text-base sm:py-[1.125rem] sm:text-[17px]",
+    face:
+      "w-full px-6 py-4 text-base font-bold tracking-[0.04em] sm:py-[1.125rem] sm:text-lg md:px-10",
   },
   hero: {
-    wrapper: "inline-block",
+    wrapper: "block w-full max-w-[21rem] sm:inline-block sm:w-auto sm:max-w-none",
     glow: "-inset-1.5",
-    face: "min-w-[12.5rem] px-8 py-3.5 text-sm sm:min-w-[15rem] sm:px-10 sm:py-4 sm:text-[15px]",
+    face:
+      "w-full px-12 py-3.5 text-[15px] font-bold tracking-[0.06em] sm:w-auto sm:min-w-[18rem] sm:px-12 sm:py-4 sm:text-[17px] md:min-w-[21rem] md:px-14 md:text-lg",
   },
 } as const;
 
@@ -81,7 +88,7 @@ export function LandingTrialCta({
   const plainSizing = PLAIN_SIZE_CLASS[size];
 
   const wrapperClass = isGlowLine
-    ? `landing-glow-cta group relative items-center justify-center rounded-full font-semibold text-white ${FOCUS_RING} ${glowSizing.wrapper} ${className}`.trim()
+    ? `landing-glow-cta group relative items-center justify-center rounded-full font-bold text-white ${FOCUS_RING} ${glowSizing.wrapper} ${className}`.trim()
     : `landing-pricing-cta group relative ${FOCUS_RING} ${plainSizing.wrapper} ${className}`.trim();
 
   const content = isGlowLine ? (

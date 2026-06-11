@@ -14,6 +14,7 @@ import {
 import { DemoSectionHeader, GenericLogo } from "@/components/landing/hero-variant-b-demo/chrome";
 import {
   GoogleLogo,
+  LinkedInLogo,
   MetaLogo,
   PinterestLogo,
   SnapchatLogo,
@@ -43,6 +44,7 @@ const PLATFORM_CONFIG: {
   { id: "meta", label: "Meta", title: "Meta ads", Icon: MetaLogo, sectionLabel: "Meta / Facebook" },
   { id: "google", label: "Google", title: "Google ads", Icon: GoogleLogo, sectionLabel: "Google" },
   { id: "tiktok", label: "TikTok", title: "TikTok ads", Icon: TikTokLogo, sectionLabel: "TikTok" },
+  { id: "linkedin", label: "LinkedIn", title: "LinkedIn ads", Icon: LinkedInLogo, sectionLabel: "LinkedIn" },
   { id: "pinterest", label: "Pinterest", title: "Pinterest ads", Icon: PinterestLogo, sectionLabel: "Pinterest" },
   { id: "snapchat", label: "Snapchat", title: "Snapchat ads", Icon: SnapchatLogo, sectionLabel: "Snapchat" },
 ];
@@ -51,11 +53,12 @@ const PLATFORM_COLORS: Record<DemoPlatform, string> = {
   meta: "#1877F2",
   google: "#34A853",
   tiktok: "#000000",
+  linkedin: "#0A66C2",
   pinterest: "#E60023",
   snapchat: "#FFFC00",
 };
 
-const PLATFORM_ORDER: DemoPlatform[] = ["meta", "google", "tiktok", "pinterest", "snapchat"];
+const PLATFORM_ORDER: DemoPlatform[] = ["meta", "google", "tiktok", "linkedin", "pinterest", "snapchat"];
 const DEFAULT_VISIBLE: DemoPlatform[] = ["meta", "google", "pinterest", "snapchat"];
 
 function DemoGauge({
@@ -222,11 +225,15 @@ type Props = {
   subTab: "all" | "saved";
   savedIds: Set<string>;
   onToggleSave: (id: string) => void;
+  /** Marketing /adspy pages — lock to one platform and hide the platform picker. */
+  lockedPlatform?: DemoPlatform;
 };
 
-export function DemoAdLibraryView({ subTab, savedIds, onToggleSave }: Props) {
+export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatform }: Props) {
   const [analyticsOpen, setAnalyticsOpen] = useState(true);
-  const [visiblePlatforms, setVisiblePlatforms] = useState<DemoPlatform[]>(DEFAULT_VISIBLE);
+  const [visiblePlatforms, setVisiblePlatforms] = useState<DemoPlatform[]>(
+    lockedPlatform ? [lockedPlatform] : DEFAULT_VISIBLE,
+  );
   const [showDemoSaved, setShowDemoSaved] = useState(true);
 
   const totalActive = useMemo(
@@ -287,7 +294,11 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave }: Props) {
       <DemoSectionHeader
         overline="Ad library"
         title={`Scraped creatives for ${DEMO_COMPETITOR.name}`}
-        description={`Last scraped ${DEMO_COMPETITOR.lastScraped} · Choose platforms below, then browse each channel section.`}
+        description={
+          lockedPlatform
+            ? `Last scraped ${DEMO_COMPETITOR.lastScraped} · ${PLATFORM_CONFIG.find((p) => p.id === lockedPlatform)?.sectionLabel ?? "Platform"} ads from your latest scrape.`
+            : `Last scraped ${DEMO_COMPETITOR.lastScraped} · Choose platforms below, then browse each channel section.`
+        }
       />
 
       <section className="mb-4 overflow-hidden rounded-2xl border border-[#cfe8f8]/80 bg-gradient-to-br from-[#e8f4fc]/90 via-[#f8fafc] to-white shadow-sm ring-1 ring-white/80">
@@ -366,36 +377,39 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave }: Props) {
         ) : null}
       </section>
 
-      <div className="mb-5 rounded-2xl border border-[#e5e7eb]/70 bg-[#DDF1FD]/25 px-3 py-2 sm:px-4">
-        <p className="text-[12px] font-semibold text-[#374151]">Choose which platforms to show</p>
-        <div
-          role="toolbar"
-          className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(68px,1fr))] gap-1.5 rounded-xl border border-[#e5e7eb]/90 bg-white/85 p-1.5"
-        >
-          {PLATFORM_CONFIG.map(({ id, label, title, Icon }) => {
-            const on = visiblePlatforms.includes(id);
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={on}
-                title={title}
-                onClick={() =>
-                  setVisiblePlatforms((prev) =>
-                    prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
-                  )
-                }
-                className={`relative flex flex-col items-center rounded-lg border-2 px-1 py-1.5 transition-all active:scale-[0.98] ${
-                  on ? "border-[#4a7fa5] bg-[#DDF1FD]/90 shadow-sm" : "border-dashed border-[#cbd5e1] bg-[#f8fafc]"
-                }`}
-              >
-                <Icon className={`size-7 ${on ? "opacity-100" : "opacity-50"}`} />
-                <span className="mt-0.5 text-[10px] font-semibold">{label}</span>
-              </button>
-            );
-          })}
+      {!lockedPlatform ? (
+        <div className="mb-5 rounded-2xl border border-[#e5e7eb]/70 bg-[#DDF1FD]/25 px-3 py-2 sm:px-4">
+          <p className="text-[12px] font-semibold text-[#374151]">Choose which platforms to show</p>
+          <div
+            role="toolbar"
+            className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(68px,1fr))] gap-1.5 rounded-xl border border-[#e5e7eb]/90 bg-white/85 p-1.5"
+          >
+            {PLATFORM_CONFIG.map(({ id, label, title, Icon }) => {
+              const on = visiblePlatforms.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={on}
+                  title={title}
+                  data-demo-interactive
+                  onClick={() =>
+                    setVisiblePlatforms((prev) =>
+                      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+                    )
+                  }
+                  className={`relative flex flex-col items-center rounded-lg border-2 px-1 py-1.5 transition-all active:scale-[0.98] ${
+                    on ? "border-[#4a7fa5] bg-[#DDF1FD]/90 shadow-sm" : "border-dashed border-[#cbd5e1] bg-[#f8fafc]"
+                  }`}
+                >
+                  <Icon className={`size-7 ${on ? "opacity-100" : "opacity-50"}`} />
+                  <span className="mt-0.5 text-[10px] font-semibold">{label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {visibleAds.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white px-6 py-12 text-center">

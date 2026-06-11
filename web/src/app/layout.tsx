@@ -22,15 +22,17 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} | AI Competitor Ad Intelligence`,
+    default: `${SITE_NAME} - #1 Free Adspy Tool`,
     template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_DESCRIPTION,
   applicationName: SITE_NAME,
   keywords: [
-    "ad spy tool",
+    "adspy",
+    "adspy tool",
+    "free adspy tool",
+    "#1 adspy tool",
     "competitor ad intelligence",
-    "AI ad research",
     "Meta ads library",
     "TikTok ads library",
     "Google ads transparency",
@@ -42,20 +44,20 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: SITE_NAME,
-    title: `${SITE_NAME} | AI Competitor Ad Intelligence`,
+    title: `${SITE_NAME} - #1 Free Adspy Tool`,
     description: DEFAULT_DESCRIPTION,
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} — AI Competitor Ad Intelligence`,
+        alt: `${SITE_NAME} — #1 Free Adspy Tool`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_NAME} | AI Competitor Ad Intelligence`,
+    title: `${SITE_NAME} - #1 Free Adspy Tool`,
     description: DEFAULT_DESCRIPTION,
     images: ["/twitter-image"],
   },

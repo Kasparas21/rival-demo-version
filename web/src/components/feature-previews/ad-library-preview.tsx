@@ -17,8 +17,13 @@ const MOCK_ADS: MockAd[] = [
   { id: "8", platform: "Google", headline: "Brand vs non-brand split", status: "Ended · 12d" },
 ];
 
-export function AdLibraryPreview() {
-  const [filter, setFilter] = useState<PlatformName | "All">("All");
+type Props = {
+  /** Lock the preview to one platform (used on /adspy/* pages). */
+  defaultPlatform?: PlatformName;
+};
+
+export function AdLibraryPreview({ defaultPlatform }: Props) {
+  const [filter, setFilter] = useState<PlatformName | "All">(defaultPlatform ?? "All");
 
   const visible = useMemo(
     () => (filter === "All" ? MOCK_ADS : MOCK_ADS.filter((ad) => ad.platform === filter)),
@@ -27,33 +32,37 @@ export function AdLibraryPreview() {
 
   return (
     <PreviewGlassPanel>
-      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by platform">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={filter === "All"}
-          onClick={() => setFilter("All")}
-          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-            filter === "All" ? "bg-[#4a7fa5] text-white" : "bg-white/60 text-gray-600 hover:bg-white/80"
-          }`}
-        >
-          All
-        </button>
-        {PLATFORMS.map((p) => (
+      {defaultPlatform ? (
+        <PlatformBadge platform={defaultPlatform} />
+      ) : (
+        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by platform">
           <button
-            key={p}
             type="button"
             role="tab"
-            aria-selected={filter === p}
-            onClick={() => setFilter(p)}
+            aria-selected={filter === "All"}
+            onClick={() => setFilter("All")}
             className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-              filter === p ? "bg-[#4a7fa5] text-white" : "bg-white/60 text-gray-600 hover:bg-white/80"
+              filter === "All" ? "bg-[#4a7fa5] text-white" : "bg-white/60 text-gray-600 hover:bg-white/80"
             }`}
           >
-            {p}
+            All
           </button>
-        ))}
-      </div>
+          {PLATFORMS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={filter === p}
+              onClick={() => setFilter(p)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
+                filter === p ? "bg-[#4a7fa5] text-white" : "bg-white/60 text-gray-600 hover:bg-white/80"
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+      )}
       <ul className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2" aria-live="polite">
         {visible.map((ad) => (
           <li

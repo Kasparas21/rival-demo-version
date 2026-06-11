@@ -117,9 +117,9 @@ const COMPARISON_SECTIONS: LandingCopy["comparison"]["sections"] = [
 export const landingCopyEn: LandingCopy = {
   locale: "en",
   meta: {
-    title: "Spy Rival | AI Competitor Ad Intelligence",
+    title: "Spy Rival - #1 Free Adspy Tool",
     description:
-      "Spy Rival is an AI ad intelligence platform for finding competitor ads, tracking creative strategy, and mapping full-funnel campaigns across major ad libraries.",
+      "Spy Rival is the #1 free adspy tool for competitor ads — covering Meta, Google, YouTube, TikTok, LinkedIn, Pinterest & Snapchat in one dashboard.",
   },
   consent: {
     title: "Cookies & analytics",
@@ -145,13 +145,13 @@ export const landingCopyEn: LandingCopy = {
   },
   hero: {
     headline: {
-      line1Prefix: "the ",
-      highlight: "ultimate ad spy tool",
+      line1Prefix: "#1 free ",
+      highlight: "adspy tool",
       line2: "",
       subline:
-        "See every ad your competitors run across Meta, Google, TikTok, LinkedIn, Pinterest & Snapchat - in one dashboard.",
+        "Spy Rival is the best adspy tool for tracking every competitor ad across Meta, Google, TikTok, LinkedIn, Pinterest & Snapchat — all in one dashboard.",
     },
-    trialCta: "Start your 7-day trial →",
+    trialCta: "TRY FOR FREE",
     platformTrialAria: "Start your trial with {platform}",
     marketersPillAria: "Built for performance marketers",
     marketersPill: "Built for performance marketers",
@@ -237,7 +237,7 @@ export const landingCopyEn: LandingCopy = {
     saveLabel: "Save €270+/mo vs a 6-tool stack",
     saveSub: "7-day trial · 1 competitor · cancel anytime",
     saveSubMobile: "Save €270+/mo · 7-day trial",
-    trialCta: "Start 7-day free trial",
+    trialCta: "TRY FOR FREE",
     stackTools: [
       { name: "AdLibrary.com", iconKey: "search", iconClass: "text-[#2563eb]", iconBg: "bg-[#dbeafe]" },
       { name: "SpyFu / Semrush", iconKey: "userSearch", iconClass: "text-[#1a1a1a]", iconBg: "bg-[#f3f4f6]" },
@@ -259,42 +259,42 @@ export const landingCopyEn: LandingCopy = {
         photo: "/landing/reviews/steven-guajardo.webp",
         when: "1 day ago",
         stars: 5,
-        text: "Rival replaced four separate subscriptions for my agency — we were running Foreplay, a Google spy tool, and two native libraries side by side. The Three Moves report is the part that earns its keep: instead of sending clients a vague \"test more video,\" I paste in the exact competitor ad that's been running 90+ days and explain why it works. Clients stopped questioning the retainer. Hours back every month.",
+        text: "Replaced four tools with one. Three Moves gives clients proof, not vague advice — hours back every month.",
       },
       {
         name: "Priya Sharma",
         photo: "/landing/reviews/tomas-kelvin.webp",
         when: "12 days ago",
         stars: 5,
-        text: "I was paying for Foreplay and AdSpy because neither one covered everything — Foreplay is Meta-only, AdSpy stops at Google. Rival pulls Meta, Google, TikTok, LinkedIn, Pinterest and Snapchat into one place, and the Activity Feed catches competitor moves I used to miss completely. The €79 pays for itself before lunch on Monday.",
+        text: "All six platforms in one place. Activity Feed catches moves Foreplay and AdSpy missed.",
       },
       {
         name: "James O'Brien",
         photo: "/landing/reviews/louis-byrd.webp",
         when: "27 days ago",
         stars: 5,
-        text: "The Stealable Angles feature rewired how I plan creative testing. I used to guess which angles to try next quarter — now I open the Comparison tab and see the exact angles a competitor is scaling that we're not running at all. We just prioritise those. Win rate on new creative is noticeably up since I made this a weekly habit.",
+        text: "Stealable Angles shows gaps we're not testing. Win rate on new creative is up.",
       },
       {
         name: "Sarah Mitchell",
         photo: "/landing/reviews/malik-johnson.webp",
         when: "52 days ago",
         stars: 5,
-        text: "Took the 7-day trial on one competitor, signed up the same afternoon. Even on a single brand it surfaced three moves I'd missed despite checking their page every week — a new TikTok angle, a budget shift to Google, and a landing page I didn't know existed. If you're doing competitor research manually, you're missing more than you think you are.",
+        text: "Signed up after a one-competitor trial the same day. Found moves I'd missed for weeks.",
       },
       {
         name: "Sofia Ricci",
         photo: "/landing/reviews/lane-morris.webp",
         when: "8 days ago",
         stars: 5,
-        text: "I run competitor research for six clients across totally different industries. Rival is the only tool that actually scales with that — 15 competitors on Pro, all six platforms, no juggling four logins. The cross-platform view alone justifies it, but the per-competitor Strategy Map is what I screenshot into client decks.",
+        text: "Fifteen competitors, six clients, one login. Strategy Map slides straight into decks.",
       },
       {
         name: "Tom Whitfield",
         photo: "/landing/reviews/triana-reyes.webp",
         when: "5 days ago",
         stars: 1,
-        text: "One star, and here's why. Before Rival I had a perfectly good excuse to spend Monday mornings \"doing competitor research\" — which mostly meant scrolling ad libraries with a coffee and looking busy until 11am. Now the Three Moves email is sitting in my inbox at 7am, fully done, and I have no choice but to actually start working. My quiet Monday is gone. Ruined a beloved routine. Devastating. (Campaigns are performing better though, so I can't even quit it.)",
+        text: "Ruined my Monday coffee scroll. Three Moves at 7am means I actually work now. (Campaigns run better.)",
       },
     ],
   },
@@ -309,7 +309,7 @@ export const landingCopyEn: LandingCopy = {
     yearly: "Yearly",
     planIncludes: "Plan includes:",
     footnote: "All plans start with a 7-day free trial · 1 competitor · card required · cancel anytime",
-    trialCta: "Start 7-day free trial",
+    trialCta: "TRY FOR FREE",
     popular: "Popular",
     perMonth: "/month",
     billedMonthly: "Billed monthly",
@@ -400,7 +400,7 @@ export const landingCopyEn: LandingCopy = {
     featureColumn: "Feature",
     yesAria: "Yes",
     noAria: "No",
-    cta: "Start your 7-day trial",
+    cta: "TRY FOR FREE",
     ctaFootnote: "The only cross-platform competitor-set OS built for weekly moves.",
     sections: COMPARISON_SECTIONS,
     competitorColumns: [
@@ -420,7 +420,7 @@ export const landingCopyEn: LandingCopy = {
     annualLabel: "Annual",
     annualSaveBadge: "Save 25%",
     billingAria: "Choose billing period",
-    trialCta: "Start your 7-day trial",
+    trialCta: "TRY FOR FREE",
     cancelNote: "cancel anytime",
   },
   footer: {
@@ -456,7 +456,7 @@ export const landingCopyEn: LandingCopy = {
   },
   jsonLd: {
     appDescription:
-      "AI competitor ad intelligence across Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat.",
+      "#1 free adspy tool for competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat.",
     starterName: "Starter",
     proName: "Pro",
   },

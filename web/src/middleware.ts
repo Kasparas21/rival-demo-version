@@ -63,17 +63,21 @@ function applyPostHogDistinctIdCookie(request: NextRequest, response: NextRespon
 }
 
 function handleHomeLocale(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
   const langParam = request.nextUrl.searchParams.get("lang");
   const cookieLocale = request.cookies.get(LOCALE_COOKIE)?.value;
   const userPickedLocale = request.cookies.get(LOCALE_USER_PICKED_COOKIE)?.value === "1";
   const country = request.headers.get("x-vercel-ip-country");
 
-  const locale = resolveLocale({
-    langParam,
-    cookie: cookieLocale,
-    userPickedLocale,
-    country,
-  });
+  const locale =
+    pathname === "/"
+      ? "en"
+      : resolveLocale({
+          langParam,
+          cookie: cookieLocale,
+          userPickedLocale,
+          country,
+        });
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(LOCALE_HEADER, locale);
@@ -82,7 +86,7 @@ function handleHomeLocale(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
-  if (isLocale(langParam)) {
+  if (pathname !== "/" && isLocale(langParam)) {
     response.cookies.set(LOCALE_COOKIE, langParam, {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,

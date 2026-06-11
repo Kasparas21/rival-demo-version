@@ -94,7 +94,7 @@ export function AboutContent() {
           href="/checkout"
           className="mt-6 inline-flex items-center justify-center rounded-full bg-[#1a1a1a] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#333]"
         >
-          Start your free trial →
+          TRY FOR FREE
         </Link>
       </section>
     </>

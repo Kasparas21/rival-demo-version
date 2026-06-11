@@ -7,7 +7,7 @@ export const SITE_NAME = "Spy Rival";
 export const SCHEMA_BRAND_NAME = "Rival";
 
 export const DEFAULT_DESCRIPTION =
-  "Spy Rival is an AI ad intelligence platform for finding competitor ads, tracking creative strategy, and mapping full-funnel campaigns across major ad libraries.";
+  "Spy Rival is the #1 free adspy tool for competitor ads — covering Meta, Google, YouTube, TikTok, LinkedIn, Pinterest & Snapchat in one dashboard.";
 
 /** Social profiles for Organization sameAs — edit when URLs change. */
 export const ORGANIZATION_SAME_AS = [

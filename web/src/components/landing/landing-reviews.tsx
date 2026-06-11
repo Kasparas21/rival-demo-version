@@ -10,7 +10,7 @@ import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { LandingCopy, LandingReview } from "@/lib/i18n/landing/types";
 
 const REVIEW_GLASS_CARD_CLASS =
-  "relative overflow-hidden rounded-[1.35rem] border border-white/70 bg-white/50 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_18px_52px_-20px_rgba(74,127,165,0.28)] backdrop-blur-2xl backdrop-saturate-[1.42] ring-1 ring-white/45 sm:p-7";
+  "relative overflow-hidden rounded-2xl border border-white/70 bg-white/50 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_12px_36px_-18px_rgba(74,127,165,0.22)] backdrop-blur-2xl backdrop-saturate-[1.42] ring-1 ring-white/45 sm:p-5";
 
 type Props = {
   copy: LandingCopy["reviews"];
@@ -52,10 +52,10 @@ function ReviewCard({
         }`}
       />
 
-      <div className="relative flex items-start gap-3.5">
+      <div className="relative flex items-start gap-3">
         <div className="relative shrink-0">
           <div className="absolute -inset-0.5 rounded-full bg-gradient-to-br from-white/90 to-[#4a7fa5]/20 opacity-80 blur-[1px]" />
-          <div className="relative size-11 overflow-hidden rounded-full border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_4px_12px_-4px_rgba(74,127,165,0.25)] ring-1 ring-white/60">
+          <div className="relative size-9 overflow-hidden rounded-full border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_4px_12px_-4px_rgba(74,127,165,0.25)] ring-1 ring-white/60">
             {review.photo ? (
               <Image
                 src={review.photo}
@@ -73,11 +73,11 @@ function ReviewCard({
           </div>
         </div>
         <div className="min-w-0 pt-0.5">
-          <p className="text-[15px] font-semibold leading-tight text-[#1a1a1a]">
+          <p className="text-sm font-semibold leading-tight text-[#1a1a1a]">
             {review.name}
             <span className="font-normal text-gray-400"> · {review.when}</span>
           </p>
-          <div className="mt-2">
+          <div className="mt-1.5">
             <ReviewStars
               count={review.stars}
               ariaLabel={fillCopyTemplate(starsAriaTemplate, { count: review.stars })}
@@ -86,7 +86,7 @@ function ReviewCard({
         </div>
       </div>
 
-      <p className="relative mt-4 flex-1 text-[13px] leading-[1.65] text-gray-600 sm:text-sm sm:leading-relaxed">
+      <p className="relative mt-3 flex-1 text-xs leading-snug text-gray-600 sm:text-[13px] sm:leading-relaxed">
         {review.text}
       </p>
     </article>
@@ -94,10 +94,10 @@ function ReviewCard({
 }
 
 export function LandingReviews({ copy }: Props) {
-  const reviewsMobile = copy.items.slice(0, -3);
+  const featuredReviews = copy.items.slice(0, 3);
 
   return (
-    <section className="relative overflow-hidden py-16 text-center sm:py-24">
+    <section className="relative overflow-hidden py-12 text-center sm:py-16">
       <div
         aria-hidden
         className="pointer-events-none absolute -left-20 top-[10%] h-72 w-72 rounded-full bg-[#4a7fa5]/10 blur-[100px]"
@@ -117,19 +117,8 @@ export function LandingReviews({ copy }: Props) {
           <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
         </h2>
 
-        <div className="mt-10 grid grid-cols-1 gap-5 text-left md:hidden">
-          {reviewsMobile.map((review) => (
-            <ReviewCard
-              key={review.name}
-              review={review}
-              starsAriaTemplate={copy.starsAria}
-              photoAltTemplate={copy.photoAlt}
-            />
-          ))}
-        </div>
-
-        <div className="mt-10 hidden grid-cols-1 gap-5 text-left sm:mt-16 sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 md:grid">
-          {copy.items.map((review) => (
+        <div className="mt-8 grid grid-cols-1 gap-4 text-left sm:grid-cols-3 sm:gap-5">
+          {featuredReviews.map((review) => (
             <ReviewCard
               key={review.name}
               review={review}

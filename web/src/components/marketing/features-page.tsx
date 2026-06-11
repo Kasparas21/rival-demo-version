@@ -47,7 +47,7 @@ export function FeaturesPage({ copy, locale }: Props) {
           <section className="px-4 py-20 sm:px-6 sm:py-28">
             <LandingScrollReveal className="mx-auto max-w-lg text-center">
               <LandingTrialCta href="/checkout" size="lg">
-                Start your 7-day free trial
+                TRY FOR FREE
                 <span aria-hidden>→</span>
               </LandingTrialCta>
               <p className="mt-4 text-xs text-gray-500">1 competitor · card required · cancel anytime</p>
