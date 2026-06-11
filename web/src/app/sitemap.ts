@@ -3,7 +3,7 @@ import type { MetadataRoute } from "next";
 import { getAllPostSlugs, normalizeBlogSlug } from "@/lib/sanity/posts";
 import { SITE_URL } from "@/lib/seo/site";
 
-const STATIC_ROUTES = ["", "/blog", "/about", "/privacy", "/terms", "/cookies"];
+const STATIC_ROUTES = ["", "/blog", "/about", "/features", "/privacy", "/terms", "/cookies"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();

@@ -1,13 +1,17 @@
+const postFields = `
+  _id,
+  title,
+  "slug": slug.current,
+  publishedAt,
+  _updatedAt,
+  mainImage,
+  "categories": categories[]->{ _id, title },
+  "excerpt": coalesce(excerpt, pt::text(body))
+`;
+
 export const postsQuery = `
   *[_type == "post" && defined(slug.current)] | order(publishedAt desc) {
-    _id,
-    title,
-    "slug": slug.current,
-    publishedAt,
-    _updatedAt,
-    mainImage,
-    "categories": categories[]->{ title },
-    "excerpt": pt::text(body)
+    ${postFields}
   }
 `;
 
@@ -21,15 +25,18 @@ export const postSlugsQuery = `
 
 export const postBySlugQuery = `
   *[_type == "post" && slug.current == $slug][0] {
-    _id,
-    title,
-    "slug": slug.current,
-    publishedAt,
-    _updatedAt,
-    mainImage,
+    ${postFields},
     body,
-    "categories": categories[]->{ title },
-    "author": author->{ name, image },
-    "excerpt": pt::text(body)
+    isListicle,
+    listicleItems,
+    faq,
+    "author": author->{ name, image }
+  }
+`;
+
+export const relatedPostsQuery = `
+  *[_type == "post" && defined(slug.current) && slug.current != $slug && count((categories[]._ref)[@ in $categoryIds]) > 0]
+    | order(publishedAt desc) [0...$limit] {
+    ${postFields}
   }
 `;

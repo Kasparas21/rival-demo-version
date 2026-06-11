@@ -1,6 +1,8 @@
 import Link from "next/link";
+
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import { SeoFooterPostLinks } from "@/components/seo/seo-footer-post-links";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 const SUPPORT_EMAIL = "hello@spy-rival.com";
@@ -13,7 +15,7 @@ export function LandingFooter({ copy }: Props) {
   return (
     <footer id="affiliates" className={`${landingNavAnchorScrollClasses} overflow-hidden pb-8 pt-14 sm:pt-16`}>
       <LandingScrollReveal className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <div className="grid grid-cols-1 gap-9 text-center sm:grid-cols-2 sm:text-left md:grid-cols-3 md:gap-10">
+        <div className="grid grid-cols-1 gap-9 text-center sm:grid-cols-2 sm:text-left md:grid-cols-4 md:gap-10">
           {copy.columns.map((col) => (
             <div key={col.title}>
               <h3 className="mb-4 text-xs font-bold tracking-widest text-[#1a1a1a]">
@@ -31,6 +33,13 @@ export function LandingFooter({ copy }: Props) {
               </ul>
             </div>
           ))}
+          <div className="text-left">
+            <h3 className="mb-4 text-xs font-bold tracking-widest text-[#1a1a1a]">
+              GUIDES
+              <span className="mt-1 block h-0.5 w-6 rounded-full bg-black" />
+            </h3>
+            <SeoFooterPostLinks className="text-sm text-[#4a7fa5]" title="Popular guides" />
+          </div>
         </div>
 
         <div className="mt-12 flex flex-col items-center gap-4 border-t border-gray-200 pt-6 text-xs text-gray-400 sm:flex-row sm:justify-between">

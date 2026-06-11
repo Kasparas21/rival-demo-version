@@ -70,7 +70,7 @@ async function runWeeklyDigest(req: Request): Promise<NextResponse> {
   const testUserId = (url.searchParams.get("userId") ?? "").trim();
 
   const admin = createSupabaseAdminClient();
-  const appOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://www.spy-rival.com";
+  const appOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://spy-rival.com";
   const from = getWeeklyDigestFromEmail();
 
   const summary: RunSummary = {

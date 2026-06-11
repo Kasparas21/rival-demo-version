@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { RivalLogoImg } from "@/components/rival-logo";
+import { SeoFooterPostLinks } from "@/components/seo/seo-footer-post-links";
 
 const footerLinks = [
   {
@@ -77,7 +78,7 @@ export function BlogShell({ children }: { children: ReactNode }) {
               <span>♬</span>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {footerLinks.map((group) => (
               <div key={group.title}>
                 <p className="text-sm font-semibold text-gray-900">{group.title}</p>
@@ -88,6 +89,7 @@ export function BlogShell({ children }: { children: ReactNode }) {
                 </ul>
               </div>
             ))}
+            <SeoFooterPostLinks />
           </div>
         </div>
         <div className="mx-auto mt-10 max-w-[1100px] border-t border-gray-200 px-6 pt-6 text-xs text-gray-400">

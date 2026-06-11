@@ -5,9 +5,11 @@ import type { Order } from "@polar-sh/sdk/models/components/order";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 import { getMetaPixelIdForCapi } from "@/lib/analytics/meta-pixel";
+import { SITE_URL } from "@/lib/seo/site";
 
 const META_CAPI_VERSION = "v23.0";
-const PURCHASE_EVENT_SOURCE_URL = "https://www.spy-rival.com/checkout";
+
+const PURCHASE_EVENT_SOURCE_URL = `${SITE_URL}/checkout`;
 
 type MetaCapiEnv = {
   pixelId: string;

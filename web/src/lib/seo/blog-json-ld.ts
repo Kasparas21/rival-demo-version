@@ -1,20 +1,21 @@
 import { urlForImage } from "@/lib/sanity/image";
-import type { BlogPostDetail } from "@/lib/sanity/types";
-import { SITE_URL } from "@/lib/seo/site";
+import type { BlogFaqItem, BlogPostDetail, ListicleItem } from "@/lib/sanity/types";
+import { isListicleSlug } from "@/lib/seo/blog-metadata";
+import { SCHEMA_BRAND_NAME, SITE_URL } from "@/lib/seo/site";
 
 function postImageUrl(post: BlogPostDetail): string | undefined {
   if (!post.mainImage?.asset?._ref) return undefined;
   return urlForImage(post.mainImage).width(1200).height(630).fit("crop").url();
 }
 
-export function blogPostingJsonLd(post: BlogPostDetail, slug: string) {
+export function articleJsonLd(post: BlogPostDetail, slug: string) {
   const modifiedAt = post._updatedAt ?? post.publishedAt ?? undefined;
-  // TODO: add author.slug to Sanity author query when author profile URLs exist.
-  const authorName = post.author?.name?.trim() || "Spy Rival Team";
+  const authorName = post.author?.name?.trim() || `${SCHEMA_BRAND_NAME} Team`;
+  const canonical = `${SITE_URL}/blog/${slug}`;
 
   return {
     "@context": "https://schema.org",
-    "@type": "BlogPosting",
+    "@type": "Article",
     headline: post.title,
     description: post.excerpt?.trim() || undefined,
     image: postImageUrl(post),
@@ -26,13 +27,16 @@ export function blogPostingJsonLd(post: BlogPostDetail, slug: string) {
     },
     publisher: {
       "@type": "Organization",
-      name: "Spy Rival",
+      name: SCHEMA_BRAND_NAME,
       logo: {
         "@type": "ImageObject",
         url: `${SITE_URL}/rival-logo.svg`,
       },
     },
-    mainEntityOfPage: `${SITE_URL}/blog/${slug}`,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": canonical,
+    },
   };
 }
 
@@ -62,3 +66,52 @@ export function blogBreadcrumbJsonLd(post: BlogPostDetail, slug: string) {
     ],
   };
 }
+
+export function faqPageJsonLdFromPost(faq: BlogFaqItem[] | null | undefined) {
+  if (!faq?.length) return null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+}
+
+export function listicleJsonLd(items: ListicleItem[] | null | undefined, slug: string) {
+  if (!items?.length) return null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: `Ranked tools — ${slug}`,
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      url: item.url || undefined,
+    })),
+  };
+}
+
+export function blogPostJsonLdBlocks(post: BlogPostDetail, slug: string) {
+  const blocks: object[] = [articleJsonLd(post, slug), blogBreadcrumbJsonLd(post, slug)];
+
+  const faq = faqPageJsonLdFromPost(post.faq);
+  if (faq) blocks.push(faq);
+
+  const isListicle = post.isListicle || isListicleSlug(slug);
+  if (isListicle) {
+    const list = listicleJsonLd(post.listicleItems, slug);
+    if (list) blocks.push(list);
+  }
+
+  return blocks;
+}
+
+/** @deprecated Use articleJsonLd */
+export const blogPostingJsonLd = articleJsonLd;

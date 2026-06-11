@@ -12,10 +12,21 @@ export const metadata: Metadata = {
   title: "Blog",
   description: "Insights on competitor ads, creative strategy, and paid social.",
   alternates: { canonical: "/blog" },
-  openGraph: { url: "/blog" },
+  openGraph: {
+    url: "/blog",
+    title: "Blog | Rival",
+    description: "Insights on competitor ads, creative strategy, and paid social.",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Blog | Rival",
+    description: "Insights on competitor ads, creative strategy, and paid social.",
+    images: ["/twitter-image"],
+  },
 };
 
-export const revalidate = 60;
+export const revalidate = 3600;
 
 const categories = ["All", "Product", "Business"];
 

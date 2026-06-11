@@ -6,6 +6,16 @@ export type SanityImage = {
   alt?: string;
 };
 
+export type BlogFaqItem = {
+  question: string;
+  answer: string;
+};
+
+export type ListicleItem = {
+  name: string;
+  url?: string | null;
+};
+
 export type BlogPostListItem = {
   _id: string;
   title: string;
@@ -13,11 +23,14 @@ export type BlogPostListItem = {
   publishedAt: string | null;
   _updatedAt: string | null;
   mainImage: SanityImage | null;
-  categories: { title: string }[] | null;
+  categories: { _id?: string; title: string }[] | null;
   excerpt: string | null;
 };
 
 export type BlogPostDetail = BlogPostListItem & {
   body: PortableTextBlock[] | null;
   author: { name: string | null; image: SanityImage | null } | null;
+  isListicle?: boolean | null;
+  listicleItems?: ListicleItem[] | null;
+  faq?: BlogFaqItem[] | null;
 };

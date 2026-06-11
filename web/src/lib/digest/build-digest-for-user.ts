@@ -93,7 +93,7 @@ export async function buildDigestForUser(
   const uid = userId.trim();
   if (!uid) return null;
 
-  const appOrigin = options?.appOrigin?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://www.spy-rival.com";
+  const appOrigin = options?.appOrigin?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://spy-rival.com";
   const { start, end, startIso, endIso } = digestWindowBounds(options?.now);
 
   const { data: profile, error: profileErr } = await admin

@@ -3,6 +3,17 @@ import type { PortableTextBlock } from "@portabletext/types";
 import Image from "next/image";
 
 import { urlForImage } from "@/lib/sanity/image";
+import { SITE_URL } from "@/lib/seo/site";
+
+function isInternalHref(href: string): boolean {
+  if (href.startsWith("/")) return true;
+  try {
+    const url = new URL(href);
+    return url.origin === SITE_URL || url.hostname === "spy-rival.com" || url.hostname === "www.spy-rival.com";
+  } catch {
+    return false;
+  }
+}
 
 const components: PortableTextComponents = {
   block: {
@@ -21,11 +32,19 @@ const components: PortableTextComponents = {
   marks: {
     strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
     em: ({ children }) => <em>{children}</em>,
-    link: ({ children, value }) => (
-      <a href={value?.href} className="font-medium text-purple-700 underline underline-offset-2" rel="noreferrer" target="_blank">
-        {children}
-      </a>
-    ),
+    link: ({ children, value }) => {
+      const href = typeof value?.href === "string" ? value.href : "#";
+      const internal = isInternalHref(href);
+      return (
+        <a
+          href={href}
+          className="font-medium text-purple-700 underline underline-offset-2"
+          {...(internal ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+        >
+          {children}
+        </a>
+      );
+    },
   },
   types: {
     image: ({ value }) => {
@@ -34,7 +53,13 @@ const components: PortableTextComponents = {
       return (
         <figure className="my-8 overflow-hidden rounded-2xl border border-slate-200 bg-white">
           <div className="relative aspect-[16/10] w-full">
-            <Image src={src} alt={value.alt ?? ""} fill className="object-cover" sizes="(max-width: 768px) 100vw, 768px" />
+            <Image
+              src={src}
+              alt={value.alt ?? ""}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 768px"
+            />
           </div>
         </figure>
       );
@@ -44,5 +69,9 @@ const components: PortableTextComponents = {
 
 export function PortableTextBody({ value }: { value: PortableTextBlock[] | null | undefined }) {
   if (!value?.length) return null;
-  return <div className="blog-prose max-w-none"><PortableText value={value} components={components} /></div>;
+  return (
+    <div className="blog-prose max-w-none">
+      <PortableText value={value} components={components} />
+    </div>
+  );
 }
