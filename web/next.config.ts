@@ -25,16 +25,6 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
   },
-  async redirects() {
-    return [
-      {
-        source: "/:path*",
-        has: [{ type: "host", value: "www.spy-rival.com" }],
-        destination: "https://spy-rival.com/:path*",
-        permanent: true,
-      },
-    ];
-  },
   async rewrites() {
     return [
       {
