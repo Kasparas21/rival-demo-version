@@ -36,14 +36,14 @@ export function MarketingDemoGate({ children, showOnMount = false }: Props) {
 
   const clearSecondWallTimer = useCallback(() => {
     if (secondWallTimerRef.current !== null) {
-      window.clearTimeout(secondWallTimerRef.current);
+      clearTimeout(secondWallTimerRef.current);
       secondWallTimerRef.current = null;
     }
   }, []);
 
   const scheduleSecondWall = useCallback(() => {
     clearSecondWallTimer();
-    secondWallTimerRef.current = window.setTimeout(() => {
+    secondWallTimerRef.current = setTimeout(() => {
       secondWallTimerRef.current = null;
       openWall();
     }, SECOND_WALL_DELAY_MS);
@@ -81,7 +81,7 @@ export function MarketingDemoGate({ children, showOnMount = false }: Props) {
   useEffect(() => {
     if (!trialStarted || trialExpired) return;
 
-    const interval = window.setInterval(() => {
+    const interval = setInterval(() => {
       setSecondsLeft((current) => {
         if (current <= 1) {
           setTrialExpired(true);
@@ -91,7 +91,7 @@ export function MarketingDemoGate({ children, showOnMount = false }: Props) {
       });
     }, 1000);
 
-    return () => window.clearInterval(interval);
+    return () => clearInterval(interval);
   }, [trialStarted, trialExpired]);
 
   const showFloatingWidget =
