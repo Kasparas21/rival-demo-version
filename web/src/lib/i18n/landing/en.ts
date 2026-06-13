@@ -320,8 +320,8 @@ export const landingCopyEn: LandingCopy = {
         name: "Starter",
         summary: "For solo media buyers tracking their core market rivals.",
         monthlyUsd: 40,
-        annualMonthlyUsd: 40,
-        annualYearlyUsd: 480,
+        annualMonthlyUsd: 32,
+        annualYearlyUsd: 384,
         features: [
           "5 competitors tracked",
           "All 6 platforms — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
@@ -338,8 +338,8 @@ export const landingCopyEn: LandingCopy = {
         name: "Pro",
         summary: "For teams that need more competitors, exports, and on-demand refresh.",
         monthlyUsd: 60,
-        annualMonthlyUsd: 60,
-        annualYearlyUsd: 720,
+        annualMonthlyUsd: 48,
+        annualYearlyUsd: 576,
         plusLabel: "Everything in Starter, plus",
         popular: true,
         features: [
@@ -357,8 +357,8 @@ export const landingCopyEn: LandingCopy = {
         name: "Agency",
         summary: "For agencies managing multiple client brands in one account.",
         monthlyUsd: 100,
-        annualMonthlyUsd: 100,
-        annualYearlyUsd: 1200,
+        annualMonthlyUsd: 80,
+        annualYearlyUsd: 960,
         plusLabel: "Everything in Pro, plus",
         features: [
           "Up to 5 brand workspaces — separate competitor lists per client",
@@ -376,7 +376,7 @@ export const landingCopyEn: LandingCopy = {
     items: [
       {
         q: "How does the free trial work?",
-        a: "Sign up with your card and get 7 days of full Rival access tracking 1 competitor across all 6 platforms. Cancel anytime in the first 7 days and you won't be charged. If you continue, you're billed from €40/month on Starter (€480/year if you choose annual). One-click cancel, no retention calls.",
+        a: "Sign up with your card and get 7 days of full Rival access tracking 1 competitor across all 6 platforms. Cancel anytime in the first 7 days and you won't be charged. If you continue, you're billed from €40/month on Starter (€384/year — 20% off — if you choose annual). One-click cancel, no retention calls.",
       },
       {
         q: "How is Rival different from Foreplay or AdSpy?",
@@ -430,10 +430,10 @@ export const landingCopyEn: LandingCopy = {
     titleHighlight: "competitors run",
     subtitle: "free 7-day trial.",
     monthlyPrice: "€40/mo",
-    annualPrice: "€40/mo",
+    annualPrice: "€32/mo",
     monthlyLabel: "Monthly",
     annualLabel: "Annual",
-    annualSaveBadge: "Pay yearly",
+    annualSaveBadge: "Save 20%",
     billingAria: "Choose billing period",
     trialCta: "TRY FOR FREE",
     cancelNote: "cancel anytime",

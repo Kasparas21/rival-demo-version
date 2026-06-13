@@ -162,8 +162,8 @@ export const landingCopyDe: LandingCopy = {
         name: "Starter",
         summary: "Für Solo-Media-Buyer mit den wichtigsten Marktrivalen.",
         monthlyUsd: 40,
-        annualMonthlyUsd: 40,
-        annualYearlyUsd: 480,
+        annualMonthlyUsd: 32,
+        annualYearlyUsd: 384,
         features: [
           "5 Wettbewerber",
           "Alle 6 Plattformen — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
@@ -180,8 +180,8 @@ export const landingCopyDe: LandingCopy = {
         name: "Pro",
         summary: "Für Teams mit mehr Wettbewerbern, Exporten und Refresh on demand.",
         monthlyUsd: 60,
-        annualMonthlyUsd: 60,
-        annualYearlyUsd: 720,
+        annualMonthlyUsd: 48,
+        annualYearlyUsd: 576,
         plusLabel: "Alles aus Starter, plus",
         popular: true,
         features: [
@@ -199,8 +199,8 @@ export const landingCopyDe: LandingCopy = {
         name: "Agency",
         summary: "Für Agenturen mit mehreren Kundenmarken in einem Account.",
         monthlyUsd: 100,
-        annualMonthlyUsd: 100,
-        annualYearlyUsd: 1200,
+        annualMonthlyUsd: 80,
+        annualYearlyUsd: 960,
         plusLabel: "Alles aus Pro, plus",
         features: [
           "Bis zu 5 Marken-Workspaces — eigene Wettbewerberliste pro Kunde",
@@ -218,7 +218,7 @@ export const landingCopyDe: LandingCopy = {
     items: [
       {
         q: "Wie funktioniert der Gratis-Test?",
-        a: "Mit Karte anmelden und 7 Tage vollen Rival-Zugang mit 1 Wettbewerber über alle 6 Plattformen. In den ersten 7 Tagen jederzeit kündigen — keine Abbuchung. Danach ab €40/Monat (Starter) bzw. €480/Jahr bei jährlicher Buchung. Ein-Klick-Kündigung, keine Retention-Calls.",
+        a: "Mit Karte anmelden und 7 Tage vollen Rival-Zugang mit 1 Wettbewerber über alle 6 Plattformen. In den ersten 7 Tagen jederzeit kündigen — keine Abbuchung. Danach ab €40/Monat (Starter) bzw. €384/Jahr (20 % Rabatt) bei jährlicher Buchung. Ein-Klick-Kündigung, keine Retention-Calls.",
       },
       {
         q: "Worin unterscheidet sich Rival von Foreplay oder AdSpy?",
@@ -282,10 +282,10 @@ export const landingCopyDe: LandingCopy = {
     titleHighlight: "wettbewerber schalten",
     subtitle: "7 tage kostenlos testen.",
     monthlyPrice: "€40/Mo.",
-    annualPrice: "€40/Mo.",
+    annualPrice: "€32/Mo.",
     monthlyLabel: "Monatlich",
     annualLabel: "Jährlich",
-    annualSaveBadge: "Jährlich zahlen",
+    annualSaveBadge: "20 % sparen",
     billingAria: "Abrechnungszeitraum wählen",
     trialCta: "KOSTENLOS TESTEN",
     cancelNote: "jederzeit kündbar",

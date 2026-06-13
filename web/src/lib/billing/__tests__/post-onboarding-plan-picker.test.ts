@@ -36,8 +36,8 @@ describe("post-onboarding plan picker", () => {
     ).toBe(false);
   });
 
-  it("computes zero annual savings when monthly and annual rates match", () => {
-    expect(annualSavingsPercent(PLAN_OFFERS[0]!)).toBe(0);
+  it("computes annual savings at 20% off monthly × 12", () => {
+    expect(annualSavingsPercent(PLAN_OFFERS[0]!)).toBe(20);
   });
 
   it("hides for admin unlimited", () => {

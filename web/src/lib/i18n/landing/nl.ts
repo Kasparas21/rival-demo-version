@@ -162,8 +162,8 @@ export const landingCopyNl: LandingCopy = {
         name: "Starter",
         summary: "Voor solo media buyers met hun belangrijkste marktrivalen.",
         monthlyUsd: 40,
-        annualMonthlyUsd: 40,
-        annualYearlyUsd: 480,
+        annualMonthlyUsd: 32,
+        annualYearlyUsd: 384,
         features: [
           "5 concurrenten",
           "Alle 6 platformen — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
@@ -180,8 +180,8 @@ export const landingCopyNl: LandingCopy = {
         name: "Pro",
         summary: "Voor teams die meer concurrenten, exports en on-demand refresh nodig hebben.",
         monthlyUsd: 60,
-        annualMonthlyUsd: 60,
-        annualYearlyUsd: 720,
+        annualMonthlyUsd: 48,
+        annualYearlyUsd: 576,
         plusLabel: "Alles in Starter, plus",
         popular: true,
         features: [
@@ -199,8 +199,8 @@ export const landingCopyNl: LandingCopy = {
         name: "Agency",
         summary: "Voor bureaus die meerdere klantmerken in één account beheren.",
         monthlyUsd: 100,
-        annualMonthlyUsd: 100,
-        annualYearlyUsd: 1200,
+        annualMonthlyUsd: 80,
+        annualYearlyUsd: 960,
         plusLabel: "Alles in Pro, plus",
         features: [
           "Tot 5 merk-workspaces — aparte concurrentenlijst per klant",
@@ -218,7 +218,7 @@ export const landingCopyNl: LandingCopy = {
     items: [
       {
         q: "Hoe werkt de gratis proef?",
-        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen — geen kosten. Daarna vanaf €40/maand (Starter) of €480/jaar bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
+        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen — geen kosten. Daarna vanaf €40/maand (Starter) of €384/jaar (20% korting) bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
       },
       {
         q: "Hoe verschilt Rival van Foreplay of AdSpy?",
@@ -282,10 +282,10 @@ export const landingCopyNl: LandingCopy = {
     titleHighlight: "concurrenten draaien",
     subtitle: "7 dagen gratis proberen.",
     monthlyPrice: "€40/mnd",
-    annualPrice: "€40/mnd",
+    annualPrice: "€32/mnd",
     monthlyLabel: "Maandelijks",
     annualLabel: "Jaarlijks",
-    annualSaveBadge: "Jaarlijks betalen",
+    annualSaveBadge: "Bespaar 20%",
     billingAria: "Kies factureringsperiode",
     trialCta: "GRATIS PROBEREN",
     cancelNote: "altijd opzegbaar",

@@ -25,3 +25,12 @@ describe("Agency plan", () => {
     );
   });
 });
+
+describe("annualPricesFromMonthly", () => {
+  it("applies 20% discount to yearly prepay", async () => {
+    const { annualPricesFromMonthly } = await import("@/lib/billing/plan-offers");
+    expect(annualPricesFromMonthly(40)).toEqual({ annualMonthlyUsd: 32, annualYearlyUsd: 384 });
+    expect(annualPricesFromMonthly(60)).toEqual({ annualMonthlyUsd: 48, annualYearlyUsd: 576 });
+    expect(annualPricesFromMonthly(100)).toEqual({ annualMonthlyUsd: 80, annualYearlyUsd: 960 });
+  });
+});

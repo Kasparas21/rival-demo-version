@@ -19,14 +19,29 @@ export const PLAN_TRIAL_BADGE = "7-day free trial";
 export const PLAN_PICKER_INTRO =
   "All plans include a 7-day free trial — full product, card required, cancel anytime.";
 
+export const ANNUAL_BILLING_DISCOUNT_PERCENT = 20;
+
+/** Annual prepay = 12 × monthly minus `ANNUAL_BILLING_DISCOUNT_PERCENT`. */
+export function annualPricesFromMonthly(monthlyUsd: number): {
+  annualMonthlyUsd: number;
+  annualYearlyUsd: number;
+} {
+  const annualYearlyUsd = Math.round(
+    monthlyUsd * 12 * (1 - ANNUAL_BILLING_DISCOUNT_PERCENT / 100),
+  );
+  return {
+    annualYearlyUsd,
+    annualMonthlyUsd: Math.round(annualYearlyUsd / 12),
+  };
+}
+
 export const PLAN_OFFERS: PlanOffer[] = [
   {
     slug: "starter",
     name: "Starter",
     summary: "For solo media buyers tracking their core market rivals.",
     monthlyUsd: 40,
-    annualMonthlyUsd: 40,
-    annualYearlyUsd: 480,
+    ...annualPricesFromMonthly(40),
     features: [
       "5 competitors tracked",
       "All 6 platforms — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
@@ -43,8 +58,7 @@ export const PLAN_OFFERS: PlanOffer[] = [
     name: "Pro",
     summary: "For teams that need more competitors, exports, and on-demand refresh.",
     monthlyUsd: 60,
-    annualMonthlyUsd: 60,
-    annualYearlyUsd: 720,
+    ...annualPricesFromMonthly(60),
     plusLabel: "Everything in Starter, plus",
     popular: true,
     features: [
@@ -62,8 +76,7 @@ export const PLAN_OFFERS: PlanOffer[] = [
     name: "Agency",
     summary: "For agencies managing multiple client brands in one account.",
     monthlyUsd: 100,
-    annualMonthlyUsd: 100,
-    annualYearlyUsd: 1200,
+    ...annualPricesFromMonthly(100),
     plusLabel: "Everything in Pro, plus",
     features: [
       "Up to 5 brand workspaces — separate competitor lists per client",
