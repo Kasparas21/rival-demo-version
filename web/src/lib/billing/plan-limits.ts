@@ -1,5 +1,5 @@
-/** Subscription tier: free trial (one scrape) + paid Starter/Pro + admin. */
-export type PlanTier = "free_trial" | "starter" | "pro" | "admin";
+/** Subscription tier: free trial + paid Starter/Pro/Agency + admin. */
+export type PlanTier = "free_trial" | "starter" | "pro" | "agency" | "admin";
 
 export type DevPlanOverride = PlanTier;
 
@@ -59,7 +59,7 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
 
 const STARTER_LIMITS: PlanLimits = {
   maxWatchedCompetitors: 5,
-  maxOwnBrandWorkspaces: 5,
+  maxOwnBrandWorkspaces: 1,
   maxAdsProcessedPerMonth: 50_000,
   maxTotalScrapeOperations: null,
   maxSwapsPerMonth: 15,
@@ -81,7 +81,7 @@ const STARTER_LIMITS: PlanLimits = {
 
 const PRO_LIMITS: PlanLimits = {
   maxWatchedCompetitors: 15,
-  maxOwnBrandWorkspaces: 5,
+  maxOwnBrandWorkspaces: 1,
   maxAdsProcessedPerMonth: 150_000,
   maxTotalScrapeOperations: null,
   maxSwapsPerMonth: 50,
@@ -98,6 +98,29 @@ const PRO_LIMITS: PlanLimits = {
   allowAlertEmail: true,
   maxAiStrategyOverviews: null,
   maxAdPreviewAnalysesPerMonth: 20,
+  initialScrapeAdsPerPlatform: null,
+};
+
+/** Pro limits × 5 — multi-brand workspaces for agencies (up to 5 client brands). */
+const AGENCY_LIMITS: PlanLimits = {
+  maxWatchedCompetitors: 75,
+  maxOwnBrandWorkspaces: 5,
+  maxAdsProcessedPerMonth: 750_000,
+  maxTotalScrapeOperations: null,
+  maxSwapsPerMonth: 250,
+  csvExportsPerMonth: 100,
+  csvMaxAdsPerExport: 10_000,
+  manualRefreshPerMonth: 25,
+  manualRefreshMinIntervalMs: 86_400_000,
+  manualRefreshAdsPerPlatform: 300,
+  canDisableSmartPrioritization: true,
+  allowCsvExport: true,
+  allowManualRefresh: true,
+  allowAutoRefresh: true,
+  allowAlertRules: true,
+  allowAlertEmail: true,
+  maxAiStrategyOverviews: null,
+  maxAdPreviewAnalysesPerMonth: 100,
   initialScrapeAdsPerPlatform: null,
 };
 
@@ -127,6 +150,7 @@ export const PLAN_LIMITS_BY_TIER: Record<PlanTier, PlanLimits> = {
   free_trial: FREE_TRIAL_LIMITS,
   starter: STARTER_LIMITS,
   pro: PRO_LIMITS,
+  agency: AGENCY_LIMITS,
   admin: ADMIN_LIMITS,
 };
 
@@ -134,6 +158,7 @@ export const PLAN_DISPLAY_NAMES: Record<PlanTier, string> = {
   free_trial: "Free trial",
   starter: "Starter",
   pro: "Pro",
+  agency: "Agency",
   admin: "Admin",
 };
 
@@ -142,11 +167,22 @@ export function limitsForTier(tier: PlanTier): PlanLimits {
 }
 
 export function isPaidTier(tier: PlanTier): boolean {
-  return tier === "starter" || tier === "pro";
+  return tier === "starter" || tier === "pro" || tier === "agency";
 }
 
 export function tierHasProductAccess(tier: PlanTier): boolean {
-  return tier === "free_trial" || tier === "starter" || tier === "pro" || tier === "admin";
+  return (
+    tier === "free_trial" ||
+    tier === "starter" ||
+    tier === "pro" ||
+    tier === "agency" ||
+    tier === "admin"
+  );
+}
+
+/** Only Agency (and admin) may create more than one own-brand workspace. */
+export function tierAllowsMultipleBrandWorkspaces(tier: PlanTier): boolean {
+  return tier === "agency" || tier === "admin";
 }
 
 /** Map legacy dev overrides and DB values to current tiers. */
@@ -154,7 +190,7 @@ export function normalizePlanTier(value: string | null | undefined): PlanTier | 
   if (!value?.trim()) return null;
   const v = value.trim();
   if (v === "free" || v === "trial") return "free_trial";
-  if (v === "free_trial" || v === "starter" || v === "pro" || v === "admin") return v;
+  if (v === "free_trial" || v === "starter" || v === "pro" || v === "agency" || v === "admin") return v;
   return null;
 }
 

@@ -8,7 +8,7 @@ import { normalizePlanTier } from "@/lib/billing/plan-limits";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 
-const VALID_OVERRIDES: DevPlanOverride[] = ["free_trial", "starter", "pro", "admin"];
+const VALID_OVERRIDES: DevPlanOverride[] = ["free_trial", "starter", "pro", "agency", "admin"];
 
 function isManualAdminUnlimited(rawPayload: unknown): boolean {
   return (

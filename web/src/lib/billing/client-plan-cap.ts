@@ -139,7 +139,11 @@ export async function fetchDashboardBillingSnapshot(): Promise<DashboardBillingS
     const limits = data.billing?.limits ?? data.usage?.limits;
     const tierRaw = data.billing?.planTier;
     const planTier: PlanTier =
-      tierRaw === "starter" || tierRaw === "pro" || tierRaw === "admin" || tierRaw === "free_trial"
+      tierRaw === "starter" ||
+      tierRaw === "pro" ||
+      tierRaw === "agency" ||
+      tierRaw === "admin" ||
+      tierRaw === "free_trial"
         ? tierRaw
         : "free_trial";
     const maxWatched =

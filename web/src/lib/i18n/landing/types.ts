@@ -14,7 +14,7 @@ export type LandingReview = {
 };
 
 export type LandingPlanOffer = {
-  slug: "starter" | "pro";
+  slug: "starter" | "pro" | "agency";
   name: string;
   summary: string;
   monthlyUsd: number;
@@ -201,5 +201,6 @@ export type LandingCopy = {
     appDescription: string;
     starterName: string;
     proName: string;
+    agencyName: string;
   };
 };

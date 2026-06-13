@@ -1,5 +1,4 @@
 import type { LandingCopy } from "@/lib/i18n/landing/types";
-import { schemaOfferJsonLd, SCHEMA_PLAN_PRICING_USD } from "@/lib/seo/schema-pricing";
 import { ORGANIZATION_SAME_AS, SCHEMA_BRAND_NAME, SITE_URL } from "@/lib/seo/site";
 
 export function organizationJsonLd() {
@@ -29,6 +28,58 @@ export function webSiteJsonLd() {
 }
 
 export function softwareApplicationJsonLd(copy: LandingCopy) {
+  const starter = copy.pricing.plans.find((p) => p.slug === "starter");
+  const pro = copy.pricing.plans.find((p) => p.slug === "pro");
+  const agency = copy.pricing.plans.find((p) => p.slug === "agency");
+
+  const offers = [
+    starter
+      ? {
+          "@type": "Offer",
+          name: copy.jsonLd.starterName,
+          price: String(starter.monthlyUsd),
+          priceCurrency: "EUR",
+          priceSpecification: {
+            "@type": "UnitPriceSpecification",
+            price: String(starter.monthlyUsd),
+            priceCurrency: "EUR",
+            billingIncrement: 1,
+            unitText: "MONTH",
+          },
+        }
+      : null,
+    pro
+      ? {
+          "@type": "Offer",
+          name: copy.jsonLd.proName,
+          price: String(pro.monthlyUsd),
+          priceCurrency: "EUR",
+          priceSpecification: {
+            "@type": "UnitPriceSpecification",
+            price: String(pro.monthlyUsd),
+            priceCurrency: "EUR",
+            billingIncrement: 1,
+            unitText: "MONTH",
+          },
+        }
+      : null,
+    agency
+      ? {
+          "@type": "Offer",
+          name: copy.jsonLd.agencyName,
+          price: String(agency.monthlyUsd),
+          priceCurrency: "EUR",
+          priceSpecification: {
+            "@type": "UnitPriceSpecification",
+            price: String(agency.monthlyUsd),
+            priceCurrency: "EUR",
+            billingIncrement: 1,
+            unitText: "MONTH",
+          },
+        }
+      : null,
+  ].filter(Boolean);
+
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -36,10 +87,7 @@ export function softwareApplicationJsonLd(copy: LandingCopy) {
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description: copy.jsonLd.appDescription,
-    offers: [
-      schemaOfferJsonLd(copy.jsonLd.starterName, SCHEMA_PLAN_PRICING_USD.starter),
-      schemaOfferJsonLd(copy.jsonLd.proName, SCHEMA_PLAN_PRICING_USD.pro),
-    ],
+    offers,
   };
 }
 

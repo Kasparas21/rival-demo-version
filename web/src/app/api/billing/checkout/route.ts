@@ -54,7 +54,13 @@ function checkoutBrowserFailure(
 function loginNextForCheckoutRequest(request: NextRequest): string {
   const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
   const plan: PolarPlanSlug =
-    planParam === "starter" ? "starter" : planParam === "pro" ? "pro" : "starter";
+    planParam === "starter"
+      ? "starter"
+      : planParam === "agency"
+        ? "agency"
+        : planParam === "pro"
+          ? "pro"
+          : "starter";
   const period = parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
   return buildCheckoutHref(plan, period, safeCheckoutNextPath(request.nextUrl.searchParams.get("next")));
 }
@@ -87,7 +93,15 @@ async function createCheckoutRedirect(request: NextRequest) {
 
   const isTesterCheckout = isTesterInviteCheckoutRequest(request);
   const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
-  const plan: PolarPlanSlug = isTesterCheckout ? "pro" : planParam === "starter" ? "starter" : "pro";
+  const plan: PolarPlanSlug = isTesterCheckout
+    ? "pro"
+    : planParam === "starter"
+      ? "starter"
+      : planParam === "agency"
+        ? "agency"
+        : planParam === "pro"
+          ? "pro"
+          : "pro";
   const period = isTesterCheckout ? "monthly" : parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
 
   if (

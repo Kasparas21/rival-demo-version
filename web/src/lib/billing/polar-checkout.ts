@@ -17,6 +17,10 @@ const PLAN_ENV_HINT: Record<PolarPlanSlug, { monthly: string; annual: string }> 
     monthly: "POLAR_PRO_PRODUCT_ID",
     annual: "POLAR_PRO_ANNUAL_PRODUCT_ID",
   },
+  agency: {
+    monthly: "POLAR_AGENCY_PRODUCT_ID",
+    annual: "POLAR_AGENCY_ANNUAL_PRODUCT_ID",
+  },
 };
 
 function hasActiveCatalogPrice(prices: { amountType?: string; isArchived?: boolean }[] | null | undefined): boolean {
@@ -34,14 +38,18 @@ export function requirePolarProductIdForPlan(plan: PolarPlanSlug, period: Billin
     period === "annual"
       ? plan === "starter"
         ? ids.starterAnnual
-        : ids.proAnnual
+        : plan === "agency"
+          ? ids.agencyAnnual
+          : ids.proAnnual
       : plan === "starter"
         ? ids.starter
-        : ids.pro;
+        : plan === "agency"
+          ? ids.agency
+          : ids.pro;
 
   if (!configured?.trim()) {
     throw new Error(
-      `${envKey} is missing. In Polar → Catalogue, open the product (e.g. "${plan === "starter" ? "Starter" : "Pro"}${period === "annual" ? " (Annual)" : ""}"), copy its Product ID (UUID), paste into .env.local, then restart \`npm run dev\`. Do not use the Share link URL.`,
+      `${envKey} is missing. In Polar → Catalogue, open the product (e.g. "${plan === "starter" ? "Starter" : plan === "agency" ? "Agency" : "Pro"}${period === "annual" ? " (Annual)" : ""}"), copy its Product ID (UUID), paste into .env.local, then restart \`npm run dev\`. Do not use the Share link URL.`,
     );
   }
 

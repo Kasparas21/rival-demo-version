@@ -8,6 +8,7 @@ export function billingPeriodForProductId(productId: string | null | undefined):
   const ids = getPolarProductIds();
   if (ids.starterAnnual && productId === ids.starterAnnual) return "annual";
   if (ids.proAnnual && productId === ids.proAnnual) return "annual";
+  if (ids.agencyAnnual && productId === ids.agencyAnnual) return "annual";
   return "monthly";
 }
 

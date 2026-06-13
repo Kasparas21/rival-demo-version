@@ -43,7 +43,7 @@ function planPriceDisplay(
   return {
     primary: `€${annualMonthlyUsd}`,
     secondary: fillCopyTemplate(labels.billedAnnually, { yearlyUsd: annualYearlyUsd }),
-    listMonthlyUsd: monthlyUsd,
+    listMonthlyUsd: annualMonthlyUsd < monthlyUsd ? monthlyUsd : undefined,
   };
 }
 
@@ -134,7 +134,7 @@ export function LandingPricing({ copy }: Props) {
 
   return (
     <section className="relative overflow-hidden py-16 sm:py-24">
-      <LandingScrollReveal className="relative mx-auto w-full max-w-5xl px-4 text-center sm:px-6">
+      <LandingScrollReveal className="relative mx-auto w-full max-w-6xl px-4 text-center sm:px-6">
         <h2
           id="pricing"
           className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
@@ -196,7 +196,7 @@ export function LandingPricing({ copy }: Props) {
           </div>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-5 text-left sm:mt-12 lg:grid-cols-2 lg:gap-6">
+        <div className="mt-10 grid grid-cols-1 gap-5 text-left sm:mt-12 lg:grid-cols-3 lg:gap-6">
           {copy.plans.map((offer) => (
             <PricingCard key={offer.slug} offer={offer} billing={billing} labels={copy} />
           ))}

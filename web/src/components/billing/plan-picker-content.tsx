@@ -72,6 +72,7 @@ function BillingToggle({
         onClick={() => onChange("annual")}
       >
         {copy.annual}
+        {maxSavingsPct > 0 ? (
         <span
           className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
             billing === "annual"
@@ -81,6 +82,7 @@ function BillingToggle({
         >
           {fillCopyTemplate(copy.savePercentBadge, { percent: maxSavingsPct })}
         </span>
+        ) : null}
       </button>
     </div>
   );
@@ -263,7 +265,7 @@ export function PlanPickerContent({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 text-left md:grid-cols-2 md:gap-5 md:items-stretch">
+      <div className="mt-4 grid grid-cols-1 gap-4 text-left md:grid-cols-2 lg:grid-cols-3 md:gap-5 md:items-stretch">
         {copy.plans.map((offer) => {
           const price = localizedPlanPriceDisplay(offer, billing, copy);
           const checkoutHref = buildCheckoutHref(offer.slug, billing, dashboardNext);

@@ -11,6 +11,8 @@ describe("polarProductIdForPlan", () => {
     vi.stubEnv("POLAR_STARTER_ANNUAL_PRODUCT_ID", "starter-a");
     vi.stubEnv("POLAR_PRO_PRODUCT_ID", "pro-m");
     vi.stubEnv("POLAR_PRO_ANNUAL_PRODUCT_ID", "pro-a");
+    vi.stubEnv("POLAR_AGENCY_PRODUCT_ID", "agency-m");
+    vi.stubEnv("POLAR_AGENCY_ANNUAL_PRODUCT_ID", "agency-a");
     vi.stubEnv("POLAR_PRODUCT_ID", "");
   });
 
@@ -23,10 +25,12 @@ describe("polarProductIdForPlan", () => {
     expect(polarProductIdForPlan("starter", "annual")).toBe("starter-a");
     expect(polarProductIdForPlan("pro", "monthly")).toBe("pro-m");
     expect(polarProductIdForPlan("pro", "annual")).toBe("pro-a");
+    expect(polarProductIdForPlan("agency", "monthly")).toBe("agency-m");
+    expect(polarProductIdForPlan("agency", "annual")).toBe("agency-a");
   });
 
   it("recognizes all configured product ids for webhooks", () => {
-    for (const id of ["starter-m", "starter-a", "pro-m", "pro-a"]) {
+    for (const id of ["starter-m", "starter-a", "pro-m", "pro-a", "agency-m", "agency-a"]) {
       expect(isKnownPolarProductId(id)).toBe(true);
     }
     expect(isKnownPolarProductId("unknown")).toBe(false);

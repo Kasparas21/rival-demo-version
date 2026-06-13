@@ -45,7 +45,8 @@ type CheckoutPageProps = {
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
   const { plan, period: periodParam, next: nextParam } = await searchParams;
-  const planSlug: PolarPlanSlug | null = plan === "starter" || plan === "pro" ? plan : null;
+  const planSlug: PolarPlanSlug | null =
+    plan === "starter" || plan === "pro" || plan === "agency" ? plan : null;
   const period = parseCheckoutPeriod(periodParam);
   const checkoutNext = safeCheckoutNextPath(nextParam);
   const checkoutEntryPath = planSlug ? buildCheckoutHref(planSlug, period, checkoutNext) : "/checkout";

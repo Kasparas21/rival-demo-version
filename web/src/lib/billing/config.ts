@@ -1,6 +1,6 @@
 export const POLAR_PRODUCT_ID_FALLBACK = "a105e33c-ab82-4649-8740-c7a799f654bc";
 
-export type PolarPlanSlug = "starter" | "pro";
+export type PolarPlanSlug = "starter" | "pro" | "agency";
 export type BillingPeriod = "monthly" | "annual";
 
 export function getPolarProductIds(): {
@@ -8,6 +8,8 @@ export function getPolarProductIds(): {
   starterAnnual: string | null;
   pro: string;
   proAnnual: string | null;
+  agency: string | null;
+  agencyAnnual: string | null;
   legacy: string;
 } {
   const legacy = process.env.POLAR_PRODUCT_ID?.trim() || POLAR_PRODUCT_ID_FALLBACK;
@@ -15,7 +17,9 @@ export function getPolarProductIds(): {
   const starterAnnual = process.env.POLAR_STARTER_ANNUAL_PRODUCT_ID?.trim() || null;
   const pro = process.env.POLAR_PRO_PRODUCT_ID?.trim() || legacy;
   const proAnnual = process.env.POLAR_PRO_ANNUAL_PRODUCT_ID?.trim() || null;
-  return { starter, starterAnnual, pro, proAnnual, legacy };
+  const agency = process.env.POLAR_AGENCY_PRODUCT_ID?.trim() || null;
+  const agencyAnnual = process.env.POLAR_AGENCY_ANNUAL_PRODUCT_ID?.trim() || null;
+  return { starter, starterAnnual, pro, proAnnual, agency, agencyAnnual, legacy };
 }
 
 export function polarProductIdForPlan(plan: PolarPlanSlug, period: BillingPeriod = "monthly"): string {
@@ -25,6 +29,13 @@ export function polarProductIdForPlan(plan: PolarPlanSlug, period: BillingPeriod
     if (ids.starter) return ids.starter;
     return ids.legacy;
   }
+  if (plan === "agency") {
+    if (period === "annual" && ids.agencyAnnual) return ids.agencyAnnual;
+    if (ids.agency) return ids.agency;
+    throw new Error(
+      "POLAR_AGENCY_PRODUCT_ID is not configured. Add your Agency product UUID from Polar → Catalogue.",
+    );
+  }
   if (period === "annual" && ids.proAnnual) return ids.proAnnual;
   return ids.pro;
 }
@@ -32,7 +43,7 @@ export function polarProductIdForPlan(plan: PolarPlanSlug, period: BillingPeriod
 export function isKnownPolarProductId(productId: string): boolean {
   const ids = getPolarProductIds();
   const known = new Set(
-    [ids.legacy, ids.starter, ids.starterAnnual, ids.pro, ids.proAnnual].filter(
+    [ids.legacy, ids.starter, ids.starterAnnual, ids.pro, ids.proAnnual, ids.agency, ids.agencyAnnual].filter(
       (id): id is string => Boolean(id?.trim()),
     ),
   );

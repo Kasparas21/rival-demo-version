@@ -78,7 +78,7 @@ type BillingState = {
 
 const emptyLimits: PlanLimitsState = {
   maxWatchedCompetitors: 5,
-  maxOwnBrandWorkspaces: 5,
+  maxOwnBrandWorkspaces: 1,
   maxAdsProcessedPerMonth: 50_000,
   maxSwapsPerMonth: 15,
   csvExportsPerMonth: 0,
@@ -807,6 +807,7 @@ export default function SettingsPage() {
                     { id: "free_trial", label: "Free trial" },
                     { id: "starter", label: "Starter" },
                     { id: "pro", label: "Pro" },
+                    { id: "agency", label: "Agency" },
                     { id: "admin", label: "Admin" },
                   ] as const
                 ).map(({ id, label }) => (

@@ -10,7 +10,8 @@ import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
-import { limitsForTier, type PlanTier } from "@/lib/billing/plan-limits";
+import { limitsForTier, tierAllowsMultipleBrandWorkspaces, type PlanTier } from "@/lib/billing/plan-limits";
+import { buildUpgradeToAgencyHref } from "@/lib/billing/checkout-url";
 import {
   buildCompetitorSidebarHref,
   clearSidebarCompetitorsForBrand,
@@ -124,10 +125,11 @@ function BrandWorkspaceLimitDialog({
   variant,
   onDismiss,
 }: {
-  variant: "trial" | "plan_cap";
+  variant: "trial" | "upgrade_agency" | "plan_cap";
   onDismiss: () => void;
 }) {
   const isTrial = variant === "trial";
+  const isAgencyUpsell = variant === "upgrade_agency";
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-10 sm:items-center sm:justify-center sm:pb-4 sm:pt-4">
       <button
@@ -146,12 +148,18 @@ function BrandWorkspaceLimitDialog({
           id="brand-workspace-limit-title"
           className="text-[17px] font-semibold leading-snug tracking-tight text-[#1a1a2e]"
         >
-          {isTrial ? "Another brand workspace isn’t available on free trial" : "Brand workspace limit reached"}
+          {isAgencyUpsell
+            ? "Multi-brand workspaces are on the Agency plan"
+            : isTrial
+              ? "Another brand workspace isn’t available on free trial"
+              : "Brand workspace limit reached"}
         </p>
         <p className="mt-3 text-[14px] leading-relaxed text-[#52525b]">
-          {isTrial
-            ? "Your free trial includes one own-brand workspace. Upgrade to a paid plan to add more brands and keep a separate competitor list for each client."
-            : "You’ve reached the maximum number of brand workspaces on your current plan."}
+          {isAgencyUpsell
+            ? "Manage up to 5 client brands, each with its own competitor list and workspace. Upgrade to Agency to add another brand."
+            : isTrial
+              ? "Your free trial includes one own-brand workspace. Upgrade to Agency to manage multiple client brands with separate competitor lists."
+              : "You’ve reached the maximum number of brand workspaces on your Agency plan."}
         </p>
         <div className="mt-6 flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
           <button
@@ -162,11 +170,11 @@ function BrandWorkspaceLimitDialog({
             Got it
           </button>
           <Link
-            href="/checkout"
+            href={isAgencyUpsell || isTrial ? buildUpgradeToAgencyHref() : "/checkout"}
             className="flex w-full items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-center text-[14px] font-medium text-white transition-colors hover:bg-[#2d2d44] sm:w-auto"
             onClick={onDismiss}
           >
-            View plans
+            {isAgencyUpsell || isTrial ? "Upgrade to Agency" : "View plans"}
           </Link>
         </div>
       </div>
@@ -279,9 +287,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const [maxOwnBrandWorkspaces, setMaxOwnBrandWorkspacesState] = useState(
     limitsForTier("free_trial").maxOwnBrandWorkspaces,
   );
-  const [brandWorkspaceLimitDialog, setBrandWorkspaceLimitDialog] = useState<"trial" | "plan_cap" | null>(
-    null,
-  );
+  const [brandWorkspaceLimitDialog, setBrandWorkspaceLimitDialog] = useState<
+    "trial" | "upgrade_agency" | "plan_cap" | null
+  >(null);
 
   const refreshSavedCompetitors = useCallback(() => {
     const activeId =
@@ -464,9 +472,21 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   const previousActiveBrandIdRef = useRef<string | null>(null);
 
+  const openBrandWorkspaceLimitDialog = useCallback(() => {
+    if (tierAllowsMultipleBrandWorkspaces(billingPlanTier)) {
+      setBrandWorkspaceLimitDialog("plan_cap");
+      return;
+    }
+    setBrandWorkspaceLimitDialog(billingPlanTier === "free_trial" ? "trial" : "upgrade_agency");
+  }, [billingPlanTier]);
+
   const handleAddBrand = useCallback(async () => {
+    if (!tierAllowsMultipleBrandWorkspaces(billingPlanTier)) {
+      openBrandWorkspaceLimitDialog();
+      return;
+    }
     if (brands.length >= maxOwnBrandWorkspaces) {
-      setBrandWorkspaceLimitDialog(billingPlanTier === "free_trial" ? "trial" : "plan_cap");
+      setBrandWorkspaceLimitDialog("plan_cap");
       return;
     }
     try {
@@ -495,7 +515,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       };
       if (!res.ok || !json.brand) {
         if (json.code === "brand_workspace_limit") {
-          setBrandWorkspaceLimitDialog(billingPlanTier === "free_trial" ? "trial" : "plan_cap");
+          openBrandWorkspaceLimitDialog();
         }
         return;
       }
@@ -516,6 +536,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     brands.length,
     billingPlanTier,
     maxOwnBrandWorkspaces,
+    openBrandWorkspaceLimitDialog,
     refreshBillingUsage,
     refreshSavedCompetitors,
     router,
@@ -1040,7 +1061,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   onClick={handleAddBrand}
-                  disabled={brands.length >= maxOwnBrandWorkspaces}
+                  disabled={
+                    tierAllowsMultipleBrandWorkspaces(billingPlanTier) &&
+                    brands.length >= maxOwnBrandWorkspaces
+                  }
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] font-semibold text-[#343434] transition-colors hover:bg-[#DDF1FD]/25 disabled:cursor-not-allowed disabled:opacity-45"
                 >
                   <Plus className="size-3.5" />

@@ -6,6 +6,7 @@ import { syncWorkspaceBrandLibraryContextFromSetup } from "@/lib/account/sync-wo
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Json } from "@/lib/supabase/types";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { tierAllowsMultipleBrandWorkspaces } from "@/lib/billing/plan-limits";
 
 const MISSING_ADS_PROFILE_SETUP_HELP =
   "The database is missing column brands.ads_profile_setup. In the Supabase dashboard open SQL Editor and run: alter table public.brands add column if not exists ads_profile_setup jsonb; Wait a few seconds for the API schema cache to refresh (or reload the project). Full migration: supabase/migrations/20260511120000_brands_ads_workspace_competitor.sql";
@@ -63,10 +64,11 @@ export async function POST(req: Request) {
     .eq("user_id", user.id);
 
   if (!countError && (count ?? 0) >= maxBrands) {
-    const message =
-      entitlement.planTier === "free_trial"
-        ? "Free trial includes one brand workspace. Upgrade to add more brands."
-        : `You can add up to ${maxBrands} brand workspaces.`;
+    const message = !tierAllowsMultipleBrandWorkspaces(entitlement.planTier)
+      ? entitlement.planTier === "free_trial"
+        ? "Free trial includes one brand workspace. Upgrade to Agency to add more brands."
+        : "Multiple brand workspaces require the Agency plan. Upgrade to add more brands."
+      : `You can add up to ${maxBrands} brand workspaces on your Agency plan.`;
     return NextResponse.json(
       { error: message, code: "brand_workspace_limit" },
       { status: 400 }

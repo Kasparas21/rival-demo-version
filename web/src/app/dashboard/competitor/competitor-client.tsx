@@ -2464,7 +2464,7 @@ function CompetitorDashboardBody({
   const [billingAllowAlertRules, setBillingAllowAlertRules] = useState(false);
   const [billingAllowAlertEmail, setBillingAllowAlertEmail] = useState(false);
   const [billingPlanTier, setBillingPlanTier] = useState<
-    "free_trial" | "starter" | "pro" | "admin"
+    "free_trial" | "starter" | "pro" | "agency" | "admin"
   >("free_trial");
   const [billingStatus, setBillingStatus] = useState("none");
   const [alertsUnreadCount, setAlertsUnreadCount] = useState(0);
@@ -2480,7 +2480,7 @@ function CompetitorDashboardBody({
         billing?: {
           limits?: { allowManualRefresh?: boolean; allowAlertRules?: boolean; allowAlertEmail?: boolean };
           isUnlimited?: boolean;
-          planTier?: "free_trial" | "starter" | "pro" | "admin";
+          planTier?: "free_trial" | "starter" | "pro" | "agency" | "admin";
           status?: string;
         };
       }) => {

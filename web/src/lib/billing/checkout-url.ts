@@ -66,6 +66,11 @@ export function parseCheckoutPeriod(raw: string | null | undefined): BillingPeri
   return raw?.trim().toLowerCase() === "annual" ? "annual" : "monthly";
 }
 
+/** Agency upgrade CTA — Polar product wired when `POLAR_AGENCY_PRODUCT_ID` is set. */
+export function buildUpgradeToAgencyHref(next?: string | null): string {
+  return buildCheckoutHref("agency", "monthly", next);
+}
+
 /** Pro upgrade CTA: prorated Polar upgrade for active Starter, checkout for everyone else. */
 export function buildUpgradeToProHref(options: {
   planTier: PlanTier;

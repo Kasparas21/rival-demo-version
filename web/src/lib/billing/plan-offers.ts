@@ -1,6 +1,6 @@
 import type { BillingPeriod } from "@/lib/billing/config";
 
-export type PlanOfferSlug = "starter" | "pro";
+export type PlanOfferSlug = "starter" | "pro" | "agency";
 
 export type PlanOffer = {
   slug: PlanOfferSlug;
@@ -17,16 +17,16 @@ export type PlanOffer = {
 export const PLAN_TRIAL_BADGE = "7-day free trial";
 
 export const PLAN_PICKER_INTRO =
-  "Both plans include a 7-day free trial — full product, card required, cancel anytime.";
+  "All plans include a 7-day free trial — full product, card required, cancel anytime.";
 
 export const PLAN_OFFERS: PlanOffer[] = [
   {
     slug: "starter",
     name: "Starter",
     summary: "For solo media buyers tracking their core market rivals.",
-    monthlyUsd: 79,
-    annualMonthlyUsd: 59,
-    annualYearlyUsd: 708,
+    monthlyUsd: 40,
+    annualMonthlyUsd: 40,
+    annualYearlyUsd: 480,
     features: [
       "5 competitors tracked",
       "All 6 platforms — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
@@ -35,21 +35,21 @@ export const PLAN_OFFERS: PlanOffer[] = [
       "Strategy Map · Activity Score · Copy Vault · Timeline · Landing Pages · Comparison",
       "Weekly Three Moves AI report",
       "Monday digest email",
-      "1 seat · up to 15 swaps/month",
+      "1 brand workspace · up to 15 swaps/month",
     ],
   },
   {
     slug: "pro",
     name: "Pro",
-    summary: "For small agencies tracking competitors across multiple clients.",
-    monthlyUsd: 149,
-    annualMonthlyUsd: 129,
-    annualYearlyUsd: 1548,
+    summary: "For teams that need more competitors, exports, and on-demand refresh.",
+    monthlyUsd: 60,
+    annualMonthlyUsd: 60,
+    annualYearlyUsd: 720,
     plusLabel: "Everything in Starter, plus",
     popular: true,
     features: [
       "15 competitors tracked",
-      "2 seats · up to 50 swaps/month",
+      "1 brand workspace · up to 50 swaps/month",
       "Priority refresh",
       "CSV exports",
       "Manual refresh on demand",
@@ -57,11 +57,27 @@ export const PLAN_OFFERS: PlanOffer[] = [
       "Emerging Angle Alerts",
     ],
   },
+  {
+    slug: "agency",
+    name: "Agency",
+    summary: "For agencies managing multiple client brands in one account.",
+    monthlyUsd: 100,
+    annualMonthlyUsd: 100,
+    annualYearlyUsd: 1200,
+    plusLabel: "Everything in Pro, plus",
+    features: [
+      "Up to 5 brand workspaces — separate competitor lists per client",
+      "75 competitor slots (shared across all brands)",
+      "All Pro features on every brand",
+      "CSV exports · manual refresh · alert rules",
+    ],
+  },
 ];
 
 export function annualSavingsPercent(offer: PlanOffer): number {
   const annualFull = offer.monthlyUsd * 12;
-  return Math.round((1 - offer.annualYearlyUsd / annualFull) * 100);
+  if (annualFull <= 0) return 0;
+  return Math.max(0, Math.round((1 - offer.annualYearlyUsd / annualFull) * 100));
 }
 
 /** Highest annual savings % across plans (for billing toggle badge). */
@@ -89,11 +105,12 @@ export function planPriceDisplay(
   }
 
   const pct = annualSavingsPercent(offer);
+  const showStrike = annualMonthlyUsd < monthlyUsd;
   return {
     primary: `€${annualMonthlyUsd}`,
     secondary: `Billed annually (€${annualYearlyUsd}/year)`,
-    listMonthlyUsd: monthlyUsd,
-    savingsPercent: pct,
+    listMonthlyUsd: showStrike ? monthlyUsd : undefined,
+    savingsPercent: pct > 0 ? pct : undefined,
     annualYearlyUsd,
   };
 }

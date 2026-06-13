@@ -33,11 +33,12 @@ export function localizedPlanPriceDisplay(
   }
 
   const pct = annualSavingsPercent(offer);
+  const showStrike = annualMonthlyUsd < monthlyUsd;
   return {
     primary: `€${annualMonthlyUsd}`,
     secondary: fillCopyTemplate(copy.billedAnnually, { yearlyUsd: annualYearlyUsd }),
-    listMonthlyUsd: monthlyUsd,
-    savingsPercent: pct,
+    listMonthlyUsd: showStrike ? monthlyUsd : undefined,
+    savingsPercent: pct > 0 ? pct : undefined,
     annualYearlyUsd,
   };
 }

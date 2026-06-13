@@ -75,6 +75,12 @@ function tierFromPolarProductId(productId: string | null | undefined): PlanTier 
   ) {
     return "pro";
   }
+  if (
+    (ids.agency && productId === ids.agency) ||
+    (ids.agencyAnnual && productId === ids.agencyAnnual)
+  ) {
+    return "agency";
+  }
   return null;
 }
 
@@ -114,19 +120,21 @@ export function resolvePlanTier(params: {
 export function hasAccessForTier(tier: PlanTier, status: string, isUnlimited: boolean): boolean {
   if (isUnlimited && tier === "admin") return true;
   if (tier === "free_trial") return true;
-  if (tier === "starter" || tier === "pro") {
+  if (tier === "starter" || tier === "pro" || tier === "agency") {
     return status === "active" || status === "trialing";
   }
   return false;
 }
 
-/** Active Polar Starter/Pro subscription (not workspace free-trial tier). */
+/** Active Polar paid subscription (Starter, Pro, or Agency — not workspace free-trial tier). */
 export function hasActivePaidSubscription(
   billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
 ): boolean {
   if (billing.isUnlimited) return true;
   return (
-    (billing.planTier === "starter" || billing.planTier === "pro") &&
+    (billing.planTier === "starter" ||
+      billing.planTier === "pro" ||
+      billing.planTier === "agency") &&
     isSubscriptionStatusAllowed(billing.status)
   );
 }
@@ -276,7 +284,7 @@ export function applyPolarTrialCompetitorCap(
   planTier: PlanTier,
 ): PlanLimits {
   if (status !== "trialing") return limits;
-  if (planTier !== "starter" && planTier !== "pro") return limits;
+  if (planTier !== "starter" && planTier !== "pro" && planTier !== "agency") return limits;
 
   const trialCap = limitsForTier("free_trial").maxWatchedCompetitors;
   if (limits.maxWatchedCompetitors <= trialCap) return limits;

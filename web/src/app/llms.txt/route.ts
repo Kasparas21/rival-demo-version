@@ -18,8 +18,8 @@ export async function GET() {
 
   const lines = [
     "# Rival (spy-rival.com)",
-    "> Rival is multi-platform competitor advertising intelligence: track competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat. Plans: Starter $" +
-      `${SCHEMA_PLAN_PRICING_USD.starter}/mo, Pro $${SCHEMA_PLAN_PRICING_USD.pro}/mo. Key features: Strategy Map, Activity Score, Three Moves, Copy Vault, competitor timelines, and landing-page archive.`,
+    "> Rival is multi-platform competitor advertising intelligence: track competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat. Plans: Starter €" +
+      `${SCHEMA_PLAN_PRICING_USD.starter}/mo, Pro €${SCHEMA_PLAN_PRICING_USD.pro}/mo, Agency €${SCHEMA_PLAN_PRICING_USD.agency}/mo. Key features: Strategy Map, Activity Score, Three Moves, Copy Vault, competitor timelines, and landing-page archive.`,
     "",
     "## Key pages",
     `- Homepage: ${SITE_URL}/`,
