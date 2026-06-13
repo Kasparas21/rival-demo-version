@@ -90,10 +90,10 @@ export const landingCopyDe: LandingCopy = {
     painPoints: ["Tabellen-Klebearbeit", "Tab-Wechsel", "Montags-Raten"],
     painPointsMobile: ["Tabellen", "Tab-Chaos", "Raten"],
     payTodayLabel: "Stack-Kosten heute",
-    payTodayAmount: "€350",
+    payTodayAmount: "£350",
     payTodaySub: "/Mo. · ~4 Std. Klebearbeit / Woche",
     payTodayBullets: [],
-    payTodayFooter: "€270+/Mo. mehr als Rival",
+    payTodayFooter: "£270+/Mo. mehr als Rival",
     payTodayFooterSub: "6 Logins · keine Strategy Map",
     bottomBadge: "6 Tools · null Ertrag",
     withTitle: "Mit Rival",
@@ -118,9 +118,9 @@ export const landingCopyDe: LandingCopy = {
     ],
     onePlanLabel: "Ein Plan · alle 6 Plattformen",
     zeroGlue: "Null Klebearbeit · ein Login",
-    saveLabel: "€270+/Monat sparen vs. 6-Tool-Stack",
+    saveLabel: "£270+/Monat sparen vs. 6-Tool-Stack",
     saveSub: "7-Tage-Test · 1 Wettbewerber · jederzeit kündbar",
-    saveSubMobile: "€270+/Monat sparen · 7-Tage-Test",
+    saveSubMobile: "£270+/Monat sparen · 7-Tage-Test",
     trialCta: "KOSTENLOS TESTEN",
   },
   reviews: {
@@ -155,7 +155,7 @@ export const landingCopyDe: LandingCopy = {
     popular: "Beliebt",
     perMonth: "/Monat",
     billedMonthly: "Monatlich abgerechnet",
-    billedAnnually: "Jährlich abgerechnet (€{yearlyUsd}/Jahr)",
+    billedAnnually: "Jährlich abgerechnet (£{yearlyUsd}/Jahr)",
     plans: [
       {
         slug: "starter",
@@ -218,7 +218,7 @@ export const landingCopyDe: LandingCopy = {
     items: [
       {
         q: "Wie funktioniert der Gratis-Test?",
-        a: "Mit Karte anmelden und 7 Tage vollen Rival-Zugang mit 1 Wettbewerber über alle 6 Plattformen. In den ersten 7 Tagen jederzeit kündigen — keine Abbuchung. Danach ab €40/Monat (Starter) bzw. €384/Jahr (20 % Rabatt) bei jährlicher Buchung. Ein-Klick-Kündigung, keine Retention-Calls.",
+        a: "Mit Karte anmelden und 7 Tage vollen Rival-Zugang mit 1 Wettbewerber über alle 6 Plattformen. In den ersten 7 Tagen jederzeit kündigen — keine Abbuchung. Danach ab £40/Monat (Starter) bzw. £384/Jahr (20 % Rabatt) bei jährlicher Buchung. Ein-Klick-Kündigung, keine Retention-Calls.",
       },
       {
         q: "Worin unterscheidet sich Rival von Foreplay oder AdSpy?",
@@ -281,8 +281,8 @@ export const landingCopyDe: LandingCopy = {
     titleLine1: "sehen sie, was ihre",
     titleHighlight: "wettbewerber schalten",
     subtitle: "7 tage kostenlos testen.",
-    monthlyPrice: "€40/Mo.",
-    annualPrice: "€32/Mo.",
+    monthlyPrice: "£40/Mo.",
+    annualPrice: "£32/Mo.",
     monthlyLabel: "Monatlich",
     annualLabel: "Jährlich",
     annualSaveBadge: "20 % sparen",

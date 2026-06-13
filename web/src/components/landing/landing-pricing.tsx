@@ -8,6 +8,7 @@ import { landingSectionHeadlineClasses } from "@/components/landing/landing-head
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import type { BillingPeriod } from "@/lib/billing/config";
+import { formatPlanPrice } from "@/lib/billing/plan-price-format";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { LandingCopy, LandingPlanOffer } from "@/lib/i18n/landing/types";
 
@@ -35,13 +36,13 @@ function planPriceDisplay(
 
   if (billing === "monthly") {
     return {
-      primary: `€${monthlyUsd}`,
+      primary: formatPlanPrice(monthlyUsd),
       secondary: labels.billedMonthly,
     };
   }
 
   return {
-    primary: `€${annualMonthlyUsd}`,
+    primary: formatPlanPrice(annualMonthlyUsd),
     secondary: fillCopyTemplate(labels.billedAnnually, { yearlyUsd: annualYearlyUsd }),
     listMonthlyUsd: annualMonthlyUsd < monthlyUsd ? monthlyUsd : undefined,
   };
@@ -85,7 +86,7 @@ function PricingCard({
       <div className="mt-5">
         {isAnnual && price.listMonthlyUsd != null ? (
           <p className="text-sm font-medium text-gray-400 line-through">
-            €{price.listMonthlyUsd} {labels.perMonth}
+            {formatPlanPrice(price.listMonthlyUsd)} {labels.perMonth}
           </p>
         ) : null}
         <div className="mt-1 flex flex-wrap items-baseline gap-1.5">

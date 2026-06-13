@@ -90,10 +90,10 @@ export const landingCopyNl: LandingCopy = {
     painPoints: ["Spreadsheet-lijm", "Tabblad-wisselen", "Maandag giswerk"],
     painPointsMobile: ["Spreadsheets", "Tab-chaos", "Giswerk"],
     payTodayLabel: "Stack-kosten vandaag",
-    payTodayAmount: "€350",
+    payTodayAmount: "£350",
     payTodaySub: "/mnd · ~4 uur lijmwerk / week",
     payTodayBullets: [],
-    payTodayFooter: "€270+/mnd meer dan Rival",
+    payTodayFooter: "£270+/mnd meer dan Rival",
     payTodayFooterSub: "6 logins · geen strategy map",
     bottomBadge: "6 tools · nul opbrengst",
     withTitle: "Met Rival",
@@ -118,9 +118,9 @@ export const landingCopyNl: LandingCopy = {
     ],
     onePlanLabel: "Eén plan · alle 6 platformen",
     zeroGlue: "Geen lijmwerk · één login",
-    saveLabel: "Bespaar €270+/maand vs. 6-tool stack",
+    saveLabel: "Bespaar £270+/maand vs. 6-tool stack",
     saveSub: "7-daagse proef · 1 concurrent · altijd opzegbaar",
-    saveSubMobile: "Bespaar €270+/maand · 7-daagse proef",
+    saveSubMobile: "Bespaar £270+/maand · 7-daagse proef",
     trialCta: "GRATIS PROBEREN",
   },
   reviews: {
@@ -155,7 +155,7 @@ export const landingCopyNl: LandingCopy = {
     popular: "Populair",
     perMonth: "/maand",
     billedMonthly: "Maandelijks gefactureerd",
-    billedAnnually: "Jaarlijks gefactureerd (€{yearlyUsd}/jaar)",
+    billedAnnually: "Jaarlijks gefactureerd (£{yearlyUsd}/jaar)",
     plans: [
       {
         slug: "starter",
@@ -218,7 +218,7 @@ export const landingCopyNl: LandingCopy = {
     items: [
       {
         q: "Hoe werkt de gratis proef?",
-        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen — geen kosten. Daarna vanaf €40/maand (Starter) of €384/jaar (20% korting) bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
+        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen — geen kosten. Daarna vanaf £40/maand (Starter) of £384/jaar (20% korting) bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
       },
       {
         q: "Hoe verschilt Rival van Foreplay of AdSpy?",
@@ -281,8 +281,8 @@ export const landingCopyNl: LandingCopy = {
     titleLine1: "zie wat je",
     titleHighlight: "concurrenten draaien",
     subtitle: "7 dagen gratis proberen.",
-    monthlyPrice: "€40/mnd",
-    annualPrice: "€32/mnd",
+    monthlyPrice: "£40/mnd",
+    annualPrice: "£32/mnd",
     monthlyLabel: "Maandelijks",
     annualLabel: "Jaarlijks",
     annualSaveBadge: "Bespaar 20%",

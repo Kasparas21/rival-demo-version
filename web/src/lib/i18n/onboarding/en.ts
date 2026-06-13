@@ -93,7 +93,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   popular: "Popular",
   includes: "Includes",
   billedMonthly: "Billed monthly",
-  billedAnnually: "Billed annually (€{yearlyUsd}/year)",
+  billedAnnually: "Billed annually (£{yearlyUsd}/year)",
   tester: {
     title: "Your tester access",
     body: "Pro is included for your test cohort — 100% discount already applied. No payment required.",
@@ -101,7 +101,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
     complimentary: "Complimentary tester Pro",
     activate: "Activate without payment (no card)",
     activating: "Activating…",
-    listPricePerMonth: "€{amount}/mo",
+    listPricePerMonth: "£{amount}/mo",
     freePerMonth: "/mo — 100% discount applied",
     claimError: "Could not activate tester access.",
     networkError: "Network error — try again.",

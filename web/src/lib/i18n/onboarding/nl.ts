@@ -97,7 +97,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   popular: "Populair",
   includes: "Inclusief",
   billedMonthly: "Maandelijks gefactureerd",
-  billedAnnually: "Jaarlijks gefactureerd (€{yearlyUsd}/jaar)",
+  billedAnnually: "Jaarlijks gefactureerd (£{yearlyUsd}/jaar)",
   tester: {
     title: "Uw tester-toegang",
     body: "Pro is inbegrepen voor uw testgroep — 100% korting al toegepast. Geen betaling nodig.",
@@ -105,7 +105,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
     complimentary: "Gratis tester Pro",
     activate: "Activeren zonder betaling (geen kaart)",
     activating: "Activeren…",
-    listPricePerMonth: "€{amount}/mnd",
+    listPricePerMonth: "£{amount}/mnd",
     freePerMonth: "/mnd — 100% korting toegepast",
     claimError: "Tester-toegang kon niet worden geactiveerd.",
     networkError: "Netwerkfout — probeer opnieuw.",

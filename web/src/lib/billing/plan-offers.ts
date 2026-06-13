@@ -1,4 +1,5 @@
 import type { BillingPeriod } from "@/lib/billing/config";
+import { formatPlanPrice } from "@/lib/billing/plan-price-format";
 
 export type PlanOfferSlug = "starter" | "pro" | "agency";
 
@@ -112,7 +113,7 @@ export function planPriceDisplay(
 
   if (billing === "monthly") {
     return {
-      primary: `€${monthlyUsd}`,
+      primary: formatPlanPrice(monthlyUsd),
       secondary: "Billed monthly",
     };
   }
@@ -120,8 +121,8 @@ export function planPriceDisplay(
   const pct = annualSavingsPercent(offer);
   const showStrike = annualMonthlyUsd < monthlyUsd;
   return {
-    primary: `€${annualMonthlyUsd}`,
-    secondary: `Billed annually (€${annualYearlyUsd}/year)`,
+    primary: formatPlanPrice(annualMonthlyUsd),
+    secondary: `Billed annually (${formatPlanPrice(annualYearlyUsd)}/year)`,
     listMonthlyUsd: showStrike ? monthlyUsd : undefined,
     savingsPercent: pct > 0 ? pct : undefined,
     annualYearlyUsd,

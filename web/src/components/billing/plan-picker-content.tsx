@@ -7,6 +7,7 @@ import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { BillingPeriod } from "@/lib/billing/config";
+import { formatPlanPrice } from "@/lib/billing/plan-price-format";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import { onboardingCopyEn } from "@/lib/i18n/onboarding/en";
 import type { PlanPickerCopy } from "@/lib/i18n/onboarding/types";
@@ -178,7 +179,7 @@ function TesterPlanPicker({
               {fillCopyTemplate(t.listPricePerMonth, { amount: proOffer.monthlyUsd })}
             </p>
             <div className="flex flex-wrap items-baseline gap-1.5">
-              <span className="text-[1.65rem] font-bold leading-none tracking-tight text-gray-900">€0</span>
+              <span className="text-[1.65rem] font-bold leading-none tracking-tight text-gray-900">{formatPlanPrice(0)}</span>
               <span className="text-[13px] font-medium text-gray-500">{t.freePerMonth}</span>
             </div>
           </div>
@@ -289,7 +290,7 @@ export function PlanPickerContent({
               <div className="mt-3">
                 {isAnnual && price.listMonthlyUsd != null ? (
                   <p className="text-[13px] font-medium text-gray-400 line-through">
-                    €{price.listMonthlyUsd}
+                    {formatPlanPrice(price.listMonthlyUsd)}
                     {copy.perMonth}
                   </p>
                 ) : null}

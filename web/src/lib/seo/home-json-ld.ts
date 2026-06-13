@@ -1,4 +1,5 @@
 import type { LandingCopy } from "@/lib/i18n/landing/types";
+import { PLAN_PRICE_CURRENCY } from "@/lib/billing/plan-price-format";
 import { ORGANIZATION_SAME_AS, SCHEMA_BRAND_NAME, SITE_URL } from "@/lib/seo/site";
 
 export function organizationJsonLd() {
@@ -38,11 +39,11 @@ export function softwareApplicationJsonLd(copy: LandingCopy) {
           "@type": "Offer",
           name: copy.jsonLd.starterName,
           price: String(starter.monthlyUsd),
-          priceCurrency: "EUR",
+          priceCurrency: PLAN_PRICE_CURRENCY,
           priceSpecification: {
             "@type": "UnitPriceSpecification",
             price: String(starter.monthlyUsd),
-            priceCurrency: "EUR",
+            priceCurrency: PLAN_PRICE_CURRENCY,
             billingIncrement: 1,
             unitText: "MONTH",
           },
@@ -53,11 +54,11 @@ export function softwareApplicationJsonLd(copy: LandingCopy) {
           "@type": "Offer",
           name: copy.jsonLd.proName,
           price: String(pro.monthlyUsd),
-          priceCurrency: "EUR",
+          priceCurrency: PLAN_PRICE_CURRENCY,
           priceSpecification: {
             "@type": "UnitPriceSpecification",
             price: String(pro.monthlyUsd),
-            priceCurrency: "EUR",
+            priceCurrency: PLAN_PRICE_CURRENCY,
             billingIncrement: 1,
             unitText: "MONTH",
           },
@@ -68,11 +69,11 @@ export function softwareApplicationJsonLd(copy: LandingCopy) {
           "@type": "Offer",
           name: copy.jsonLd.agencyName,
           price: String(agency.monthlyUsd),
-          priceCurrency: "EUR",
+          priceCurrency: PLAN_PRICE_CURRENCY,
           priceSpecification: {
             "@type": "UnitPriceSpecification",
             price: String(agency.monthlyUsd),
-            priceCurrency: "EUR",
+            priceCurrency: PLAN_PRICE_CURRENCY,
             billingIncrement: 1,
             unitText: "MONTH",
           },

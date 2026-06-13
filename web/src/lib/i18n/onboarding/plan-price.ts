@@ -1,4 +1,5 @@
 import type { BillingPeriod } from "@/lib/billing/config";
+import { formatPlanPrice } from "@/lib/billing/plan-price-format";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { LandingPlanOffer } from "@/lib/i18n/landing/types";
 import type { PlanPickerCopy } from "@/lib/i18n/onboarding/types";
@@ -27,7 +28,7 @@ export function localizedPlanPriceDisplay(
 
   if (billing === "monthly") {
     return {
-      primary: `€${monthlyUsd}`,
+      primary: formatPlanPrice(monthlyUsd),
       secondary: copy.billedMonthly,
     };
   }
@@ -35,7 +36,7 @@ export function localizedPlanPriceDisplay(
   const pct = annualSavingsPercent(offer);
   const showStrike = annualMonthlyUsd < monthlyUsd;
   return {
-    primary: `€${annualMonthlyUsd}`,
+    primary: formatPlanPrice(annualMonthlyUsd),
     secondary: fillCopyTemplate(copy.billedAnnually, { yearlyUsd: annualYearlyUsd }),
     listMonthlyUsd: showStrike ? monthlyUsd : undefined,
     savingsPercent: pct > 0 ? pct : undefined,

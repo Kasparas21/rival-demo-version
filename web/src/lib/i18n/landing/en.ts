@@ -204,10 +204,10 @@ export const landingCopyEn: LandingCopy = {
     painPoints: ["Spreadsheet glue", "Tab switching", "Monday guesswork"],
     painPointsMobile: ["Spreadsheets", "Tab chaos", "Guesswork"],
     payTodayLabel: "Stack cost today",
-    payTodayAmount: "€350",
+    payTodayAmount: "£350",
     payTodaySub: "/mo · ~4 hrs glue / week",
     payTodayBullets: [],
-    payTodayFooter: "€270+/mo more than Rival",
+    payTodayFooter: "£270+/mo more than Rival",
     payTodayFooterSub: "6 logins · no strategy map",
     bottomBadge: "6 tools · zero payoff",
     withTitle: "With Rival",
@@ -231,12 +231,12 @@ export const landingCopyEn: LandingCopy = {
       "One login — no per-platform fees",
     ],
     onePlanLabel: "One plan · all 6 platforms",
-    price: "€40",
+    price: "£40",
     priceSuffix: "/mo",
     zeroGlue: "Zero glue work · one login",
-    saveLabel: "Save €270+/mo vs a 6-tool stack",
+    saveLabel: "Save £270+/mo vs a 6-tool stack",
     saveSub: "7-day trial · 1 competitor · cancel anytime",
-    saveSubMobile: "Save €270+/mo · 7-day trial",
+    saveSubMobile: "Save £270+/mo · 7-day trial",
     trialCta: "TRY FOR FREE",
     stackTools: [
       { name: "AdLibrary.com", iconKey: "search", iconClass: "text-[#2563eb]", iconBg: "bg-[#dbeafe]" },
@@ -313,7 +313,7 @@ export const landingCopyEn: LandingCopy = {
     popular: "Popular",
     perMonth: "/month",
     billedMonthly: "Billed monthly",
-    billedAnnually: "Billed annually (€{yearlyUsd}/year)",
+    billedAnnually: "Billed annually (£{yearlyUsd}/year)",
     plans: [
       {
         slug: "starter",
@@ -376,7 +376,7 @@ export const landingCopyEn: LandingCopy = {
     items: [
       {
         q: "How does the free trial work?",
-        a: "Sign up with your card and get 7 days of full Rival access tracking 1 competitor across all 6 platforms. Cancel anytime in the first 7 days and you won't be charged. If you continue, you're billed from €40/month on Starter (€384/year — 20% off — if you choose annual). One-click cancel, no retention calls.",
+        a: "Sign up with your card and get 7 days of full Rival access tracking 1 competitor across all 6 platforms. Cancel anytime in the first 7 days and you won't be charged. If you continue, you're billed from £40/month on Starter (£384/year — 20% off — if you choose annual). One-click cancel, no retention calls.",
       },
       {
         q: "How is Rival different from Foreplay or AdSpy?",
@@ -429,8 +429,8 @@ export const landingCopyEn: LandingCopy = {
     titleLine1: "see what your",
     titleHighlight: "competitors run",
     subtitle: "free 7-day trial.",
-    monthlyPrice: "€40/mo",
-    annualPrice: "€32/mo",
+    monthlyPrice: "£40/mo",
+    annualPrice: "£32/mo",
     monthlyLabel: "Monthly",
     annualLabel: "Annual",
     annualSaveBadge: "Save 20%",

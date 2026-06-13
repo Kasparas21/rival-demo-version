@@ -2,6 +2,7 @@ import { fetchSanity } from "@/lib/sanity/client";
 import { postsQuery } from "@/lib/sanity/queries";
 import type { BlogPostListItem } from "@/lib/sanity/types";
 import { SCHEMA_PLAN_PRICING_USD } from "@/lib/seo/schema-pricing";
+import { PLAN_PRICE_SYMBOL } from "@/lib/billing/plan-price-format";
 import { SEO_FOOTER_BLOG_POSTS } from "@/lib/seo/important-blog-posts";
 import { SITE_URL } from "@/lib/seo/site";
 import { truncateExcerpt } from "@/lib/sanity/format";
@@ -18,8 +19,8 @@ export async function GET() {
 
   const lines = [
     "# Rival (spy-rival.com)",
-    "> Rival is multi-platform competitor advertising intelligence: track competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat. Plans: Starter €" +
-      `${SCHEMA_PLAN_PRICING_USD.starter}/mo, Pro €${SCHEMA_PLAN_PRICING_USD.pro}/mo, Agency €${SCHEMA_PLAN_PRICING_USD.agency}/mo. Key features: Strategy Map, Activity Score, Three Moves, Copy Vault, competitor timelines, and landing-page archive.`,
+    `> Rival is multi-platform competitor advertising intelligence: track competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat. Plans: Starter ${PLAN_PRICE_SYMBOL}` +
+      `${SCHEMA_PLAN_PRICING_USD.starter}/mo, Pro ${PLAN_PRICE_SYMBOL}${SCHEMA_PLAN_PRICING_USD.pro}/mo, Agency ${PLAN_PRICE_SYMBOL}${SCHEMA_PLAN_PRICING_USD.agency}/mo. Key features: Strategy Map, Activity Score, Three Moves, Copy Vault, competitor timelines, and landing-page archive.`,
     "",
     "## Key pages",
     `- Homepage: ${SITE_URL}/`,
