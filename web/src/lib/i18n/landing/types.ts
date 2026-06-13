@@ -13,6 +13,11 @@ export type LandingReview = {
   text: string;
 };
 
+export type LandingPlanMetricHighlight = {
+  count: string;
+  label: string;
+};
+
 export type LandingPlanOffer = {
   slug: "starter" | "pro" | "agency";
   name: string;
@@ -20,6 +25,10 @@ export type LandingPlanOffer = {
   monthlyUsd: number;
   annualMonthlyUsd: number;
   annualYearlyUsd: number;
+  /** Strikethrough "was" price on monthly billing (e.g. launch discount). */
+  originalMonthlyUsd?: number;
+  /** Primary decision metric — rendered large above the feature list. */
+  metricHighlight?: LandingPlanMetricHighlight;
   features: string[];
   plusLabel?: string;
   popular?: boolean;
@@ -155,8 +164,11 @@ export type LandingCopy = {
     planIncludes: string;
     footnote: string;
     trialCta: string;
-    popular: string;
+    popularBadge: string;
+    popularClaim: string;
     perMonth: string;
+    /** Template: `{price}` — per-competitor unit cost under the metric highlight. */
+    perCompetitor: string;
     billedMonthly: string;
     /** Template: `{yearlyUsd}` */
     billedAnnually: string;
