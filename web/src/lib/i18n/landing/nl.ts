@@ -9,16 +9,6 @@ export const landingCopyNl: LandingCopy = {
     description:
       "Spy Rival is het #1 gratis adspy-tool voor concurrent-ads — Meta, Google, YouTube, TikTok, LinkedIn, Pinterest en Snapchat in één dashboard.",
   },
-  consent: {
-    title: "Cookies & analytics",
-    descriptionMobile: "Analytics- en marketingcookies voor site- en advertentiemeting.",
-    descriptionDesktop:
-      "We gebruiken analytics- en marketingcookies (inclusief Meta Pixel) om sitegebruik en advertentieprestaties te meten. U kunt niet-essentiële cookies accepteren of weigeren.",
-    policyShort: "Beleid",
-    cookiePolicy: "Cookiebeleid",
-    reject: "Weigeren",
-    accept: "Accepteren",
-  },
   header: {
     navItems: [
       { label: "Hoe het werkt", sectionId: "solution" },

@@ -9,16 +9,6 @@ export const landingCopyDe: LandingCopy = {
     description:
       "Spy Rival ist das #1 kostenlose Adspy-Tool für Wettbewerber-Anzeigen — Meta, Google, YouTube, TikTok, LinkedIn, Pinterest und Snapchat in einem Dashboard.",
   },
-  consent: {
-    title: "Cookies & Analyse",
-    descriptionMobile: "Analyse- und Marketing-Cookies für Website- und Anzeigen-Messung.",
-    descriptionDesktop:
-      "Wir verwenden Analyse- und Marketing-Cookies (einschließlich Meta Pixel), um die Nutzung der Website und die Anzeigenleistung zu messen. Sie können nicht notwendige Cookies akzeptieren oder ablehnen.",
-    policyShort: "Richtlinie",
-    cookiePolicy: "Cookie-Richtlinie",
-    reject: "Ablehnen",
-    accept: "Akzeptieren",
-  },
   header: {
     navItems: [
       { label: "So funktioniert's", sectionId: "solution" },

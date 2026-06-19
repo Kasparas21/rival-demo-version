@@ -70,15 +70,6 @@ export type LandingCopy = {
     title: string;
     description: string;
   };
-  consent: {
-    title: string;
-    descriptionMobile: string;
-    descriptionDesktop: string;
-    policyShort: string;
-    cookiePolicy: string;
-    reject: string;
-    accept: string;
-  };
   header: {
     navItems: LandingNavItem[];
     startTrial: string;

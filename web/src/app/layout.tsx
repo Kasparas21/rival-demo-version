@@ -2,14 +2,11 @@ import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
 import { Suspense } from "react";
 import { DeferredMarketingTags } from "@/components/analytics/deferred-marketing-tags";
-import { MarketingConsentBanner } from "@/components/analytics/marketing-consent-banner";
-import { MarketingConsentProvider } from "@/components/analytics/marketing-consent-provider";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
 import { getPostHogBootstrap } from "@/lib/analytics/posthog-server";
 import { fontInter } from "@/lib/fonts/inter";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
-import { getLandingCopy } from "@/lib/i18n/landing";
 import { DEFAULT_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo/site";
 import "./globals.css";
 
@@ -81,7 +78,6 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const lang = await getRequestLocale();
-  const consentCopy = getLandingCopy(lang).consent;
   const posthogBootstrap = await getPostHogBootstrap();
 
   return (
@@ -89,16 +85,13 @@ export default async function RootLayout({
       <body
         className={`${instrumentSerif.variable} ${fontInter.variable} ${fontInter.className} font-sans antialiased`}
       >
-        <MarketingConsentProvider>
-          <DeferredMarketingTags />
-          <SitePostHogProvider bootstrap={posthogBootstrap}>
-            <Suspense fallback={null}>
-              <MetaPixelPageView />
-            </Suspense>
-            {children}
-            <MarketingConsentBanner copy={consentCopy} />
-          </SitePostHogProvider>
-        </MarketingConsentProvider>
+        <DeferredMarketingTags />
+        <SitePostHogProvider bootstrap={posthogBootstrap}>
+          <Suspense fallback={null}>
+            <MetaPixelPageView />
+          </Suspense>
+          {children}
+        </SitePostHogProvider>
       </body>
     </html>
   );
