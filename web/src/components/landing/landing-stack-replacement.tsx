@@ -11,7 +11,7 @@ import {
   GoogleLogo,
   LinkedInLogo,
   MetaLogo,
-  RedditLogo,
+  PinterestLogo,
   SnapchatLogo,
   TikTokLogo,
 } from "@/components/platform-logos";
@@ -32,7 +32,7 @@ const PLATFORM_ICONS: Record<string, ReactNode> = {
   TikTok: <TikTokLogo className="mx-auto block h-[15px] w-[14px]" />,
   LinkedIn: <LinkedInLogo className="mx-auto block h-[14px] w-[14px]" />,
   Snapchat: <SnapchatLogo className="mx-auto block size-[18px]" />,
-  Reddit: <RedditLogo className="mx-auto block size-[15px]" />,
+  Pinterest: <PinterestLogo className="mx-auto block size-[15px]" />,
 };
 
 const PAIN_CHIP_ICONS = [FileSpreadsheet, LayoutGrid, HelpCircle] as const;

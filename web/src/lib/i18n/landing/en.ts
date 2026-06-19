@@ -236,7 +236,7 @@ export const landingCopyEn: LandingCopy = {
       { name: "5 native ad libraries", iconKey: "folder", iconClass: "text-[#ca8a04]", iconBg: "bg-[#fef9c3]" },
       { name: "Spreadsheets & decks", iconKey: "spreadsheet", iconClass: "text-[#16a34a]", iconBg: "bg-[#dcfce7]" },
     ],
-    platforms: ["Meta", "Google", "TikTok", "LinkedIn", "Snapchat", "Reddit"],
+    platforms: ["Meta", "Google", "TikTok", "LinkedIn", "Snapchat", "Pinterest"],
   },
   reviews: {
     titleLine1: "the preferred tool",

@@ -64,5 +64,5 @@ export const WITH_RIVAL_PLATFORMS = [
   "TikTok",
   "LinkedIn",
   "Snapchat",
-  "Reddit",
+  "Pinterest",
 ] as const;
