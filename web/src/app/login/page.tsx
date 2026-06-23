@@ -9,7 +9,6 @@ import {
   type SearchParams,
 } from "@/lib/auth/auth-page-helpers";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
-import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
 import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";

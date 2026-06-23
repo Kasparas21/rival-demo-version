@@ -1316,6 +1316,7 @@ export type Database = {
         Row: {
           id: string;
           invite_code: string;
+          cohort_label: string | null;
           user_id: string;
           polar_subscription_id: string | null;
           redeemed_at: string;
@@ -1323,6 +1324,7 @@ export type Database = {
         Insert: {
           id?: string;
           invite_code: string;
+          cohort_label?: string | null;
           user_id: string;
           polar_subscription_id?: string | null;
           redeemed_at?: string;
@@ -1330,6 +1332,7 @@ export type Database = {
         Update: {
           id?: string;
           invite_code?: string;
+          cohort_label?: string | null;
           user_id?: string;
           polar_subscription_id?: string | null;
           redeemed_at?: string;
