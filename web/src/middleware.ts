@@ -8,6 +8,10 @@ import {
 } from "@/lib/analytics/posthog-distinct-id";
 import { resolveLocale } from "@/lib/i18n/resolve-locale";
 import {
+  applyTesterInviteCookieFromRequest,
+  matchesTesterInviteCode,
+} from "@/lib/billing/tester-invite";
+import {
   isLocale,
   LOCALE_COOKIE,
   LOCALE_HEADER,
@@ -103,6 +107,11 @@ function handleHomeLocale(request: NextRequest) {
 
   response.headers.set("Vary", "Cookie, x-vercel-ip-country");
 
+  const testerParam = request.nextUrl.searchParams.get("tester")?.trim();
+  if (testerParam && testerParam !== "1" && matchesTesterInviteCode(testerParam)) {
+    return applyTesterInviteCookieFromRequest(request, response);
+  }
+
   return response;
 }
 
@@ -122,6 +131,7 @@ const LOCALE_PATHS = new Set([
 
 function isLocalePath(pathname: string) {
   if (LOCALE_PATHS.has(pathname)) return true;
+  if (pathname.startsWith("/invite/")) return true;
   return pathname.startsWith("/blog");
 }
 
@@ -154,6 +164,7 @@ export const config = {
     "/auth/:path*",
     "/onboarding",
     "/choose-plan",
+    "/invite/:path*",
     "/dashboard",
     "/dashboard/:path*",
     "/api/account/:path*",

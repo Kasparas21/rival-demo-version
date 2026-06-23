@@ -4,6 +4,7 @@ import {
   CHOOSE_PLAN_AFTER_TRIAL_PATH,
   SIGNUP_AFTER_ONBOARDING_PATH,
   TRIAL_COMPLETE_PATH,
+  buildSignupAfterOnboardingPath,
   getTrialStartHref,
   isPostGuestSignupPath,
   isTrialCompletePath,
@@ -21,6 +22,7 @@ describe("trial-flow", () => {
 
   it("links signup straight to plan picker after guest onboarding", () => {
     expect(SIGNUP_AFTER_ONBOARDING_PATH).toContain(encodeURIComponent("/choose-plan"));
+    expect(buildSignupAfterOnboardingPath("barcelona")).toContain("tester=barcelona");
     expect(CHOOSE_PLAN_AFTER_TRIAL_PATH).toContain("/choose-plan");
     expect(CHOOSE_PLAN_AFTER_TRIAL_PATH).toContain(encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH));
   });

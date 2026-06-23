@@ -7,6 +7,7 @@ import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashe
 import {
   matchesTesterInviteCode,
   normalizeInviteCode,
+  TESTER_INVITE_COOKIE,
 } from "@/lib/billing/tester-invite";
 import { persistTesterInviteToUserMetadata } from "@/lib/billing/tester-invite-user";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
@@ -17,9 +18,15 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function resolveSignupTesterInvite(_request: NextRequest, bodyTester?: string): string | null {
-  if (typeof bodyTester !== "string" || !bodyTester.trim()) return null;
-  return matchesTesterInviteCode(bodyTester) ? normalizeInviteCode(bodyTester) : null;
+function resolveSignupTesterInvite(request: NextRequest, bodyTester?: string): string | null {
+  if (typeof bodyTester === "string" && bodyTester.trim()) {
+    return matchesTesterInviteCode(bodyTester) ? normalizeInviteCode(bodyTester) : null;
+  }
+  const fromCookie = request.cookies.get(TESTER_INVITE_COOKIE)?.value;
+  if (fromCookie && matchesTesterInviteCode(fromCookie)) {
+    return normalizeInviteCode(fromCookie);
+  }
+  return null;
 }
 
 export async function POST(request: NextRequest) {

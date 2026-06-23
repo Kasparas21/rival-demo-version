@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { CookieOptions } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureUserProfile } from "@/lib/auth/profile";
+import { claimTesterAccessForUser } from "@/lib/billing/claim-tester-access-core";
 import {
   CHOOSE_PLAN_AFTER_TRIAL_PATH,
   resolveAuthCallbackNext,
@@ -10,13 +11,14 @@ import {
 } from "@/lib/auth/trial-flow";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
-import { resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
+import { POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { persistTesterInviteToUserMetadata, readTesterInviteFromUserMetadata } from "@/lib/billing/tester-invite-user";
 import {
   matchesTesterInviteCode,
   normalizeInviteCode,
   OAUTH_TESTER_INVITE_COOKIE,
   setTesterInviteCookie,
+  TESTER_INVITE_COOKIE,
 } from "@/lib/billing/tester-invite";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
@@ -142,6 +144,46 @@ export async function GET(request: NextRequest) {
   const onboardingDone = profile?.onboarding_completed === true;
   const safeRequested = resolveAuthCallbackNext(url.searchParams.get("next"), request.cookies);
   const safePostOnboardingPath = safeRequested ? postOnboardingPath(safeRequested) : null;
+
+  const inviteFromMetadata = readTesterInviteFromUserMetadata(user.user_metadata);
+  const oauthBridgeRaw = request.cookies.get(OAUTH_TESTER_INVITE_COOKIE)?.value;
+  const inviteFromOAuthBridge =
+    oauthBridgeRaw && matchesTesterInviteCode(oauthBridgeRaw)
+      ? normalizeInviteCode(oauthBridgeRaw)
+      : null;
+  const testerFromQuery = url.searchParams.get("tester");
+  const inviteFromQuery =
+    testerFromQuery && matchesTesterInviteCode(testerFromQuery)
+      ? normalizeInviteCode(testerFromQuery)
+      : null;
+  const cookieTesterRaw = request.cookies.get(TESTER_INVITE_COOKIE)?.value;
+  const inviteFromCookie =
+    cookieTesterRaw && matchesTesterInviteCode(cookieTesterRaw)
+      ? normalizeInviteCode(cookieTesterRaw)
+      : null;
+  const inviteCode =
+    inviteFromMetadata ?? inviteFromOAuthBridge ?? inviteFromQuery ?? inviteFromCookie;
+
+  const trialFunnel = shouldRedirectToTrialComplete(
+    safeRequested,
+    request.cookies.get(TRIAL_PENDING_COOKIE)?.value,
+  );
+
+  let claimedTesterAccess = false;
+  if (inviteCode && trialFunnel && !onboardingDone) {
+    try {
+      const admin = createSupabaseAdminClient();
+      await persistTesterInviteToUserMetadata(admin, user.id, inviteCode);
+      const claim = await claimTesterAccessForUser(admin, user.id, inviteCode);
+      claimedTesterAccess = claim.ok;
+      if (!claim.ok) {
+        console.error("[auth/callback] auto-claim tester access", claim.error);
+      }
+    } catch (err) {
+      console.error("[auth/callback] auto-claim tester access", err);
+    }
+  }
+
   const billing = await getBillingEntitlement(supabase, user.id);
   const resolvedNext = safePostOnboardingPath
     ? adminSkipCheckoutDestination(safePostOnboardingPath, billing.isUnlimited)
@@ -153,13 +195,16 @@ export async function GET(request: NextRequest) {
   let searchFromIncomplete: string | null = null;
   if (safePostOnboardingPath === RESET_PASSWORD_PATH) {
     pathname = RESET_PASSWORD_PATH;
-  } else if (
-    !onboardingDone &&
-    shouldRedirectToTrialComplete(safeRequested, request.cookies.get(TRIAL_PENDING_COOKIE)?.value)
-  ) {
-    const trialPlans = new URL(CHOOSE_PLAN_AFTER_TRIAL_PATH, url.origin);
-    pathname = trialPlans.pathname;
-    searchFromIncomplete = trialPlans.search;
+  } else if (!onboardingDone && trialFunnel) {
+    if (claimedTesterAccess || billing.isUnlimited) {
+      const postPayment = new URL(POST_PAYMENT_ONBOARDING_PATH, url.origin);
+      pathname = postPayment.pathname;
+      searchFromIncomplete = postPayment.search;
+    } else {
+      const trialPlans = new URL(CHOOSE_PLAN_AFTER_TRIAL_PATH, url.origin);
+      pathname = trialPlans.pathname;
+      searchFromIncomplete = trialPlans.search;
+    }
   } else if (!onboardingDone) {
     const incompleteTarget = resolveIncompleteOnboardingPath(
       profile,
@@ -195,21 +240,15 @@ export async function GET(request: NextRequest) {
   out.cookies.set("rival_oauth_next", "", { maxAge: 0, path: "/" });
   out.cookies.set(OAUTH_TESTER_INVITE_COOKIE, "", { maxAge: 0, path: "/" });
 
-  const inviteFromMetadata = readTesterInviteFromUserMetadata(user.user_metadata);
-  const oauthBridgeRaw = request.cookies.get(OAUTH_TESTER_INVITE_COOKIE)?.value;
-  const inviteFromOAuthBridge =
-    oauthBridgeRaw && matchesTesterInviteCode(oauthBridgeRaw)
-      ? normalizeInviteCode(oauthBridgeRaw)
-      : null;
-  /** Never attach tester access from a stale `rival_tester_invite` cookie on a normal Google signup. */
-  const inviteCode = inviteFromMetadata ?? inviteFromOAuthBridge;
   if (inviteCode) {
     setTesterInviteCookie(out, inviteCode);
-    try {
-      const admin = createSupabaseAdminClient();
-      await persistTesterInviteToUserMetadata(admin, user.id, inviteCode);
-    } catch (err) {
-      console.error("[auth/callback] persist tester invite metadata", err);
+    if (!claimedTesterAccess) {
+      try {
+        const admin = createSupabaseAdminClient();
+        await persistTesterInviteToUserMetadata(admin, user.id, inviteCode);
+      } catch (err) {
+        console.error("[auth/callback] persist tester invite metadata", err);
+      }
     }
   }
 

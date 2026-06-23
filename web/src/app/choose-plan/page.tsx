@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { OnboardingPlanPicker } from "@/components/billing/onboarding-plan-picker";
+import { claimTesterAccessForUser } from "@/lib/billing/claim-tester-access-core";
 import {
   adminSkipCheckoutDestination,
   getBillingEntitlement,
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
-import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
+import { isTesterInviteFlowEligibleForUser, resolveTesterInviteCodeForUser } from "@/lib/billing/tester-invite-server";
+import { POST_PAYMENT_ONBOARDING_PATH } from "@/lib/onboarding/phase";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getOnboardingCopy } from "@/lib/i18n/onboarding";
@@ -52,6 +55,15 @@ export default async function ChoosePlanPage({
   }
 
   const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
+  if (testerInviteActive) {
+    const inviteCode = await resolveTesterInviteCodeForUser(user.id);
+    const admin = createSupabaseAdminClient();
+    const claim = await claimTesterAccessForUser(admin, user.id, inviteCode);
+    if (claim.ok) {
+      redirect(POST_PAYMENT_ONBOARDING_PATH);
+    }
+  }
+
   const checkoutError = firstParam(params.checkout_error);
 
   return (

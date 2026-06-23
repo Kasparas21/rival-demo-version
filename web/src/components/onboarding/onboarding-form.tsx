@@ -46,10 +46,10 @@ import {
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
 import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progress-bar";
 import type { Locale } from "@/lib/i18n/locale";
-import { SIGNUP_AFTER_ONBOARDING_PATH } from "@/lib/auth/trial-flow";
+import { buildSignupAfterOnboardingPath } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
-import { saveOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
+import { saveOnboardingDraft, readOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
 import {
   adsProfileSetupV1,
   emptyWorkspaceScrapeRow,
@@ -135,6 +135,26 @@ const STEP_WORKSPACE_CHANNELS = 2;
 const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
 const STEP_CHOOSE_PLAN = 5;
+
+const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = CHANNELS.map((c) => c.id);
+
+function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
+  return (
+    channels.length === ALL_WORKSPACE_CHANNEL_IDS.length &&
+    ALL_WORKSPACE_CHANNEL_IDS.every((id) => channels.includes(id))
+  );
+}
+
+function resolveInitialWorkspaceChannels(
+  initialBrandSetup: AdsProfileSetup | null | undefined,
+): ChannelId[] {
+  if (initialBrandSetup?.channels?.length) return initialBrandSetup.channels;
+  if (typeof window !== "undefined") {
+    const draft = readOnboardingDraft();
+    if (draft?.workspaceChannels?.length) return draft.workspaceChannels;
+  }
+  return ALL_WORKSPACE_CHANNEL_IDS;
+}
 
 function defaultWorkspaceAdMarketCodes(hostname: string): string[] {
   const inferred = inferAdMarketFromHostname(hostname);
@@ -293,6 +313,8 @@ type Props = {
   initialBrandSetup?: AdsProfileSetup | null;
   initialDomain?: string | null;
   testerInviteActive?: boolean;
+  /** Valid invite code from URL/cookie for signup redirect attribution. */
+  testerInviteCode?: string | null;
   initialData?: {
     company_name?: string | null;
     company_url?: string | null;
@@ -324,6 +346,7 @@ export function OnboardingForm({
   initialBrandSetup = null,
   initialDomain = null,
   testerInviteActive = false,
+  testerInviteCode = null,
   initialData = null,
 }: Props) {
   const router = useRouter();
@@ -353,8 +376,8 @@ export function OnboardingForm({
   const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(null);
 
   /** Workspace (your ads) */
-  const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(
-    () => initialBrandSetup?.channels ?? CHANNELS.map((c) => c.id),
+  const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(() =>
+    resolveInitialWorkspaceChannels(initialBrandSetup),
   );
   const [workspaceAdMarketCodes, setWorkspaceAdMarketCodes] = useState<string[]>([]);
   /** When true, all supported ISO markets apply (exclusive with manual country picks). */
@@ -381,7 +404,9 @@ export function OnboardingForm({
   useEffect(() => {
     if (!initialBrandSetup || brandSetupHydratedRef.current) return;
     brandSetupHydratedRef.current = true;
-    setWorkspaceChannels(initialBrandSetup.channels);
+    if (initialBrandSetup.channels.length > 0) {
+      setWorkspaceChannels(initialBrandSetup.channels);
+    }
     const codes = initialBrandSetup.adMarketCountryCodes;
     if (codes.length >= ONBOARDING_AD_MARKET_CODES.length) {
       setWorkspaceMarketsGlobal(true);
@@ -398,6 +423,16 @@ export function OnboardingForm({
       ...initialBrandSetup.scrape,
     }));
   }, [initialBrandSetup, normalizedCompany]);
+
+  /** Post-signup: restore platform picks from guest draft until DB sync catches up. */
+  useEffect(() => {
+    if (initialBrandSetup?.channels?.length) return;
+    const draft = readOnboardingDraft();
+    if (!draft?.workspaceChannels?.length) return;
+    setWorkspaceChannels((prev) =>
+      isAllWorkspaceChannels(prev) ? draft.workspaceChannels : prev,
+    );
+  }, [initialBrandSetup, postPaymentResume]);
 
   const effectiveWorkspaceMarketCodes = useMemo(() => {
     if (workspaceMarketsGlobal) return [...ONBOARDING_AD_MARKET_CODES];
@@ -564,7 +599,7 @@ export function OnboardingForm({
 
     if (hostMismatch || websiteEdited) {
       setBrandInsights(null);
-      setWorkspaceChannels(CHANNELS.map((c) => c.id));
+      setWorkspaceChannels(ALL_WORKSPACE_CHANNEL_IDS);
       setWorkspaceAdMarketCodes([]);
       setWorkspaceMarketsGlobal(false);
       setWorkspaceMarketsAuto(true);
@@ -628,7 +663,7 @@ export function OnboardingForm({
         await supabase.auth.signOut();
       }
 
-      router.push(SIGNUP_AFTER_ONBOARDING_PATH);
+      router.push(buildSignupAfterOnboardingPath(testerInviteCode));
       router.refresh();
       return true;
     } catch {

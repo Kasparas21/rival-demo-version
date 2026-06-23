@@ -174,7 +174,9 @@ export async function updateSession(request: NextRequest) {
   if (isAuthPage) {
     const testerParam = request.nextUrl.searchParams.get("tester")?.trim();
     const hasValidTesterQuery = Boolean(testerParam && testerParam !== "1" && matchesTesterInviteCode(testerParam));
-    if (!hasValidTesterQuery && request.cookies.get(TESTER_INVITE_COOKIE)?.value) {
+    const cookieCode = request.cookies.get(TESTER_INVITE_COOKIE)?.value;
+    const hasValidTesterCookie = Boolean(cookieCode && matchesTesterInviteCode(cookieCode));
+    if (!hasValidTesterQuery && !hasValidTesterCookie) {
       clearTesterInviteCookie(response);
     }
   }

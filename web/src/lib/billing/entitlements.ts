@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
+import { TESTER_FULL_PRO_PAYLOAD_KEY } from "@/lib/billing/claim-tester-access-core";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { getPolarProductIds } from "@/lib/billing/config";
 import {
@@ -267,6 +268,11 @@ export function isTesterInviteBillingAccount(
   return false;
 }
 
+export function isTesterFullProAccount(rawPayload: unknown): boolean {
+  const p = readRawPayload(rawPayload);
+  return p[TESTER_FULL_PRO_PAYLOAD_KEY] === true;
+}
+
 /** Complimentary tester Pro keeps Pro features but free-trial competitor caps. */
 export function applyTesterInvitePlanLimits(limits: PlanLimits): PlanLimits {
   const trialLimits = limitsForTier("free_trial");
@@ -329,7 +335,7 @@ export async function getBillingEntitlement(
   });
 
   let limits = limitsForTier(planTier);
-  if (isTesterInviteBillingAccount(rawPayload, hasTesterRedemption)) {
+  if (isTesterInviteBillingAccount(rawPayload, hasTesterRedemption) && !isTesterFullProAccount(rawPayload)) {
     limits = applyTesterInvitePlanLimits(limits);
   } else {
     limits = applyPolarTrialCompetitorCap(limits, status, planTier);

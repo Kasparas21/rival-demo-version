@@ -5,6 +5,7 @@ import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
 import { getBillingEntitlement, shouldShowPostOnboardingPlanPicker } from "@/lib/billing/entitlements";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
+import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { hasPrePaymentSetup, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
@@ -75,8 +76,7 @@ export default async function SignupPage({
     testerFromQuery && matchesTesterInviteCode(testerFromQuery)
       ? normalizeInviteCode(testerFromQuery)
       : null;
-  /** Tester flow only from the explicit invite URL — never a stale `rival_tester_invite` cookie. */
-  const testerInviteCode = testerFromQueryCode;
+  const testerInviteCode = testerFromQueryCode ?? (await getTesterInviteCodeFromCookies());
 
   return <SignupForm copy={copy} locale={locale} testerInviteCode={testerInviteCode} />;
 }

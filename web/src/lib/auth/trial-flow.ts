@@ -19,6 +19,14 @@ export const CHOOSE_PLAN_AFTER_TRIAL_PATH = `/choose-plan?next=${encodeURICompon
 
 export const SIGNUP_AFTER_ONBOARDING_PATH = `/signup?next=${encodeURIComponent(CHOOSE_PLAN_AFTER_TRIAL_PATH)}`;
 
+/** Signup URL after guest pre-payment onboarding, preserving tester invite attribution. */
+export function buildSignupAfterOnboardingPath(testerCode?: string | null): string {
+  if (!testerCode?.trim()) return SIGNUP_AFTER_ONBOARDING_PATH;
+  const base = new URL(SIGNUP_AFTER_ONBOARDING_PATH, "http://local");
+  base.searchParams.set("tester", testerCode.trim().toLowerCase());
+  return `${base.pathname}${base.search}`;
+}
+
 /** Landing free-trial CTAs start here (guest or authenticated). */
 export function getTrialStartHref(domain?: string | null): string {
   if (!domain?.trim()) return "/onboarding";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
 import { buildCheckoutHref } from "@/lib/billing/checkout-url";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
@@ -117,6 +117,11 @@ function TesterPlanPicker({
   const isOnboarding = variant === "onboarding";
   const destinationAfterActivate = dashboardNext ?? DASHBOARD_HOME_PATH;
   const t = copy.tester;
+
+  useEffect(() => {
+    void claimWithoutCard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-activate once on mount
+  }, []);
 
   const titleClass =
     variant === "onboarding"

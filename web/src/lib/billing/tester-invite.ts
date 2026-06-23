@@ -157,6 +157,7 @@ export async function recordTesterInviteRedemption(
   const { error } = await admin.from("tester_invite_redemptions").upsert(
     {
       invite_code: normalizeInviteCode(params.inviteCode),
+      cohort_label: normalizeInviteCode(params.inviteCode),
       user_id: params.userId,
       polar_subscription_id: params.polarSubscriptionId ?? null,
       redeemed_at: new Date().toISOString(),

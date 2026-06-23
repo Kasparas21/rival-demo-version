@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { OnboardingDevHints } from "@/components/onboarding/onboarding-dev-hints";
+import { TrialSetupBackgroundSync } from "@/components/onboarding/trial-setup-background-sync";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
 import {
   adminSkipCheckoutDestination,
@@ -14,7 +15,11 @@ import {
 import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
 import { OnboardingFlowHeader } from "@/components/onboarding/onboarding-flow-header";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
-import { isTesterInviteFlowEligibleForUser } from "@/lib/billing/tester-invite-server";
+import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
+import {
+  getTesterInviteCodeFromCookies,
+  isTesterInviteFlowEligibleForUser,
+} from "@/lib/billing/tester-invite-server";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -83,6 +88,12 @@ export default async function OnboardingPage({
   const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
   const initialDomain = initialDomainFromParams(params);
   const explicitPostPayment = isPostPaymentOnboardingSearchParams(params);
+  const testerFromQuery = firstParam(params.tester);
+  const testerInviteCode =
+    testerFromQuery && matchesTesterInviteCode(testerFromQuery)
+      ? normalizeInviteCode(testerFromQuery)
+      : null;
+  const testerInviteCodeFromCookie = testerInviteCode ?? (await getTesterInviteCodeFromCookies());
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -99,6 +110,7 @@ export default async function OnboardingPage({
           initialDomain={initialDomain}
           userId="guest"
           showPlanStep={false}
+          testerInviteCode={testerInviteCodeFromCookie}
         />
       </OnboardingShell>
     );
@@ -170,6 +182,7 @@ export default async function OnboardingPage({
 
   return (
     <OnboardingShell showReplay={replayOnboarding}>
+      <TrialSetupBackgroundSync />
       <OnboardingForm
         copy={copy}
         locale={locale}
