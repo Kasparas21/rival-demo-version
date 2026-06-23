@@ -1,15 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 import { applyPartialOnboardingDraft } from "@/lib/onboarding/apply-draft";
-import { clearOnboardingDraft, readOnboardingDraft } from "@/lib/onboarding/draft";
+import { readOnboardingDraft } from "@/lib/onboarding/draft";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 /**
  * Applies the guest onboarding draft after signup without blocking the plan picker UI.
  */
 export function TrialSetupBackgroundSync() {
+  const router = useRouter();
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -28,10 +30,10 @@ export function TrialSetupBackgroundSync() {
 
       const result = await applyPartialOnboardingDraft(user.id, draft);
       if (result.ok) {
-        clearOnboardingDraft();
+        router.refresh();
       }
     })();
-  }, []);
+  }, [router]);
 
   return null;
 }

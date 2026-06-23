@@ -49,7 +49,8 @@ import type { Locale } from "@/lib/i18n/locale";
 import { buildSignupAfterOnboardingPath } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
-import { saveOnboardingDraft, readOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
+import { saveOnboardingDraft, readOnboardingDraft, clearOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
+import { resolveOnboardingCompanyHost } from "@/lib/onboarding/resolve-company-host";
 import {
   adsProfileSetupV1,
   emptyWorkspaceScrapeRow,
@@ -137,6 +138,11 @@ const STEP_WORKSPACE_SCRAPE = 4;
 const STEP_CHOOSE_PLAN = 5;
 
 const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = CHANNELS.map((c) => c.id);
+
+function getHydrationDraft(): OnboardingDraft | null {
+  if (typeof window === "undefined") return null;
+  return readOnboardingDraft();
+}
 
 function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
   return (
@@ -333,6 +339,20 @@ type BrandInsightsPayload = {
   message?: string;
 };
 
+function brandInsightsFromDraft(draft: OnboardingDraft): BrandInsightsPayload | null {
+  if (!draft.brandInsights) return null;
+  return {
+    ok: draft.brandInsights.ok,
+    partial: draft.brandInsights.partial,
+    domain: draft.brandInsights.domain,
+    brandName: draft.brandInsights.brandName,
+    description: draft.brandInsights.description,
+    logoUrl: draft.brandInsights.logoUrl,
+    contextSnippet: draft.brandInsights.contextSnippet,
+    socials: draft.brandInsights.socials,
+  };
+}
+
 export function OnboardingForm({
   copy,
   locale,
@@ -368,12 +388,17 @@ export function OnboardingForm({
   const lastContinueFromWebsiteHostRef = useRef<string>("");
 
   const [companyUrl, setCompanyUrl] = useState(() => {
+    const draft = getHydrationDraft();
+    if (draft?.companyUrl?.trim()) return sanitizeCompanyUrlInput(draft.companyUrl);
     if (initialDomain) return sanitizeCompanyUrlInput(initialDomain);
     return sanitizeCompanyUrlInput(initialData?.company_url ?? "");
   });
 
   const [brandLoading, setBrandLoading] = useState(false);
-  const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(null);
+  const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(() => {
+    const draft = getHydrationDraft();
+    return draft ? brandInsightsFromDraft(draft) : null;
+  });
 
   /** Workspace (your ads) */
   const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(() =>
@@ -389,9 +414,15 @@ export function OnboardingForm({
   const [workspaceMarketsAuto, setWorkspaceMarketsAuto] = useState(true);
   const [workspaceMarketsPickerExpanded, setWorkspaceMarketsPickerExpanded] = useState(false);
   const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => {
-    const host = initialDomain
-      ? normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialDomain))
-      : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? ""));
+    const draft = getHydrationDraft();
+    const hostFromDraft = draft?.companyHost
+      ? normalizedWorkspaceHost(draft.companyHost)
+      : "";
+    const host =
+      hostFromDraft ||
+      (initialDomain
+        ? normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialDomain))
+        : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? "")));
     const base = emptyWorkspaceScrapeRow(host);
     if (!initialBrandSetup?.scrape) return base;
     return { ...base, ...initialBrandSetup.scrape };
@@ -400,6 +431,19 @@ export function OnboardingForm({
   const brandSetupHydratedRef = useRef(false);
 
   const normalizedCompany = useMemo(() => normalizedWorkspaceHost(companyUrl.trim()), [companyUrl]);
+
+  useEffect(() => {
+    const draft = readOnboardingDraft();
+    if (!draft) return;
+    if (!companyUrl.trim() && draft.companyUrl?.trim()) {
+      setCompanyUrl(sanitizeCompanyUrlInput(draft.companyUrl));
+    }
+    if (!brandInsights && draft.brandInsights) {
+      setBrandInsights(brandInsightsFromDraft(draft));
+    }
+    // Hydrate once on mount — guest draft survives Google OAuth redirect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!initialBrandSetup || brandSetupHydratedRef.current) return;
@@ -611,10 +655,13 @@ export function OnboardingForm({
   };
 
   const buildPrePaymentDraft = (): OnboardingDraft => {
-    const companyHost = normalizedCompany;
+    const companyHost = resolveOnboardingCompanyHost({
+      companyUrl,
+      profileCompanyUrl: initialData?.company_url,
+    });
     return {
       v: 1,
-      companyUrl,
+      companyUrl: companyUrl.trim() || companyHost,
       companyHost,
       workspaceChannels,
       workspaceAdMarketCodes: [],
@@ -643,10 +690,13 @@ export function OnboardingForm({
     setError(null);
 
     try {
-      const companyHost = normalizedCompany;
+      const companyHost = resolveOnboardingCompanyHost({
+        companyUrl,
+        profileCompanyUrl: initialData?.company_url,
+      });
       if (!isPlausiblePublicHostname(companyHost)) {
         setError(t.errors.invalidWebsiteGoBack);
-        setStep(0);
+        if (!postPaymentResume) setStep(STEP_WEBSITE);
         return false;
       }
       if (!workspaceChannelsValid) {
@@ -684,10 +734,13 @@ export function OnboardingForm({
     const shouldNavigate = options?.navigate !== false;
 
     try {
-      const companyHost = normalizedCompany;
+      const companyHost = resolveOnboardingCompanyHost({
+        companyUrl,
+        profileCompanyUrl: initialData?.company_url,
+      });
       if (!isPlausiblePublicHostname(companyHost)) {
         setError(t.errors.invalidWebsiteGoBack);
-        setStep(0);
+        if (!postPaymentResume) setStep(STEP_WEBSITE);
         return false;
       }
 
@@ -884,6 +937,7 @@ export function OnboardingForm({
         router.push(destination);
         router.refresh();
       }
+      clearOnboardingDraft();
       return true;
     } catch {
       setError(t.errors.finishFailed);
