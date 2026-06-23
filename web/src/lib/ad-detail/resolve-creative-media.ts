@@ -4,6 +4,7 @@
  */
 
 import { pickSnapchatHeroStillUrlFromPayload } from "@/lib/ad-library/normalize";
+import { googleCreativeDisplayUrl } from "@/lib/ad-library/google-creative-display-url";
 
 export function looksLikePlayableVideoUrl(url: string): boolean {
   const u = url.trim().toLowerCase();
@@ -90,13 +91,26 @@ export function resolveAdDetailCreativeMedia(ad: {
   const poster = posterCandidates.find(Boolean);
 
   if (videoSrc) {
-    return { kind: "video", src: videoSrc, ...(poster ? { poster } : {}) };
+    const posterDisplay = poster ? (googleCreativeDisplayUrl(poster) ?? poster) : undefined;
+    return { kind: "video", src: videoSrc, ...(posterDisplay ? { poster: posterDisplay } : {}) };
   }
 
   const still = poster ?? (creative && !looksLikePlayableVideoUrl(creative) ? creative : null);
-  if (still) return { kind: "image", src: still };
+  if (still) {
+    const pl = ad.platform.trim().toLowerCase();
+    const src =
+      pl === "google" || pl === "youtube" ? (googleCreativeDisplayUrl(still) ?? still) : still;
+    return { kind: "image", src };
+  }
 
-  if (creative) return { kind: "image", src: creative };
+  if (creative) {
+    const pl = ad.platform.trim().toLowerCase();
+    const src =
+      pl === "google" || pl === "youtube"
+        ? (googleCreativeDisplayUrl(creative) ?? creative)
+        : creative;
+    return { kind: "image", src };
+  }
 
   return { kind: "empty" };
 }

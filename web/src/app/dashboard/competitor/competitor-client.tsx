@@ -97,6 +97,10 @@ import {
 import { WORKSPACE_RESCRAPE_ADS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import {
+  googleCreativeDisplayUrl,
+  resolveGoogleStillPreviewDisplayUrl,
+} from "@/lib/ad-library/google-creative-display-url";
+import {
   extractYouTubeVideoId,
   googleAdsExternalLinkLabel,
   isUsableGoogleStillImagePreviewUrl,
@@ -436,12 +440,10 @@ function GoogleTransparencyCard({
   const href = resolveGoogleAdRowTransparencyHref(ad, brandDomain);
   const linkCta = googleAdsExternalLinkLabel(href);
 
-  /** Prefer Transparency “Preview URL” only when it is a still image — `content.js` loaders are not valid `<img src>`. */
+  /** Prefer Transparency “Preview URL” only when it is a still image — proxy Google CDNs for ad blockers. */
   const rawPreview = (ad.previewUrl?.trim() || "").trim();
   const rawImg = (ad.img || "").trim();
-  const imageSrc =
-    (isUsableGoogleStillImagePreviewUrl(rawPreview) ? rawPreview : "") ||
-    (isUsableGoogleStillImagePreviewUrl(rawImg) ? rawImg : "");
+  const imageSrc = resolveGoogleStillPreviewDisplayUrl(rawPreview || null, rawImg || null);
   const isFaviconOnly = Boolean(
     imageSrc.includes("google.com/s2/favicons") || imageSrc.includes("gstatic.com/favicon")
   );
@@ -495,6 +497,7 @@ function GoogleTransparencyCard({
                   src={imageSrc}
                   alt=""
                   className="max-h-full max-w-full rounded-xl object-contain object-center"
+                  referrerPolicy="no-referrer"
                   onError={() => setCreativeImgFailed(true)}
                 />
               ) : (
@@ -607,7 +610,9 @@ function GoogleYoutubeAdCard({
     const list: string[] = [];
     const push = (u: string) => {
       const t = u.trim();
-      if (t && !list.includes(t)) list.push(t);
+      if (!t || list.includes(t)) return;
+      const display = googleCreativeDisplayUrl(t) ?? t;
+      if (!list.includes(display)) list.push(display);
     };
     const thumb = ad.thumbnail?.trim() || "";
     if (thumb && isUsableGoogleStillImagePreviewUrl(thumb)) push(thumb);
@@ -677,6 +682,7 @@ function GoogleYoutubeAdCard({
             src={activePoster}
             alt=""
             className="max-h-full max-w-full rounded-xl object-contain object-center bg-black"
+            referrerPolicy="no-referrer"
             onError={() => {
               if (canBumpPoster) setPosterIdx((i) => i + 1);
               else setPosterExhausted(true);
