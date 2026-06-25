@@ -437,6 +437,23 @@ export function isGoogleFaviconUrl(url: string): boolean {
   return /google\.com\/s2\/favicons|gstatic\.com\/favicon/i.test(url);
 }
 
+export function isGoogleTransparencyScriptPreviewUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  if (u.includes("/ads/preview/content.js")) return true;
+  if (u.includes("content.js?") || u.endsWith("content.js")) return true;
+  return false;
+}
+
+/** Suitable for `<img src>` on Google / YouTube ad cards (excludes script loaders and video streams). */
+export function isUsableGoogleStillImagePreviewUrl(url: string): boolean {
+  const t = url.trim();
+  if (!t || !/^https?:\/\//i.test(t)) return false;
+  if (isGoogleTransparencyScriptPreviewUrl(t)) return false;
+  if (/googlevideo\.com\/videoplayback/i.test(t)) return false;
+  if (/\.(mp4|webm|m3u8)(\?|$)/i.test(t)) return false;
+  return true;
+}
+
 /** Extract YouTube video id from watch / embed / shorts / youtu.be URLs. */
 export function extractYouTubeVideoId(url: string): string | null {
   if (!url?.trim()) return null;
