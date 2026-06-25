@@ -31,6 +31,12 @@ export type PlanLimits = {
   maxAiStrategyOverviews: number | null;
   /** Ad preview AI analyses per UTC month (null = unlimited). */
   maxAdPreviewAnalysesPerMonth: number | null;
+  /** Email marketing intelligence (inbound tracking + AI). */
+  allowEmailMarketing: boolean;
+  /** Active email trackers per account (null = unlimited). */
+  maxEmailTrackers: number | null;
+  /** Competitor email AI analyses per UTC month (null = unlimited). */
+  maxEmailAiAnalysesPerMonth: number | null;
   initialScrapeAdsPerPlatform: number | null;
 };
 
@@ -54,6 +60,9 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
   allowAlertEmail: false,
   maxAiStrategyOverviews: 1,
   maxAdPreviewAnalysesPerMonth: 0,
+  allowEmailMarketing: true,
+  maxEmailTrackers: 1,
+  maxEmailAiAnalysesPerMonth: 5,
   initialScrapeAdsPerPlatform: 200,
 };
 
@@ -76,6 +85,9 @@ const STARTER_LIMITS: PlanLimits = {
   allowAlertEmail: false,
   maxAiStrategyOverviews: null,
   maxAdPreviewAnalysesPerMonth: 10,
+  allowEmailMarketing: true,
+  maxEmailTrackers: 5,
+  maxEmailAiAnalysesPerMonth: 10,
   initialScrapeAdsPerPlatform: null,
 };
 
@@ -98,6 +110,9 @@ const PRO_LIMITS: PlanLimits = {
   allowAlertEmail: true,
   maxAiStrategyOverviews: null,
   maxAdPreviewAnalysesPerMonth: 20,
+  allowEmailMarketing: true,
+  maxEmailTrackers: 15,
+  maxEmailAiAnalysesPerMonth: 20,
   initialScrapeAdsPerPlatform: null,
 };
 
@@ -121,6 +136,9 @@ const AGENCY_LIMITS: PlanLimits = {
   allowAlertEmail: true,
   maxAiStrategyOverviews: null,
   maxAdPreviewAnalysesPerMonth: 100,
+  allowEmailMarketing: true,
+  maxEmailTrackers: 75,
+  maxEmailAiAnalysesPerMonth: 100,
   initialScrapeAdsPerPlatform: null,
 };
 
@@ -143,6 +161,9 @@ const ADMIN_LIMITS: PlanLimits = {
   allowAlertEmail: true,
   maxAiStrategyOverviews: null,
   maxAdPreviewAnalysesPerMonth: null,
+  allowEmailMarketing: true,
+  maxEmailTrackers: null,
+  maxEmailAiAnalysesPerMonth: null,
   initialScrapeAdsPerPlatform: null,
 };
 

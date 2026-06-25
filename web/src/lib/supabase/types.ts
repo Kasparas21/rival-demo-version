@@ -694,6 +694,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      email_intelligence_analysis_usage: {
+        Row: {
+          user_id: string;
+          year_month: string;
+          analysis_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          year_month: string;
+          analysis_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          year_month?: string;
+          analysis_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       competitor_strategy_overview_snapshots: {
         Row: {
           id: string;
@@ -891,6 +912,111 @@ export type Database = {
           is_read?: boolean;
           notified_at?: string | null;
           dedupe_key?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      competitor_emails: {
+        Row: {
+          id: string;
+          tracker_id: string;
+          user_id: string;
+          competitor_id: string;
+          resend_inbound_id: string | null;
+          from_email: string | null;
+          from_name: string | null;
+          subject: string | null;
+          preview_text: string | null;
+          html_body: string | null;
+          plain_text: string | null;
+          received_at: string;
+          esp_detected: string | null;
+          email_type: string | null;
+          ai_summary: string | null;
+          ai_offers: Json | null;
+          ai_cta: string | null;
+          ai_angle: string | null;
+          ai_processed_at: string | null;
+          ai_analysis_error: string | null;
+          ai_analysis_attempts: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          tracker_id: string;
+          user_id: string;
+          competitor_id: string;
+          resend_inbound_id?: string | null;
+          from_email?: string | null;
+          from_name?: string | null;
+          subject?: string | null;
+          preview_text?: string | null;
+          html_body?: string | null;
+          plain_text?: string | null;
+          received_at?: string;
+          esp_detected?: string | null;
+          email_type?: string | null;
+          ai_summary?: string | null;
+          ai_offers?: Json | null;
+          ai_cta?: string | null;
+          ai_angle?: string | null;
+          ai_processed_at?: string | null;
+          ai_analysis_error?: string | null;
+          ai_analysis_attempts?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          tracker_id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          resend_inbound_id?: string | null;
+          from_email?: string | null;
+          from_name?: string | null;
+          subject?: string | null;
+          preview_text?: string | null;
+          html_body?: string | null;
+          plain_text?: string | null;
+          received_at?: string;
+          esp_detected?: string | null;
+          email_type?: string | null;
+          ai_summary?: string | null;
+          ai_offers?: Json | null;
+          ai_cta?: string | null;
+          ai_angle?: string | null;
+          ai_processed_at?: string | null;
+          ai_analysis_error?: string | null;
+          ai_analysis_attempts?: number;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      competitor_email_trackers: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          tracking_address: string;
+          tracking_code: string;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          tracking_address: string;
+          tracking_code: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          tracking_address?: string;
+          tracking_code?: string;
+          is_active?: boolean;
           created_at?: string;
         };
         Relationships: [];
@@ -1352,6 +1478,10 @@ export type Database = {
       };
       increment_ad_preview_analysis_usage: {
         Args: Record<string, never>;
+        Returns: undefined;
+      };
+      increment_email_intelligence_analysis_usage: {
+        Args: { p_user_id: string };
         Returns: undefined;
       };
       increment_csv_export_usage: {

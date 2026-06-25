@@ -5,6 +5,7 @@ import {
   Gauge,
   GitCompareArrows,
   Library,
+  Mail,
   SlidersHorizontal,
   TrendingUp,
   Users,
@@ -29,6 +30,7 @@ export type CompetitorPageTabId =
   | "audience-copy"
   | "comparison"
   | "alerts"
+  | "email-marketing"
   | "workspace-ads"
   | "workspace-marketing-improvements"
   | "benchmark";
@@ -100,6 +102,11 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     id: "alerts",
     label: "Alerts",
     icon: Bell,
+  },
+  {
+    id: "email-marketing",
+    label: "Email Marketing",
+    icon: Mail,
   },
 ];
 
@@ -182,7 +189,7 @@ export function competitorPageTabsForView(opts: {
   const { isOwnWorkspace, showDebugTabs = false } = opts;
 
   let base = isOwnWorkspace
-    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison")
+    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison" && t.id !== "email-marketing")
     : [...COMPETITOR_PAGE_TABS];
 
   if (isOwnWorkspace && !showDebugTabs) {

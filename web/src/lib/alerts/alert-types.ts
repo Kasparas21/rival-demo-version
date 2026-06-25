@@ -7,7 +7,8 @@ export type AlertType =
   | "new_platform"
   | "platform_exit"
   | "proven_winner"
-  | "creative_push";
+  | "creative_push"
+  | "competitor_email";
 
 export type AlertSeverity = "info" | "notable" | "high";
 
@@ -19,6 +20,7 @@ export const ALL_ALERT_TYPES: AlertType[] = [
   "platform_exit",
   "proven_winner",
   "creative_push",
+  "competitor_email",
 ];
 
 export type AlertThresholds = {
@@ -41,6 +43,7 @@ export const DEFAULT_SEVERITY: Record<AlertType, AlertSeverity> = {
   platform_exit: "notable",
   proven_winner: "notable",
   creative_push: "high",
+  competitor_email: "notable",
 };
 
 /** Types enabled by default for all competitors (feed only; email off). */
@@ -48,6 +51,7 @@ export const STARTER_DEFAULT_ENABLED_TYPES: AlertType[] = [
   "new_angle",
   "activity_spike",
   "new_platform",
+  "competitor_email",
 ];
 
 export type AlertTypeConfig = {
@@ -112,6 +116,11 @@ export const ALERT_TYPE_CONFIG: Record<AlertType, AlertTypeConfig> = {
     thresholdMin: 3,
     thresholdMax: 50,
   },
+  competitor_email: {
+    label: "Competitor email",
+    description: "New marketing email captured from a tracked competitor inbox.",
+    hasThreshold: false,
+  },
 };
 
 export function parseThresholds(raw: unknown): AlertThresholds {
@@ -171,6 +180,24 @@ export function buildCreativePushDedupeKey(competitorId: string, batchId: string
   return buildDedupeKey("creative_push", competitorId, [batchId]);
 }
 
+export function buildCompetitorEmailDedupeKey(competitorId: string, emailId: string): string {
+  return buildDedupeKey("competitor_email", competitorId, [emailId]);
+}
+
+export const MARKETING_EMAIL_ALERT_TYPES = new Set([
+  "promotional",
+  "nurture",
+  "newsletter",
+  "reengagement",
+  "cart_abandonment",
+]);
+
+export function formatEmailTypeLabel(emailType: string | null | undefined): string {
+  const t = emailType?.trim();
+  if (!t) return "marketing";
+  return t.replace(/_/g, " ");
+}
+
 export type AlertCopyParams = {
   competitorName?: string;
   platform?: string | null;
@@ -183,6 +210,8 @@ export type AlertCopyParams = {
   newAdCount?: number;
   lifespanDays?: number;
   adPreview?: string | null;
+  emailType?: string | null;
+  emailSubject?: string | null;
 };
 
 export function buildAlertTitle(alertType: AlertType, p: AlertCopyParams): string {
@@ -202,6 +231,10 @@ export function buildAlertTitle(alertType: AlertType, p: AlertCopyParams): strin
       return `${name} launched ${p.newAdCount ?? 0} new ads`;
     case "proven_winner":
       return `${name} ad running ${p.lifespanDays ?? 0}+ days`;
+    case "competitor_email": {
+      const typeLabel = formatEmailTypeLabel(p.emailType);
+      return `New ${typeLabel} email from ${name}`;
+    }
     default:
       return `${name} activity update`;
   }
@@ -237,6 +270,14 @@ export function buildAlertBody(alertType: AlertType, p: AlertCopyParams): string
       const preview = p.adPreview?.trim();
       const snippet = preview ? ` “${preview.slice(0, 80)}${preview.length > 80 ? "…" : ""}”` : "";
       return `An ad${snippet} has been active for ${days} days and is still running on ${platformLabel(p.platform ?? "")}.`;
+    }
+    case "competitor_email": {
+      const typeLabel = formatEmailTypeLabel(p.emailType);
+      const subject = p.emailSubject?.trim();
+      const snippet = subject
+        ? ` “${subject.slice(0, 80)}${subject.length > 80 ? "…" : ""}”`
+        : "";
+      return `${name} sent a new ${typeLabel} email${snippet}. Open Email Marketing to see AI summary and offers.`;
     }
     default:
       return `${name} had a notable change on the latest scrape.`;

@@ -19,3 +19,12 @@ export function getResendFromEmail(): string {
     "Spy Rival <hello@spy-rival.com>"
   );
 }
+
+/** Resend inbound receiving domain for competitor email trackers. */
+export function getInboundEmailDomain(): string {
+  return process.env.INBOUND_EMAIL_DOMAIN?.trim() || "whxila.resend.app";
+}
+
+export function getResendWebhookSecret(): string | undefined {
+  return process.env.RESEND_WEBHOOK_SECRET?.trim() || undefined;
+}

@@ -7,6 +7,7 @@ import {
   buildActivitySpikeDedupeKey,
   buildAlertBody,
   buildAlertTitle,
+  buildCompetitorEmailDedupeKey,
   buildCreativePushDedupeKey,
   buildNewAngleDedupeKey,
   buildNewPlatformDedupeKey,
@@ -47,6 +48,9 @@ describe("alert-types", () => {
     expect(buildProvenWinnerDedupeKey(competitorId, "ad-1")).toBe(
       `proven_winner:${competitorId}:ad-1`
     );
+    expect(buildCompetitorEmailDedupeKey(competitorId, "email-1")).toBe(
+      `competitor_email:${competitorId}:email-1`
+    );
   });
 
   it("parses partial threshold overrides", () => {
@@ -71,5 +75,22 @@ describe("alert-types", () => {
     expect(title).toContain("TikTok");
     expect(body).toContain("14");
     expect(body).not.toContain("change was detected");
+  });
+
+  it("builds competitor_email title and body from email metadata", () => {
+    const title = buildAlertTitle("competitor_email", {
+      competitorName: "Adidas",
+      emailType: "nurture",
+    });
+    const body = buildAlertBody("competitor_email", {
+      competitorName: "Adidas",
+      emailType: "nurture",
+      emailSubject: "Welcome to the club",
+    });
+    expect(title).toContain("Adidas");
+    expect(title.toLowerCase()).toContain("nurture");
+    expect(body).toContain("Welcome to the club");
+    expect(DEFAULT_SEVERITY.competitor_email).toBe("notable");
+    expect(ALL_ALERT_TYPES).toContain("competitor_email");
   });
 });

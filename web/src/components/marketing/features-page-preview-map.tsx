@@ -91,4 +91,9 @@ export const FEATURE_PREVIEW_MAP: Record<string, ComponentType> = {
       default: m.PlatformPrioritizationPreview,
     })),
   ),
+  "email-marketing": lazyPreview(() =>
+    import("@/components/feature-previews/email-marketing-preview").then((m) => ({
+      default: m.EmailMarketingPreview,
+    })),
+  ),
 };

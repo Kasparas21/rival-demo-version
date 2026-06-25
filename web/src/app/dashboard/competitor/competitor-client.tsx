@@ -219,6 +219,7 @@ import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-ove
 import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
 import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
+import { EmailMarketingTab } from "@/components/email-intelligence/EmailMarketingTab";
 import { BenchmarkTab } from "@/components/benchmark/benchmark-tab";
 import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-styles";
 import {
@@ -5456,6 +5457,15 @@ function CompetitorDashboardBody({
             billingIsUnlimited={billingIsUnlimited}
             onUnreadChange={setAlertsUnreadCount}
             fetchEnabled={navTab === "alerts"}
+          />
+        </div>
+      </KeepMountedTab>
+
+      <KeepMountedTab active={navTab === "email-marketing" && !isOwnWorkspace} className="min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+          <EmailMarketingTab
+            competitorId={competitorDbIdForSaved || undefined}
+            competitorName={competitorDisplayLabel}
           />
         </div>
       </KeepMountedTab>

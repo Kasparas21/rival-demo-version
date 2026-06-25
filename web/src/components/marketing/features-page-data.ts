@@ -145,4 +145,17 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
       "Spot channel experiments before they scale",
     ],
   },
+  {
+    id: "email-marketing",
+    name: "Email Marketing Intelligence",
+    iconKey: "mail",
+    summary:
+      "Capture competitor newsletters and promos with a unique inbox address — AI summaries, offer codes, and send cadence.",
+    why: "See what they email subscribers without signing up on every list yourself.",
+    bullets: [
+      "Unique tracking inbox per competitor",
+      "AI summaries, angles, and offer extraction",
+      "Cadence insights and marketing-type alerts",
+    ],
+  },
 ];

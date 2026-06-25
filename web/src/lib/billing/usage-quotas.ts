@@ -233,3 +233,115 @@ export function canRunAdPreviewAnalysis(
 
   return { ok: true, limit, remaining: limit - usedThisMonth };
 }
+
+export async function loadEmailAiAnalysisUsage(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  yearMonth = utcYearMonth(),
+): Promise<number> {
+  const { data } = await supabase
+    .from("email_intelligence_analysis_usage")
+    .select("analysis_count")
+    .eq("user_id", userId)
+    .eq("year_month", yearMonth)
+    .maybeSingle();
+
+  return data?.analysis_count ?? 0;
+}
+
+export async function incrementEmailAiAnalysisUsage(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("increment_email_intelligence_analysis_usage", {
+    p_user_id: userId,
+  });
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+export async function loadActiveEmailTrackerCount(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("competitor_email_trackers")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return count ?? 0;
+}
+
+export function canCreateEmailTracker(
+  billing: BillingEntitlement,
+  activeTrackers: number,
+): { ok: true } | { ok: false; error: string; status: number } {
+  if (billing.isUnlimited) return { ok: true };
+  if (!billing.limits.allowEmailMarketing) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Email marketing is available on Starter and Pro plans.",
+    };
+  }
+  const limit = billing.limits.maxEmailTrackers;
+  if (limit == null) return { ok: true };
+  if (activeTrackers >= limit) {
+    return {
+      ok: false,
+      status: 402,
+      error: `Email tracker limit reached (${activeTrackers}/${limit}). Upgrade for more competitors.`,
+    };
+  }
+  return { ok: true };
+}
+
+export function canRunEmailAiAnalysis(
+  billing: BillingEntitlement,
+  usedThisMonth: number,
+):
+  | { ok: true; limit: number | null; remaining: number | null }
+  | { ok: false; error: string; status: number; quotaExceeded: true } {
+  if (billing.isUnlimited) {
+    return { ok: true, limit: null, remaining: null };
+  }
+
+  if (!billing.limits.allowEmailMarketing) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Email AI analysis is available on Starter and Pro plans.",
+      quotaExceeded: true,
+    };
+  }
+
+  const limit = billing.limits.maxEmailAiAnalysesPerMonth;
+  if (limit == null) {
+    return { ok: true, limit: null, remaining: null };
+  }
+
+  if (limit <= 0) {
+    return {
+      ok: false,
+      status: 402,
+      error: "Email AI analysis is not included on your plan.",
+      quotaExceeded: true,
+    };
+  }
+
+  if (usedThisMonth >= limit) {
+    return {
+      ok: false,
+      status: 402,
+      error: `Monthly email AI limit reached (${usedThisMonth}/${limit}). Resets next UTC month.`,
+      quotaExceeded: true,
+    };
+  }
+
+  return { ok: true, limit, remaining: limit - usedThisMonth };
+}

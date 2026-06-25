@@ -320,6 +320,7 @@ export const landingCopyEn: LandingCopy = {
           "Automatic refresh — no manual work",
           "Full intelligence suite — Strategy Map, Activity Score, Copy Vault & more",
           "Weekly Three Moves AI report + Monday digest",
+          "Competitor email capture",
           "1 brand workspace · up to 15 swaps/month",
         ],
       },
@@ -337,7 +338,7 @@ export const landingCopyEn: LandingCopy = {
         features: [
           "1 brand workspace · up to 50 swaps/month",
           "Priority refresh",
-          "CSV exports",
+          "CSV exports (ads + emails)",
           "Manual refresh on demand",
           "Historical snapshots",
           "Emerging Angle Alerts",

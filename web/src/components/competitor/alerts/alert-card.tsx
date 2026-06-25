@@ -108,6 +108,11 @@ export function alertDeepLinkPath(alert: AlertFeedRow): { tab: string; sub?: str
     case "activity_spike":
     case "activity_drop":
       return { tab: "insights", sub: "strategy-map" };
+    case "competitor_email":
+      return {
+        tab: "email-marketing",
+        extra: typeof meta.emailId === "string" ? { email_id: meta.emailId } : undefined,
+      };
     default:
       return { tab: "insights", sub: "activity-feed" };
   }

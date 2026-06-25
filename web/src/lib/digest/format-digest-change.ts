@@ -61,6 +61,12 @@ export function formatDigestChangeLine(alert: AlertRow): string {
       if (days != null) return `Proven winner: ad running ${days}+ days`;
       return alert.title.trim() || "Long-running ad crossed lifespan threshold";
     }
+    case "competitor_email": {
+      const type = typeof meta.email_type === "string" ? meta.email_type.replace(/_/g, " ") : "marketing";
+      const subject = typeof meta.subject === "string" ? meta.subject.trim() : "";
+      if (subject) return `New ${type} email: “${truncate(subject, 72)}”`;
+      return alert.title.trim() || `New ${type} email captured`;
+    }
     default:
       break;
   }
