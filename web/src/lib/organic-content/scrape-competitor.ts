@@ -8,7 +8,7 @@ import { generateOrganicInsights } from "./generate-insights";
 import { upsertOrganicPosts } from "./persist-posts";
 import { scrapeOrganicPlatformSafe } from "./run-platform-scraper";
 import { parseOrganicSocials } from "./socials";
-import { ORGANIC_PLATFORMS, type NormalizedOrganicPost, type ScrapeOrganicCompetitorRow } from "./types";
+import { ORGANIC_PLATFORMS, type NormalizedOrganicPost, type OrganicPlatform, type ScrapeOrganicCompetitorRow } from "./types";
 
 export type ScrapeOrganicCompetitorResult = {
   ok: boolean;
