@@ -30,6 +30,11 @@ export default async function LoginPage({
     return <AuthSetupError message={e instanceof Error ? e.message : "Missing Supabase configuration."} />;
   }
 
+  if (firstParam(params.switch) === "1") {
+    await supabase.auth.signOut();
+    redirect("/login");
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();

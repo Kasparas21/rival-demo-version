@@ -185,6 +185,10 @@ export type Database = {
           platform_high_coverage_applied: boolean;
           first_scrape_completed_at: string | null;
           smart_prioritization_disabled: boolean;
+          socials: Json;
+          organic_baseline_date: string | null;
+          organic_last_scraped_at: string | null;
+          organic_next_scrape_at: string | null;
         };
         Insert: {
           id?: string;
@@ -207,6 +211,10 @@ export type Database = {
           platform_high_coverage_applied?: boolean;
           first_scrape_completed_at?: string | null;
           smart_prioritization_disabled?: boolean;
+          socials?: Json;
+          organic_baseline_date?: string | null;
+          organic_last_scraped_at?: string | null;
+          organic_next_scrape_at?: string | null;
         };
         Update: {
           id?: string;
@@ -229,6 +237,10 @@ export type Database = {
           platform_high_coverage_applied?: boolean;
           first_scrape_completed_at?: string | null;
           smart_prioritization_disabled?: boolean;
+          socials?: Json;
+          organic_baseline_date?: string | null;
+          organic_last_scraped_at?: string | null;
+          organic_next_scrape_at?: string | null;
         };
         Relationships: [];
       };
@@ -1021,6 +1033,144 @@ export type Database = {
         };
         Relationships: [];
       };
+      organic_posts: {
+        Row: {
+          id: string;
+          competitor_id: string;
+          user_id: string;
+          platform: string;
+          post_id: string;
+          content: string | null;
+          media_urls: string[];
+          likes: number;
+          comments: number;
+          shares: number;
+          views: number;
+          posted_at: string | null;
+          scraped_at: string;
+          raw_data: Json;
+        };
+        Insert: {
+          id?: string;
+          competitor_id: string;
+          user_id: string;
+          platform: string;
+          post_id: string;
+          content?: string | null;
+          media_urls?: string[];
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          views?: number;
+          posted_at?: string | null;
+          scraped_at?: string;
+          raw_data?: Json;
+        };
+        Update: {
+          id?: string;
+          competitor_id?: string;
+          user_id?: string;
+          platform?: string;
+          post_id?: string;
+          content?: string | null;
+          media_urls?: string[];
+          likes?: number;
+          comments?: number;
+          shares?: number;
+          views?: number;
+          posted_at?: string | null;
+          scraped_at?: string;
+          raw_data?: Json;
+        };
+        Relationships: [];
+      };
+      organic_collaborators: {
+        Row: {
+          id: string;
+          competitor_id: string;
+          user_id: string;
+          platform: string;
+          handle: string;
+          display_name: string | null;
+          profile_url: string | null;
+          avatar_url: string | null;
+          collab_types: string[];
+          post_count: number;
+          first_seen_at: string;
+          last_seen_at: string;
+        };
+        Insert: {
+          id?: string;
+          competitor_id: string;
+          user_id: string;
+          platform: string;
+          handle: string;
+          display_name?: string | null;
+          profile_url?: string | null;
+          avatar_url?: string | null;
+          collab_types?: string[];
+          post_count?: number;
+          first_seen_at?: string;
+          last_seen_at?: string;
+        };
+        Update: {
+          id?: string;
+          competitor_id?: string;
+          user_id?: string;
+          platform?: string;
+          handle?: string;
+          display_name?: string | null;
+          profile_url?: string | null;
+          avatar_url?: string | null;
+          collab_types?: string[];
+          post_count?: number;
+          first_seen_at?: string;
+          last_seen_at?: string;
+        };
+        Relationships: [];
+      };
+      organic_insights: {
+        Row: {
+          id: string;
+          competitor_id: string;
+          user_id: string;
+          platform: string;
+          generated_at: string;
+          whats_working: Json;
+          whats_flopping: Json;
+          top_collaborators: Json;
+          hot_right_now: Json;
+          metrics_overview: Json;
+          raw_analysis: string | null;
+        };
+        Insert: {
+          id?: string;
+          competitor_id: string;
+          user_id: string;
+          platform?: string;
+          generated_at?: string;
+          whats_working?: Json;
+          whats_flopping?: Json;
+          top_collaborators?: Json;
+          hot_right_now?: Json;
+          metrics_overview?: Json;
+          raw_analysis?: string | null;
+        };
+        Update: {
+          id?: string;
+          competitor_id?: string;
+          user_id?: string;
+          platform?: string;
+          generated_at?: string;
+          whats_working?: Json;
+          whats_flopping?: Json;
+          top_collaborators?: Json;
+          hot_right_now?: Json;
+          metrics_overview?: Json;
+          raw_analysis?: string | null;
+        };
+        Relationships: [];
+      };
       alert_rules: {
         Row: {
           id: string;
@@ -1490,6 +1640,20 @@ export type Database = {
       };
       record_manual_refresh_usage: {
         Args: { p_competitor_id: string };
+        Returns: undefined;
+      };
+      upsert_organic_collaborator: {
+        Args: {
+          p_competitor_id: string;
+          p_user_id: string;
+          p_platform: string;
+          p_handle: string;
+          p_display_name?: string | null;
+          p_profile_url?: string | null;
+          p_avatar_url?: string | null;
+          p_collab_types?: string[];
+          p_post_count_delta?: number;
+        };
         Returns: undefined;
       };
     };

@@ -198,8 +198,10 @@ import {
   competitorPageTabsForView,
   competitorSubTabsForView,
   findCompetitorTab,
+  isGlobalDebugOnlyTab,
   isOwnBrandDebugOnlySubTab,
   isOwnBrandDebugOnlyTab,
+  type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
@@ -220,6 +222,7 @@ import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab"
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
 import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
 import { EmailMarketingTab } from "@/components/email-intelligence/EmailMarketingTab";
+import { OrganicTab } from "@/components/organic/OrganicTab";
 import { BenchmarkTab } from "@/components/benchmark/benchmark-tab";
 import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-styles";
 import {
@@ -2244,6 +2247,15 @@ function CompetitorDashboardBody({
   }, [isOwnWorkspace, showBrandDebugTabs, navTab, navSub, syncNavToUrl]);
 
   useEffect(() => {
+    if (showBrandDebugTabs) return;
+    if (navTab !== "organic") return;
+    const sub = deriveSubFromParams(searchParams, "ads library");
+    setNavTab("ads library");
+    setNavSub(sub);
+    syncNavToUrl("ads library", sub);
+  }, [showBrandDebugTabs, navTab, searchParams, deriveSubFromParams, syncNavToUrl]);
+
+  useEffect(() => {
     if (
       !isOwnWorkspace &&
       (navTab === "workspace-ads" || navTab === "workspace-marketing-improvements" || navTab === "benchmark")
@@ -4102,7 +4114,9 @@ function CompetitorDashboardBody({
               const isActive = navTab === tab.id;
               const isDisabled = tab.disabled === true;
               const isDebugOnlyTab =
-                isOwnWorkspace && showBrandDebugTabs && isOwnBrandDebugOnlyTab(tab.id);
+                showBrandDebugTabs &&
+                (isGlobalDebugOnlyTab(tab.id) ||
+                  (isOwnWorkspace && isOwnBrandDebugOnlyTab(tab.id)));
               const Icon = tab.icon;
               return (
                 <button
@@ -5466,6 +5480,17 @@ function CompetitorDashboardBody({
           <EmailMarketingTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorName={competitorDisplayLabel}
+          />
+        </div>
+      </KeepMountedTab>
+
+      <KeepMountedTab active={navTab === "organic" && !isOwnWorkspace && showBrandDebugTabs} className="min-h-0">
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+          <OrganicTab
+            competitorId={competitorDbIdForSaved || undefined}
+            competitorName={competitorDisplayLabel}
+            activeSubTab={(navSub as CompetitorSubTabId | null) ?? "feed"}
+            onSubTabChange={handleSubTabChange}
           />
         </div>
       </KeepMountedTab>

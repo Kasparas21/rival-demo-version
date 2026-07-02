@@ -6,6 +6,7 @@ import {
   GitCompareArrows,
   Library,
   Mail,
+  Share2,
   SlidersHorizontal,
   TrendingUp,
   Users,
@@ -21,7 +22,10 @@ export type CompetitorSubTabId =
   | "timeline"
   | "landing-pages"
   | "audience"
-  | "copy-vault";
+  | "copy-vault"
+  | "feed"
+  | "insights"
+  | "organic-settings";
 
 export type CompetitorPageTabId =
   | "ads library"
@@ -31,6 +35,7 @@ export type CompetitorPageTabId =
   | "comparison"
   | "alerts"
   | "email-marketing"
+  | "organic"
   | "workspace-ads"
   | "workspace-marketing-improvements"
   | "benchmark";
@@ -108,6 +113,17 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     label: "Email Marketing",
     icon: Mail,
   },
+  {
+    id: "organic",
+    label: "Organic",
+    icon: Share2,
+    defaultSubTab: "feed",
+    subTabs: [
+      { id: "feed", label: "Feed" },
+      { id: "insights", label: "Insights" },
+      { id: "organic-settings", label: "Settings" },
+    ],
+  },
 ];
 
 export function findCompetitorTab(id: string): CompetitorPageTab | undefined {
@@ -139,6 +155,13 @@ export const WORKSPACE_BENCHMARK_TAB: CompetitorPageTab = {
   label: "Benchmark",
   icon: Gauge,
 };
+
+/** Competitor hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
+export const DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = ["organic"];
+
+export function isGlobalDebugOnlyTab(tabId: string): tabId is (typeof DEBUG_ONLY_TAB_IDS)[number] {
+  return DEBUG_ONLY_TAB_IDS.includes(tabId as (typeof DEBUG_ONLY_TAB_IDS)[number]);
+}
 
 /** Own-brand hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
 export const OWN_BRAND_DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [
@@ -189,11 +212,14 @@ export function competitorPageTabsForView(opts: {
   const { isOwnWorkspace, showDebugTabs = false } = opts;
 
   let base = isOwnWorkspace
-    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison" && t.id !== "email-marketing")
+    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison" && t.id !== "email-marketing" && t.id !== "organic")
     : [...COMPETITOR_PAGE_TABS];
 
-  if (isOwnWorkspace && !showDebugTabs) {
-    const hidden = new Set<string>(OWN_BRAND_DEBUG_ONLY_TAB_IDS);
+  if (!showDebugTabs) {
+    const hidden = new Set<string>(DEBUG_ONLY_TAB_IDS);
+    if (isOwnWorkspace) {
+      OWN_BRAND_DEBUG_ONLY_TAB_IDS.forEach((id) => hidden.add(id));
+    }
     base = base.filter((t) => !hidden.has(t.id));
   }
 

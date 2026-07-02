@@ -98,6 +98,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   includes: "Enthält",
   billedMonthly: "Monatlich abgerechnet",
   billedAnnually: "Jährlich abgerechnet (£{yearlyUsd}/Jahr)",
+  switchAccount: "Mit einem anderen Konto anmelden",
   tester: {
     title: "Ihr Tester-Zugang",
     body: "Pro ist für Ihre Testgruppe inklusive — 100 % Rabatt bereits angewendet. Keine Zahlung nötig.",

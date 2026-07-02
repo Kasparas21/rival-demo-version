@@ -98,6 +98,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   includes: "Inclusief",
   billedMonthly: "Maandelijks gefactureerd",
   billedAnnually: "Jaarlijks gefactureerd (£{yearlyUsd}/jaar)",
+  switchAccount: "Inloggen met een ander account",
   tester: {
     title: "Uw tester-toegang",
     body: "Pro is inbegrepen voor uw testgroep — 100% korting al toegepast. Geen betaling nodig.",

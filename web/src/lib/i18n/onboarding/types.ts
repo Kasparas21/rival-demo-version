@@ -97,6 +97,8 @@ export type PlanPickerCopy = {
   billedMonthly: string;
   /** Template: `{yearlyUsd}` */
   billedAnnually: string;
+  /** Link shown when user is stuck on choose-plan but wants another account. */
+  switchAccount: string;
   tester: {
     title: string;
     body: string;

@@ -94,6 +94,7 @@ const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   includes: "Includes",
   billedMonthly: "Billed monthly",
   billedAnnually: "Billed annually (£{yearlyUsd}/year)",
+  switchAccount: "Sign in with a different account",
   tester: {
     title: "You're invited to Rival Pro",
     body: "Your complimentary Pro access is included — no payment required. We're activating your account now.",

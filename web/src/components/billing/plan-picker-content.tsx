@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
@@ -340,6 +341,14 @@ export function PlanPickerContent({
           );
         })}
       </div>
+
+      {variant === "page" ? (
+        <p className="mt-6 text-center text-[13px] text-gray-600">
+          <Link href="/auth/sign-out?next=/login" className="font-semibold text-gray-800 underline-offset-2 hover:underline">
+            {copy.switchAccount}
+          </Link>
+        </p>
+      ) : null}
     </>
   );
 }

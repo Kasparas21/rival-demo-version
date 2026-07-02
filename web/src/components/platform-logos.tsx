@@ -234,6 +234,36 @@ export function RedditLogo({ className }: { className?: string }) {
   );
 }
 
+export function FacebookLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 256 256" className={className || svgClass} aria-hidden>
+      <path
+        fill="#1877F2"
+        d="M256 128C256 57.308 198.692 0 128 0C57.308 0 0 57.308 0 128c0 63.888 46.808 116.843 108 126.445V165H75.5v-37H108V99.8c0-32.08 19.11-49.8 48.348-49.8 14.005 0 28.679 2.5 28.679 2.5v31.5h-16.153c-15.931 0-20.906 9.889-20.906 20.024V128h35.632l-5.708 37H148v89.445C209.192 244.843 256 191.888 256 128Z"
+      />
+    </svg>
+  );
+}
+
+export function InstagramLogo({ className }: { className?: string }) {
+  const u = useId().replace(/[:]/g, "");
+  const gradId = `ig-grad-${u}`;
+  return (
+    <svg viewBox="0 0 256 256" className={className || svgClass} aria-hidden>
+      <defs>
+        <linearGradient id={gradId} x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#FD5949" />
+          <stop offset="50%" stopColor="#D6249F" />
+          <stop offset="100%" stopColor="#285AEB" />
+        </linearGradient>
+      </defs>
+      <rect width="256" height="256" rx="58" fill={`url(#${gradId})`} />
+      <circle cx="128" cy="128" r="52" fill="none" stroke="#fff" strokeWidth="22" />
+      <circle cx="188" cy="68" r="16" fill="#fff" />
+    </svg>
+  );
+}
+
 export function TikTokLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
