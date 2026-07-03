@@ -332,7 +332,7 @@ export async function scrapeOrganicPlatform(
   const normalized = normalizeOrganicItems(platform, items).slice(0, ORGANIC_SCRAPE_MAX_ITEMS);
 
   if (platform === "twitter") {
-    return { posts: enrichTwitterPostsWithViews(normalized) };
+    return { posts: await enrichTwitterPostsWithViews(normalized) };
   }
 
   return { posts: normalized };

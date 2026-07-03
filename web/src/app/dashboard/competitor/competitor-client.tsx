@@ -203,7 +203,7 @@ import {
   isOwnBrandDebugOnlyTab,
   type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
-import { COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
+import { COMPETITOR_PAGE_X, scrollDashboardMainToTop } from "@/components/dashboard/competitor/competitor-page-layout";
 import {
   CompetitorCompactStickyNav,
   CompetitorHeaderScrollSentinel,
@@ -2274,6 +2274,7 @@ function CompetitorDashboardBody({
 
   const handleTabChange = useCallback(
     (tabId: string) => {
+      scrollDashboardMainToTop();
       const tab = findCompetitorTab(tabId);
       const sub = tab?.defaultSubTab ?? null;
       userNavIntentRef.current = { tab: tabId, sub };
@@ -2301,6 +2302,7 @@ function CompetitorDashboardBody({
 
   const handleSubTabChange = useCallback(
     (subTabId: string) => {
+      scrollDashboardMainToTop();
       userNavIntentRef.current = { tab: navTab, sub: subTabId };
       setNavSub(subTabId);
       startTransition(() => {
@@ -2317,6 +2319,7 @@ function CompetitorDashboardBody({
   );
 
   const navigateToLandingPagesExplorer = useCallback(() => {
+    scrollDashboardMainToTop();
     userNavIntentRef.current = { tab: "tests", sub: "landing-pages" };
     setNavTab("tests");
     setNavSub("landing-pages");

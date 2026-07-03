@@ -286,6 +286,10 @@ export function toOrganicPostClientPayload<
 >(post: T): Omit<T & OrganicPostDisplayFields, "raw_data"> & { views: number; media_urls: string[] } {
   const enriched = enrichOrganicPostForApi(post);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { raw_data, ...client } = enriched as T & OrganicPostDisplayFields & { raw_data?: unknown };
-  return client;
+  const { raw_data, ...client } = enriched;
+  return {
+    ...client,
+    views: enriched.views,
+    media_urls: enriched.media_urls,
+  };
 }
