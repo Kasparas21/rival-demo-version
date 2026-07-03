@@ -7,6 +7,7 @@ import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-s
 import { COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import {
   competitorSubTabsForView,
+  competitorTabNewBadgeClass,
   findCompetitorTab,
   isGlobalDebugOnlyTab,
   isOwnBrandDebugOnlyTab,
@@ -219,6 +220,11 @@ export function CompetitorCompactStickyNav({
                   ) : null}
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden sm:inline">{tab.label}</span>
+                  {tab.isNew ? (
+                    <span className={cn(competitorTabNewBadgeClass, "scale-90")} aria-label="New feature">
+                      New
+                    </span>
+                  ) : null}
                   {tab.id === "alerts" && alertsUnreadCount > 0 ? (
                     <AlertUnreadCountBadge count={alertsUnreadCount} className="ml-0.5 scale-90" />
                   ) : null}

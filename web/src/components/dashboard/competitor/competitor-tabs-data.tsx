@@ -52,9 +52,14 @@ export type CompetitorPageTab = {
   label: string;
   icon: LucideIcon;
   disabled?: boolean;
+  isNew?: boolean;
   subTabs?: CompetitorSubTab[];
   defaultSubTab?: CompetitorSubTabId;
 };
+
+/** Rival-accent pill for newly launched main tabs (Organic, Email Marketing, …). */
+export const competitorTabNewBadgeClass =
+  "inline-flex shrink-0 items-center rounded-full bg-[color:var(--rival-accent-blue)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.04em] text-[#1e6fa8] ring-1 ring-[#bfdbfe]/55";
 
 export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
   {
@@ -66,6 +71,24 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
       { id: "all", label: "All Ads" },
       { id: "saved", label: "Saved" },
     ],
+  },
+  {
+    id: "organic",
+    label: "Organic",
+    icon: Share2,
+    isNew: true,
+    defaultSubTab: "feed",
+    subTabs: [
+      { id: "feed", label: "Feed" },
+      { id: "insights", label: "Insights" },
+      { id: "organic-settings", label: "Settings" },
+    ],
+  },
+  {
+    id: "email-marketing",
+    label: "Email Marketing",
+    icon: Mail,
+    isNew: true,
   },
   {
     id: "insights",
@@ -107,22 +130,6 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     id: "alerts",
     label: "Alerts",
     icon: Bell,
-  },
-  {
-    id: "email-marketing",
-    label: "Email Marketing",
-    icon: Mail,
-  },
-  {
-    id: "organic",
-    label: "Organic",
-    icon: Share2,
-    defaultSubTab: "feed",
-    subTabs: [
-      { id: "feed", label: "Feed" },
-      { id: "insights", label: "Insights" },
-      { id: "organic-settings", label: "Settings" },
-    ],
   },
 ];
 

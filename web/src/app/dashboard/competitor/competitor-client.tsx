@@ -197,6 +197,7 @@ import {
   OWN_BRAND_DEBUG_ONLY_TAB_IDS,
   competitorPageTabsForView,
   competitorSubTabsForView,
+  competitorTabNewBadgeClass,
   findCompetitorTab,
   isGlobalDebugOnlyTab,
   isOwnBrandDebugOnlySubTab,
@@ -4180,6 +4181,11 @@ function CompetitorDashboardBody({
                     }`}
                   />
                   {tab.label}
+                  {tab.isNew ? (
+                    <span className={competitorTabNewBadgeClass} aria-label="New feature">
+                      New
+                    </span>
+                  ) : null}
                   {tab.id === "alerts" && alertsUnreadCount > 0 ? (
                     <AlertUnreadCountBadge count={alertsUnreadCount} className="ml-0.5" />
                   ) : null}
