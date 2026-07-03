@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { isMetaAdActive, isTikTokAdActive } from "@/lib/ad-library/count-active-ads";
+import { metaCardForLifecycle } from "@/lib/ad-library/meta-payload-lifecycle";
 import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
 import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
-import type { MetaAdCard, TikTokAdCard } from "@/lib/ad-library/normalize";
+import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -57,7 +58,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
     const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
     if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
-      running = isMetaAdActive(payload as MetaAdCard, scrapeAtMs);
+      const card = metaCardForLifecycle(payload, scrapeAtMs);
+      running = card ? isMetaAdActive(card, scrapeAtMs) : false;
     } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
       running = isTikTokAdActive(payload as TikTokAdCard);
     } else {

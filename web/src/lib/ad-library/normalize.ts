@@ -25,6 +25,7 @@ import {
   harvestDeepMetaReachImpressionsCandidate,
   harvestDeepMetaTransparencyFields,
 } from "@/lib/ad-detail/meta-ad-detail-fields";
+import { resolveMetaAdLibraryUrlFromPayload } from "@/lib/ad-library/meta-ad-library-url";
 
 /** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
 export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
@@ -69,6 +70,8 @@ export type MetaAdCard = {
   isVideo: boolean;
   videoUrl?: string;
   adLibraryUrl: string;
+  /** Official Meta Ad Library archive id — only valid for `?id=` detail links. */
+  adArchiveId?: string;
   startedAt?: number;
   endedAt?: number;
   /** From Meta Ad Library scrape (`is_active`) — still running when true. */
@@ -1109,12 +1112,16 @@ export function facebookItemToMetaCard(
   const subtext = linkMerged || captionForHostname || "";
   const destinationUrl = linkMerged ? metaDestinationHttps(linkMerged) : undefined;
 
-  const id = item.ad_archive_id || item.collation_id || `fb-${index}`;
+  const archiveId = item.ad_archive_id?.trim() || "";
+  const id = archiveId || `fb-${index}`;
   const adLibraryUrl =
-    item.ad_library_url?.trim() ||
-    (item.ad_archive_id
-      ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(item.ad_archive_id)}`
-      : "https://www.facebook.com/ads/library/");
+    resolveMetaAdLibraryUrlFromPayload({
+      ad_archive_id: archiveId || undefined,
+      adArchiveId: archiveId || undefined,
+      ad_library_url: item.ad_library_url?.trim() || undefined,
+      adLibraryUrl: item.ad_library_url?.trim() || undefined,
+      id: archiveId || undefined,
+    }) || "";
   const pic = snap?.page_profile_picture_url || undefined;
   const { url: probeImg } = pickMetaImage(snap);
   const hasRenderable =
@@ -1142,13 +1149,10 @@ export function facebookItemToMetaCard(
     img: finalImg || "",
     isVideo,
     adLibraryUrl,
+    ...(archiveId ? { adArchiveId: archiveId } : {}),
     startedAt: item.start_date,
     ...(typeof item.is_active === "boolean" ? { isActive: item.is_active } : {}),
-    ...(item.is_active === true
-      ? {}
-      : item.end_date != null && Number.isFinite(item.end_date)
-        ? { endedAt: item.end_date }
-        : {}),
+    ...(item.end_date != null && Number.isFinite(item.end_date) ? { endedAt: item.end_date } : {}),
     impressionsIndex: item.impressions_with_index?.impressions_index,
     pageName,
     pageProfilePic: pic,

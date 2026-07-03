@@ -76,9 +76,8 @@ export function buildManualRefreshLibraryBodyForPlatform(
       return {
         ...base,
         metaMaxAds: cap,
-        metaStartDate: dateParams.metaStartDate,
-        metaEndDate: dateParams.metaEndDate,
         metaSortBy: "impressions_desc",
+        /** Page-id scrapes: no same-day ISO window — it breaks the Facebook actor for saved page URLs. */
       };
     case "google":
       return {

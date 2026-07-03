@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
+import { hydrateMetaAdCardForLibrary, isMetaAdActive } from "@/lib/ad-library/count-active-ads";
 import { parseGoogleShownSummaryRange } from "@/lib/ad-library/google-shown-range";
 import type { GoogleAdRow } from "@/lib/ad-library/normalize";
 import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
@@ -258,24 +259,27 @@ export function buildScrapedAdInsertsForPlatform(params: {
 
   switch (platform) {
     case "meta":
-      return (out.meta.ads ?? []).map((ad) => ({
-        ...base,
-        platform: "meta",
-        stable_ad_key: stableAdKeyForLibraryItem("meta", ad),
-        ad_text: joinedText([ad.desc, ad.headline, ad.linkDescription, ad.cta]),
-        ad_creative_url: ad.img?.trim() || ad.videoUrl?.trim() || null,
-        format: ad.isVideo ? "video" : "image",
-        first_seen_at: unixishToIso(ad.startedAt, nowIso),
-        last_seen_at:
-          ad.isActive === true
-            ? nowIso
-            : unixishToIso(ad.endedAt, nowIso),
-        ai_extracted_launch_date: (() => {
-          const launch = extractLaunchDate(ad, "meta");
-          return launch ? launch.toISOString() : null;
-        })(),
-        raw_payload: sanitizeJsonForPostgres(ad),
-      }));
+      return (out.meta.ads ?? []).map((ad) => {
+        const scrapeAtMs = Date.parse(nowIso);
+        const hydrated = hydrateMetaAdCardForLibrary(ad, scrapeAtMs);
+        const active = isMetaAdActive(hydrated, scrapeAtMs);
+        return {
+          ...base,
+          platform: "meta",
+          stable_ad_key: stableAdKeyForLibraryItem("meta", hydrated),
+          ad_text: joinedText([hydrated.desc, hydrated.headline, hydrated.linkDescription, hydrated.cta]),
+          ad_creative_url: hydrated.img?.trim() || hydrated.videoUrl?.trim() || null,
+          format: hydrated.isVideo ? "video" : "image",
+          first_seen_at: unixishToIso(hydrated.startedAt, nowIso),
+          last_seen_at: active ? nowIso : unixishToIso(hydrated.endedAt, nowIso),
+          is_active: active,
+          ai_extracted_launch_date: (() => {
+            const launch = extractLaunchDate(hydrated, "meta");
+            return launch ? launch.toISOString() : null;
+          })(),
+          raw_payload: sanitizeJsonForPostgres(hydrated),
+        };
+      });
     case "google": {
       const rows: ScrapedAdInsert[] = [];
       for (const row of out.google.rows ?? []) {

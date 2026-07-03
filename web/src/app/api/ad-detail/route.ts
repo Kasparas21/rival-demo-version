@@ -3,7 +3,9 @@ import { z } from "zod";
 
 import { isScrapedAdsUuid } from "@/lib/ad-detail/ad-id";
 import { adPreviewAnalysisSchema, type AdPreviewAnalysis } from "@/lib/ad-detail/ad-ai-analysis-types";
+import { resolveMetaAdKilledForDetail } from "@/lib/ad-detail/resolve-meta-ad-killed";
 import { ensureCompetitorAdsPersisted } from "@/lib/ad-library/ensure-competitor-ads-persisted";
+import { isScrapedAdKilled } from "@/lib/ad-library/scraped-ad-lifecycle";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { canRunAdPreviewAnalysis, loadAdPreviewAnalysisUsage } from "@/lib/billing/usage-quotas";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
@@ -228,13 +230,13 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
 
-  const lastScrapedAt = competitor.last_scraped_at
-    ? new Date(competitor.last_scraped_at).getTime()
-    : Date.now();
-  const killedThreshold = lastScrapedAt - 24 * 60 * 60 * 1000;
+  const lastScrapedAt = competitor.last_scraped_at;
   const lastSeenMs = new Date(ad.last_seen_at).getTime();
   const firstSeenMs = new Date(ad.first_seen_at).getTime();
-  const isKilled = lastSeenMs < killedThreshold;
+  const isKilled =
+    ad.platform === "meta"
+      ? resolveMetaAdKilledForDetail(ad.raw_payload, ad.last_seen_at, lastScrapedAt)
+      : isScrapedAdKilled(ad.last_seen_at, lastScrapedAt);
   const lifespanDays = Math.max(0, Math.floor((lastSeenMs - firstSeenMs) / (24 * 60 * 60 * 1000)));
 
   const ctaFromPayload = (() => {

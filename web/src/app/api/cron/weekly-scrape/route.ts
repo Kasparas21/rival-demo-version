@@ -2,7 +2,6 @@ import { after } from "next/server";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
 import { classifyCompetitorPlatforms } from "@/lib/ad-library/classify-competitor-platforms";
-import { buildScheduledScrapeLimits } from "@/lib/ad-library/build-scheduled-scrape-params";
 import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
 import { finalizeAdsLibraryAfterFreshScrape } from "@/lib/ad-library/finalize-ads-library-scrape";
 import {
@@ -21,8 +20,6 @@ import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { refreshPlatformTrackingAfterScrape } from "@/lib/ad-library/persist-platform-tracking";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import {
-  computeScheduledScrapeDateWindow,
-  linkedinDateRangeForWindow,
   msToUtcYmd,
 } from "@/lib/ad-library/scheduled-scrape-date-window";
 import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-options";
@@ -32,11 +29,18 @@ import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { filterWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidates";
+import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+/** Vercel Pro allows up to 800s; time-box still stops new work at ~230s. */
+export const maxDuration = 800;
+
+/** Mark `running` jobs older than this as failed before starting new work. */
+const STALE_RUNNING_JOB_MS = 2 * 60 * 60 * 1000;
+/** Stop enqueueing new competitor scrapes before the serverless hard kill. */
+const CRON_TIME_BUDGET_MS = 230 * 1000;
 
 function cleanDomain(d: string): string {
   return d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || d;
@@ -86,6 +90,88 @@ async function userAllowsAutoRefresh(
   const billing = await getBillingEntitlement(admin, userId);
   if (billing.planTier === "free_trial") return false;
   return billing.limits.allowAutoRefresh || billing.isUnlimited;
+}
+
+async function cleanupStaleRunningJobs(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+): Promise<number> {
+  const cutoff = new Date(Date.now() - STALE_RUNNING_JOB_MS).toISOString();
+  const { data, error } = await admin
+    .from("weekly_scrape_jobs")
+    .update({
+      status: "failed",
+      error_text: "Stale running job — timed out or interrupted by serverless limit",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("status", "running")
+    .lt("updated_at", cutoff)
+    .select("id");
+
+  if (error) {
+    console.error("[cron/weekly-scrape] stale job cleanup", error.message);
+    return 0;
+  }
+  const count = data?.length ?? 0;
+  if (count > 0) {
+    console.info("[cron/weekly-scrape] marked stale running jobs failed", { count });
+  }
+  return count;
+}
+
+async function loadOrderedCandidateRows(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  savedRows: ScheduledScrapeRow[],
+  runDayYmd: string,
+  opts?: { skipDoneTodayForCompetitorId?: string | null },
+): Promise<ScheduledScrapeRow[]> {
+  const candidates = filterWeeklyScrapeCandidates(savedRows);
+
+  const { data: doneToday } = await admin
+    .from("weekly_scrape_jobs")
+    .select("competitor_id")
+    .eq("week_start", runDayYmd)
+    .eq("status", "done");
+
+  const skipDoneId = opts?.skipDoneTodayForCompetitorId?.trim() || null;
+  const doneTodayIds = new Set(
+    (doneToday ?? [])
+      .map((r) => r.competitor_id)
+      .filter((id) => !skipDoneId || id !== skipDoneId),
+  );
+
+  const { data: runningRecent } = await admin
+    .from("weekly_scrape_jobs")
+    .select("competitor_id")
+    .eq("status", "running")
+    .gte("updated_at", new Date(Date.now() - STALE_RUNNING_JOB_MS).toISOString());
+
+  const runningIds = new Set((runningRecent ?? []).map((r) => r.competitor_id));
+
+  const eligible = candidates.filter((r) => !doneTodayIds.has(r.id) && !runningIds.has(r.id));
+  if (eligible.length === 0) return [];
+
+  const competitorIds = eligible.map((r) => r.id);
+  const { data: trackingRows } = await admin
+    .from("competitor_platform_tracking")
+    .select("competitor_id, next_scrape_at")
+    .in("competitor_id", competitorIds);
+
+  const earliestDueByCompetitor = new Map<string, number>();
+  for (const row of trackingRows ?? []) {
+    const cid = row.competitor_id;
+    const dueMs = row.next_scrape_at ? Date.parse(row.next_scrape_at) : 0;
+    const prev = earliestDueByCompetitor.get(cid);
+    if (prev === undefined || dueMs < prev) {
+      earliestDueByCompetitor.set(cid, Number.isNaN(dueMs) ? 0 : dueMs);
+    }
+  }
+
+  return [...eligible].sort((a, b) => {
+    const aDue = earliestDueByCompetitor.get(a.id) ?? 0;
+    const bDue = earliestDueByCompetitor.get(b.id) ?? 0;
+    if (aDue !== bDue) return aDue - bDue;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 async function runWeeklyJobForRow(
@@ -271,61 +357,56 @@ async function runWeeklyJobForRow(
     const googleRegion = normalizeGoogleAdsRegion(undefined);
     const pinterestCountry = normalizePinterestAdsCountry(undefined);
 
-    for (const platform of platformsToScrape) {
-      const classification = classificationByPlatform.get(platform) ?? "SECONDARY";
-      const isInactiveProbe = classification === "INACTIVE";
-      const lim = buildScheduledScrapeLimits(classification, { isInactiveProbe });
-      const lastScrapeAt =
-        lastScrapeByPlatform.get(platform) ?? firstScrapeAt ?? nowStamp;
-      const dateWindow = computeScheduledScrapeDateWindow(lastScrapeAt, nowMs);
-      const linkedinDateRange = linkedinDateRangeForWindow(dateWindow, {
-        inactiveProbe: isInactiveProbe,
-      });
-
-      const platformsNeedingScrape = new Set<AdsLibraryPlatform>([platform]);
-
-      await runAdsLibraryParallelScrape({
-        ids,
-        brandName,
-        domain: domainNormLower,
-        linkedinKeywordFallback,
-        pinterestAdvertiserNameForApify,
-        platformsRequested,
-        platformsNeedingScrape,
-        out,
-        metaStatus,
-        metaMaxAds: lim.metaMaxAds,
-        metaCountry,
-        metaStartDate: dateWindow.startYmd,
-        metaEndDate: dateWindow.endYmd,
-        metaSortBy,
-        linkedinMaxAds: lim.linkedinMaxAds,
-        linkedinDateRange,
-        linkedinCountryCode,
-        tiktokMaxAds: lim.tiktokMaxAds,
-        tiktokStartDate: dateWindow.startYmd,
-        tiktokEndDate: dateWindow.endYmd,
-        microsoftMaxSearchResults: Math.max(24, lim.metaMaxAds, 1000),
-        microsoftCountryCodes,
-        microsoftStartDate: dateWindow.startYmd,
-        microsoftEndDate: dateWindow.endYmd,
-        pinterestMaxResults: lim.pinterestMaxResults,
-        pinterestStartDate: dateWindow.startYmd,
-        pinterestEndDate: dateWindow.endYmd,
-        snapchatMaxItems: lim.snapchatMaxItems,
-        snapchatCountryIso,
-        snapchatStartDate: dateWindow.startYmd,
-        snapchatEndDate: dateWindow.endYmd,
-        tiktokRegion,
-        googleRegion,
-        googleResultsLimit: normalizeGoogleAdsResultsLimit(lim.googleResultsLimit),
-        pinterestCountry,
-        pinterestConfirmedAdvertiserQuery,
-        snapchatConfirmedAdvertiserQuery,
-      });
-    }
+    const scrapeScalars = buildParallelScrapeScalars(
+      platformsToScrape,
+      classificationByPlatform,
+      lastScrapeByPlatform,
+      firstScrapeAt,
+      nowStamp,
+      nowMs,
+    );
 
     const platformsNeedingScrape = new Set<AdsLibraryPlatform>(platformsToScrape);
+
+    await runAdsLibraryParallelScrape({
+      ids,
+      brandName,
+      domain: domainNormLower,
+      linkedinKeywordFallback,
+      pinterestAdvertiserNameForApify,
+      platformsRequested,
+      platformsNeedingScrape,
+      out,
+      metaStatus,
+      metaMaxAds: scrapeScalars.metaMaxAds,
+      metaCountry,
+      metaStartDate: scrapeScalars.metaStartDate,
+      metaEndDate: scrapeScalars.metaEndDate,
+      metaSortBy,
+      linkedinMaxAds: scrapeScalars.linkedinMaxAds,
+      linkedinDateRange: scrapeScalars.linkedinDateRange,
+      linkedinCountryCode,
+      tiktokMaxAds: scrapeScalars.tiktokMaxAds,
+      tiktokStartDate: scrapeScalars.tiktokStartDate,
+      tiktokEndDate: scrapeScalars.tiktokEndDate,
+      microsoftMaxSearchResults: scrapeScalars.microsoftMaxSearchResults,
+      microsoftCountryCodes,
+      microsoftStartDate: scrapeScalars.microsoftStartDate,
+      microsoftEndDate: scrapeScalars.microsoftEndDate,
+      pinterestMaxResults: scrapeScalars.pinterestMaxResults,
+      pinterestStartDate: scrapeScalars.pinterestStartDate,
+      pinterestEndDate: scrapeScalars.pinterestEndDate,
+      snapchatMaxItems: scrapeScalars.snapchatMaxItems,
+      snapchatCountryIso,
+      snapchatStartDate: scrapeScalars.snapchatStartDate,
+      snapchatEndDate: scrapeScalars.snapchatEndDate,
+      tiktokRegion,
+      googleRegion,
+      googleResultsLimit: normalizeGoogleAdsResultsLimit(scrapeScalars.googleResultsLimit),
+      pinterestCountry,
+      pinterestConfirmedAdvertiserQuery,
+      snapchatConfirmedAdvertiserQuery,
+    });
 
     await finalizeAdsLibraryAfterFreshScrape(admin, {
       userId: row.user_id,
@@ -397,12 +478,16 @@ async function runWeeklyScrape(req: Request) {
     return cronUnauthorizedResponse();
   }
 
-  if (!isWithinRefreshWindowUtc()) {
+  const url = new URL(req.url);
+  const forceRun = url.searchParams.get("force") === "1" || url.searchParams.get("force") === "true";
+  const onlyCompetitorId = url.searchParams.get("competitorId")?.trim() || null;
+
+  if (!forceRun && !isWithinRefreshWindowUtc()) {
     return Response.json({
       ok: true,
       skipped: true,
       reason: "outside_refresh_window",
-      message: "Scheduled refresh only runs 04:00–07:00 UTC",
+      message: "Scheduled refresh only runs 04:00–07:00 UTC. Retry with ?force=1 and CRON_SECRET to test manually.",
       processed: 0,
       succeeded: 0,
       failed: 0,
@@ -418,6 +503,9 @@ async function runWeeklyScrape(req: Request) {
 
   const admin = createSupabaseAdminClient();
   const runDayYmd = msToUtcYmd(Date.now());
+  const cronStartedAt = Date.now();
+
+  await cleanupStaleRunningJobs(admin);
 
   const { data: savedRows, error: listErr } = await admin.from("saved_competitors").select("*");
 
@@ -433,27 +521,58 @@ async function runWeeklyScrape(req: Request) {
   let succeeded = 0;
   let failed = 0;
   let skipped = 0;
+  let timeBoxed = 0;
 
-  const candidateRows = filterWeeklyScrapeCandidates(savedRows);
+  const candidateRows = await loadOrderedCandidateRows(admin, savedRows, runDayYmd, {
+    skipDoneTodayForCompetitorId: forceRun ? onlyCompetitorId : null,
+  });
+  const rowsToProcess = onlyCompetitorId
+    ? candidateRows.filter((r) => r.id === onlyCompetitorId)
+    : candidateRows;
 
-  const chunkSize = 3;
-  for (let i = 0; i < candidateRows.length; i += chunkSize) {
-    const chunk = candidateRows.slice(i, i + chunkSize);
-    await Promise.all(
-      chunk.map(async (row) => {
-        processed += 1;
-        try {
-          const result = await runWeeklyJobForRow(admin, row, runDayYmd);
-          if (result.skipped) skipped += 1;
-          else succeeded += 1;
-        } catch {
-          failed += 1;
-        }
-      })
-    );
+  if (onlyCompetitorId && rowsToProcess.length === 0) {
+    return Response.json({
+      ok: false,
+      error: "competitor_not_eligible",
+      message:
+        "Competitor not found, already scraped today, has a running job, or has no due platforms.",
+      competitorId: onlyCompetitorId,
+      processed: 0,
+      succeeded: 0,
+      failed: 0,
+      skipped: 0,
+    });
   }
 
-  const summary = { ok: true, processed, succeeded, failed, skipped, runDayYmd };
+  for (const row of rowsToProcess) {
+    if (Date.now() - cronStartedAt >= CRON_TIME_BUDGET_MS) {
+      timeBoxed += 1;
+      break;
+    }
+
+    processed += 1;
+    try {
+      const result = await runWeeklyJobForRow(admin, row, runDayYmd);
+      if (result.skipped) skipped += 1;
+      else succeeded += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  const remaining = Math.max(0, rowsToProcess.length - processed);
+  const summary = {
+    ok: true,
+    processed,
+    succeeded,
+    failed,
+    skipped,
+    timeBoxed,
+    remainingCandidates: remaining,
+    runDayYmd,
+    forced: forceRun,
+    competitorFilter: onlyCompetitorId,
+  };
   console.info("[cron/weekly-scrape]", summary);
   return Response.json(summary);
 }

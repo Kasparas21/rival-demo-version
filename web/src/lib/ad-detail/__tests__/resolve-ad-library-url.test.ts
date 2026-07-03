@@ -45,6 +45,26 @@ describe("resolveAdLibrarySourceUrl — Google / YouTube", () => {
   });
 });
 
+describe("resolveAdLibrarySourceUrl — Meta", () => {
+  it("uses ad_archive_id for library detail URL", () => {
+    expect(
+      resolveAdLibrarySourceUrl("meta", {
+        ad_archive_id: "26493469133670382",
+        id: "99988877766655544",
+      })
+    ).toBe("https://www.facebook.com/ads/library/?id=26493469133670382");
+  });
+
+  it("does not build a URL from collation-only id", () => {
+    expect(
+      resolveAdLibrarySourceUrl("meta", {
+        id: "99988877766655544",
+        adLibraryUrl: "https://www.facebook.com/ads/library/",
+      })
+    ).toBeNull();
+  });
+});
+
 describe("resolveGoogleAdRowTransparencyHref", () => {
   it("builds creative URL from stable row id when adUrl is account-only", () => {
     const ad = {

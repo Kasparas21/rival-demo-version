@@ -68,6 +68,8 @@ function fallbackKeyFromUrl(url: string): string {
 }
 
 export function stableAdKeyForMeta(card: MetaAdCard): string {
+  const archive = card.adArchiveId?.trim() || metaArchiveIdFromAdLibraryUrl(card.adLibraryUrl);
+  if (archive) return archive;
   const raw = String(card.id ?? "").trim();
   if (raw && !/^fb-\d+$/i.test(raw)) return raw;
   const fromUrl = metaArchiveIdFromAdLibraryUrl(card.adLibraryUrl);

@@ -189,6 +189,8 @@ export type Database = {
           organic_baseline_date: string | null;
           organic_last_scraped_at: string | null;
           organic_next_scrape_at: string | null;
+          baseline_metrics: Json;
+          agent_scrape_cycles: Json;
         };
         Insert: {
           id?: string;
@@ -215,6 +217,8 @@ export type Database = {
           organic_baseline_date?: string | null;
           organic_last_scraped_at?: string | null;
           organic_next_scrape_at?: string | null;
+          baseline_metrics?: Json;
+          agent_scrape_cycles?: Json;
         };
         Update: {
           id?: string;
@@ -241,6 +245,8 @@ export type Database = {
           organic_baseline_date?: string | null;
           organic_last_scraped_at?: string | null;
           organic_next_scrape_at?: string | null;
+          baseline_metrics?: Json;
+          agent_scrape_cycles?: Json;
         };
         Relationships: [];
       };
@@ -661,6 +667,243 @@ export type Database = {
         };
         Relationships: [];
       };
+      agent_messages: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string | null;
+          signal_ids: string[];
+          channels_delivered: string[];
+          subject: string | null;
+          body_markdown: string | null;
+          body_html: string | null;
+          sent_at: string;
+          status: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id?: string | null;
+          signal_ids?: string[];
+          channels_delivered?: string[];
+          subject?: string | null;
+          body_markdown?: string | null;
+          body_html?: string | null;
+          sent_at?: string;
+          status?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string | null;
+          signal_ids?: string[];
+          channels_delivered?: string[];
+          subject?: string | null;
+          body_markdown?: string | null;
+          body_html?: string | null;
+          sent_at?: string;
+          status?: string;
+        };
+        Relationships: [];
+      };
+      agent_settings: {
+        Row: {
+          id: string;
+          user_id: string;
+          enabled: boolean;
+          channels: Json;
+          min_threat_score: number;
+          weekly_brief_enabled: boolean;
+          weekly_brief_day: string;
+          weekly_brief_time: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          enabled?: boolean;
+          channels?: Json;
+          min_threat_score?: number;
+          weekly_brief_enabled?: boolean;
+          weekly_brief_day?: string;
+          weekly_brief_time?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          enabled?: boolean;
+          channels?: Json;
+          min_threat_score?: number;
+          weekly_brief_enabled?: boolean;
+          weekly_brief_day?: string;
+          weekly_brief_time?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      autopilot_settings: {
+        Row: {
+          id: string;
+          user_id: string;
+          enabled: boolean;
+          watch_enabled: boolean;
+          watch_sensitivity: string;
+          watch_channels: Json;
+          slack_webhook_url: string | null;
+          watch_competitor_ids: string[] | null;
+          watch_quiet_hours: Json;
+          report_enabled: boolean;
+          report_day_of_month: number;
+          report_branding: Json;
+          report_workspaces: Json;
+          brief_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          enabled?: boolean;
+          watch_enabled?: boolean;
+          watch_sensitivity?: string;
+          watch_channels?: Json;
+          slack_webhook_url?: string | null;
+          watch_competitor_ids?: string[] | null;
+          watch_quiet_hours?: Json;
+          report_enabled?: boolean;
+          report_day_of_month?: number;
+          report_branding?: Json;
+          report_workspaces?: Json;
+          brief_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          enabled?: boolean;
+          watch_enabled?: boolean;
+          watch_sensitivity?: string;
+          watch_channels?: Json;
+          slack_webhook_url?: string | null;
+          watch_competitor_ids?: string[] | null;
+          watch_quiet_hours?: Json;
+          report_enabled?: boolean;
+          report_day_of_month?: number;
+          report_branding?: Json;
+          report_workspaces?: Json;
+          brief_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      autopilot_outputs: {
+        Row: {
+          id: string;
+          user_id: string;
+          output_type: string;
+          dedupe_key: string;
+          payload: Json;
+          channels_sent: Json;
+          status: string;
+          error: string | null;
+          created_at: string;
+          sent_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          output_type: string;
+          dedupe_key: string;
+          payload?: Json;
+          channels_sent?: Json;
+          status?: string;
+          error?: string | null;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          output_type?: string;
+          dedupe_key?: string;
+          payload?: Json;
+          channels_sent?: Json;
+          status?: string;
+          error?: string | null;
+          created_at?: string;
+          sent_at?: string | null;
+        };
+        Relationships: [];
+      };
+      autopilot_cron_locks: {
+        Row: {
+          job_name: string;
+          locked_until: string;
+          owner_token: string;
+          updated_at: string;
+        };
+        Insert: {
+          job_name: string;
+          locked_until?: string;
+          owner_token: string;
+          updated_at?: string;
+        };
+        Update: {
+          job_name?: string;
+          locked_until?: string;
+          owner_token?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_signals: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string | null;
+          signal_type: string;
+          source: string;
+          threat_score: number;
+          payload: Json;
+          screenshot_urls: string[];
+          delivered: boolean;
+          delivered_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id?: string | null;
+          signal_type: string;
+          source: string;
+          threat_score?: number;
+          payload?: Json;
+          screenshot_urls?: string[];
+          delivered?: boolean;
+          delivered_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string | null;
+          signal_type?: string;
+          source?: string;
+          threat_score?: number;
+          payload?: Json;
+          screenshot_urls?: string[];
+          delivered?: boolean;
+          delivered_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
       ad_preview_analysis_cache: {
         Row: {
           ad_id: string;
@@ -891,6 +1134,7 @@ export type Database = {
           source_scrape_batch_id: string | null;
           is_read: boolean;
           notified_at: string | null;
+          autopilot_processed_at: string | null;
           dedupe_key: string;
           created_at: string;
         };
@@ -907,6 +1151,7 @@ export type Database = {
           source_scrape_batch_id?: string | null;
           is_read?: boolean;
           notified_at?: string | null;
+          autopilot_processed_at?: string | null;
           dedupe_key: string;
           created_at?: string;
         };
@@ -923,6 +1168,7 @@ export type Database = {
           source_scrape_batch_id?: string | null;
           is_read?: boolean;
           notified_at?: string | null;
+          autopilot_processed_at?: string | null;
           dedupe_key?: string;
           created_at?: string;
         };

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { decodeCompetitorDomainSegment } from "@/lib/competitor-dashboard-url";
-import { CompetitorContent } from "../competitor-client";
+import { CompetitorContent } from "../competitor-content-loader";
 import CompetitorLoading from "../loading";
 
 export default async function CompetitorDomainPage({

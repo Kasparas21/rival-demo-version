@@ -4,6 +4,7 @@
  */
 
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
+import { resolveMetaAdLibraryUrlFromPayload } from "@/lib/ad-library/meta-ad-library-url";
 import { extractDomainFromTransparencyDomainSearchUrl } from "@/lib/ad-library/google-transparency-url";
 import {
   buildGoogleTransparencyCreativeUrl,
@@ -107,20 +108,8 @@ export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown)
   const pl = normalizeAdDetailPlatformKey(platform);
 
   switch (pl) {
-    case "meta": {
-      const direct = stringField(p, ["adLibraryUrl", "ad_library_url", "facebook_ad_library_url"]);
-      if (direct && isHttpUrl(direct)) return direct;
-
-      const archive = stringField(p, ["ad_archive_id", "adArchiveId"]) ?? null;
-      if (archive && /^\d+$/.test(archive)) {
-        return `https://www.facebook.com/ads/library/?id=${encodeURIComponent(archive)}`;
-      }
-      const id = typeof p.id === "string" ? p.id.trim() : "";
-      if (id && /^\d+$/.test(id)) {
-        return `https://www.facebook.com/ads/library/?id=${encodeURIComponent(id)}`;
-      }
-      return null;
-    }
+    case "meta":
+      return resolveMetaAdLibraryUrlFromPayload(p);
 
     case "tiktok": {
       const u = stringField(p, ["adUrl", "adLibraryUrl", "Ad Detail URL", "ad_detail_url", "url"]);

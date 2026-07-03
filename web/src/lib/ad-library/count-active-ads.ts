@@ -38,18 +38,24 @@ export function isMetaAdActive(
   nowMs = Date.now()
 ): boolean {
   if (ad.isActive === false) return false;
-  if (ad.isActive === true) return true;
 
-  if (ad.endedAt == null || !Number.isFinite(ad.endedAt) || ad.endedAt <= 0) return true;
-
-  const endMs = metaTimestampToMs(ad.endedAt);
   const anchorMs =
     scrapeAtMs != null && Number.isFinite(scrapeAtMs) ? scrapeAtMs : nowMs;
-  const endYmd = utcYmdFromMs(endMs);
-  const scrapeYmd = utcYmdFromMs(anchorMs);
-  if (!endYmd || !scrapeYmd) return true;
 
-  return endYmd === scrapeYmd;
+  if (ad.endedAt != null && Number.isFinite(ad.endedAt) && ad.endedAt > 0) {
+    const endMs = metaTimestampToMs(ad.endedAt);
+    const endYmd = utcYmdFromMs(endMs);
+    const scrapeYmd = utcYmdFromMs(anchorMs);
+    if (endYmd && scrapeYmd) {
+      if (endYmd < scrapeYmd) return false;
+      if (endYmd === scrapeYmd) return true;
+    }
+  }
+
+  if (ad.isActive === true) return true;
+  if (ad.endedAt == null || !Number.isFinite(ad.endedAt) || ad.endedAt <= 0) return true;
+
+  return true;
 }
 
 /** Align library card fields with scrape-aware active rules. */

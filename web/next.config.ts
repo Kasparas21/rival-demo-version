@@ -22,6 +22,12 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
   skipTrailingSlashRedirect: true,
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.output = { ...config.output, chunkLoadTimeout: 300_000 };
+    }
+    return config;
+  },
   turbopack: {
     root: repoRoot,
   },

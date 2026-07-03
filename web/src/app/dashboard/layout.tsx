@@ -8,6 +8,7 @@ import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalLoadingBlock } from "@/components/ui/rival-loading";
+import { SidebarRivalAgentControl } from "@/components/agent/SidebarRivalAgentControl";
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
 import { limitsForTier, tierAllowsMultipleBrandWorkspaces, type PlanTier } from "@/lib/billing/plan-limits";
@@ -1078,6 +1079,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         {/* Divider */}
         <div className={`shrink-0 ${collapsed ? "mx-3" : "mx-4"} my-2`}>
           <div className="h-px bg-[#e8e8e8]/90" />
+        </div>
+
+        {/* Rival Agent — between brand and search */}
+        <div className={`shrink-0 ${collapsed ? "px-3" : "px-4"} pb-0.5 pt-0`}>
+          <SidebarRivalAgentControl collapsed={collapsed} />
         </div>
 
         {/* Find competitor + competitors header + filter — fixed under brand */}

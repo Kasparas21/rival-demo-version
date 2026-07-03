@@ -16,6 +16,8 @@ export type ScrapeOrganicCompetitorResult = {
   platformErrors: Record<string, string>;
   insightsErrors: string[];
   platformScrapeMeta?: Partial<Record<OrganicPlatform, YouTubeScrapeMeta>>;
+  /** Posts upserted in this scrape run (for agent signal detection). */
+  scrapedPosts: NormalizedOrganicPost[];
 };
 
 function sortPostsByDateDesc(posts: NormalizedOrganicPost[]): NormalizedOrganicPost[] {
@@ -156,7 +158,35 @@ export async function scrapeOrganicCompetitor(
       platformErrors,
       insightsErrors: [...insightsErrors, updateErr.message],
       platformScrapeMeta,
+      scrapedPosts: allPosts,
     };
+  }
+
+  try {
+    const { organicPostsToAgentInput } = await import("@/lib/agent/fetch-scrape-deltas");
+    const { runAgentForUserCompetitor } = await import("@/lib/agent/run-agent");
+    if (allPosts.length > 0) {
+      await runAgentForUserCompetitor(admin, {
+        userId: competitor.user_id,
+        competitorId: competitor.id,
+        scrapeResults: {
+          newOrganicPosts: organicPostsToAgentInput(
+            allPosts.map((p) => ({
+              platform: p.platform,
+              post_id: p.post_id,
+              content: p.content,
+              media_urls: p.media_urls,
+              likes: p.likes,
+              comments: p.comments,
+              shares: p.shares,
+              posted_at: p.posted_at,
+            })),
+          ),
+        },
+      });
+    }
+  } catch (agentErr) {
+    console.error("[organic-scrape] rival-agent failed", agentErr);
   }
 
   return {
@@ -165,6 +195,7 @@ export async function scrapeOrganicCompetitor(
     platformErrors,
     insightsErrors,
     platformScrapeMeta,
+    scrapedPosts: allPosts,
   };
 }
 

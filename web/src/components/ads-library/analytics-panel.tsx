@@ -182,8 +182,6 @@ export function AdLibraryAnalyticsPanel({
 
   const landingLoading = loading;
   const bothAsyncLoading = Boolean(competitorId) && activityScoreLoading && landingLoading;
-  const activityFoxOnly = Boolean(competitorId) && activityScoreLoading && !landingLoading;
-  const landingFoxOnly = !activityScoreLoading && landingLoading;
 
   const sectionShell = isOwnWorkspace
     ? brandWorkspaceShellClass
@@ -269,7 +267,7 @@ export function AdLibraryAnalyticsPanel({
                     </div>
                   ) : null}
                   <div className="relative min-h-[140px] pl-1">
-                    {activityFoxOnly ? <AdLibraryAnalyticsFoxOverlay /> : null}
+                    {activityScoreLoading ? <AdLibraryAnalyticsFoxOverlay /> : null}
                     <ActivityScorePanel
                       competitorId={competitorId}
                       cacheDomainNorm={cacheDomainNorm}
@@ -292,7 +290,7 @@ export function AdLibraryAnalyticsPanel({
                     </div>
                   ) : null}
                   <div className="relative min-h-[140px] pl-1">
-                    {landingFoxOnly ? <AdLibraryAnalyticsFoxOverlay /> : null}
+                    {landingLoading ? <AdLibraryAnalyticsFoxOverlay /> : null}
                     <LandingPagesList
                       groups={landingPages}
                       loading={landingLoading}
@@ -301,7 +299,6 @@ export function AdLibraryAnalyticsPanel({
                     />
                   </div>
                 </div>
-                {bothAsyncLoading ? <AdLibraryAnalyticsFoxOverlay /> : null}
               </div>
             </div>
           ) : (

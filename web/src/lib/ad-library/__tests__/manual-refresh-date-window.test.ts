@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildManualRefreshLibraryBodyForPlatform,
   buildManualRefreshScrapeParams,
   computeManualRefreshTodayWindow,
 } from "@/lib/ad-library/manual-refresh-date-window";
@@ -23,7 +24,19 @@ describe("buildManualRefreshScrapeParams", () => {
     expect(p.metaStartDate).toBe("2026-05-19");
     expect(p.metaEndDate).toBe("2026-05-19");
     expect(p.linkedinDateRange).toBe("past-day");
-    expect(p.tiktokStartDate).toBe("2026-05-19");
+    expect(p.tiktokEndDate).toBe("2026-05-19");
+    expect(p.tiktokStartDate).toBe("2026-04-19");
     expect(p.snapchatEndDate).toBe("2026-05-19");
+  });
+});
+
+describe("buildManualRefreshLibraryBodyForPlatform", () => {
+  it("omits Meta date window for page-id manual refresh", () => {
+    const body = buildManualRefreshLibraryBodyForPlatform("meta");
+    expect(body.intent).toBe("manual");
+    expect(body.metaStatus).toBe("ACTIVE");
+    expect(body.metaMaxAds).toBeGreaterThan(0);
+    expect(body).not.toHaveProperty("metaStartDate");
+    expect(body).not.toHaveProperty("metaEndDate");
   });
 });

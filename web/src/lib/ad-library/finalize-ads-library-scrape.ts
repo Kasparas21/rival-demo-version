@@ -217,4 +217,17 @@ export async function finalizeAdsLibraryAfterFreshScrape(
       }
     }
   }
+
+  if (userId && resolvedCompetitorId && scrapeBatchId) {
+    try {
+      const { runAgentAfterAdsScrape } = await import("@/lib/agent/fetch-scrape-deltas");
+      await runAgentAfterAdsScrape(supabase, {
+        userId,
+        competitorId: resolvedCompetitorId,
+        scrapeBatchId,
+      });
+    } catch (agentErr) {
+      console.error("[finalizeAdsLibrary] rival-agent", agentErr);
+    }
+  }
 }

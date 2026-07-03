@@ -199,9 +199,9 @@ describe("isMetaAdActive sentinel", () => {
 });
 
 describe("isMetaAdActive isActive flag", () => {
-  it("treats isActive true with old endedAt as active", () => {
+  it("treats isActive true with old endedAt as inactive when end predates scrape", () => {
     const endedSec = Math.floor((NOW - 8 * 24 * 60 * 60 * 1000) / 1000);
-    expect(isMetaAdActive({ isActive: true, endedAt: endedSec }, SCRAPE, NOW)).toBe(true);
+    expect(isMetaAdActive({ isActive: true, endedAt: endedSec }, SCRAPE, NOW)).toBe(false);
   });
 
   it("treats isActive false as inactive even with endedAt on scrape day", () => {

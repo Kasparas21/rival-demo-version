@@ -49,7 +49,21 @@ function metaRunDays(rawPayload: unknown, api: DetailRunningApiSlice): number | 
   const startCal = utcCalendarFromEpoch(epochMs);
   if (startCal == null) return null;
 
-  const endCal = api.is_killed ? utcCalendarFromSeenIso(api.last_seen_at) ?? utcCalendarToday() : utcCalendarToday();
+  let endCal = utcCalendarToday();
+  if (api.is_killed) {
+    const endedAt = p.endedAt;
+    if (typeof endedAt === "number" && Number.isFinite(endedAt) && endedAt > 0) {
+      const endedMs = endedAt > 1e12 ? endedAt : endedAt * 1000;
+      const endedCal = utcCalendarFromEpoch(endedMs);
+      if (endedCal != null) {
+        endCal = endedCal;
+      } else {
+        endCal = utcCalendarFromSeenIso(api.last_seen_at) ?? utcCalendarToday();
+      }
+    } else {
+      endCal = utcCalendarFromSeenIso(api.last_seen_at) ?? utcCalendarToday();
+    }
+  }
 
   return daySpanFromUtcMs(startCal, endCal);
 }

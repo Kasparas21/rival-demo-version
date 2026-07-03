@@ -2622,6 +2622,7 @@ function CompetitorDashboardBody({
     refreshLinkedInAds,
     refreshSnapchatAds,
     reloadPlatformFromCache,
+    manualRefreshPlatform,
   } = useAdLibrary(
     {
       name: isOwnWorkspace ? competitorDisplayLabel : brand.name,
@@ -3492,25 +3493,38 @@ function CompetitorDashboardBody({
 
   const handleManualPlatformRefresh = useCallback(
     async (platform: AdsLibraryPlatform) => {
-      if (manualRefreshBusyPlatform || !competitorDbIdForSaved) return;
+      if (manualRefreshBusyPlatform) return;
+      if (!competitorDbIdForSaved) {
+        toast.error("Competitor is still loading — wait a moment and try again.");
+        return;
+      }
       if (!ensureManualRefreshAllowed()) return;
       setManualRefreshBusyPlatform(platform);
       try {
-        const res = await fetch("/api/competitor/force-rescrape", {
+        const result = await manualRefreshPlatform(platform);
+        if (!result?.ok) {
+          toast.error(result?.error ?? "Refresh failed");
+          return;
+        }
+        const recordRes = await fetch("/api/competitor/record-manual-refresh", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ competitorId: competitorDbIdForSaved, platforms: [platform] }),
+          body: JSON.stringify({ competitorId: competitorDbIdForSaved }),
         });
-        const json = (await res.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
-        if (json?.ok) {
-          await reloadPlatformFromCache(platform);
-          await syncSavedCompetitorsFromAccount();
-          void loadManualRefreshStatus();
-          void loadPlatformTracking();
-        } else {
-          toast.error(typeof json?.error === "string" ? json.error : res.statusText || "Refresh failed");
+        const recordJson = (await recordRes.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+        } | null;
+        if (!recordRes.ok || !recordJson?.ok) {
+          toast.error(recordJson?.error ?? "Could not record refresh usage");
         }
+        await syncSavedCompetitorsFromAccount();
+        void loadManualRefreshStatus();
+        void loadPlatformTracking();
+        toast.success(
+          `${platform.charAt(0).toUpperCase()}${platform.slice(1)} refreshed — ads are up to date.`,
+        );
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Refresh error");
       } finally {
@@ -3522,8 +3536,9 @@ function CompetitorDashboardBody({
       ensureManualRefreshAllowed,
       loadManualRefreshStatus,
       manualRefreshBusyPlatform,
-      reloadPlatformFromCache,
+      manualRefreshPlatform,
       loadPlatformTracking,
+      syncSavedCompetitorsFromAccount,
     ],
   );
 

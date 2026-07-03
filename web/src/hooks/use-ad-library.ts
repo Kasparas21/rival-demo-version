@@ -29,6 +29,7 @@ import {
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
+import { buildManualRefreshLibraryBodyForPlatform } from "@/lib/ad-library/manual-refresh-date-window";
 import { clearFreshDiscoveryScan, isFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
 import {
   clearWorkspaceBrandScrapeHandoff,
@@ -53,6 +54,30 @@ function totalAdsInResponse(response: AdsLibraryResponse | null): number {
     (sum, pl) => sum + countLibraryAdsForPlatform(pl, response),
     0
   );
+}
+
+function platformErrorFromResponse(
+  response: AdsLibraryResponse,
+  platform: AdsLibraryPlatform,
+): string | null {
+  switch (platform) {
+    case "meta":
+      return response.meta?.error ?? null;
+    case "google":
+      return response.google?.error ?? null;
+    case "linkedin":
+      return response.linkedin?.error ?? null;
+    case "tiktok":
+      return response.tiktok?.error ?? null;
+    case "pinterest":
+      return response.pinterest?.error ?? null;
+    case "microsoft":
+      return response.microsoft?.error ?? null;
+    case "snapchat":
+      return response.snapchat?.error ?? null;
+    default:
+      return null;
+  }
 }
 
 function readLocalAdsLibraryCacheForDomain(
@@ -173,8 +198,11 @@ export function useAdLibrary(
       background?: boolean;
       /** When true, do not broadcast `ADS_LIBRARY_UPDATED_EVENT` (prevents reload loops). */
       suppressUpdatedEvent?: boolean;
+      /** Pro manual refresh — sets `intent: manual` and platform-specific Apify params. */
+      manualRefresh?: boolean;
     }) => {
       const platforms = opts?.platforms;
+      const isManualRefresh = opts?.manualRefresh === true;
       const isBackground = opts?.background === true;
       const partial =
         platforms != null &&
@@ -212,6 +240,12 @@ export function useAdLibrary(
         if (platforms?.length) {
           body.platforms = [...platforms].sort();
         }
+        if (isManualRefresh && platforms?.length === 1) {
+          Object.assign(body, buildManualRefreshLibraryBodyForPlatform(platforms[0]!));
+          if (platforms[0] === "google") {
+            body.filterGoogleActiveToday = true;
+          }
+        }
         const forceFresh = opts?.skipCache === true;
         /** Opening a competitor page must never trigger Apify — only `skipCache: true` (manual refresh / discovery). */
         const cacheOnly = !forceFresh;
@@ -221,7 +255,7 @@ export function useAdLibrary(
           clientSkipReadCache: isBackground,
           signal: ac.signal,
         });
-        if (loadAbortRef.current !== ac) return;
+        if (loadAbortRef.current !== ac) return { ok: false, aborted: true as const };
 
         let mergeBase = dataRef.current;
         if (mergeBase === null) {
@@ -260,7 +294,9 @@ export function useAdLibrary(
               );
             }
           } catch (e) {
-            if (e instanceof DOMException && e.name === "AbortError") return;
+            if (e instanceof DOMException && e.name === "AbortError") {
+              return { ok: false, aborted: true as const };
+            }
           }
         }
 
@@ -301,10 +337,10 @@ export function useAdLibrary(
         const priorTotal = totalAdsInResponse(dataRef.current);
         const mergedTotal = totalAdsInResponse(coerceAdsLibraryResponse(merged));
         if (hydrateMarkedFresh && priorTotal > 0 && mergedTotal === priorTotal) {
-          return;
+          return { ok: true };
         }
         if (isBackground && priorTotal > 0 && mergedTotal === 0) {
-          return;
+          return { ok: true };
         }
         dataRef.current = coerceAdsLibraryResponse(merged);
         setData(dataRef.current);
@@ -335,16 +371,34 @@ export function useAdLibrary(
             }
           }
         }
+        const response = coerceAdsLibraryResponse(merged);
+        const platformError =
+          partial && platforms?.length === 1
+            ? platformErrorFromResponse(response, platforms[0]!)
+            : null;
+        if (!httpOk) {
+          const err =
+            typeof json === "object" && json && "error" in json && typeof json.error === "string"
+              ? json.error
+              : "Request failed";
+          return { ok: false, error: err };
+        }
+        if (platformError) {
+          return { ok: false, error: platformError };
+        }
+        return { ok: true };
       } catch (e) {
         const aborted =
           (e instanceof DOMException && e.name === "AbortError") ||
           (e instanceof Error && e.name === "AbortError");
-        if (aborted) return;
-        if (loadAbortRef.current !== ac) return;
-        setFetchError(e instanceof Error ? e.message : "Failed to load ads");
+        if (aborted) return { ok: false, aborted: true as const };
+        if (loadAbortRef.current !== ac) return { ok: false, aborted: true as const };
+        const message = e instanceof Error ? e.message : "Failed to load ads";
+        setFetchError(message);
         if (!partial && !isBackground) setData(null);
+        return { ok: false, error: message };
       } finally {
-        if (loadAbortRef.current !== ac) return;
+        if (loadAbortRef.current !== ac) return { ok: false, aborted: true as const };
         if (!isBackground) {
           setLoading(false);
           setGoogleRefreshing(false);
@@ -537,6 +591,14 @@ export function useAdLibrary(
     [load],
   );
 
+  const manualRefreshPlatform = useCallback(
+    (platform: AdsLibraryPlatform) => {
+      clearFreshDiscoveryScan(brand.domain);
+      return load({ skipCache: true, platforms: [platform], manualRefresh: true });
+    },
+    [load, brand.domain],
+  );
+
   return {
     data,
     loading,
@@ -558,5 +620,6 @@ export function useAdLibrary(
     refreshMicrosoftAds,
     refreshSnapchatAds,
     reloadPlatformFromCache,
+    manualRefreshPlatform,
   };
 }

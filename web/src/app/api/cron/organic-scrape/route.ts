@@ -17,6 +17,7 @@ async function runOrganicScrape(req: Request) {
 
   const results: Array<{
     competitorId: string;
+    userId: string;
     ok: boolean;
     postsUpserted: number;
     platformErrors: Record<string, string>;
@@ -27,6 +28,7 @@ async function runOrganicScrape(req: Request) {
       const result = await scrapeOrganicCompetitor(admin, competitor);
       results.push({
         competitorId: competitor.id,
+        userId: competitor.user_id,
         ok: result.ok,
         postsUpserted: result.postsUpserted,
         platformErrors: result.platformErrors,
@@ -34,6 +36,7 @@ async function runOrganicScrape(req: Request) {
     } catch (error) {
       results.push({
         competitorId: competitor.id,
+        userId: competitor.user_id,
         ok: false,
         postsUpserted: 0,
         platformErrors: {
@@ -41,6 +44,16 @@ async function runOrganicScrape(req: Request) {
         },
       });
     }
+  }
+
+  const userIds = [...new Set(results.map((r) => r.userId))];
+  try {
+    const { runCrossCompetitorCheck } = await import("@/lib/agent/run-agent");
+    for (const userId of userIds) {
+      await runCrossCompetitorCheck(admin, userId);
+    }
+  } catch (err) {
+    console.error("[cron/organic-scrape] cross-competitor check failed", err);
   }
 
   return NextResponse.json({

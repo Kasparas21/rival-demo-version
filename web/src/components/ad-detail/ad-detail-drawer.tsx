@@ -57,6 +57,7 @@ import {
   googleFamilyDrawerIsYoutubeish,
 } from "@/lib/ad-detail/google-drawer-surface";
 import { resolveDetailRunningDays } from "@/lib/ad-detail/detail-time-running";
+import { formatMetaDetailStatusLabel } from "@/lib/ad-detail/meta-detail-status";
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import {
   buildCanonicalDetailSlices,
@@ -1370,9 +1371,18 @@ function DetailsTab({ data }: { data: AdDetailData }) {
             ? buildSnapchatLibraryDetailRows(ad.raw_payload)
             : [];
 
-  const statusLabel = ad.is_killed
-    ? `Killed · last seen ${formatDate(ad.last_seen_at)}`
-    : `Still running · from ${formatDate(ad.first_seen_at)}`;
+  const statusLabel =
+    pl === "meta"
+      ? formatMetaDetailStatusLabel({
+          isKilled: ad.is_killed,
+          firstSeenAt: ad.first_seen_at,
+          lastSeenAt: ad.last_seen_at,
+          runStartLabel,
+          rawPayload: ad.raw_payload,
+        })
+      : ad.is_killed
+        ? `Killed · last seen ${formatDate(ad.last_seen_at)}`
+        : `Still running · from ${runStartLabel || formatDate(ad.first_seen_at)}`;
 
   const tailBeforeActions: { label: string; value: ReactNode }[] = [];
 

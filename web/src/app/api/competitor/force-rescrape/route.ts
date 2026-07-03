@@ -9,6 +9,7 @@ import {
 } from "@/lib/ad-library/google-ads-regions";
 import { extractPinterestHandleFromUrlOrString } from "@/lib/ad-library/pinterest-handle";
 import {
+  buildManualRefreshLibraryBodyForPlatform,
   buildManualRefreshScrapeParams,
   computeManualRefreshTodayWindow,
 } from "@/lib/ad-library/manual-refresh-date-window";
@@ -57,18 +58,43 @@ function buildAdsLibraryForceBody(params: {
   const { brandName, domainClean, ids, platforms, adsPerPlatform } = params;
   const cap = Math.max(1, Math.min(adsPerPlatform, MAX_ADS));
   const dateParams = buildManualRefreshScrapeParams(computeManualRefreshTodayWindow());
+  const hasMetaPageId = Boolean(
+    ids.metaPageUrl?.trim() ||
+      (ids.meta?.trim() && /^\d{10,22}$/.test(ids.meta.replace(/\D/g, ""))),
+  );
+  const platformFields =
+    platforms.length === 1
+      ? buildManualRefreshLibraryBodyForPlatform(platforms[0]!, cap)
+      : {};
 
-  return {
+  const shared = {
     brand: { name: brandName, domain: domainClean },
     ids,
     skipCache: true,
     intent: "manual" as const,
     platforms,
+    metaCountry: "US",
+    tiktokRegion: normalizeTikTokAdsRegion(undefined),
+    googleRegion: normalizeGoogleAdsRegion(undefined),
+    pinterestCountry: normalizePinterestAdsCountry(undefined),
+    googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
+    ...platformFields,
+  };
+
+  if (platforms.length === 1) {
+    return {
+      ...shared,
+      ...(platforms[0] === "google" ? { filterGoogleActiveToday: true } : {}),
+    };
+  }
+
+  return {
+    ...shared,
     metaStatus: dateParams.metaStatus,
     metaMaxAds: cap,
-    metaCountry: "US",
-    metaStartDate: dateParams.metaStartDate,
-    metaEndDate: dateParams.metaEndDate,
+    ...(hasMetaPageId
+      ? {}
+      : { metaStartDate: dateParams.metaStartDate, metaEndDate: dateParams.metaEndDate }),
     metaSortBy: "impressions_desc",
     linkedinMaxAds: cap,
     linkedinDateRange: dateParams.linkedinDateRange,

@@ -250,5 +250,20 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
     console.error("[analyze] alert generation failed", err);
   }
 
+  try {
+    const { fetchEmailForAgent } = await import("@/lib/agent/fetch-scrape-deltas");
+    const { runAgentForUserCompetitor } = await import("@/lib/agent/run-agent");
+    const emailForAgent = await fetchEmailForAgent(admin, emailId);
+    if (emailForAgent) {
+      await runAgentForUserCompetitor(admin, {
+        userId: row.user_id,
+        competitorId: row.competitor_id,
+        scrapeResults: { newEmails: [emailForAgent] },
+      });
+    }
+  } catch (err) {
+    console.error("[analyze] rival-agent failed", err);
+  }
+
   return { ok: true };
 }

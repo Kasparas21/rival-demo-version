@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { CheckoutNavigationAnchor } from "@/components/analytics/checkout-navigation-link";
+import { AgentSettingsPanel } from "@/components/agent/AgentSettingsPanel";
 import {
   buildCheckoutHref,
   buildUpgradeToProHref,
@@ -678,6 +680,21 @@ export default function SettingsPage() {
             </button>
           </div>
         </section>
+
+        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Autopilot</h2>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
+            Alerts with suggested moves and monthly client-ready reports — delivered without you checking in.
+          </p>
+          <Link
+            href="/dashboard/settings/autopilot"
+            className="mt-4 inline-flex rounded-xl border border-[#ececef] bg-[#fafafa] px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-[#f4f4f5]"
+          >
+            Open autopilot settings
+          </Link>
+        </section>
+
+        <AgentSettingsPanel />
 
         <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>
