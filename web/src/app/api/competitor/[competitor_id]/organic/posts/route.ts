@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ORGANIC_FEED_PAGE_SIZE } from "@/lib/organic-content/constants";
-import { enrichOrganicPostForApi } from "@/lib/organic-content/post-display";
+import { toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import type { OrganicPlatform, OrganicPostSort } from "@/lib/organic-content/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -31,6 +31,12 @@ function parsePage(raw: string | null): number {
   return n;
 }
 
+function parsePageSize(raw: string | null): number {
+  const n = raw ? Number.parseInt(raw, 10) : ORGANIC_FEED_PAGE_SIZE;
+  if (!Number.isFinite(n) || n < 1) return ORGANIC_FEED_PAGE_SIZE;
+  return Math.min(n, ORGANIC_FEED_PAGE_SIZE);
+}
+
 export async function GET(
   req: Request,
   context: { params: Promise<{ competitor_id: string }> },
@@ -41,6 +47,7 @@ export async function GET(
   const platformRaw = searchParams.get("platform")?.trim() ?? "";
   const sort = parseSort(searchParams.get("sort"));
   const page = parsePage(searchParams.get("page"));
+  const pageSize = parsePageSize(searchParams.get("pageSize"));
 
   if (!competitorId || !UUID_RE.test(competitorId)) {
     return NextResponse.json({ ok: false, error: "Invalid competitor_id" }, { status: 400 });
@@ -84,14 +91,28 @@ export async function GET(
     query = query.order("posted_at", { ascending: false, nullsFirst: false });
   }
 
-  const from = (page - 1) * ORGANIC_FEED_PAGE_SIZE;
-  const to = from + ORGANIC_FEED_PAGE_SIZE - 1;
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
   query = query.range(from, to);
 
   const { data, error, count } = await query;
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  let lastScrapedAt: string | null = null;
+  if (platformRaw && platformRaw !== "all" && VALID_PLATFORMS.has(platformRaw)) {
+    const { data: scrapeRow } = await supabase
+      .from("organic_posts")
+      .select("scraped_at")
+      .eq("competitor_id", competitorId)
+      .eq("user_id", user.id)
+      .eq("platform", platformRaw)
+      .order("scraped_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    lastScrapedAt = scrapeRow?.scraped_at ?? null;
   }
 
   const { data: platformRows } = await supabase
@@ -104,10 +125,11 @@ export async function GET(
 
   return NextResponse.json({
     ok: true,
-    posts: (data ?? []).map((post) => enrichOrganicPostForApi(post)),
+    posts: (data ?? []).map((post) => toOrganicPostClientPayload(post)),
     page,
-    pageSize: ORGANIC_FEED_PAGE_SIZE,
+    pageSize,
     total: count ?? 0,
     platformsWithPosts,
+    last_scraped_at: lastScrapedAt,
   });
 }

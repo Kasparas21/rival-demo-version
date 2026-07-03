@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { organicPostDisplayFields } from "../post-display";
+import { organicPostDisplayFields, enrichOrganicPostForApi } from "../post-display";
 
 const calaiFeedPost = {
   code: "DGecL_zS9uv",
@@ -67,5 +67,63 @@ describe("organicPostDisplayFields author extraction", () => {
       author_display_name: "Tech Channel",
       media_aspect: "landscape",
     });
+  });
+
+  it("extracts scrapesmith YouTube fields", () => {
+    expect(
+      organicPostDisplayFields(
+        {
+          video_url: "https://www.youtube.com/watch?v=mJJY53qhJe0",
+          channel_name: "adidas",
+          channel_url: "https://www.youtube.com/@adidas",
+          product_type: "video",
+        },
+        "youtube",
+      ),
+    ).toMatchObject({
+      post_url: "https://www.youtube.com/watch?v=mJJY53qhJe0",
+      author_display_name: "adidas",
+      author_username: "https://www.youtube.com/@adidas",
+      product_type: "video",
+      media_aspect: "landscape",
+    });
+  });
+
+  it("extracts xtdata Twitter author and vertical aspect from extended_entities", () => {
+    expect(
+      organicPostDisplayFields(
+        {
+          url: "https://x.com/adidas/status/2069772479283810730",
+          author: {
+            screen_name: "adidas",
+            name: "adidas",
+            profile_image_url_https: "https://pbs.twimg.com/profile_images/2052302029268164609/YAtZ75Su_normal.jpg",
+          },
+          extended_entities: {
+            media: [{ original_info: { width: 1080, height: 1440 } }],
+          },
+        },
+        "twitter",
+      ),
+    ).toMatchObject({
+      post_url: "https://x.com/adidas/status/2069772479283810730",
+      author_username: "adidas",
+      author_display_name: "adidas",
+      author_avatar_url: "https://pbs.twimg.com/profile_images/2052302029268164609/YAtZ75Su_normal.jpg",
+      media_aspect: "vertical",
+    });
+  });
+
+  it("re-extracts Twitter views from raw_data when stored views are zero", () => {
+    expect(
+      enrichOrganicPostForApi({
+        platform: "twitter",
+        views: 0,
+        raw_data: {
+          full_text: "Hello",
+          views: { count: "12345" },
+        },
+      }).views,
+    ).toBe(12345);
   });
 });

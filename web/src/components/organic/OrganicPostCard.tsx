@@ -35,13 +35,17 @@ export function OrganicPostCard({
   socials,
   highlightEngagement,
   className,
+  variant = "section",
+  onPostClick,
 }: {
   post: OrganicPostCardData;
   socials?: OrganicSocials;
   highlightEngagement?: boolean;
   className?: string;
+  variant?: "standalone" | "section";
+  onPostClick?: (post: OrganicPostCardData) => void;
 }) {
-  const props = { post, socials, highlightEngagement, className: cn(className) };
+  const props = { post, socials, highlightEngagement, className: cn(className), variant, onPostClick };
 
   switch (post.platform) {
     case "instagram":

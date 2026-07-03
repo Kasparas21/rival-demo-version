@@ -6,8 +6,8 @@ import { ORGANIC_FIRST_SCRAPE_POST_LIMIT, ORGANIC_SCRAPE_INTERVAL_DAYS } from ".
 import { extractAndUpsertCollaborators } from "./extract-collaborators";
 import { generateOrganicInsights } from "./generate-insights";
 import { upsertOrganicPosts } from "./persist-posts";
-import { scrapeOrganicPlatformSafe } from "./run-platform-scraper";
-import { parseOrganicSocials } from "./socials";
+import { scrapeOrganicPlatformSafe, type YouTubeScrapeMeta } from "./run-platform-scraper";
+import { parseOrganicSocials, deriveYoutubeSearchSlugs } from "./socials";
 import { ORGANIC_PLATFORMS, type NormalizedOrganicPost, type OrganicPlatform, type ScrapeOrganicCompetitorRow } from "./types";
 
 export type ScrapeOrganicCompetitorResult = {
@@ -15,6 +15,7 @@ export type ScrapeOrganicCompetitorResult = {
   postsUpserted: number;
   platformErrors: Record<string, string>;
   insightsErrors: string[];
+  platformScrapeMeta?: Partial<Record<OrganicPlatform, YouTubeScrapeMeta>>;
 };
 
 function sortPostsByDateDesc(posts: NormalizedOrganicPost[]): NormalizedOrganicPost[] {
@@ -57,6 +58,13 @@ export async function scrapeOrganicCompetitor(
   const newerThan = !isFirstScrape && baselineDate ? baselineDate : null;
   const newPlatformSet = new Set(opts?.newPlatforms ?? []);
   const platformFilter = opts?.platforms?.length ? new Set(opts.platforms) : null;
+  const skipFirstScrapeCap =
+    Boolean(platformFilter) &&
+    platformFilter!.size === 1 &&
+    opts?.newPlatforms?.length === 1 &&
+    platformFilter!.has(opts.newPlatforms[0]!);
+
+  const platformScrapeMeta: ScrapeOrganicCompetitorResult["platformScrapeMeta"] = {};
 
   for (const platform of ORGANIC_PLATFORMS) {
     if (platformFilter && !platformFilter.has(platform)) continue;
@@ -65,10 +73,22 @@ export async function scrapeOrganicCompetitor(
     if (!handle?.trim()) continue;
 
     const isNewPlatform = newPlatformSet.has(platform);
-    const { posts, error } = await scrapeOrganicPlatformSafe(platform, handle, {
-      newerThan: platform === "instagram" && !isNewPlatform ? newerThan : null,
-    });
+    const scrapeOpts =
+      platform === "youtube"
+        ? {
+            newerThan: null as string | null,
+            youtubeSearchSlugs: deriveYoutubeSearchSlugs(
+              socials,
+              handle,
+              competitor.competitor_name,
+            ),
+          }
+        : {
+            newerThan: platform === "instagram" && !isNewPlatform ? newerThan : null,
+          };
+    const { posts, error, youtubeMeta } = await scrapeOrganicPlatformSafe(platform, handle, scrapeOpts);
     if (error) platformErrors[platform] = error;
+    if (youtubeMeta) platformScrapeMeta[platform] = youtubeMeta;
 
     let platformPosts = posts;
     if (isNewPlatform) {
@@ -89,7 +109,7 @@ export async function scrapeOrganicCompetitor(
       const oldest = allPosts[allPosts.length - 1]?.posted_at;
       if (oldest) baselineDate = oldest;
     }
-  } else if (isFirstScrape && platformFilter) {
+  } else if (isFirstScrape && platformFilter && !skipFirstScrapeCap) {
     // First-ever scrape limited to specific new platforms only
     allPosts = sortPostsByDateDesc(allPosts).slice(0, ORGANIC_FIRST_SCRAPE_POST_LIMIT);
     if (allPosts.length > 0) {
@@ -135,6 +155,7 @@ export async function scrapeOrganicCompetitor(
       postsUpserted,
       platformErrors,
       insightsErrors: [...insightsErrors, updateErr.message],
+      platformScrapeMeta,
     };
   }
 
@@ -143,6 +164,7 @@ export async function scrapeOrganicCompetitor(
     postsUpserted,
     platformErrors,
     insightsErrors,
+    platformScrapeMeta,
   };
 }
 

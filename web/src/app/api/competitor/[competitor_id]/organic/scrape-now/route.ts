@@ -59,7 +59,7 @@ export async function POST(
 
   const { data: row, error: rowErr } = await supabase
     .from("saved_competitors")
-    .select("id, user_id, socials, organic_baseline_date")
+    .select("id, user_id, socials, organic_baseline_date, name")
     .eq("id", competitor.id)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -84,6 +84,7 @@ export async function POST(
       user_id: row.user_id,
       socials,
       organic_baseline_date: row.organic_baseline_date,
+      competitor_name: row.name,
     },
     { platforms, newPlatforms },
   );
@@ -93,5 +94,6 @@ export async function POST(
     postsUpserted: result.postsUpserted,
     platformErrors: result.platformErrors,
     insightsErrors: result.insightsErrors,
+    platformScrapeMeta: result.platformScrapeMeta,
   });
 }

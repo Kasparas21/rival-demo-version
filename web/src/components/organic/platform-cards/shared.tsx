@@ -1,7 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
+import { ExternalLink } from "lucide-react";
 
+import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import {
   FacebookLogo,
   InstagramLogo,
@@ -18,11 +21,15 @@ import { cn } from "@/lib/utils";
 import { formatEngagementCount } from "../organic-ui-utils";
 import type { OrganicPostCardData } from "../OrganicPostCard";
 
+export type OrganicCardVariant = "standalone" | "section";
+
 export type PlatformCardProps = {
   post: OrganicPostCardData;
   socials?: OrganicSocials;
   highlightEngagement?: boolean;
   className?: string;
+  variant?: OrganicCardVariant;
+  onPostClick?: (post: OrganicPostCardData) => void;
 };
 
 export function resolveAuthor(post: OrganicPostCardData, socials?: OrganicSocials) {
@@ -56,36 +63,43 @@ export function formatRelativeTime(iso: string | null): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(iso));
 }
 
+function isLoadableImageUrl(url: string | null | undefined): url is string {
+  const trimmed = url?.trim();
+  if (!trimmed) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function AuthorAvatar({
-  name,
   avatarUrl,
   className,
 }: {
-  name: string | null;
+  name?: string | null;
   avatarUrl: string | null;
   className?: string;
 }) {
-  const initial = (name ?? "?").replace(/^@/, "").charAt(0).toUpperCase();
-  if (avatarUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={avatarUrl}
-        alt=""
-        className={cn("rounded-full object-cover bg-slate-200", className)}
-        loading="lazy"
-      />
-    );
-  }
+  const [broken, setBroken] = useState(false);
+  const src = isLoadableImageUrl(avatarUrl) ? avatarUrl.trim() : null;
+
+  useEffect(() => {
+    setBroken(false);
+  }, [src]);
+
+  if (!src || broken) return null;
+
   return (
-    <div
-      className={cn(
-        "flex items-center justify-center rounded-full bg-gradient-to-br from-slate-300 to-slate-400 text-[11px] font-bold text-white",
-        className,
-      )}
-    >
-      {initial}
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className={cn("rounded-full object-cover", className)}
+      loading="lazy"
+      onError={() => setBroken(true)}
+    />
   );
 }
 
@@ -121,6 +135,39 @@ export function ExternalPlatformLink({
   );
 }
 
+export function PostExternalLinkIcon({
+  platform,
+  postUrl,
+  className,
+  dark = false,
+}: {
+  platform: string;
+  postUrl: string | null | undefined;
+  className?: string;
+  dark?: boolean;
+}) {
+  if (!postUrl) return null;
+  const label = PLATFORM_LINK_LABELS[platform as OrganicPlatform] ?? "View post";
+  return (
+    <a
+      href={postUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+        dark
+          ? "text-white/80 hover:bg-white/10 hover:text-white"
+          : "text-slate-500 hover:bg-slate-100 hover:text-slate-700",
+        className,
+      )}
+    >
+      <ExternalLink className="h-4 w-4" />
+    </a>
+  );
+}
+
 const PLATFORM_CHROME: Record<
   OrganicPlatform,
   { border: string; bg: string; Logo: React.ComponentType<{ className?: string }> }
@@ -138,35 +185,68 @@ export function PlatformChrome({
   children,
   className,
   dark = false,
+  variant = "section",
+  showPlatformBar,
+  onClick,
 }: {
   platform: string;
   children: ReactNode;
   className?: string;
   dark?: boolean;
+  variant?: OrganicCardVariant;
+  /** Show logo + platform label bar in section mode (e.g. Hot Right Now cards). */
+  showPlatformBar?: boolean;
+  onClick?: () => void;
 }) {
   const key = platform as OrganicPlatform;
   const chrome = PLATFORM_CHROME[key] ?? PLATFORM_CHROME.instagram;
   const Logo = chrome.Logo;
+  const isSection = variant === "section";
+  const showBar = showPlatformBar ?? !isSection;
 
   return (
     <article
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       className={cn(
-        "mx-auto w-full max-w-[420px] overflow-hidden border shadow-sm",
+        "relative w-full overflow-hidden border",
+        isSection
+          ? "rounded-2xl transition-shadow hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-2 hover:ring-slate-200"
+          : "mx-auto max-w-[420px] rounded-none shadow-sm",
+        onClick && "cursor-pointer",
         dark ? "border-black bg-black text-white" : cn(chrome.border, chrome.bg),
         className,
       )}
     >
-      <div
-        className={cn(
-          "flex items-center gap-1.5 border-b px-3 py-1.5",
-          dark ? "border-white/10 bg-black" : "border-inherit bg-inherit",
-        )}
-      >
-        <Logo className="h-3.5 w-3.5 shrink-0" />
-        <span className={cn("text-[10px] font-semibold uppercase tracking-wide", dark ? "text-white/70" : "text-slate-500")}>
-          {ORGANIC_PLATFORM_LABELS[key] ?? platform}
-        </span>
-      </div>
+      {showBar ? (
+        <div
+          className={cn(
+            "flex items-center gap-1.5 border-b px-3 py-2",
+            dark ? "border-white/10 bg-black" : "border-inherit bg-inherit",
+          )}
+        >
+          <Logo className="h-4 w-4 shrink-0" />
+          <span
+            className={cn(
+              "text-[11px] font-semibold uppercase tracking-wide",
+              dark ? "text-white/90" : "text-slate-600",
+            )}
+          >
+            {ORGANIC_PLATFORM_LABELS[key] ?? platform}
+          </span>
+        </div>
+      ) : null}
       {children}
     </article>
   );
@@ -175,22 +255,52 @@ export function PlatformChrome({
 export function MediaFrame({
   src,
   aspect,
+  platform,
   className,
   overlay,
+  capVerticalHeight = false,
 }: {
   src: string | null;
   aspect: OrganicMediaAspect;
+  platform?: OrganicPlatform;
   className?: string;
   overlay?: ReactNode;
+  capVerticalHeight?: boolean;
 }) {
-  if (!src) return null;
+  const [broken, setBroken] = useState(false);
+  const showPlaceholder = !src || broken;
   const aspectClass =
     aspect === "vertical" ? "aspect-[9/16]" : aspect === "square" ? "aspect-square" : "aspect-video";
+  const heightCap =
+    capVerticalHeight && aspect === "vertical" ? "max-h-[420px] [&_img]:object-cover" : "";
+
+  if (showPlaceholder) {
+    const Logo = platform ? PLATFORM_CHROME[platform]?.Logo : null;
+    return (
+      <div
+        className={cn(
+          "relative flex w-full min-h-[180px] flex-col items-center justify-center gap-2 bg-[#f3f4f6]",
+          aspectClass,
+          heightCap,
+          className,
+        )}
+      >
+        {Logo ? <Logo className="h-8 w-8 opacity-40" /> : null}
+        <span className="text-[12px] font-medium text-[#94a3b8]">No preview</span>
+      </div>
+    );
+  }
 
   return (
-    <div className={cn("relative w-full overflow-hidden bg-black/5", aspectClass, className)}>
+    <div className={cn("relative w-full overflow-hidden bg-black/5", aspectClass, heightCap, className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
+      <img
+        src={src}
+        alt=""
+        className="h-full w-full object-cover"
+        loading="lazy"
+        onError={() => setBroken(true)}
+      />
       {overlay}
     </div>
   );
@@ -198,6 +308,25 @@ export function MediaFrame({
 
 export function EngagementCount({ value }: { value: number }) {
   return <span>{formatEngagementCount(value)}</span>;
+}
+
+export function ExpandableCaption({
+  content,
+  username,
+  className,
+}: {
+  content: string;
+  username?: string | null;
+  className?: string;
+}) {
+  const text = username ? `${username} ${content}` : content;
+  return (
+    <ExpandableAdText
+      text={text}
+      className={cn("text-[13px] leading-snug text-inherit", className)}
+      scrollWhenExpanded={false}
+    />
+  );
 }
 
 export function CaptionText({

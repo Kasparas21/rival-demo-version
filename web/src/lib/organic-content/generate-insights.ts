@@ -5,22 +5,102 @@ import { anthropicHaiku } from "@/lib/llm/anthropic";
 import type { Database } from "@/lib/supabase/types";
 
 import { ORGANIC_INSIGHTS_MAX_TOKENS } from "./constants";
-import { organicInsightsAnalysisSchema } from "./types";
+import { insightAiSectionsEmpty, sanitizeInsightItem } from "./insight-utils";
+import { organicInsightsAnalysisSchema, type OrganicInsightsAnalysis } from "./types";
+
+export { insightAiSectionsEmpty };
 
 const SYSTEM_PROMPT =
   "You are an organic social media analyst. Return ONLY valid JSON. No markdown, no preamble.";
 
+const INSIGHTS_POST_LIMIT = 30;
+
+type OrganicPostRow = Database["public"]["Tables"]["organic_posts"]["Row"];
+
+export function compactPostForInsights(post: OrganicPostRow) {
+  const raw =
+    post.raw_data && typeof post.raw_data === "object"
+      ? (post.raw_data as Record<string, unknown>)
+      : null;
+  const productType = raw?.product_type ?? raw?.productType;
+  return {
+    post_id: post.post_id,
+    platform: post.platform,
+    content: (post.content ?? "").slice(0, 400),
+    likes: post.likes,
+    comments: post.comments,
+    shares: post.shares,
+    views: post.views,
+    posted_at: post.posted_at,
+    ...(typeof productType === "string" && productType.trim()
+      ? { product_type: productType.trim() }
+      : {}),
+  };
+}
+
+function analysisHasContent(parsed: OrganicInsightsAnalysis): boolean {
+  return (
+    parsed.whats_working.length > 0 ||
+    parsed.whats_flopping.length > 0 ||
+    parsed.hot_right_now.length > 0
+  );
+}
+
+function normalizeInsightJson(raw: unknown): OrganicInsightsAnalysis {
+  const rec = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const normalizeItems = (items: unknown) => {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+      const postIds = Array.isArray(row.post_ids)
+        ? row.post_ids.map((id) => String(id))
+        : [];
+      return sanitizeInsightItem({
+        summary: String(row.summary ?? "").trim(),
+        why: row.why != null ? String(row.why) : undefined,
+        post_ids: postIds,
+      });
+    }).filter((item) => item.summary.length > 0);
+  };
+
+  const normalizeHot = (items: unknown) => {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item) => {
+        const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        return {
+          post_id: String(row.post_id ?? ""),
+          platform: String(row.platform ?? ""),
+          engagement_total: Number(row.engagement_total ?? 0),
+          summary: String(row.summary ?? "").trim(),
+        };
+      })
+      .filter((item) => item.post_id && item.summary);
+  };
+
+  return organicInsightsAnalysisSchema.parse({
+    whats_working: normalizeItems(rec.whats_working),
+    whats_flopping: normalizeItems(rec.whats_flopping),
+    top_collaborators: Array.isArray(rec.top_collaborators) ? rec.top_collaborators : [],
+    hot_right_now: normalizeHot(rec.hot_right_now),
+    metrics_overview:
+      rec.metrics_overview && typeof rec.metrics_overview === "object" ? rec.metrics_overview : {},
+  });
+}
+
 async function fetchPostsForInsights(
   admin: SupabaseClient<Database>,
   competitorId: string,
+  userId: string,
   platform: string,
 ) {
   let query = admin
     .from("organic_posts")
     .select("*")
     .eq("competitor_id", competitorId)
+    .eq("user_id", userId)
     .order("posted_at", { ascending: false })
-    .limit(50);
+    .limit(INSIGHTS_POST_LIMIT);
 
   if (platform !== "all") {
     query = query.eq("platform", platform);
@@ -34,12 +114,14 @@ async function fetchPostsForInsights(
 async function fetchCollabsForInsights(
   admin: SupabaseClient<Database>,
   competitorId: string,
+  userId: string,
   platform: string,
 ) {
   let query = admin
     .from("organic_collaborators")
-    .select("*")
+    .select("handle, platform, post_count, collab_types, display_name")
     .eq("competitor_id", competitorId)
+    .eq("user_id", userId)
     .order("post_count", { ascending: false })
     .limit(10);
 
@@ -59,20 +141,24 @@ export async function generateInsightsForPlatform(
     userId: string;
     platform: string;
   },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
   const { competitorId, userId, platform } = params;
 
-  const posts = await fetchPostsForInsights(admin, competitorId, platform);
+  const posts = await fetchPostsForInsights(admin, competitorId, userId, platform);
   if (posts.length === 0) {
-    return { ok: true };
+    return { ok: true, skipped: true };
   }
 
-  const collabs = await fetchCollabsForInsights(admin, competitorId, platform);
+  const collabs = await fetchCollabsForInsights(admin, competitorId, userId, platform);
+  const compactPosts = posts.map(compactPostForInsights);
 
-  const userPrompt = `Analyze the following posts from a competitor brand.
+  const userPrompt = `Analyze the following organic social posts from a competitor brand.
+
+Reference posts ONLY via the post_ids array — never put post_id strings, shortcodes, or IDs in summary or why text.
+Write summary and why in plain English for marketers (no technical IDs, no parenthetical post codes).
 
 Posts (JSON):
-${JSON.stringify(posts, null, 2)}
+${JSON.stringify(compactPosts, null, 2)}
 
 Top collaborators:
 ${JSON.stringify(collabs, null, 2)}
@@ -101,6 +187,7 @@ Return ONLY a JSON object with this exact structure:
   }
 }
 
+Provide 2-4 whats_working items and 1-3 whats_flopping items when patterns exist.
 No preamble. No markdown. Pure JSON only.`;
 
   const out = await anthropicHaiku({
@@ -109,15 +196,19 @@ No preamble. No markdown. Pure JSON only.`;
     maxTokens: ORGANIC_INSIGHTS_MAX_TOKENS,
   });
 
-  const rawText = out.ok ? out.text : "";
-  let parsed = organicInsightsAnalysisSchema.parse({});
+  if (!out.ok) {
+    return { ok: false, error: out.error };
+  }
 
-  if (out.ok && rawText) {
-    try {
-      parsed = organicInsightsAnalysisSchema.parse(JSON.parse(stripJsonFences(rawText)));
-    } catch {
-      parsed = organicInsightsAnalysisSchema.parse({});
-    }
+  let parsed: OrganicInsightsAnalysis;
+  try {
+    parsed = normalizeInsightJson(JSON.parse(stripJsonFences(out.text)));
+  } catch {
+    return { ok: false, error: "Failed to parse AI insight response" };
+  }
+
+  if (!analysisHasContent(parsed)) {
+    return { ok: false, error: "AI returned empty insight sections" };
   }
 
   const { error } = await admin.from("organic_insights").upsert(
@@ -131,7 +222,7 @@ No preamble. No markdown. Pure JSON only.`;
       top_collaborators: parsed.top_collaborators,
       hot_right_now: parsed.hot_right_now,
       metrics_overview: parsed.metrics_overview ?? {},
-      raw_analysis: rawText || null,
+      raw_analysis: out.text || null,
     },
     { onConflict: "competitor_id,platform" },
   );
@@ -150,7 +241,8 @@ export async function generateOrganicInsights(
   const { data: platformRows, error } = await admin
     .from("organic_posts")
     .select("platform")
-    .eq("competitor_id", competitorId);
+    .eq("competitor_id", competitorId)
+    .eq("user_id", userId);
 
   if (error) {
     return { platforms: [], errors: [error.message] };
@@ -165,4 +257,41 @@ export async function generateOrganicInsights(
   }
 
   return { platforms, errors };
+}
+
+export async function regenerateOrganicInsightsForScope(
+  admin: SupabaseClient<Database>,
+  params: { competitorId: string; userId: string; platform?: string },
+): Promise<{ ok: boolean; errors: string[]; platforms: string[] }> {
+  const { competitorId, userId, platform } = params;
+  const errors: string[] = [];
+  const ran: string[] = [];
+
+  if (platform && platform !== "all") {
+    const result = await generateInsightsForPlatform(admin, { competitorId, userId, platform });
+    if (!result.ok && result.error) errors.push(result.error);
+    if (result.ok && !result.skipped) ran.push(platform);
+    return { ok: errors.length === 0, errors, platforms: ran };
+  }
+
+  const { data: platformRows, error } = await admin
+    .from("organic_posts")
+    .select("platform")
+    .eq("competitor_id", competitorId)
+    .eq("user_id", userId);
+
+  if (error) {
+    return { ok: false, errors: [error.message], platforms: [] };
+  }
+
+  const uniquePlatforms = [...new Set((platformRows ?? []).map((r) => r.platform))];
+  const targets = ["all", ...uniquePlatforms];
+
+  for (const p of targets) {
+    const result = await generateInsightsForPlatform(admin, { competitorId, userId, platform: p });
+    if (!result.ok && result.error) errors.push(`${p}: ${result.error}`);
+    if (result.ok && !result.skipped) ran.push(p);
+  }
+
+  return { ok: errors.length === 0, errors, platforms: ran };
 }

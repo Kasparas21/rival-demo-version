@@ -245,24 +245,7 @@ export function FacebookLogo({ className }: { className?: string }) {
   );
 }
 
-export function InstagramLogo({ className }: { className?: string }) {
-  const u = useId().replace(/[:]/g, "");
-  const gradId = `ig-grad-${u}`;
-  return (
-    <svg viewBox="0 0 256 256" className={className || svgClass} aria-hidden>
-      <defs>
-        <linearGradient id={gradId} x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#FD5949" />
-          <stop offset="50%" stopColor="#D6249F" />
-          <stop offset="100%" stopColor="#285AEB" />
-        </linearGradient>
-      </defs>
-      <rect width="256" height="256" rx="58" fill={`url(#${gradId})`} />
-      <circle cx="128" cy="128" r="52" fill="none" stroke="#fff" strokeWidth="22" />
-      <circle cx="188" cy="68" r="16" fill="#fff" />
-    </svg>
-  );
-}
+export { InstagramMark as InstagramLogo } from "@/components/icons/instagram-mark";
 
 export function TikTokLogo(props: SVGProps<SVGSVGElement>) {
   return (

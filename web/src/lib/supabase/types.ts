@@ -1084,6 +1084,30 @@ export type Database = {
         };
         Relationships: [];
       };
+      organic_post_preview_analysis_cache: {
+        Row: {
+          organic_post_id: string;
+          user_id: string;
+          analysis: Json;
+          ai_model_version: string;
+          computed_at: string;
+        };
+        Insert: {
+          organic_post_id: string;
+          user_id: string;
+          analysis: Json;
+          ai_model_version: string;
+          computed_at?: string;
+        };
+        Update: {
+          organic_post_id?: string;
+          user_id?: string;
+          analysis?: Json;
+          ai_model_version?: string;
+          computed_at?: string;
+        };
+        Relationships: [];
+      };
       organic_collaborators: {
         Row: {
           id: string;

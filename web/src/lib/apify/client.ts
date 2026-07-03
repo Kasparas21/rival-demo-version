@@ -26,6 +26,11 @@ export type RunActorOptions = {
    * Store actors that bill per dataset row require this to be > 0 or the run is rejected.
    */
   maxItems?: number;
+  /**
+   * Spending cap for pay-per-event Actors (Apify `maxTotalChargeUsd` query param).
+   * xtdata/twitter-x-scraper requires at least $3.00 or the run is rejected at start.
+   */
+  maxTotalChargeUsd?: number;
 };
 
 type ApifyRunResponse = {
@@ -207,6 +212,9 @@ export async function runApifyActor<T = Record<string, unknown>>(
   }
   if (options?.maxItems != null && options.maxItems > 0) {
     runUrl.searchParams.set("maxItems", String(Math.floor(options.maxItems)));
+  }
+  if (options?.maxTotalChargeUsd != null && options.maxTotalChargeUsd > 0) {
+    runUrl.searchParams.set("maxTotalChargeUsd", String(options.maxTotalChargeUsd));
   }
 
   let runResponse: Response;

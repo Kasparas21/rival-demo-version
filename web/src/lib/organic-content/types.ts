@@ -90,4 +90,6 @@ export type ScrapeOrganicCompetitorRow = {
   user_id: string;
   socials: OrganicSocials | null;
   organic_baseline_date: string | null;
+  /** Used to derive YouTube searchTerms when only a /channel/UC… URL is saved. */
+  competitor_name?: string | null;
 };

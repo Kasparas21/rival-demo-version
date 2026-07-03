@@ -204,6 +204,11 @@ import {
   type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
+import {
+  CompetitorCompactStickyNav,
+  CompetitorHeaderScrollSentinel,
+  useCompactNavScroll,
+} from "@/components/dashboard/competitor/competitor-compact-sticky-nav";
 import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
 import {
   RecomputePollProvider,
@@ -3996,16 +4001,19 @@ function CompetitorDashboardBody({
     [adsPlatforms, defaultVisibleAdPlatforms]
   );
 
+  const headerScrollSentinelRef = useRef<HTMLDivElement>(null);
+  const { progress: compactNavProgress } = useCompactNavScroll(headerScrollSentinelRef);
+
   return (
     <RecomputePollProvider value={recomputePollState}>
     <AdSaveVisibilityProvider
       visible={ownBrandSavedAdsEnabled}
       showDebugIndicator={isOwnWorkspace && showBrandDebugTabs}
     >
-    <div className="flex min-h-0 w-full flex-1 flex-col">
+    <div className="flex w-full flex-col">
       {/* Top Header */}
       <div
-        className={`relative shrink-0 backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)] border-b ${
+        className={`relative backdrop-blur-xl shadow-[0_1px_0_rgba(255,255,255,0.5)] border-b ${
           isOwnWorkspace
             ? "border-sky-200/90 bg-gradient-to-br from-sky-50/95 via-amber-50/30 to-white/[0.92]"
             : "border-white/60 bg-white/70"
@@ -4228,9 +4236,24 @@ function CompetitorDashboardBody({
           })()}
       </div>
 
+      <CompetitorHeaderScrollSentinel sentinelRef={headerScrollSentinelRef} />
+      <CompetitorCompactStickyNav
+        progress={compactNavProgress}
+        competitorDisplayLabel={competitorDisplayLabel}
+        brand={{ logoUrl: brand.logoUrl, domain: brand.domain }}
+        isOwnWorkspace={isOwnWorkspace}
+        showBrandDebugTabs={showBrandDebugTabs}
+        pageTabs={pageTabs}
+        navTab={navTab}
+        navSub={navSub}
+        alertsUnreadCount={alertsUnreadCount}
+        onTabChange={handleTabChange}
+        onSubTabChange={handleSubTabChange}
+      />
+
       {/* Tab Content Areas */}
-      <KeepMountedTab active={navTab === "workspace-ads" && isOwnWorkspace} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={navTab === "workspace-ads" && isOwnWorkspace} className="!flex-none flex-col">
+        <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
             <WorkspaceAdSourcesPanel
               brandId={myBrand.id}
@@ -4243,8 +4266,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "benchmark" && isOwnWorkspace} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={navTab === "benchmark" && isOwnWorkspace} className="!flex-none flex-col">
+        <div className="bg-transparent">
           <BenchmarkTab
             fetchEnabled={navTab === "benchmark" && isOwnWorkspace}
             brandId={myBrand.id}
@@ -4255,8 +4278,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "workspace-marketing-improvements" && isOwnWorkspace} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={navTab === "workspace-marketing-improvements" && isOwnWorkspace} className="!flex-none flex-col">
+        <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 w-full animate-in fade-in duration-200`}>
             <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -4395,8 +4418,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "ads library"} className="min-h-0">
-        <div className="flex-1 min-h-0 overflow-y-auto bg-transparent">
+      <KeepMountedTab active={navTab === "ads library"} className="!flex-none flex-col">
+        <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
             {navSub === "saved" && ownBrandSavedAdsEnabled ? (
               <SavedAdsPanel
@@ -5317,8 +5340,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "insights"} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab active={navTab === "insights"} className="!flex-none flex-col">
+        <div className="bg-slate-50">
           {shouldRenderAiAnalysisNotice ? (
             <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
           ) : null}
@@ -5327,7 +5350,7 @@ function CompetitorDashboardBody({
               <RivalLoadingBlock padded className="py-14" />
             }
           >
-            <KeepMountedTab active={navSub === "strategy-map"} className="min-h-0">
+            <KeepMountedTab active={navSub === "strategy-map"} className="!flex-none flex-col">
               <StrategyOverviewApp
                 brand={brand}
                 onOpenAdsLibrary={() => handleTabChange("ads library")}
@@ -5339,7 +5362,7 @@ function CompetitorDashboardBody({
                 externalRecomputeError={recomputePollState.recomputeError}
               />
             </KeepMountedTab>
-            <KeepMountedTab active={navSub === "activity-feed"} className="min-h-0">
+            <KeepMountedTab active={navSub === "activity-feed"} className="!flex-none flex-col">
               <ActivityFeedTab
                 competitorDomain={brand.domain}
                 competitorLabel={competitorDisplayLabel}
@@ -5353,12 +5376,12 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "tests"} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab active={navTab === "tests"} className="!flex-none flex-col">
+        <div className="bg-slate-50">
           {shouldRenderAiAnalysisNotice ? (
             <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
           ) : null}
-          <KeepMountedTab active={navSub === "creative-tests"} className="min-h-0">
+          <KeepMountedTab active={navSub === "creative-tests"} className="!flex-none flex-col">
             <CreativeTestsTab
               competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
@@ -5369,7 +5392,7 @@ function CompetitorDashboardBody({
               fetchEnabled={navSub === "creative-tests"}
             />
           </KeepMountedTab>
-          <KeepMountedTab active={navSub === "timeline"} className="min-h-0">
+          <KeepMountedTab active={navSub === "timeline"} className="!flex-none flex-col">
             <TimelineTab
               competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
@@ -5380,7 +5403,7 @@ function CompetitorDashboardBody({
               fetchEnabled={navSub === "timeline"}
             />
           </KeepMountedTab>
-          <KeepMountedTab active={navSub === "landing-pages"} className="min-h-0">
+          <KeepMountedTab active={navSub === "landing-pages"} className="!flex-none flex-col">
             <LandingPagesTab
               competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
@@ -5395,12 +5418,12 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "audience-copy"} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab active={navTab === "audience-copy"} className="!flex-none flex-col">
+        <div className="bg-slate-50">
           {shouldRenderAiAnalysisNotice ? (
             <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
           ) : null}
-          <KeepMountedTab active={navSub === "audience"} className="min-h-0">
+          <KeepMountedTab active={navSub === "audience"} className="!flex-none flex-col">
             <AudienceTab
               brandId={myBrand.id}
               competitorDomain={brand.domain}
@@ -5417,7 +5440,7 @@ function CompetitorDashboardBody({
               externalRecomputeRunning={recomputePollState.recomputeRunning}
             />
           </KeepMountedTab>
-          <KeepMountedTab active={navSub === "copy-vault"} className="min-h-0">
+          <KeepMountedTab active={navSub === "copy-vault"} className="!flex-none flex-col">
             <CopyVaultTab
               competitorId={competitorDbIdForSaved}
               competitorLabel={competitorDisplayLabel}
@@ -5430,8 +5453,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "comparison" && !isOwnWorkspace} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab active={navTab === "comparison" && !isOwnWorkspace} className="!flex-none flex-col">
+        <div className="bg-slate-50">
           <div className="animate-in fade-in duration-200">
             {shouldRenderAiAnalysisNotice ? (
               <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
@@ -5459,8 +5482,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "alerts"} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab active={navTab === "alerts"} className="!flex-none flex-col">
+        <div className="bg-slate-50">
           <AlertsTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorLabel={competitorDisplayLabel}
@@ -5475,8 +5498,8 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "email-marketing" && !isOwnWorkspace} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab active={navTab === "email-marketing" && !isOwnWorkspace} className="!flex-none flex-col">
+        <div className="bg-slate-50">
           <EmailMarketingTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorName={competitorDisplayLabel}
@@ -5484,8 +5507,11 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "organic" && !isOwnWorkspace && showBrandDebugTabs} className="min-h-0">
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
+      <KeepMountedTab
+        active={navTab === "organic" && !isOwnWorkspace && showBrandDebugTabs}
+        className="!flex-none flex-col"
+      >
+        <div className="bg-slate-50">
           <OrganicTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorName={competitorDisplayLabel}

@@ -1,5 +1,7 @@
 import type { OrganicPlatform } from "./types";
 
+import { extractFacebookMediaFromRaw, extractLinkedInMediaFromRaw, extractTwitterViewsFromRaw } from "./normalize";
+
 export type OrganicMediaAspect = "square" | "vertical" | "landscape";
 
 export type OrganicPostDisplayFields = {
@@ -42,38 +44,71 @@ function extractAuthor(
     }
     case "twitter":
       return {
-        author_username: pickString(author?.userName, author?.username, user?.screen_name, raw.screen_name),
+        author_username: pickString(
+          author?.screen_name,
+          author?.userName,
+          author?.username,
+          user?.screen_name,
+          raw.screen_name,
+        ),
         author_display_name: pickString(author?.name, user?.name, raw.name),
         author_avatar_url: pickString(
+          author?.profile_image_url_https,
           author?.profilePicture,
           author?.profileImageUrl,
           user?.profile_image_url_https,
           raw.profileImageUrl,
         ),
       };
-    case "linkedin":
+    case "linkedin": {
+      const avatar = asRecord(author?.avatar);
       return {
         author_username: pickString(
-          author?.username,
+          author?.universalName,
           author?.publicIdentifier,
-          author?.vanityName,
+          raw.author_username,
+          author?.username,
           raw.publicIdentifier,
         ),
-        author_display_name: pickString(author?.name, author?.fullName, raw.authorName),
-        author_avatar_url: pickString(author?.profilePicture, author?.avatar, raw.authorImage),
+        author_display_name: pickString(author?.name, raw.author_name, raw.authorName, raw.author_display_name),
+        author_avatar_url: pickString(
+          avatar?.url,
+          raw.author_avatar_url,
+          author?.profilePicture,
+          author?.avatar,
+          raw.authorImage,
+        ),
       };
+    }
     case "tiktok":
       return {
         author_username: pickString(authorMeta?.name, raw.author, author?.uniqueId, author?.name),
         author_display_name: pickString(authorMeta?.nickName, authorMeta?.nickname, author?.nickname),
         author_avatar_url: pickString(authorMeta?.avatar, author?.avatarThumb, author?.avatar),
       };
-    case "youtube":
+    case "youtube": {
+      const channel = asRecord(raw.channel);
       return {
-        author_username: pickString(raw.channelUsername, raw.channelHandle, raw.channelUrl),
-        author_display_name: pickString(raw.channelName, raw.channelTitle, raw.uploader),
+        author_username: pickString(
+          channel?.handle as string | undefined,
+          channel?.url as string | undefined,
+          raw.channelUsername,
+          raw.channelHandle,
+          raw.channel_url,
+          raw.channelUrl,
+          asRecord(raw.details)?.author as string | undefined,
+        ),
+        author_display_name: pickString(
+          channel?.name as string | undefined,
+          raw.channel_name,
+          raw.channelName,
+          raw.channelTitle,
+          raw.uploader,
+          asRecord(raw.details)?.author as string | undefined,
+        ),
         author_avatar_url: pickString(raw.channelAvatarUrl, raw.channelThumbnail, raw.uploaderAvatar),
       };
+    }
     case "facebook":
       return {
         author_username: pickString(raw.pageName, user?.name, raw.userName, raw.pageUrl),
@@ -95,7 +130,12 @@ function inferMediaAspect(
   productType: string | null,
 ): OrganicMediaAspect {
   if (productType === "clips" || platform === "tiktok") return "vertical";
-  if (platform === "youtube") return "landscape";
+  if (platform === "youtube") {
+    if (productType === "short" || raw.isShort === true) return "vertical";
+    const videoUrl = pickString(raw.video_url, raw.url, raw.post_url);
+    if (videoUrl && /youtube\.com\/shorts\//i.test(videoUrl)) return "vertical";
+    return "landscape";
+  }
 
   if (platform === "instagram") {
     if (productType === "feed") return "square";
@@ -108,6 +148,68 @@ function inferMediaAspect(
       return "square";
     }
     return "square";
+  }
+
+  if (platform === "linkedin") {
+    if (productType === "video") return "landscape";
+    const postImages = raw.postImages;
+    if (Array.isArray(postImages) && postImages.length > 0) {
+      const first = asRecord(postImages[0]);
+      const width = typeof first?.width === "number" ? first.width : null;
+      const height = typeof first?.height === "number" ? first.height : null;
+      if (width && height) {
+        const ratio = width / height;
+        if (ratio < 0.85) return "vertical";
+        if (ratio > 1.15) return "landscape";
+        return "square";
+      }
+    }
+    const coverPages = asRecord(raw.document)?.coverPages;
+    if (Array.isArray(coverPages) && coverPages.length > 0) {
+      const first = asRecord(coverPages[0]);
+      const width = typeof first?.width === "number" ? first.width : null;
+      const height = typeof first?.height === "number" ? first.height : null;
+      if (width && height) {
+        const ratio = width / height;
+        if (ratio < 0.85) return "vertical";
+        if (ratio > 1.15) return "landscape";
+        return "square";
+      }
+    }
+  }
+
+  if (platform === "facebook") {
+    if (productType === "reel" || productType === "video" || productType === "clips") return "vertical";
+    const postUrl = pickString(raw.url, raw.post_url, raw.postUrl);
+    if (postUrl && /facebook\.com\/reel\//i.test(postUrl)) return "vertical";
+    const mediaArr = raw.media;
+    if (Array.isArray(mediaArr) && mediaArr.length > 0) {
+      const first = asRecord(mediaArr[0]);
+      const width = typeof first?.width === "number" ? first.width : null;
+      const height = typeof first?.height === "number" ? first.height : null;
+      if (width && height) {
+        const ratio = width / height;
+        if (ratio < 0.85) return "vertical";
+        if (ratio > 1.15) return "landscape";
+        return "square";
+      }
+      if (first?.__typename === "Video") return "vertical";
+    }
+  }
+
+  if (platform === "twitter") {
+    const extended = asRecord(raw.extended_entities);
+    const media = Array.isArray(extended?.media) ? extended.media[0] : null;
+    const mediaRec = asRecord(media);
+    const originalInfo = asRecord(mediaRec?.original_info);
+    const width = typeof originalInfo?.width === "number" ? originalInfo.width : null;
+    const height = typeof originalInfo?.height === "number" ? originalInfo.height : null;
+    if (width && height) {
+      const ratio = width / height;
+      if (ratio < 0.85) return "vertical";
+      if (ratio > 1.15) return "landscape";
+      return "square";
+    }
   }
 
   const width = typeof raw.width === "number" ? raw.width : null;
@@ -142,7 +244,15 @@ export function organicPostDisplayFields(
   const author = extractAuthor(raw, platform);
 
   return {
-    post_url: pickString(raw.post_url, raw.url, raw.postUrl, raw.link, raw.webVideoUrl),
+    post_url: pickString(
+      raw.post_url,
+      raw.linkedinUrl,
+      raw.video_url,
+      raw.url,
+      raw.postUrl,
+      raw.link,
+      raw.webVideoUrl,
+    ),
     product_type,
     ...author,
     media_aspect: inferMediaAspect(raw, platform, product_type),
@@ -150,13 +260,32 @@ export function organicPostDisplayFields(
 }
 
 export function enrichOrganicPostForApi<
-  T extends { raw_data?: unknown; views?: number; platform?: string },
->(post: T): T & OrganicPostDisplayFields & { views: number } {
+  T extends { raw_data?: unknown; views?: number; platform?: string; media_urls?: string[] },
+>(post: T): T & OrganicPostDisplayFields & { views: number; media_urls: string[] } {
   const platform = (post.platform ?? "instagram") as OrganicPlatform;
   const display = organicPostDisplayFields(post.raw_data, platform);
+  const storedViews = post.views ?? 0;
+  const rawViews = platform === "twitter" ? extractTwitterViewsFromRaw(post.raw_data) : 0;
+  const facebookMedia =
+    platform === "facebook" ? extractFacebookMediaFromRaw(post.raw_data) : [];
+  const linkedinMedia =
+    platform === "linkedin" ? extractLinkedInMediaFromRaw(post.raw_data) : [];
+  const repairedMedia = facebookMedia.length > 0 ? facebookMedia : linkedinMedia;
+  const media_urls =
+    repairedMedia.length > 0 ? repairedMedia : (post.media_urls ?? []);
   return {
     ...post,
     ...display,
-    views: post.views ?? 0,
+    media_urls,
+    views: storedViews > 0 ? storedViews : rawViews,
   };
+}
+
+export function toOrganicPostClientPayload<
+  T extends { raw_data?: unknown; views?: number; platform?: string; media_urls?: string[] },
+>(post: T): Omit<T & OrganicPostDisplayFields, "raw_data"> & { views: number; media_urls: string[] } {
+  const enriched = enrichOrganicPostForApi(post);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { raw_data, ...client } = enriched as T & OrganicPostDisplayFields & { raw_data?: unknown };
+  return client;
 }

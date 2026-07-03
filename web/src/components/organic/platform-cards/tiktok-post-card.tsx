@@ -9,25 +9,43 @@ import {
   ExternalPlatformLink,
   MediaFrame,
   PlatformChrome,
+  PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
 
-export function TikTokPostCard({ post, socials, highlightEngagement, className }: PlatformCardProps) {
+export function TikTokPostCard({
+  post,
+  socials,
+  highlightEngagement,
+  className,
+  variant = "section",
+  onPostClick,
+}: PlatformCardProps) {
   const author = resolveAuthor(post, socials);
   const content = post.content?.trim() ?? "";
   const thumbnail = post.media_urls[0] ?? null;
+  const isSection = variant === "section";
 
   return (
     <PlatformChrome
       platform="tiktok"
       dark
+      variant={variant}
       className={cn(highlightEngagement && "ring-2 ring-amber-300", className)}
+      onClick={onPostClick ? () => onPostClick(post) : undefined}
     >
       <div className="relative">
+        {isSection ? (
+          <div className="absolute right-2.5 top-2.5 z-20">
+            <PostExternalLinkIcon platform="tiktok" postUrl={post.post_url} dark />
+          </div>
+        ) : null}
         <MediaFrame
           src={thumbnail}
+          platform="tiktok"
           aspect="vertical"
+          capVerticalHeight={isSection}
           className="bg-black"
           overlay={
             <>
@@ -69,9 +87,11 @@ export function TikTokPostCard({ post, socials, highlightEngagement, className }
         />
       </div>
 
-      <div className="border-t border-white/10 px-3 py-2">
-        <ExternalPlatformLink platform="tiktok" postUrl={post.post_url} className="text-white/80 hover:text-white" />
-      </div>
+      {!isSection ? (
+        <div className="border-t border-white/10 px-3 py-2">
+          <ExternalPlatformLink platform="tiktok" postUrl={post.post_url} className="text-white/80 hover:text-white" />
+        </div>
+      ) : null}
     </PlatformChrome>
   );
 }
