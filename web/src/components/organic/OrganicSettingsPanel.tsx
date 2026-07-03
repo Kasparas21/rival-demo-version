@@ -8,6 +8,7 @@ import {
   ORGANIC_PLATFORM_PLACEHOLDERS,
 } from "@/lib/organic-content/constants";
 import { ORGANIC_PLATFORMS, type OrganicPlatform, type OrganicSocials } from "@/lib/organic-content/types";
+import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { cn } from "@/lib/utils";
 
 type OrganicSettingsPanelProps = {
@@ -30,6 +31,7 @@ export function OrganicSettingsPanel({
   const [rescrapingPlatform, setRescrapingPlatform] = useState<OrganicPlatform | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const showTestingTools = isDebugPlatformClassificationEnabled();
 
   useEffect(() => {
     setSocials(initialSocials);
@@ -234,36 +236,39 @@ export function OrganicSettingsPanel({
         </div>
       </div>
 
-      <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 p-5">
-        <h3 className="text-[14px] font-semibold text-slate-900">Testing</h3>
-        <p className="mt-1 text-[12px] text-slate-600">
-          Re-run Apify for a single platform without changing saved handles. Uses a full scrape (ignores
-          incremental baseline).
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {ORGANIC_PLATFORMS.map((platform) => {
-            const hasHandle = Boolean(savedSocials[platform]?.trim());
-            const busy = rescrapingPlatform === platform;
-            const label = ORGANIC_PLATFORM_LABELS[platform];
-            return (
-              <button
-                key={platform}
-                type="button"
-                onClick={() => void handleTestRescrape(platform)}
-                disabled={!hasHandle || rescrapingPlatform != null || saving || scraping}
-                title={hasHandle ? undefined : `Save a ${label} handle first`}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 transition-opacity hover:bg-slate-50",
-                  (!hasHandle || rescrapingPlatform != null || saving || scraping) && "cursor-not-allowed opacity-50",
-                )}
-              >
-                <RefreshCw className={cn("h-3.5 w-3.5", busy && "motion-safe:animate-spin")} />
-                {busy ? `Rescraping ${label}…` : `Rescrape ${label} only`}
-              </button>
-            );
-          })}
+      {showTestingTools ? (
+        <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/50 p-5">
+          <h3 className="text-[14px] font-semibold text-slate-900">Testing</h3>
+          <p className="mt-1 text-[12px] text-slate-600">
+            Re-run Apify for a single platform without changing saved handles. Uses a full scrape (ignores
+            incremental baseline).
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {ORGANIC_PLATFORMS.map((platform) => {
+              const hasHandle = Boolean(savedSocials[platform]?.trim());
+              const busy = rescrapingPlatform === platform;
+              const label = ORGANIC_PLATFORM_LABELS[platform];
+              return (
+                <button
+                  key={platform}
+                  type="button"
+                  onClick={() => void handleTestRescrape(platform)}
+                  disabled={!hasHandle || rescrapingPlatform != null || saving || scraping}
+                  title={hasHandle ? undefined : `Save a ${label} handle first`}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] font-medium text-slate-800 transition-opacity hover:bg-slate-50",
+                    (!hasHandle || rescrapingPlatform != null || saving || scraping) &&
+                      "cursor-not-allowed opacity-50",
+                  )}
+                >
+                  <RefreshCw className={cn("h-3.5 w-3.5", busy && "motion-safe:animate-spin")} />
+                  {busy ? `Rescraping ${label}…` : `Rescrape ${label} only`}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

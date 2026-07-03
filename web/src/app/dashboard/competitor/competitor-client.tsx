@@ -2252,15 +2252,6 @@ function CompetitorDashboardBody({
   }, [isOwnWorkspace, showBrandDebugTabs, navTab, navSub, syncNavToUrl]);
 
   useEffect(() => {
-    if (showBrandDebugTabs) return;
-    if (navTab !== "organic") return;
-    const sub = deriveSubFromParams(searchParams, "ads library");
-    setNavTab("ads library");
-    setNavSub(sub);
-    syncNavToUrl("ads library", sub);
-  }, [showBrandDebugTabs, navTab, searchParams, deriveSubFromParams, syncNavToUrl]);
-
-  useEffect(() => {
     if (
       !isOwnWorkspace &&
       (navTab === "workspace-ads" || navTab === "workspace-marketing-improvements" || navTab === "benchmark")
@@ -5511,7 +5502,7 @@ function CompetitorDashboardBody({
       </KeepMountedTab>
 
       <KeepMountedTab
-        active={navTab === "organic" && !isOwnWorkspace && showBrandDebugTabs}
+        active={navTab === "organic" && !isOwnWorkspace}
         className="!flex-none flex-col"
       >
         <div className="bg-slate-50">

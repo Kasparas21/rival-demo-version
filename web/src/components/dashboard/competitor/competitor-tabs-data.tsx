@@ -157,7 +157,7 @@ export const WORKSPACE_BENCHMARK_TAB: CompetitorPageTab = {
 };
 
 /** Competitor hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
-export const DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = ["organic"];
+export const DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [];
 
 export function isGlobalDebugOnlyTab(tabId: string): tabId is (typeof DEBUG_ONLY_TAB_IDS)[number] {
   return DEBUG_ONLY_TAB_IDS.includes(tabId as (typeof DEBUG_ONLY_TAB_IDS)[number]);
