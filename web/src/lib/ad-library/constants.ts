@@ -7,7 +7,13 @@ export const ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM = 10;
  * Upper bound for Meta, LinkedIn, TikTok, Pinterest, Snapchat, and Google Transparency `resultsLimit`
  * in `app/api/ads/library/route.ts`.
  */
-export const ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM = 500;
+export const ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM = 1000;
+
+/**
+ * Full active-ads sweep cap for meta/google/tiktok refreshes. A sweep that returns fewer ads than
+ * this cap is exhaustive, which is what makes "absent from scrape → killed" sound.
+ */
+export const FULL_SWEEP_ADS_PER_PLATFORM = 1000;
 
 /** Google Transparency `resultsLimit` when the client omits `googleResultsLimit`. */
 export const GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT = 25;
@@ -35,8 +41,8 @@ export function getInitialAdsCount(platform: InitialScrapePlatform): number {
 /** Per-platform ad count for scheduled refresh scrapes (not initial discovery). */
 export const REFRESH_ADS_PER_PLATFORM = 100;
 
-/** Pro/Admin manual force-rescrape: active-today window, all platforms. */
-export const MANUAL_REFRESH_ADS_PER_PLATFORM = 300;
+/** Pro/Admin manual force-rescrape: full active sweep per platform. */
+export const MANUAL_REFRESH_ADS_PER_PLATFORM = FULL_SWEEP_ADS_PER_PLATFORM;
 
 /** Workspace “Rescrape ads” — small refresh per platform (not full discovery). */
 export const WORKSPACE_RESCRAPE_ADS_PER_PLATFORM = {

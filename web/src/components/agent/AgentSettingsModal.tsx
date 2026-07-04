@@ -54,7 +54,6 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
     });
   };
 
-  const showForm = Boolean(settings);
   const showFormSkeleton = settingsLoading && !settings;
 
   return createPortal(
@@ -96,7 +95,7 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {showFormSkeleton ? (
             <AgentSettingsFormSkeleton />
-          ) : !showForm ? (
+          ) : !settings ? (
             <p className="text-[13px] text-red-700">{error ?? "Could not load settings."}</p>
           ) : (
             <>

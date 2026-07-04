@@ -83,8 +83,10 @@ function spanForMeta(ad: MetaAdCard, nowMs: number): AdSpan {
   const startMs = ad.startedAt != null && Number.isFinite(ad.startedAt) ? metaTimestampToMs(ad.startedAt) : 0;
   const endRaw =
     ad.endedAt != null && Number.isFinite(ad.endedAt) && ad.endedAt > 0 ? metaTimestampToMs(ad.endedAt) : nowMs;
+  const seenMs = ad.librarySeenAtMs ?? 0;
   const endMs = Math.max(startMs, endRaw);
-  return { startMs, endMs, lifespanMs: Math.max(0, endMs - startMs), newestMs: endMs };
+  const newestMs = Math.max(endMs, seenMs, startMs);
+  return { startMs, endMs, lifespanMs: Math.max(0, endMs - startMs), newestMs };
 }
 
 function spanForGoogle(ad: GoogleAdRow, nowMs: number): AdSpan {

@@ -5,7 +5,25 @@ import { resolveCellAdLifecycle, sortCellAds } from "@/lib/strategy-overview/cel
 describe("resolveCellAdLifecycle", () => {
   const now = Date.parse("2026-05-20T12:00:00.000Z");
 
-  it("marks Meta video as running when endedAt is recent", () => {
+  it("marks Meta video as running when endedAt is the current day", () => {
+    const lc = resolveCellAdLifecycle(
+      {
+        platform: "meta",
+        first_seen_at: "2026-05-01T00:00:00.000Z",
+        last_seen_at: "2026-05-20T00:00:00.000Z",
+        is_active: true,
+        raw_payload: {
+          isActive: true,
+          endedAt: Math.floor(Date.parse("2026-05-20T00:00:00.000Z") / 1000),
+        },
+      },
+      now
+    );
+    expect(lc.isRunning).toBe(true);
+    expect(lc.runtimeDays).toBeGreaterThan(0);
+  });
+
+  it("marks Meta ad ended when endedAt predates the current day even if isActive is stale-true", () => {
     const lc = resolveCellAdLifecycle(
       {
         platform: "meta",
@@ -19,8 +37,7 @@ describe("resolveCellAdLifecycle", () => {
       },
       now
     );
-    expect(lc.isRunning).toBe(true);
-    expect(lc.runtimeDays).toBeGreaterThan(0);
+    expect(lc.isRunning).toBe(false);
   });
 
   it("marks ended Meta ad inactive when endedAt is old", () => {

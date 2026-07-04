@@ -234,7 +234,7 @@ describe("classifyByActiveCount", () => {
 });
 
 describe("computePlatformTracking", () => {
-  it("classifies each platform independently", () => {
+  it("applies high-coverage top-3 demotion when 5+ platforms have 30+ active ads", () => {
     const result = computePlatformTracking({
       meta: 100,
       google: 90,
@@ -243,9 +243,27 @@ describe("computePlatformTracking", () => {
       linkedin: 60,
       snapchat: 40,
     });
+    expect(result.highCoverageApplied).toBe(true);
+    const demoted = result.platforms
+      .filter((p) => p.highCoverageDemoted)
+      .map((p) => p.platform)
+      .sort();
+    expect(demoted).toEqual(["linkedin", "pinterest", "snapchat"]);
+    expect(result.platforms.filter((p) => p.classification === "PRIMARY")).toHaveLength(5);
+  });
+
+  it("classifies each platform independently below the high-coverage threshold", () => {
+    const result = computePlatformTracking({
+      meta: 100,
+      google: 90,
+      tiktok: 80,
+      pinterest: 10,
+      linkedin: 3,
+      snapchat: 0,
+    });
     expect(result.highCoverageApplied).toBe(false);
     expect(result.platforms.every((p) => !p.highCoverageDemoted)).toBe(true);
-    expect(result.platforms.filter((p) => p.classification === "PRIMARY")).toHaveLength(5);
+    expect(result.platforms.filter((p) => p.classification === "PRIMARY")).toHaveLength(3);
   });
 });
 

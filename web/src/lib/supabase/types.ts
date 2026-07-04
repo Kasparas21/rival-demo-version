@@ -530,6 +530,7 @@ export type Database = {
           ai_extracted_launch_date: string | null;
           created_at: string;
           archived_at: string | null;
+          archived_creative_url: string | null;
         };
         Insert: {
           id?: string;
@@ -551,6 +552,7 @@ export type Database = {
           ai_extracted_voice_tone?: Json | null;
           ai_extracted_launch_date?: string | null;
           archived_at?: string | null;
+          archived_creative_url?: string | null;
           created_at?: string;
         };
         Update: {
@@ -573,6 +575,7 @@ export type Database = {
           ai_extracted_voice_tone?: Json | null;
           ai_extracted_launch_date?: string | null;
           archived_at?: string | null;
+          archived_creative_url?: string | null;
           created_at?: string;
         };
         Relationships: [];

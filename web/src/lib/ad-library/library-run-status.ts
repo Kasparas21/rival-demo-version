@@ -11,6 +11,8 @@ import type { GoogleAdRow, MetaAdCard, TikTokAdCard } from "./normalize";
 
 export type LibraryRunStatus = {
   isRunning: boolean;
+  /** Supabase Storage copy of the creative — fallback when the platform CDN link expires. */
+  archivedCreativeUrl?: string;
 };
 
 export function libraryRunStatusFromScrapedRow(

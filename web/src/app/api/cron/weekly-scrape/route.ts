@@ -418,6 +418,11 @@ async function runWeeklyJobForRow(
       platformsNeedingScrape,
       out,
       scrapeBatchId: batchId,
+      sweepCaps: {
+        meta: scrapeScalars.metaMaxAds,
+        google: scrapeScalars.googleResultsLimit,
+        tiktok: scrapeScalars.tiktokMaxAds,
+      },
     });
 
     await refreshPlatformTrackingAfterScrape(admin, {

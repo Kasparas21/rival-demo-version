@@ -683,6 +683,7 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
   }
 
   if (resolved.kind === "image") {
+    const archived = (ad as { archived_creative_url?: string | null }).archived_creative_url?.trim();
     return (
       <DetailCreativeMediaFrame showYoutubePlayOverlay={showYoutubePlay}>
         <img
@@ -694,7 +695,13 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
           className={detailCreativeMediaClasses(vertical, false)}
           referrerPolicy="no-referrer"
           onError={(e) => {
-            (e.target as HTMLImageElement).style.display = "none";
+            const el = e.target as HTMLImageElement;
+            /** Expired CDN link → swap to the archived Storage copy once, then hide. */
+            if (archived && el.src !== archived) {
+              el.src = archived;
+              return;
+            }
+            el.style.display = "none";
           }}
         />
       </DetailCreativeMediaFrame>

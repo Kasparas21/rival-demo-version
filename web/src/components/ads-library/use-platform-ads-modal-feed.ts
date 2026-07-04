@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
+import { normalizeAdsLibraryEventDomain } from "@/lib/ad-library/build-client-ads-library-payload";
 import { PLATFORM_ADS_MODAL_BATCH_SIZE } from "@/lib/ad-library/constants";
+import {
+  ADS_LIBRARY_UPDATED_EVENT,
+  type AdsLibraryUpdatedDetail,
+} from "@/lib/strategy-overview/ads-library-strategy-bridge";
 
 import {
   type PlatformAdsFeedResponse,
@@ -155,6 +160,24 @@ export function usePlatformAdsModalFeed({
     setAds([]);
     void fetchBatch(0, false, gen);
   }, [fetchBatch]);
+
+  /** Re-fetch when a rescrape finishes for this competitor so new ads appear without closing the modal. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const domainNorm = normalizeAdsLibraryEventDomain(domain);
+    if (!domainNorm) return;
+
+    const onLibraryUpdated = (ev: Event) => {
+      if (!open) return;
+      const detail = (ev as CustomEvent<AdsLibraryUpdatedDetail>).detail;
+      const incoming = normalizeAdsLibraryEventDomain(detail?.domain ?? "");
+      if (!incoming || incoming !== domainNorm) return;
+      retry();
+    };
+
+    window.addEventListener(ADS_LIBRARY_UPDATED_EVENT, onLibraryUpdated);
+    return () => window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, onLibraryUpdated);
+  }, [domain, open, retry]);
 
   return {
     ads,

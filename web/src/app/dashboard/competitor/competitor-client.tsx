@@ -3503,6 +3503,17 @@ function CompetitorDashboardBody({
       setManualRefreshBusyPlatform(platform);
       try {
         const result = await manualRefreshPlatform(platform);
+        if (!result?.ok && "aborted" in (result ?? {}) && (result as { aborted?: boolean }).aborted) {
+          /** Apify may still finish server-side — poll cache so new ads land in the library. */
+          toast.info("Refresh is running in the background — ads will update shortly.");
+          const reloadDelaysMs = [8_000, 25_000, 60_000];
+          for (const delay of reloadDelaysMs) {
+            window.setTimeout(() => {
+              void reloadPlatformFromCache(platform);
+            }, delay);
+          }
+          return;
+        }
         if (!result?.ok) {
           toast.error(result?.error ?? "Refresh failed");
           return;
@@ -3523,6 +3534,7 @@ function CompetitorDashboardBody({
         await syncSavedCompetitorsFromAccount();
         void loadManualRefreshStatus();
         void loadPlatformTracking();
+        void reloadPlatformFromCache(platform);
         toast.success(
           `${platform.charAt(0).toUpperCase()}${platform.slice(1)} refreshed — ads are up to date.`,
         );
@@ -3539,6 +3551,7 @@ function CompetitorDashboardBody({
       manualRefreshBusyPlatform,
       manualRefreshPlatform,
       loadPlatformTracking,
+      reloadPlatformFromCache,
       syncSavedCompetitorsFromAccount,
     ],
   );
@@ -3726,7 +3739,7 @@ function CompetitorDashboardBody({
   );
 
   const [bulkLibraryLifecycle, setBulkLibraryLifecycle] = useState<
-    Record<string, { isRunning: boolean }>
+    Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>
   >({});
 
   useEffect(() => {
@@ -3741,17 +3754,22 @@ function CompetitorDashboardBody({
       credentials: "include",
     })
       .then((r) => r.json())
-      .then((res: { ok?: boolean; libraryLifecycle?: Record<string, { isRunning: boolean }> }) => {
-        if (cancelled || !res.ok) return;
-        setBulkLibraryLifecycle(res.libraryLifecycle ?? {});
-      })
+      .then(
+        (res: {
+          ok?: boolean;
+          libraryLifecycle?: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>;
+        }) => {
+          if (cancelled || !res.ok) return;
+          setBulkLibraryLifecycle(res.libraryLifecycle ?? {});
+        },
+      )
       .catch(() => {
         if (!cancelled) setBulkLibraryLifecycle({});
       });
     return () => {
       cancelled = true;
     };
-  }, [navTab, competitorDbIdForSaved]);
+  }, [navTab, competitorDbIdForSaved, accountLastScrapedAt, platformTrackingByPlatform]);
 
   useEffect(() => {
     const id = competitorDbIdForSaved;
@@ -3832,10 +3850,16 @@ function CompetitorDashboardBody({
 
   const runStatusForLibraryCard = useCallback(
     (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
-      return (
-        libraryRunStatusForCard(platform, libraryItemId, alternateIds) ??
-        bulkLibraryLifecycle[`${platform.trim().toLowerCase()}:${libraryItemId.trim()}`]
-      );
+      const fromSaved = libraryRunStatusForCard(platform, libraryItemId, alternateIds);
+      const fromBulk =
+        bulkLibraryLifecycle[`${platform.trim().toLowerCase()}:${libraryItemId.trim()}`];
+      if (fromSaved == null && fromBulk == null) return undefined;
+      const archivedCreativeUrl =
+        fromSaved?.archivedCreativeUrl ?? fromBulk?.archivedCreativeUrl;
+      return {
+        isRunning: (fromSaved ?? fromBulk)!.isRunning,
+        ...(archivedCreativeUrl ? { archivedCreativeUrl } : {}),
+      };
     },
     [libraryRunStatusForCard, bulkLibraryLifecycle],
   );

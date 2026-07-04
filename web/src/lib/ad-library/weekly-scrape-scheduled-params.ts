@@ -1,5 +1,5 @@
 import { buildScheduledScrapeLimits } from "@/lib/ad-library/build-scheduled-scrape-params";
-import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
+import { FULL_SWEEP_ADS_PER_PLATFORM, type InitialScrapePlatform } from "@/lib/ad-library/constants";
 import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
 import {
   computeScheduledScrapeDateWindow,
@@ -70,12 +70,19 @@ export function buildParallelScrapeScalars(
 
     switch (platform) {
       case "meta":
-        scalars.metaMaxAds = lim.metaMaxAds;
-        scalars.metaStartDate = dateWindow.startYmd;
-        scalars.metaEndDate = dateWindow.endYmd;
+        /**
+         * Full ACTIVE sweep — no date window. Absence from an exhaustive sweep is what
+         * lets us mark ads killed; a windowed scrape only sees newly-started ads.
+         * INACTIVE platforms keep the cheap probe limit.
+         */
+        scalars.metaMaxAds = isInactiveProbe ? lim.metaMaxAds : FULL_SWEEP_ADS_PER_PLATFORM;
+        scalars.metaStartDate = "";
+        scalars.metaEndDate = "";
         break;
       case "google":
-        scalars.googleResultsLimit = lim.googleResultsLimit;
+        scalars.googleResultsLimit = isInactiveProbe
+          ? lim.googleResultsLimit
+          : FULL_SWEEP_ADS_PER_PLATFORM;
         break;
       case "linkedin":
         scalars.linkedinMaxAds = lim.linkedinMaxAds;
@@ -84,9 +91,10 @@ export function buildParallelScrapeScalars(
         });
         break;
       case "tiktok":
-        scalars.tiktokMaxAds = lim.tiktokMaxAds;
-        scalars.tiktokStartDate = dateWindow.startYmd;
-        scalars.tiktokEndDate = dateWindow.endYmd;
+        /** Full sweep for TikTok too — lifecycle comes from flight dates in each returned row. */
+        scalars.tiktokMaxAds = isInactiveProbe ? lim.tiktokMaxAds : FULL_SWEEP_ADS_PER_PLATFORM;
+        scalars.tiktokStartDate = "";
+        scalars.tiktokEndDate = "";
         break;
       case "pinterest":
         scalars.pinterestMaxResults = lim.pinterestMaxResults;

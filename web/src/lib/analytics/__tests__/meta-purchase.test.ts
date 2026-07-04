@@ -5,6 +5,7 @@ import {
   hashMetaEmailForCapi,
   readOrderPaidAmountCents,
 } from "@/lib/analytics/meta-purchase";
+import { SITE_URL } from "@/lib/seo/site";
 
 describe("hashMetaEmailForCapi", () => {
   it("hashes lowercased trimmed email", () => {
@@ -40,7 +41,7 @@ describe("buildMetaPurchaseEventFromOrder", () => {
       event_name: "Purchase",
       event_id: "ord_123",
       action_source: "website",
-      event_source_url: "https://www.spy-rival.com/checkout",
+      event_source_url: `${SITE_URL}/checkout`,
       user_data: {
         em: [hashMetaEmailForCapi("buyer@example.com")],
         fbp: "fb.1.111.222",

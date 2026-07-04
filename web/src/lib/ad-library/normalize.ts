@@ -96,6 +96,8 @@ export type MetaAdCard = {
   transparency_by_location?: Record<string, unknown>;
   /** Apify snapshot subtree — kept on cached cards so preview repair works without re-scrape. */
   snapshot?: FacebookAdSnapshot;
+  /** UTC ms when this card last appeared in a scrape merge — drives "newest" library sort. */
+  librarySeenAtMs?: number;
 };
 
 /** Google / YouTube style row */

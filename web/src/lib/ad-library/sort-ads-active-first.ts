@@ -39,6 +39,9 @@ function metaTimestampToMs(ts: number): number {
 }
 
 function compareMetaByRecency(a: MetaAdCard, b: MetaAdCard): number {
+  const aSeen = a.librarySeenAtMs ?? 0;
+  const bSeen = b.librarySeenAtMs ?? 0;
+  if (bSeen !== aSeen) return bSeen - aSeen;
   const aOpen = a.endedAt == null || !Number.isFinite(a.endedAt) || a.endedAt <= 0;
   const bOpen = b.endedAt == null || !Number.isFinite(b.endedAt) || b.endedAt <= 0;
   if (aOpen !== bOpen) return aOpen ? -1 : 1;

@@ -34,8 +34,8 @@ function buildDisplayLabel(adText: string, angle: string | null): string {
   return `${t.slice(0, 50)}…`;
 }
 
-const scrapedAdSelect = `id, platform, format, ad_creative_url, ad_text,
-        first_seen_at, last_seen_at, raw_payload, competitor_id,
+const scrapedAdSelect = `id, platform, format, ad_creative_url, archived_creative_url, ad_text,
+        first_seen_at, last_seen_at, is_active, raw_payload, competitor_id,
         ai_extracted_angle, funnel_stage, ai_extracted_voice_tone,
         ai_extracted_launch_date, ai_enrichment_status`;
 
@@ -48,6 +48,8 @@ export type AdDetailResponse = {
     platform: string;
     format: string;
     ad_creative_url: string | null;
+    /** Supabase Storage copy — fallback when the platform CDN link has expired. */
+    archived_creative_url?: string | null;
     ad_text: string;
     cta: string | null;
     first_seen_at: string;
@@ -95,9 +97,11 @@ type AdRow = {
   platform: string;
   format: string;
   ad_creative_url: string | null;
+  archived_creative_url: string | null;
   ad_text: string;
   first_seen_at: string;
   last_seen_at: string;
+  is_active: boolean | null;
   raw_payload: Json;
   competitor_id: string;
   ai_extracted_angle: string | null;
@@ -233,10 +237,23 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
   const lastScrapedAt = competitor.last_scraped_at;
   const lastSeenMs = new Date(ad.last_seen_at).getTime();
   const firstSeenMs = new Date(ad.first_seen_at).getTime();
-  const isKilled =
-    ad.platform === "meta"
-      ? resolveMetaAdKilledForDetail(ad.raw_payload, ad.last_seen_at, lastScrapedAt)
-      : isScrapedAdKilled(ad.last_seen_at, lastScrapedAt);
+  /**
+   * meta/google/tiktok: `is_active` is maintained by post-sweep reconciliation, so the
+   * column plus the payload lifecycle decide — not the shared last-seen recency
+   * heuristic, which false-kills a platform whenever a *different* platform scrapes.
+   */
+  const platformNorm = ad.platform.trim().toLowerCase();
+  const sweepReconciled = ["meta", "google", "youtube", "tiktok"].includes(platformNorm);
+  let isKilled: boolean;
+  if (sweepReconciled) {
+    isKilled =
+      ad.is_active === false ||
+      (platformNorm === "meta"
+        ? resolveMetaAdKilledForDetail(ad.raw_payload, ad.last_seen_at, null)
+        : false);
+  } else {
+    isKilled = isScrapedAdKilled(ad.last_seen_at, lastScrapedAt);
+  }
   const lifespanDays = Math.max(0, Math.floor((lastSeenMs - firstSeenMs) / (24 * 60 * 60 * 1000)));
 
   const ctaFromPayload = (() => {
@@ -306,6 +323,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
       platform: ad.platform,
       format: ad.format,
       ad_creative_url: ad.ad_creative_url,
+      archived_creative_url: ad.archived_creative_url ?? null,
       ad_text: ad.ad_text,
       cta: ctaFromPayload,
       first_seen_at: ad.first_seen_at,

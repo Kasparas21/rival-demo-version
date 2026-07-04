@@ -153,12 +153,43 @@ describe("merge-library-platform-ads", () => {
     expect(mergeSnapchatAdCards(a, b, opts)).toHaveLength(12);
   });
 
-  it("preserves still-running Meta when merging active scrape with historical end_date", () => {
+  it("preserves still-running Meta when an ACTIVE-sweep card merges over a historical end_date", () => {
     const historical = { ...metaCard(0), endedAt: Math.floor(Date.parse("2024-01-01T00:00:00.000Z") / 1000) };
-    const active = { ...metaCard(0), endedAt: undefined };
+    const active = { ...metaCard(0), isActive: true as const, endedAt: undefined };
     const merged = mergeMetaAdCards([historical], [active], opts);
     expect(merged).toHaveLength(1);
     expect(merged[0].endedAt).toBeUndefined();
+    expect(merged[0].isActive).toBe(true);
+  });
+
+  it("keeps prior lifecycle when incoming card has no lifecycle info (no resurrection)", () => {
+    const endedSec = Math.floor(Date.parse("2024-01-01T00:00:00.000Z") / 1000);
+    const killed = { ...metaCard(0), isActive: false as const, endedAt: endedSec };
+    const bare = { ...metaCard(0), isActive: undefined, endedAt: undefined };
+    const merged = mergeMetaAdCards([killed], [bare], opts);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].isActive).toBe(false);
+    expect(merged[0].endedAt).toBe(endedSec);
+  });
+
+  it("stamps librarySeenAtMs on incoming ads so newest sort can surface fresh scrapes", () => {
+    const nowMs = Date.parse("2026-07-03T12:00:00.000Z");
+    const existing = [metaCard(1)];
+    const brandNew = metaCard(99);
+    const merged = mergeMetaAdCards(existing, [brandNew], { nowMs, maxItems: 50 });
+    const fresh = merged.find((c) => c.id === "m99");
+    expect(fresh?.librarySeenAtMs).toBe(nowMs);
+    expect(merged[0]?.id).toBe("m99");
+  });
+
+  it("flips a previously active card when incoming reports isActive false", () => {
+    const active = { ...metaCard(0), isActive: true as const };
+    const endedSec = Math.floor(Date.parse("2026-07-01T00:00:00.000Z") / 1000);
+    const flipped = { ...metaCard(0), isActive: false as const, endedAt: endedSec };
+    const merged = mergeMetaAdCards([active], [flipped], opts);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].isActive).toBe(false);
+    expect(merged[0].endedAt).toBe(endedSec);
   });
 
   it("clears stale endedAt when merging incoming isActive true", () => {

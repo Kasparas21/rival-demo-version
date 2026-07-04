@@ -80,20 +80,39 @@ function mergeOptionalEnrichmentText(a?: string | null, b?: string | null): stri
 }
 
 function metaLastSeenMs(card: MetaAdCard): number {
-  const t = maxOptionalUnix(card.endedAt, card.startedAt);
-  return metaTimeToMs(t ?? undefined) || 0;
+  const fromLifecycle = maxOptionalUnix(card.endedAt, card.startedAt);
+  const lifecycleMs = metaTimeToMs(fromLifecycle ?? undefined) || 0;
+  const seenMs = card.librarySeenAtMs ?? 0;
+  return Math.max(lifecycleMs, seenMs);
 }
 
-function mergeMetaEndedAt(a?: number, b?: number): number | undefined {
-  const aOpen = a == null || !Number.isFinite(a) || a <= 0;
-  const bOpen = b == null || !Number.isFinite(b) || b <= 0;
-  if (aOpen || bOpen) return undefined;
-  return Math.max(a, b);
+function hasEndedAt(v?: number): boolean {
+  return v != null && Number.isFinite(v) && v > 0;
 }
 
+/**
+ * Incoming card (`b`, the newer scrape) is authoritative for lifecycle. The old rule
+ * `isActive = a.isActive || b.isActive` made cards immortal — once active, a card
+ * could never flip to ended, no matter what later scrapes reported.
+ */
 function mergeMetaCards(a: MetaAdCard, b: MetaAdCard): MetaAdCard {
-  const isActive = a.isActive === true || b.isActive === true;
-  const endedAt = isActive ? undefined : mergeMetaEndedAt(a.endedAt, b.endedAt);
+  let isActive: boolean | undefined;
+  let endedAt: number | undefined;
+
+  if (b.isActive === true) {
+    isActive = true;
+    endedAt = undefined;
+  } else if (b.isActive === false) {
+    isActive = false;
+    endedAt = hasEndedAt(b.endedAt) ? b.endedAt : hasEndedAt(a.endedAt) ? a.endedAt : undefined;
+  } else if (hasEndedAt(b.endedAt)) {
+    isActive = undefined;
+    endedAt = b.endedAt;
+  } else {
+    isActive = a.isActive;
+    endedAt = a.isActive === true ? undefined : a.endedAt;
+  }
+
   return repairMetaAdCardMedia({
     ...a,
     ...b,
@@ -102,7 +121,10 @@ function mergeMetaCards(a: MetaAdCard, b: MetaAdCard): MetaAdCard {
     snapshot: b.snapshot ?? a.snapshot,
     startedAt: minOptionalUnix(a.startedAt, b.startedAt),
     endedAt,
-    ...(isActive ? { isActive: true as const } : {}),
+    ...(isActive != null ? { isActive } : {}),
+    ...(Math.max(a.librarySeenAtMs ?? 0, b.librarySeenAtMs ?? 0) > 0
+      ? { librarySeenAtMs: Math.max(a.librarySeenAtMs ?? 0, b.librarySeenAtMs ?? 0) }
+      : {}),
   });
 }
 
@@ -224,13 +246,14 @@ export function mergeMetaAdCards(
   }
   for (const item of incoming) {
     const k = stableAdKeyForMeta(item);
-    const incSeen = Math.max(metaLastSeenMs(item), nowMs);
+    const incSeen = Math.max(metaLastSeenMs(item), metaTimeToMs(item.librarySeenAtMs ?? 0), nowMs);
+    const stamped: MetaAdCard = { ...item, librarySeenAtMs: incSeen };
     const prev = map.get(k);
     if (!prev) {
-      map.set(k, { item, lastSeenMs: incSeen });
+      map.set(k, { item: stamped, lastSeenMs: incSeen });
     } else {
       map.set(k, {
-        item: mergeMetaCards(prev.item, item),
+        item: mergeMetaCards(prev.item, stamped),
         lastSeenMs: Math.max(prev.lastSeenMs, incSeen),
       });
     }

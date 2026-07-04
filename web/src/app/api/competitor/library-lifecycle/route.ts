@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .maybeSingle(),
     supabase
       .from("scraped_ads")
-      .select("platform, raw_payload, last_seen_at, is_active")
+      .select("platform, raw_payload, last_seen_at, is_active, archived_creative_url")
       .eq("user_id", user.id)
       .eq("competitor_id", competitorId),
   ]);
@@ -45,7 +45,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   const lastScrapedAt = compRow?.last_scraped_at ?? null;
-  const libraryLifecycle: Record<string, { isRunning: boolean }> = {};
+  const libraryLifecycle: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }> = {};
 
   for (const row of rows ?? []) {
     const cardId = libraryItemIdFromRawPayload(row.raw_payload);
@@ -57,7 +57,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     let running = false;
     const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
     const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
-    if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+    if (row.is_active === false && (pl === "meta" || pl === "google" || pl === "youtube" || pl === "tiktok")) {
+      /** Sweep reconciliation proved this ad is gone — authoritative over stale payloads. */
+      running = false;
+    } else if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
       const card = metaCardForLifecycle(payload, scrapeAtMs);
       running = card ? isMetaAdActive(card, scrapeAtMs) : false;
     } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
@@ -65,7 +68,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     } else {
       running = row.is_active === true || isScrapedAdRunning(row.last_seen_at, lastScrapedAt);
     }
-    libraryLifecycle[key] = { isRunning: running };
+    const archived = row.archived_creative_url?.trim();
+    libraryLifecycle[key] = {
+      isRunning: running,
+      ...(archived ? { archivedCreativeUrl: archived } : {}),
+    };
   }
 
   return NextResponse.json({ ok: true, libraryLifecycle });

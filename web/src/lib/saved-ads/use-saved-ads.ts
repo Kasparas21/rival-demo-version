@@ -17,7 +17,7 @@ const EMPTY_SCRAPED_IDS: readonly string[] = [];
 type SavedAdsCheckResult = {
   savedMap: SavedMap;
   resolvedToScraped: Record<string, string>;
-  libraryLifecycle: Record<string, { isRunning: boolean }>;
+  libraryLifecycle: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>;
   libraryPreviewUrls: Record<string, string>;
 };
 
@@ -111,7 +111,9 @@ export function useSavedAdsStatus(
 
   const [savedMap, setSavedMap] = useState<SavedMap>({});
   const [resolvedToScraped, setResolvedToScraped] = useState<Record<string, string>>({});
-  const [libraryLifecycle, setLibraryLifecycle] = useState<Record<string, { isRunning: boolean }>>({});
+  const [libraryLifecycle, setLibraryLifecycle] = useState<
+    Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>
+  >({});
   const [libraryPreviewUrls, setLibraryPreviewUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
@@ -193,7 +195,7 @@ export function useSavedAdsStatus(
           ok?: boolean;
           savedMap?: SavedMap;
           resolvedToScraped?: Record<string, string>;
-          libraryLifecycle?: Record<string, { isRunning: boolean }>;
+          libraryLifecycle?: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>;
           libraryPreviewUrls?: Record<string, string>;
         }) => {
           if (cancelled) return;

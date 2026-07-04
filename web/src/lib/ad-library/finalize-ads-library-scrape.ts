@@ -18,6 +18,12 @@ import {
   persistScrapedAdsFromAdsLibraryResponse,
 } from "@/lib/ad-library/persist-scraped-ads";
 import { refreshPlatformTrackingAfterScrape } from "@/lib/ad-library/persist-platform-tracking";
+import {
+  applyMetaSweepToMergedCards,
+  reconcileLifecycleAfterSweep,
+  type SweepCaps,
+} from "@/lib/ad-library/reconcile-lifecycle-after-sweep";
+import type { MetaAdCard } from "@/lib/ad-library/normalize";
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import type { Database, Json } from "@/lib/supabase/types";
 
@@ -43,6 +49,11 @@ export async function finalizeAdsLibraryAfterFreshScrape(
     out: AdsLibraryResponse;
     /** When set (e.g. weekly cron), `persistScrapedAdsFromAdsLibraryResponse` uses this batch instead of inserting. */
     scrapeBatchId?: string | null;
+    /**
+     * Requested per-platform caps for this scrape. When a platform's result count is
+     * below its cap the sweep is exhaustive → absent ads get marked killed.
+     */
+    sweepCaps?: SweepCaps;
   }
 ): Promise<void> {
   const {
@@ -55,7 +66,12 @@ export async function finalizeAdsLibraryAfterFreshScrape(
     platformsNeedingScrape,
     out,
     scrapeBatchId,
+    sweepCaps,
   } = params;
+
+  /** Fresh Meta sweep results, captured before cache merge re-adds older cards. */
+  const metaIncomingForSweep =
+    platformsNeedingScrape.has("meta") && out.meta.error == null ? [...(out.meta.ads ?? [])] : null;
 
   if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
     const cacheableToMerge = [...platformsNeedingScrape].filter(isCacheablePlatform);
@@ -80,7 +96,17 @@ export async function finalizeAdsLibraryAfterFreshScrape(
       for (const p of cacheableToMerge) {
         const prev = prevByPl.get(p);
         const merged = mergeAdsCachePayloadForPlatform(p, prev, out);
-        if (p === "meta") out.meta = merged as AdsLibraryResponse["meta"];
+        if (p === "meta") {
+          const mergedMeta = merged as AdsLibraryResponse["meta"];
+          if (metaIncomingForSweep && mergedMeta.error == null) {
+            mergedMeta.ads = applyMetaSweepToMergedCards(
+              (mergedMeta.ads ?? []) as MetaAdCard[],
+              metaIncomingForSweep,
+              sweepCaps?.meta ?? null,
+            );
+          }
+          out.meta = mergedMeta;
+        }
         if (p === "google") out.google = merged as AdsLibraryResponse["google"];
         if (p === "linkedin") out.linkedin = merged as AdsLibraryResponse["linkedin"];
         if (p === "tiktok") out.tiktok = merged as AdsLibraryResponse["tiktok"];
@@ -119,6 +145,46 @@ export async function finalizeAdsLibraryAfterFreshScrape(
         persistResult.errors,
         "rowsInserted=",
         persistResult.rowsInserted
+      );
+    }
+  }
+
+  if (userId && resolvedCompetitorId && platformsNeedingScrape.size > 0) {
+    /**
+     * Sweep reconciliation must see the raw scrape results, not the cache-merged
+     * arrays — pass the pre-merge Meta ads captured above.
+     */
+    const outForReconcile: AdsLibraryResponse = metaIncomingForSweep
+      ? { ...out, meta: { ads: metaIncomingForSweep, error: out.meta.error } }
+      : out;
+    try {
+      await reconcileLifecycleAfterSweep(supabase, {
+        userId,
+        competitorId: resolvedCompetitorId,
+        platformsScraped: [...platformsNeedingScrape].filter(
+          (p): p is AdsLibraryPlatform => p === "meta" || p === "google" || p === "tiktok",
+        ),
+        out: outForReconcile,
+        sweepCaps,
+      });
+    } catch (reconcileErr) {
+      console.error("[finalizeAdsLibrary] reconcileLifecycleAfterSweep", reconcileErr);
+    }
+
+    /** Copy new creatives into Supabase Storage before their CDN links expire. */
+    const archiveParams = { userId, competitorId: resolvedCompetitorId };
+    try {
+      const { after } = await import("next/server");
+      after(async () => {
+        const { archiveAdCreativesForCompetitor } = await import("@/lib/ad-library/archive-ad-creatives");
+        await archiveAdCreativesForCompetitor(archiveParams).catch((e) =>
+          console.error("[finalizeAdsLibrary] archiveAdCreatives", e),
+        );
+      });
+    } catch {
+      const { archiveAdCreativesForCompetitor } = await import("@/lib/ad-library/archive-ad-creatives");
+      void archiveAdCreativesForCompetitor(archiveParams).catch((e) =>
+        console.error("[finalizeAdsLibrary] archiveAdCreatives", e),
       );
     }
   }

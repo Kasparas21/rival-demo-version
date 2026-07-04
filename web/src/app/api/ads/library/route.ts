@@ -497,6 +497,12 @@ export async function POST(req: Request): Promise<NextResponse> {
       platformsRequested,
       platformsNeedingScrape,
       out,
+      /** Only Meta ACTIVE sweeps prove absence; ALL-status scrapes include ended ads. */
+      sweepCaps: {
+        ...(metaStatus === "ACTIVE" ? { meta: metaMaxAds } : {}),
+        google: googleResultsLimit,
+        tiktok: tiktokMaxAds,
+      },
     });
   }
 

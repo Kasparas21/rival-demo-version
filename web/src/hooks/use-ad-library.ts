@@ -147,6 +147,8 @@ export function useAdLibrary(
 
   const sessionRef = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
+  /** True while a Pro manual refresh awaits Apify (~1–2 min) — background reloads must not abort it. */
+  const manualRefreshInFlightRef = useRef(false);
   const persistRecoveryKeyRef = useRef<string | null>(null);
   /** Mirrors latest `data` so merges after `await fetch` use the correct prior state (functional `setData` + session write were racing React 18 batching). */
   const dataRef = useRef<AdsLibraryResponse | null>(null);
@@ -198,6 +200,8 @@ export function useAdLibrary(
       background?: boolean;
       /** When true, do not broadcast `ADS_LIBRARY_UPDATED_EVENT` (prevents reload loops). */
       suppressUpdatedEvent?: boolean;
+      /** After a cache reload (e.g. post-rescrape poll), notify listeners so modals refetch. */
+      notifyLibraryUpdated?: boolean;
       /** Pro manual refresh — sets `intent: manual` and platform-specific Apify params. */
       manualRefresh?: boolean;
     }) => {
@@ -209,9 +213,19 @@ export function useAdLibrary(
         platforms.length > 0 &&
         platforms.length < ALL_ADS_API_PLATFORMS.length;
 
+      /**
+       * A manual refresh keeps an Apify run awaiting for ~1–2 min. Cache revalidations and
+       * update-event reloads fired during that window used to abort it, and the UI then
+       * reported "Refresh failed" for a scrape that completed fine server-side.
+       */
+      if (manualRefreshInFlightRef.current && !isManualRefresh) {
+        return { ok: false, aborted: true as const };
+      }
+
       loadAbortRef.current?.abort();
       const ac = new AbortController();
       loadAbortRef.current = ac;
+      if (isManualRefresh) manualRefreshInFlightRef.current = true;
 
       if (!isBackground) {
         if (partial) {
@@ -359,7 +373,7 @@ export function useAdLibrary(
         } else if (httpOk && typeof window !== "undefined") {
           const d = brand.domain.trim();
           if (d) markPendingStrategyRefresh(d);
-          if (!opts?.suppressUpdatedEvent && opts?.skipCache === true) {
+          if (!opts?.suppressUpdatedEvent && (opts?.skipCache === true || opts?.notifyLibraryUpdated === true)) {
             try {
               window.dispatchEvent(
                 new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
@@ -398,6 +412,7 @@ export function useAdLibrary(
         if (!partial && !isBackground) setData(null);
         return { ok: false, error: message };
       } finally {
+        if (isManualRefresh) manualRefreshInFlightRef.current = false;
         if (loadAbortRef.current !== ac) return { ok: false, aborted: true as const };
         if (!isBackground) {
           setLoading(false);
@@ -587,7 +602,8 @@ export function useAdLibrary(
   }, [load, brand.domain]);
 
   const reloadPlatformFromCache = useCallback(
-    (platform: AdsLibraryPlatform) => load({ platforms: [platform], skipCache: false, background: true }),
+    (platform: AdsLibraryPlatform) =>
+      load({ platforms: [platform], skipCache: false, background: true, notifyLibraryUpdated: true }),
     [load],
   );
 

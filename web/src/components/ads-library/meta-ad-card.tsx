@@ -15,19 +15,37 @@ import { safeHttpsUrl } from "@/lib/ad-library/normalize";
 import { resolveMetaLibraryCardPreview } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
-function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: boolean }) {
+function MetaCreativeMedia({
+  ad,
+  compact,
+  archivedUrl,
+}: {
+  ad: MetaAdCardModel;
+  compact: boolean;
+  /** Supabase Storage copy — survives Meta CDN link expiry. */
+  archivedUrl?: string;
+}) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [archivedFailed, setArchivedFailed] = useState(false);
   const stream = ad.videoUrl?.trim() ?? "";
   useEffect(() => {
     setVideoFailed(false);
     setPlaying(false);
     setImageFailed(false);
+    setArchivedFailed(false);
   }, [ad.id, stream, ad.img]);
   const still = resolveMetaLibraryCardPreview(ad);
   const fallbackStill = ad.img?.trim() ?? "";
-  const displayStill = !imageFailed ? still || fallbackStill : fallbackStill;
+  const archived = !archivedFailed ? archivedUrl?.trim() ?? "" : "";
+  const cdnStill = still || fallbackStill;
+  /** CDN link first (freshest); archived Storage copy when the CDN link has expired. */
+  const displayStill = !imageFailed ? cdnStill || archived : archived;
+  const onStillError = () => {
+    if (!imageFailed) setImageFailed(true);
+    else setArchivedFailed(true);
+  };
   /** Poster-first preview so video tiles match image size; mount `<video>` only after play. */
   const wantsVideo = Boolean(stream && ad.isVideo && displayStill);
   const maxH = compact ? "max-h-[300px]" : "max-h-[420px]";
@@ -73,7 +91,7 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
           referrerPolicy="no-referrer"
           className={videoPreviewMediaClass}
           onClick={(e) => e.stopPropagation()}
-          onError={() => setImageFailed(true)}
+          onError={onStillError}
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white shadow-lg">
@@ -151,8 +169,31 @@ function MetaCreativeMedia({ ad, compact }: { ad: MetaAdCardModel; compact: bool
         referrerPolicy="no-referrer"
         className={imageMediaClass}
         onClick={(e) => e.stopPropagation()}
-        onError={() => setImageFailed(true)}
+        onError={onStillError}
       />
+    );
+  }
+
+  /** Had a preview URL but every source (CDN + archive) failed → the creative expired on Meta's side. */
+  const expired = imageFailed && Boolean(cdnStill || archivedUrl?.trim());
+  if (expired) {
+    return (
+      <div
+        className={`flex w-full ${compact ? "min-h-[200px]" : "min-h-[280px]"} flex-col items-center justify-center gap-2 px-4 text-center`}
+      >
+        <p className="text-[12px] text-[#6b7280]">Preview expired — Meta rotates creative links for ended ads.</p>
+        {ad.adLibraryUrl?.trim() ? (
+          <a
+            href={ad.adLibraryUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-full bg-white text-[#2563eb] text-[12px] font-semibold px-4 py-2 border border-[#bfdbfe] hover:bg-[#eff6ff]"
+          >
+            View in Meta library
+          </a>
+        ) : null}
+      </div>
     );
   }
 
@@ -212,6 +253,7 @@ export function MetaAdCard({
 }) {
   const killed = isLibraryAdKilled("meta", ad, runStatus, metaScrapeAtMs);
   const runDays = computeLibraryAdRunDays("meta", ad, runStatus, metaScrapeAtMs);
+  const archivedUrl = runStatus?.archivedCreativeUrl;
   const { destHttps, siteLabel } = metaSiteLabel(ad, brand.domain);
   const ctaHref = destHttps || ad.adLibraryUrl;
   const metaTitle = ad.headline?.trim() || "";
@@ -229,7 +271,7 @@ export function MetaAdCard({
         {viewMode === "list" ? (
           <div className="relative w-56 shrink-0 min-h-[220px] border-r border-[#e5e7eb] bg-[#f3f4f6] p-2">
             <div className="relative flex h-full min-h-[204px] w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-              <MetaCreativeMedia ad={ad} compact />
+              <MetaCreativeMedia ad={ad} compact archivedUrl={archivedUrl} />
             </div>
           </div>
         ) : null}
@@ -305,7 +347,7 @@ export function MetaAdCard({
           {viewMode === "grid" && (
             <div className="relative w-full shrink-0 border-y border-[#e5e7eb] bg-[#f3f4f6] p-3">
               <div className="relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-                <MetaCreativeMedia ad={ad} compact={false} />
+                <MetaCreativeMedia ad={ad} compact={false} archivedUrl={archivedUrl} />
               </div>
             </div>
           )}
