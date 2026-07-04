@@ -34,8 +34,8 @@ import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cr
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 export const runtime = "nodejs";
-/** Vercel Pro allows up to 800s; time-box still stops new work at ~230s. */
-export const maxDuration = 800;
+/** Vercel Hobby caps at 300s; time-box still stops new work at ~230s. */
+export const maxDuration = 300;
 
 /** Mark `running` jobs older than this as failed before starting new work. */
 const STALE_RUNNING_JOB_MS = 2 * 60 * 60 * 1000;
