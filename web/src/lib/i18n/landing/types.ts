@@ -166,6 +166,7 @@ export type LandingCopy = {
     plans: LandingPlanOffer[];
   };
   faq: {
+    eyebrow: string;
     titleLine1: string;
     titleHighlight: string;
     items: FaqItem[];

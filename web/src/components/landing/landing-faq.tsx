@@ -133,9 +133,10 @@ export function LandingFAQ({ copy }: Props) {
   return (
     <section className="relative overflow-hidden py-16 text-center sm:py-24">
       <LandingScrollReveal className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <p className="text-xs font-semibold lowercase tracking-widest text-[#4a7fa5]">{copy.eyebrow}</p>
         <h2
           id="faq"
-          className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
+          className={`${landingNavAnchorScrollClasses} mt-2 ${landingSectionHeadlineClasses}`}
         >
           {copy.titleLine1}
           <br />

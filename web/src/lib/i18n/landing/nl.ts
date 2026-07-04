@@ -205,6 +205,7 @@ export const landingCopyNl: LandingCopy = {
     ],
   },
   faq: {
+    eyebrow: "nog niet overtuigd?",
     titleLine1: "veelgestelde",
     titleHighlight: "vragen",
     items: [

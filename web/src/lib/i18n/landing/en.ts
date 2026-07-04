@@ -364,6 +364,7 @@ export const landingCopyEn: LandingCopy = {
     ],
   },
   faq: {
+    eyebrow: "not convinced yet?",
     titleLine1: "frequently asked",
     titleHighlight: "questions",
     items: [
