@@ -10,15 +10,67 @@ import type {
 import {
   extractYouTubeVideoId,
   isUsableGoogleStillImagePreviewUrl,
+  pickGoogleStillPreviewExternalUrl,
   youtubeThumbnailFromUrl,
 } from "./normalize";
+import { resolveGoogleStillPreviewDisplayCandidates } from "./google-creative-display-url";
 import { resolveMetaLibraryCardPreview } from "./resolve-meta-library-card-preview";
+import { repairMetaAdCardMedia } from "./repair-library-ad-media";
 export const DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE =
   "The newest ads don’t have a dashboard image or video yet. Open View all for the full list.";
 
 /** Matches Meta dashboard creative rules — needs a renderable still (including video poster). */
 export function metaAdHasDashboardInlinePreview(ad: MetaAdCard): boolean {
-  return Boolean(resolveMetaLibraryCardPreview(ad));
+  return Boolean(resolveMetaLibraryCardPreview(repairMetaAdCardMedia(ad)));
+}
+
+/** Meta inline slot — includes scraped archive URLs not yet on the card payload. */
+export function metaAdQualifiesForDashboardInlinePreview(
+  ad: MetaAdCard,
+  opts?: { scrapedPreviewUrl?: string; archivedCreativeUrl?: string },
+): boolean {
+  if (opts?.archivedCreativeUrl?.trim()) return true;
+  if (opts?.scrapedPreviewUrl?.trim()) return true;
+  return metaAdHasDashboardInlinePreview(ad);
+}
+
+/**
+ * Dashboard 3-card slots: running ads with previews first, then ended/inactive fallbacks.
+ * Preserves input order within each bucket (e.g. newest-first from upstream sort).
+ */
+export function prioritizeRunningDashboardInlinePreviewAds<T>(
+  ads: readonly T[],
+  isRunning: (ad: T) => boolean,
+  hasPreview: (ad: T) => boolean,
+): T[] {
+  const active: T[] = [];
+  const inactive: T[] = [];
+  for (const ad of ads) {
+    if (!hasPreview(ad)) continue;
+    if (isRunning(ad)) active.push(ad);
+    else inactive.push(ad);
+  }
+  return [...active, ...inactive];
+}
+
+/**
+ * Up to `limit` dashboard preview cards: prefer running creatives with previews, then ended
+ * creatives with previews, then any running card, then any ended card (expired-preview UI beats empty slots).
+ */
+export function pickDashboardInlinePreviewAds<T>(
+  ads: readonly T[],
+  isRunning: (ad: T) => boolean,
+  hasPreview: (ad: T) => boolean,
+  limit = 3,
+  keyOf: (ad: T) => string = (ad) => String((ad as { id?: string }).id ?? ""),
+): T[] {
+  const withPreview = prioritizeRunningDashboardInlinePreviewAds(ads, isRunning, hasPreview);
+  if (withPreview.length >= limit) return withPreview.slice(0, limit);
+
+  const pickedKeys = new Set(withPreview.map(keyOf));
+  const rest = ads.filter((ad) => !pickedKeys.has(keyOf(ad)));
+  const fallback = prioritizeRunningDashboardInlinePreviewAds(rest, isRunning, () => true);
+  return [...withPreview, ...fallback].slice(0, limit);
 }
 
 export function googleAdRowHasDashboardInlinePreview(row: GoogleAdRow): boolean {
@@ -34,15 +86,9 @@ export function googleAdRowHasDashboardInlinePreview(row: GoogleAdRow): boolean 
     if (yid) return true;
     return Boolean(youtubeThumbnailFromUrl(row.adUrl));
   }
-  const rawPreview = (row.previewUrl?.trim() || "").trim();
-  const rawImg = (row.img || "").trim();
-  const imageSrc =
-    (isUsableGoogleStillImagePreviewUrl(rawPreview) ? rawPreview : "") ||
-    (isUsableGoogleStillImagePreviewUrl(rawImg) ? rawImg : "");
-  const isFaviconOnly = Boolean(
-    imageSrc.includes("google.com/s2/favicons") || imageSrc.includes("gstatic.com/favicon")
-  );
-  return Boolean(imageSrc && !isFaviconOnly);
+  const still = pickGoogleStillPreviewExternalUrl(row.previewUrl, row.img);
+  if (!still) return false;
+  return Boolean(resolveGoogleStillPreviewDisplayCandidates(still)[0]);
 }
 
 export function linkedInAdHasDashboardInlinePreview(ad: LinkedInAdCard): boolean {

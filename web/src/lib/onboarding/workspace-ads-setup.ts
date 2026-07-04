@@ -297,3 +297,25 @@ export function scrapeHintsToPlatformIds(params: {
 
   return out;
 }
+
+/** Hydrate workspace scrape form fields from saved competitor / sidebar platform ids. */
+export function platformIdsToWorkspaceScrapeHints(
+  ids: Record<string, string>,
+  domain: string,
+): WorkspaceAdsScrapeHints {
+  const row = emptyWorkspaceScrapeRow(domain);
+  const metaPage = ids.metaPageUrl?.trim() || "";
+  const metaId = ids.meta?.trim() || "";
+  if (metaPage) {
+    row.metaAdsLibraryUrl = metaPage;
+  } else if (metaId) {
+    row.metaAdsLibraryUrl = `https://www.facebook.com/ads/library/?view_all_page_id=${encodeURIComponent(metaId)}`;
+  }
+  row.googleAdsTransparencyUrl = ids.google?.trim() || "";
+  row.linkedInUrl = ids.linkedin?.trim() || "";
+  row.tiktokKeyword = (ids.tiktok?.trim() || "").replace(/^@+/, "");
+  const pin = ids.pinterest?.trim() || ids.pinterestAdvertiserName?.trim() || "";
+  row.pinterestKeyword = pin.includes("pinterest.com") ? pinterestKeywordLegacy(pin) : pin.replace(/^@+/, "");
+  row.snapchatKeyword = (ids.snapchat?.trim() || "").replace(/^@+/, "");
+  return row;
+}

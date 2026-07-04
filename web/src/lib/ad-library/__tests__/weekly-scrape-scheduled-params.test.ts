@@ -4,7 +4,7 @@ import { FULL_SWEEP_ADS_PER_PLATFORM, INACTIVE_PROBE_ADS_PER_PLATFORM } from "@/
 import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
 
 describe("buildParallelScrapeScalars", () => {
-  it("uses full ACTIVE sweeps (no date window) for meta/google/tiktok so absence can mark kills", () => {
+  it("uses full ACTIVE sweeps (no date window) for meta/google so absence can mark kills", () => {
     const nowMs = Date.parse("2026-07-03T12:00:00.000Z");
     const nowStamp = new Date(nowMs).toISOString();
 
@@ -31,11 +31,12 @@ describe("buildParallelScrapeScalars", () => {
 
     expect(scalars.metaMaxAds).toBe(FULL_SWEEP_ADS_PER_PLATFORM);
     expect(scalars.googleResultsLimit).toBe(FULL_SWEEP_ADS_PER_PLATFORM);
-    expect(scalars.tiktokMaxAds).toBe(FULL_SWEEP_ADS_PER_PLATFORM);
     expect(scalars.metaStartDate).toBe("");
     expect(scalars.metaEndDate).toBe("");
-    expect(scalars.tiktokStartDate).toBe("");
-    expect(scalars.tiktokEndDate).toBe("");
+    expect(scalars.tiktokMaxAds).toBe(100);
+    expect(scalars.tiktokStartDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(scalars.tiktokEndDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(scalars.tiktokStartDate <= scalars.tiktokEndDate).toBe(true);
   });
 
   it("keeps the cheap probe limit for INACTIVE platforms", () => {

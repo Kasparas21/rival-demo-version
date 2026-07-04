@@ -88,6 +88,10 @@ import {
   googleTransparencyTerritoryDisclosureRows,
   parseGoogleRegionStatsFromRecord,
 } from "@/lib/ad-library/google-region-stats";
+import {
+  parseTikTokLocationImpressionsFromRecord,
+  tiktokImpressionsCollapsedHeadline,
+} from "@/lib/ad-detail/tiktok-region-stats";
 
 function MetaPublisherPlatformGlyph({ slug, index }: { slug: string; index: number }) {
   switch (slug) {
@@ -829,6 +833,7 @@ function AdCreativePreview({
   const linkedinPl = ad.platform.toLowerCase() === "linkedin";
   const pinterestPl = ad.platform.toLowerCase() === "pinterest";
   const snapchatPl = ad.platform.toLowerCase() === "snapchat";
+  const tiktokPl = normalizeAdDetailPlatformKey(ad.platform) === "tiktok";
   const meta =
     metaPl && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
       ? (ad.raw_payload as Record<string, unknown>)
@@ -965,6 +970,22 @@ function AdCreativePreview({
     }
     storyTitle = snapHead && !/^snapchat ad$/i.test(snapHead) ? snapHead : null;
     storyBody = null;
+  } else if (tiktokPl) {
+    /** Landing/tracking URLs live in Details only — never overlay the video preview. */
+    const tt =
+      ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+        ? (ad.raw_payload as Record<string, unknown>)
+        : null;
+    const rawHead =
+      (tt && typeof tt.headline === "string" ? tt.headline.trim() : "") ||
+      (tt && typeof tt.adTitle === "string" ? tt.adTitle.trim() : "") ||
+      "";
+    const adv = tt && typeof tt.advertiser === "string" ? tt.advertiser.trim() : "";
+    storyTitle =
+      rawHead && rawHead !== adv && !/^https?:\/\//i.test(rawHead) && !rawHead.includes("?")
+        ? rawHead
+        : null;
+    storyBody = null;
   } else if (transparencyYoutubePl) {
     /** Google Ads Transparency YouTube row — omit assembled title/channel/views `ad_text`; headline/description chip only when payload has strings. */
     storyTitle = null;
@@ -977,7 +998,7 @@ function AdCreativePreview({
     storyBody = ad.ad_text?.trim() || null;
   }
 
-  const structuredPl = metaPl || linkedinPl || pinterestPl || snapchatPl;
+  const structuredPl = metaPl || linkedinPl || pinterestPl || snapchatPl || tiktokPl;
   const structuredTitleTrimmed = structuredPl ? (storyTitle?.trim() ?? "") : "";
   const structuredBodyTrimmed = structuredPl ? (storyBody?.trim() ?? "") : "";
   const plainBodyTrimmed =
@@ -1348,6 +1369,10 @@ function DetailsTab({ data }: { data: AdDetailData }) {
       : null;
   const linkedInLandingRaw =
     linkedInRaw && typeof linkedInRaw.url === "string" ? linkedInRaw.url.trim() : "";
+  const tiktokRaw =
+    pl === "tiktok" && ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+      ? (ad.raw_payload as Record<string, unknown>)
+      : null;
   const detailLandingPageHref =
     context.landing_page_url?.trim() || safeExternalHref(linkedInLandingRaw);
 
@@ -1366,6 +1391,8 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     !Array.isArray(ad.raw_payload)
       ? parseGoogleRegionStatsFromRecord(ad.raw_payload as Record<string, unknown>)
       : [];
+
+  const tiktokLocationRows = tiktokRaw ? parseTikTokLocationImpressionsFromRecord(tiktokRaw) : [];
 
   const extraTargetingRows =
     pl === "tiktok"
@@ -1470,7 +1497,7 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     if (genderLabel) rows.push({ label: "Gender", value: textVal(genderLabel) });
   }
 
-  if (canonical.impressionsFormatted) {
+  if (canonical.impressionsFormatted || (pl === "tiktok" && tiktokLocationRows.length > 0)) {
     const googleTerritoryRows =
       isGoogleFamily && googleTransparencyStats.length > 0
         ? googleTransparencyTerritoryDisclosureRows(googleTransparencyStats)
@@ -1482,6 +1509,11 @@ function DetailsTab({ data }: { data: AdDetailData }) {
           <GoogleTransparencyImpressionsDisclosure
             headline={googleTransparencyImpressionsCollapsedHeadline(googleTransparencyStats)}
             detailRows={googleTerritoryRows}
+          />
+        ) : pl === "tiktok" && tiktokLocationRows.length > 0 ? (
+          <GoogleTransparencyImpressionsDisclosure
+            headline={tiktokImpressionsCollapsedHeadline(canonical.impressionsFormatted, tiktokLocationRows)}
+            detailRows={tiktokLocationRows}
           />
         ) : (
           <span className="max-w-[260px] whitespace-pre-wrap text-right font-medium leading-snug text-slate-900">
@@ -1545,7 +1577,7 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     });
   }
 
-  if (pl !== "snapchat" && detailLandingPageHref && landingPageButtonLabel) {
+  if (pl !== "snapchat" && pl !== "tiktok" && detailLandingPageHref && landingPageButtonLabel) {
     rows.push({
       label: "Landing Page",
       value: (

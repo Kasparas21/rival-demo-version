@@ -437,6 +437,10 @@ interface ManualIdentifiersFormProps {
   onAdLibraryRegionsChange: (next: AdLibraryRegionPrefs) => void;
   /** Remove a platform from the selection (parent updates URL / channel list). */
   onRemoveChannel?: (channelId: ChannelId) => void;
+  /** Override primary submit label (defaults to discovery flow copy). */
+  submitLabel?: string;
+  submitLabelWhenComplete?: string;
+  submitBusy?: boolean;
 }
 
 function isNonEmptyDiscovered(v: unknown): v is string {
@@ -583,6 +587,9 @@ export function ManualIdentifiersForm({
   adLibraryRegions,
   onAdLibraryRegionsChange,
   onRemoveChannel,
+  submitLabel,
+  submitLabelWhenComplete,
+  submitBusy = false,
 }: ManualIdentifiersFormProps) {
   const [identifiers, setIdentifiers] = useState<PlatformIdentifier>(() =>
     buildManualIdentifierSeed(discoveredIds, selectedChannels)
@@ -712,8 +719,8 @@ export function ManualIdentifiersForm({
         TIKTOK_ADS_LIBRARY_REGION_OPTIONS.map((o) => ({
           value: o.value,
           label: o.label,
-          shortTag: o.value,
-          flagIso2: o.value.length === 2 ? o.value.toUpperCase() : null,
+          shortTag: o.value === "all" ? "ALL" : o.value,
+          flagIso2: o.value === "all" ? null : o.value.length === 2 ? o.value.toUpperCase() : null,
         }))
       ),
     []
@@ -1154,17 +1161,19 @@ export function ManualIdentifiersForm({
           <div className="mt-7 pt-5 border-t border-gray-100">
             <button
               type="submit"
-              disabled={continueDisabled}
-              aria-disabled={continueDisabled}
+              disabled={continueDisabled || submitBusy}
+              aria-disabled={continueDisabled || submitBusy}
               className={`w-full min-h-[48px] rounded-xl font-semibold text-[14px] transition-colors shadow-sm px-4 ${
-                continueDisabled
+                continueDisabled || submitBusy
                   ? "cursor-not-allowed bg-[#6b7280] text-white/90"
                   : "bg-[#343434] text-white hover:bg-[#2a2a2a]"
               }`}
             >
-              {allSelectedChannelsFilled
-                ? "Looks good — continue"
-                : "Continue"}
+              {submitBusy
+                ? "Saving…"
+                : allSelectedChannelsFilled
+                  ? (submitLabelWhenComplete ?? "Looks good — continue")
+                  : (submitLabel ?? "Continue")}
             </button>
             {!allSelectedChannelsFilled ? (
               <p className="mt-3 text-center text-[13px] leading-snug text-[#57534e]" role="status">

@@ -24,6 +24,7 @@ import {
 } from "@/lib/ad-library/scheduled-scrape-date-window";
 import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-options";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
+import { readTiktokRegionFromAdsLibraryContext } from "@/lib/ad-library/read-region-from-ads-library-context";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -353,7 +354,7 @@ async function runWeeklyJobForRow(
     const linkedinCountryCode = "";
     const microsoftCountryCodes = microsoftMarketCodeToArray("66");
     const snapchatCountryIso = "";
-    const tiktokRegion = normalizeTikTokAdsRegion(undefined);
+    const tiktokRegion = readTiktokRegionFromAdsLibraryContext(row.ads_library_context, domainNorm);
     const googleRegion = normalizeGoogleAdsRegion(undefined);
     const pinterestCountry = normalizePinterestAdsCountry(undefined);
 

@@ -41,8 +41,19 @@ export function getInitialAdsCount(platform: InitialScrapePlatform): number {
 /** Per-platform ad count for scheduled refresh scrapes (not initial discovery). */
 export const REFRESH_ADS_PER_PLATFORM = 100;
 
-/** Pro/Admin manual force-rescrape: full active sweep per platform. */
-export const MANUAL_REFRESH_ADS_PER_PLATFORM = FULL_SWEEP_ADS_PER_PLATFORM;
+/** Pro/Admin manual force-rescrape caps per platform. */
+export const MANUAL_REFRESH_ADS_PER_PLATFORM: Record<InitialScrapePlatform, number> = {
+  meta: FULL_SWEEP_ADS_PER_PLATFORM,
+  google: FULL_SWEEP_ADS_PER_PLATFORM,
+  tiktok: 300,
+  linkedin: 300,
+  pinterest: 400,
+  snapchat: 300,
+};
+
+export function manualRefreshAdsCapForPlatform(platform: InitialScrapePlatform): number {
+  return MANUAL_REFRESH_ADS_PER_PLATFORM[platform];
+}
 
 /** Workspace “Rescrape ads” — small refresh per platform (not full discovery). */
 export const WORKSPACE_RESCRAPE_ADS_PER_PLATFORM = {

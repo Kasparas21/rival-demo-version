@@ -4,9 +4,14 @@ import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { tiktokApifyItemToCard, normalizeUserAdvertiserQueryToken } from "@/lib/ad-library/normalize";
-import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import { buildTikTokApifyLibraryQuery } from "@/lib/apify/tiktok-apify-input";
+import {
+  buildLexisTikTokActorInput,
+  isLexisTikTokActor,
+  LEXIS_TIKTOK_ACTOR,
+} from "@/lib/apify/tiktok-lexis-input";
 
-const DEFAULT_TIKTOK_ACTOR = "data_xplorer/tiktok-ads-library-pay-per-event";
+const DEFAULT_TIKTOK_ACTOR = LEXIS_TIKTOK_ACTOR;
 const MAX_TIMEOUT_SECS = 600;
 
 function formatIsoDate(d: Date): string {
@@ -15,43 +20,24 @@ function formatIsoDate(d: Date): string {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Actor `query`: **2** = advertiser name / biz id · **url** = paste library URL. */
-function buildTikTokApifyQuery(params: {
-  brandName: string;
-  brandDomain?: string;
-  savedTiktok?: string | null;
-}): {
-  query: string;
-  queryType: string;
-} {
-  const raw = params.savedTiktok?.trim().replace(/^@+/, "") ?? "";
-  const searchBrand = effectiveCompetitorBrandLabel(params.brandName, params.brandDomain) || params.brandName.trim();
-
-  if (raw && /^https?:\/\//i.test(raw)) {
-    return { query: raw, queryType: "url" };
+function pickStartEndDates(
+  startIn?: string,
+  endIn?: string,
+): { startDate: string; endDate: string } | { omitDateFilter: true } {
+  const startTrim = startIn?.trim() ?? "";
+  const endTrim = endIn?.trim() ?? "";
+  const hasStart = startTrim.length > 0 && ISO_DATE.test(startTrim);
+  const hasEnd = endTrim.length > 0 && ISO_DATE.test(endTrim);
+  if (!hasStart && !hasEnd) {
+    return { omitDateFilter: true };
   }
-  if (raw && /^\d{6,}$/.test(raw)) {
-    return { query: raw, queryType: "2" };
-  }
-
-  /** Always `query_type=2`; **omit** `"` wrappers — TikTok’s `adv_name=%22Brand%22` often matches zero rows vs plain `adv_name=Brand`. */
-  const token = normalizeUserAdvertiserQueryToken(raw.length > 0 ? raw : searchBrand);
-  if (!token.length) {
-    return { query: "brand", queryType: "2" };
-  }
-  return { query: token, queryType: "2" };
-}
-
-function pickStartEndDates(startIn?: string, endIn?: string): { startDate: string; endDate: string } {
   const end = new Date();
   const start = new Date();
   start.setFullYear(start.getFullYear() - 1);
   const defStart = formatIsoDate(start);
   const defEnd = formatIsoDate(end);
-  const s =
-    startIn?.trim() && ISO_DATE.test(startIn.trim()) ? startIn.trim() : defStart;
-  let e =
-    endIn?.trim() && ISO_DATE.test(endIn.trim()) ? endIn.trim() : defEnd;
+  const s = hasStart ? startTrim : defStart;
+  let e = hasEnd ? endTrim : defEnd;
   if (s > e) {
     e = s;
   }
@@ -61,7 +47,6 @@ function pickStartEndDates(startIn?: string, endIn?: string): { startDate: strin
 export async function scrapeTikTokAdsLibrary(params: {
   brandName: string;
   brandDomain?: string;
-  /** Saved TikTok Ads Library advertiser token / pasted library URL — same `query_type=2` exact‑match semantics as brand name unless URL or numeric id. */
   savedTiktok?: string | null;
   region?: string;
   maxAds: number;
@@ -71,57 +56,74 @@ export async function scrapeTikTokAdsLibrary(params: {
 }): Promise<TikTokAdCard[]> {
   const actorId = process.env.APIFY_TIKTOK_ADS_ACTOR?.trim() || DEFAULT_TIKTOK_ACTOR;
   const maxAds = Math.max(1, Math.min(params.maxAds, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
-  const { startDate, endDate } = pickStartEndDates(params.startDate, params.endDate);
-
-  const { query, queryType } = buildTikTokApifyQuery({
-    brandName: params.brandName,
-    brandDomain: params.brandDomain,
-    savedTiktok: params.savedTiktok,
-  });
-
-  const hadUserSavedTiktok = Boolean(params.savedTiktok?.trim());
-  let confirmedAdvertiserQuery: string | undefined;
-  if (
-    hadUserSavedTiktok &&
-    queryType === "2" &&
-    query.trim() &&
-    !/^https?:\/\//i.test(query.trim()) &&
-    !/^\d{6,}$/.test(query.trim())
-  ) {
-    confirmedAdvertiserQuery = normalizeUserAdvertiserQueryToken(query);
-  }
+  const dateRange = pickStartEndDates(params.startDate, params.endDate);
+  const actorDateInput =
+    "omitDateFilter" in dateRange
+      ? {}
+      : { startDate: dateRange.startDate, endDate: dateRange.endDate };
 
   const region = normalizeTikTokAdsRegion(params.region) || DEFAULT_TIKTOK_ADS_REGION;
 
-  /**Residential exits can trip TLS timeouts; set APIFY_TIKTOK_USE_RESIDENTIAL=false for datacenter (actor default — often more stable). */
   const tiktokResidential =
     typeof process.env.APIFY_TIKTOK_USE_RESIDENTIAL === "string" &&
     ["0", "false", "no", "off"].includes(process.env.APIFY_TIKTOK_USE_RESIDENTIAL.trim().toLowerCase())
       ? false
       : true;
 
-  const { items } = await runApifyActor<Record<string, unknown>>(
-    actorId,
-    {
+  let confirmedAdvertiserQuery: string | undefined;
+  let actorInput: Record<string, unknown>;
+
+  if (isLexisTikTokActor(actorId)) {
+    /** Lexis: omit date filters — TikTok library advertiser search returns 0 rows with our rolling ISO windows. */
+    const lexis = buildLexisTikTokActorInput({
+      brandName: params.brandName,
+      brandDomain: params.brandDomain,
+      savedTiktok: params.savedTiktok,
       region,
-      startDate,
-      endDate,
+      maxAds,
+    });
+    confirmedAdvertiserQuery = lexis.confirmedAdvertiserQuery;
+    actorInput = lexis.input as unknown as Record<string, unknown>;
+  } else {
+    const { query, queryType, advertiserBizId } = buildTikTokApifyLibraryQuery({
+      brandName: params.brandName,
+      brandDomain: params.brandDomain,
+      savedTiktok: params.savedTiktok,
+    });
+
+    const hadUserSavedTiktok = Boolean(params.savedTiktok?.trim());
+    if (
+      hadUserSavedTiktok &&
+      queryType === "2" &&
+      query.trim() &&
+      !/^https?:\/\//i.test(query.trim()) &&
+      !/^\d{6,}$/.test(query.trim())
+    ) {
+      confirmedAdvertiserQuery = normalizeUserAdvertiserQueryToken(query);
+    }
+
+    actorInput = {
+      mode: "library",
+      region,
+      ...actorDateInput,
       queryType,
       query,
+      ...(advertiserBizId ? { advertiserBizId } : {}),
       maxAds,
       fetchDetails: params.fetchDetails ?? true,
       proxyConfiguration: {
         useApifyProxy: true,
         apifyProxyGroups: tiktokResidential ? ["RESIDENTIAL"] : [],
       },
-    },
-    {
-      waitSecs: MAX_TIMEOUT_SECS,
-      timeoutSecs: MAX_TIMEOUT_SECS,
-      maxItems: maxAds,
-      memoryMbytes: readApifyActorMemoryMbytes("TIKTOK_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES),
-    }
-  );
+    };
+  }
+
+  const { items } = await runApifyActor<Record<string, unknown>>(actorId, actorInput, {
+    waitSecs: MAX_TIMEOUT_SECS,
+    timeoutSecs: MAX_TIMEOUT_SECS,
+    maxItems: maxAds,
+    memoryMbytes: readApifyActorMemoryMbytes("TIKTOK_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES),
+  });
 
   return items
     .map((raw, i) =>

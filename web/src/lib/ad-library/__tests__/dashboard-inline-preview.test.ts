@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   googleAdRowHasDashboardInlinePreview,
   metaAdHasDashboardInlinePreview,
+  pickDashboardInlinePreviewAds,
+  prioritizeRunningDashboardInlinePreviewAds,
 } from "@/lib/ad-library/dashboard-inline-preview";
 import type { GoogleAdRow, MetaAdCard } from "@/lib/ad-library/normalize";
 
@@ -54,5 +56,37 @@ describe("dashboard-inline-preview", () => {
       img: "https://cdn.example.com/creative.jpg",
     };
     expect(googleAdRowHasDashboardInlinePreview(withImg)).toBe(true);
+  });
+
+  it("prioritizeRunningDashboardInlinePreviewAds: active first, inactive fills gaps", () => {
+    const ads = [
+      { id: "ended-preview", running: false, preview: true },
+      { id: "active-no-preview", running: true, preview: false },
+      { id: "active-preview", running: true, preview: true },
+      { id: "ended-no-preview", running: false, preview: false },
+      { id: "ended-preview-2", running: false, preview: true },
+    ];
+    const picked = prioritizeRunningDashboardInlinePreviewAds(
+      ads,
+      (ad) => ad.running,
+      (ad) => ad.preview,
+    );
+    expect(picked.map((a) => a.id)).toEqual(["active-preview", "ended-preview", "ended-preview-2"]);
+  });
+
+  it("pickDashboardInlinePreviewAds: falls back to cards without preview when needed", () => {
+    const ads = [
+      { id: "active-no-preview", running: true, preview: false },
+      { id: "ended-preview", running: false, preview: true },
+      { id: "ended-no-preview", running: false, preview: false },
+    ];
+    const picked = pickDashboardInlinePreviewAds(
+      ads,
+      (ad) => ad.running,
+      (ad) => ad.preview,
+      3,
+      (ad) => ad.id,
+    );
+    expect(picked.map((a) => a.id)).toEqual(["ended-preview", "active-no-preview", "ended-no-preview"]);
   });
 });

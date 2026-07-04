@@ -72,14 +72,8 @@ export function TikTokAdCard({
 
   const first = ad.firstShown?.trim() || "—";
   const last = ad.lastShown?.trim() || "—";
-  const reach = ad.uniqueUsersSeen?.trim() || "—";
-  const overlayCopy = (() => {
-    const h = ad.headline?.trim() ?? "";
-    if (h && h !== ad.advertiser.trim()) return h;
-    const d = ad.desc?.trim() ?? "";
-    if (d && d !== "—") return d.split("\n")[0]!.slice(0, 280);
-    return "";
-  })();
+  const reachLabel = ad.impressions?.trim() || ad.uniqueUsersSeen?.trim() || "—";
+  const reachRowLabel = ad.impressions?.trim() ? "Impressions:" : "Unique users seen:";
 
   const poster = ad.img?.trim();
   const hasVideo = Boolean(ad.videoUrl?.trim());
@@ -150,7 +144,7 @@ export function TikTokAdCard({
         <div className="space-y-1.5">
           <MetaRow label="First shown:" value={first} />
           <MetaRow label="Last shown:" value={last} />
-          <MetaRow label="Unique users seen:" value={reach} />
+          <MetaRow label={reachRowLabel} value={reachLabel} />
         </div>
       </div>
 
@@ -168,13 +162,6 @@ export function TikTokAdCard({
                 onClick={(e) => e.stopPropagation()}
                 onError={() => setVideoFailed(true)}
               />
-              {overlayCopy ? (
-                <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/65 via-black/25 to-transparent px-3 pb-10 pt-3">
-                  <p className="line-clamp-4 text-[13px] font-semibold leading-snug text-white [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)]">
-                    {overlayCopy}
-                  </p>
-                </div>
-              ) : null}
             </div>
           ) : tryImg ? (
             <a
@@ -195,13 +182,6 @@ export function TikTokAdCard({
                   <Play className="ml-1 h-8 w-8" fill="currentColor" aria-hidden />
                 </span>
               </div>
-              {overlayCopy ? (
-                <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/65 via-black/25 to-transparent px-3 pb-10 pt-3">
-                  <p className="line-clamp-4 text-[13px] font-semibold leading-snug text-white [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)]">
-                    {overlayCopy}
-                  </p>
-                </div>
-              ) : null}
             </a>
           ) : (
             <TikTokCreativePlaceholder ad={ad} />

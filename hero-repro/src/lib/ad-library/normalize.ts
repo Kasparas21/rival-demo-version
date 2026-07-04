@@ -1370,7 +1370,7 @@ function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
   return firstString(raw, ["Ad Target Audience Size", "adTargetAudienceSize"]);
 }
 
-/** Map data_xplorer/tiktok-ads-library-pay-per-event dataset row → card. */
+/** Map data_xplorer/tiktok-ads-scraper (library mode) dataset row → card. */
 export function tiktokApifyItemToCard(raw: Record<string, unknown>, index: number): TikTokAdCard | null {
   const id =
     firstString(raw, ["adId", "ad_id", "AD ID", "id"]) ?? `tt-${index}`;

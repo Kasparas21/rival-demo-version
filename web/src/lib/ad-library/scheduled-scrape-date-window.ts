@@ -44,3 +44,19 @@ export function linkedinDateRangeForWindow(
   if (days <= 31) return "past-month";
   return "past-year";
 }
+
+/** TikTok scheduled scrapes need a minimum window — same-day discovery + refresh can be 1 day. */
+export function computeTikTokScheduledScrapeDateWindow(
+  lastScrapeAtIso: string,
+  nowMs = Date.now(),
+  minDays = 30,
+): ScheduledScrapeDateWindow {
+  const window = computeScheduledScrapeDateWindow(lastScrapeAtIso, nowMs);
+  if (utcYmdSpanDays(window.startYmd, window.endYmd) >= minDays) {
+    return window;
+  }
+  const endMs = Date.parse(`${window.endYmd}T12:00:00.000Z`);
+  const start = new Date(endMs);
+  start.setUTCDate(start.getUTCDate() - (minDays - 1));
+  return { startYmd: msToUtcYmd(start.getTime()), endYmd: window.endYmd };
+}

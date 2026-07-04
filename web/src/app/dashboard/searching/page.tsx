@@ -40,7 +40,10 @@ import {
   markDiscoveryScanInProgress,
   markFreshDiscoveryScan,
 } from "@/lib/ad-library/discovery-scan-guard";
-import { channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
+import {
+  channelsQueryToAdsPlatforms,
+  channelsReadyForAdsLibraryScan,
+} from "@/lib/ad-library/channels-to-platforms";
 import {
   coerceAdsLibraryResponse,
   mergeAdsLibraryState,
@@ -138,14 +141,11 @@ function channelsWithFilledIdentifiers(
   selectedChannels: ChannelId[],
   merged: Partial<PlatformIdentifier>
 ): ChannelId[] {
-  return selectedChannels.filter((ch) => {
-    if (ch === "meta") {
-      const v = merged.meta ?? merged.metaPageUrl;
-      return Boolean(v && String(v).trim().length > 0);
-    }
-    const val = merged[ch as keyof PlatformIdentifier];
-    return typeof val === "string" && val.trim().length > 0;
-  });
+  const flat: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(merged)) {
+    if (typeof v === "string") flat[k] = v;
+  }
+  return channelsReadyForAdsLibraryScan(selectedChannels, flat);
 }
 
 type DiscoveredBrand = { name: string; domain: string; logoUrl?: string };

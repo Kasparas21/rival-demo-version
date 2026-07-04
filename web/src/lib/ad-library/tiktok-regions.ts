@@ -1,11 +1,12 @@
 /**
- * TikTok Ads Library Apify actor (`data_xplorer/tiktok-ads-library-pay-per-event`)
+ * TikTok Ads Library Apify actor (`lexis-solutions/tiktok-ads-scraper` by default).
  * allowed `region` values (API validation).
  */
 export const TIKTOK_ADS_LIBRARY_REGION_OPTIONS: ReadonlyArray<{
   value: string;
   label: string;
 }> = [
+  { value: "all", label: "All countries" },
   { value: "AT", label: "Austria" },
   { value: "BE", label: "Belgium" },
   { value: "BG", label: "Bulgaria" },
@@ -43,13 +44,13 @@ export const TIKTOK_ADS_LIBRARY_REGION_OPTIONS: ReadonlyArray<{
 
 const ALLOWED = new Set(TIKTOK_ADS_LIBRARY_REGION_OPTIONS.map((o) => o.value));
 
-/** Default when TLD inference or storage does not match an actor region (US not supported by this actor). */
-export const DEFAULT_TIKTOK_ADS_REGION = "GB";
+/** Default TikTok Ads Library region — search all EU/EEA markets (Lexis `country: all`). */
+export const DEFAULT_TIKTOK_ADS_REGION = "all";
 
-/** Coerce user/API input to a valid actor region. Legacy `all` maps to {@link DEFAULT_TIKTOK_ADS_REGION}. */
+/** Coerce user/API input to a valid actor region code or `all`. */
 export function normalizeTikTokAdsRegion(input: string | undefined): string {
   const t = input?.trim();
-  if (t === "all") return DEFAULT_TIKTOK_ADS_REGION;
+  if (t === "all") return "all";
   if (t && ALLOWED.has(t)) return t;
   return DEFAULT_TIKTOK_ADS_REGION;
 }

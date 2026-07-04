@@ -1,5 +1,5 @@
 /**
- * TikTok Ads Library Apify actor (`data_xplorer/tiktok-ads-library-pay-per-event`)
+ * TikTok Ads Library Apify actor (`data_xplorer/tiktok-ads-scraper`, mode `library`)
  * allowed `region` values (API validation).
  */
 export const TIKTOK_ADS_LIBRARY_REGION_OPTIONS: ReadonlyArray<{

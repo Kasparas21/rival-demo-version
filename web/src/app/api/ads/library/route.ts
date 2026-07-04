@@ -318,7 +318,29 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   if (cacheOnly || !skipCache) {
     /** Hydration reads `ads_cache` only; Apify runs require explicit `skipCache: true`. */
+    if (platformsRequested.has("tiktok")) {
+      console.info(
+        "[ads/library] TikTok scrape skipped — cache-only or skipCache false",
+        JSON.stringify({
+          domain: domainNorm,
+          skipCache,
+          cacheOnly,
+          intent: scrapeIntent,
+        }),
+      );
+    }
     platformsNeedingScrape = new Set();
+  } else if (platformsNeedingScrape.has("tiktok")) {
+    console.info(
+      "[ads/library] TikTok queued for Apify",
+      JSON.stringify({
+        domain: domainNorm,
+        skipCache,
+        intent: scrapeIntent,
+        tiktokMaxAds,
+        tiktokRegion,
+      }),
+    );
   }
 
   if (platformsNeedingScrape.size > 0) {

@@ -47,7 +47,7 @@ describe("Google YouTube / video ad previews", () => {
     };
     const item = normalizeGoogleApiItem(raw);
     expect(item.creativeVideoUrl).toContain("googlevideo.com/videoplayback");
-    expect(item.previewUrl).toContain("content.js");
+    expect(item.previewUrl).toBeNull();
     expect(item.imageUrl).toBeNull();
     const row = googleItemToRow(item, 0, { queryDomain: "puma.com" });
     if (row.type !== "youtube") throw new Error("expected youtube row");

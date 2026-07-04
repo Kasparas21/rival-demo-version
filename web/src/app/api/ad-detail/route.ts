@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { isScrapedAdsUuid } from "@/lib/ad-detail/ad-id";
 import { adPreviewAnalysisSchema, type AdPreviewAnalysis } from "@/lib/ad-detail/ad-ai-analysis-types";
-import { resolveMetaAdKilledForDetail } from "@/lib/ad-detail/resolve-meta-ad-killed";
+import { isMetaRunningForLibraryRow } from "@/lib/ad-detail/resolve-meta-ad-killed";
 import { ensureCompetitorAdsPersisted } from "@/lib/ad-library/ensure-competitor-ads-persisted";
 import { isScrapedAdKilled } from "@/lib/ad-library/scraped-ad-lifecycle";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
@@ -246,11 +246,16 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
   const sweepReconciled = ["meta", "google", "youtube", "tiktok"].includes(platformNorm);
   let isKilled: boolean;
   if (sweepReconciled) {
-    isKilled =
-      ad.is_active === false ||
-      (platformNorm === "meta"
-        ? resolveMetaAdKilledForDetail(ad.raw_payload, ad.last_seen_at, null)
-        : false);
+    if (platformNorm === "meta") {
+      isKilled = !isMetaRunningForLibraryRow({
+        rawPayload: ad.raw_payload,
+        lastSeenAt: ad.last_seen_at,
+        lastScrapedAt: lastScrapedAt,
+        isActiveDb: ad.is_active,
+      });
+    } else {
+      isKilled = ad.is_active === false;
+    }
   } else {
     isKilled = isScrapedAdKilled(ad.last_seen_at, lastScrapedAt);
   }

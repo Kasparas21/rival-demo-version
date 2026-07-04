@@ -16,6 +16,7 @@ import {
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { readGoogleAdDetailsPublicFlag } from "@/lib/ad-library/public-env-flags";
 import type { AdsLibraryIds } from "@/lib/ad-library/run-ads-library-parallel-scrape";
+import { readTiktokRegionFromAdsLibraryContext } from "@/lib/ad-library/read-region-from-ads-library-context";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import {
   billingRequiredResponseBody,
@@ -54,8 +55,9 @@ function buildAdsLibraryForceBody(params: {
   ids: AdsLibraryIds;
   platforms: AdsLibraryPlatform[];
   adsPerPlatform: number;
+  tiktokRegion: string;
 }) {
-  const { brandName, domainClean, ids, platforms, adsPerPlatform } = params;
+  const { brandName, domainClean, ids, platforms, adsPerPlatform, tiktokRegion } = params;
   const cap = Math.max(1, Math.min(adsPerPlatform, MAX_ADS));
   const dateParams = buildManualRefreshScrapeParams(computeManualRefreshTodayWindow());
   const hasMetaPageId = Boolean(
@@ -74,7 +76,7 @@ function buildAdsLibraryForceBody(params: {
     intent: "manual" as const,
     platforms,
     metaCountry: "US",
-    tiktokRegion: normalizeTikTokAdsRegion(undefined),
+    tiktokRegion: normalizeTikTokAdsRegion(tiktokRegion),
     googleRegion: normalizeGoogleAdsRegion(undefined),
     pinterestCountry: normalizePinterestAdsCountry(undefined),
     googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
@@ -113,7 +115,7 @@ function buildAdsLibraryForceBody(params: {
     snapchatStartDate: dateParams.snapchatStartDate,
     snapchatEndDate: dateParams.snapchatEndDate,
     snapchatCountry: "",
-    tiktokRegion: normalizeTikTokAdsRegion(undefined),
+    tiktokRegion: normalizeTikTokAdsRegion(tiktokRegion),
     googleRegion: normalizeGoogleAdsRegion(undefined),
     googleResultsLimit: normalizeGoogleAdsResultsLimit(cap),
     pinterestCountry: normalizePinterestAdsCountry(undefined),
@@ -213,6 +215,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
+  const tiktokRegion = readTiktokRegionFromAdsLibraryContext(row.ads_library_context, domainClean);
+
   const libraryBody = {
     ...buildAdsLibraryForceBody({
       brandName: displayName,
@@ -220,6 +224,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       ids,
       platforms,
       adsPerPlatform,
+      tiktokRegion,
     }),
     filterGoogleActiveToday: platforms.includes("google"),
   };

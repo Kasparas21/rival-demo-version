@@ -38,6 +38,36 @@ export function channelsQueryToAdsPlatforms(channelIds: string[]): AdsLibraryPla
   return ALL_ADS_API_PLATFORMS.filter((p) => set.has(p));
 }
 
+/**
+ * TikTok Ads Library accepts advertiser-name search (`query_type=2`) — no saved id required
+ * when the channel is selected during discovery.
+ */
+const BRAND_NAME_SCAN_CHANNELS = new Set<ChannelId>(["tiktok"]);
+
+/** Whether a channel picker id is ready for an Apify scan given merged identifier fields. */
+export function channelReadyForAdsLibraryScan(
+  channel: ChannelId,
+  merged: Record<string, string | undefined>,
+): boolean {
+  if (channel === "meta") {
+    const v = merged.meta ?? merged.metaPageUrl;
+    return Boolean(v?.trim());
+  }
+  if (BRAND_NAME_SCAN_CHANNELS.has(channel)) {
+    return true;
+  }
+  const val = merged[channel];
+  return typeof val === "string" && val.trim().length > 0;
+}
+
+/** Selected channels that can be scraped (filled id or brand-name fallback for TikTok). */
+export function channelsReadyForAdsLibraryScan(
+  selectedChannels: ChannelId[],
+  merged: Record<string, string | undefined>,
+): ChannelId[] {
+  return selectedChannels.filter((ch) => channelReadyForAdsLibraryScan(ch, merged));
+}
+
 function platformHasFilledId(platform: AdsLibraryPlatform, ids: Record<string, string>): boolean {
   const pick = (key: string) => {
     const v = ids[key];

@@ -25,7 +25,7 @@ describe("buildManualRefreshScrapeParams", () => {
     expect(p.metaEndDate).toBe("2026-05-19");
     expect(p.linkedinDateRange).toBe("past-day");
     expect(p.tiktokEndDate).toBe("2026-05-19");
-    expect(p.tiktokStartDate).toBe("2026-04-19");
+    expect(p.tiktokStartDate).toBe("2025-05-19");
     expect(p.snapchatEndDate).toBe("2026-05-19");
   });
 });
@@ -38,5 +38,12 @@ describe("buildManualRefreshLibraryBodyForPlatform", () => {
     expect(body.metaMaxAds).toBeGreaterThan(0);
     expect(body).not.toHaveProperty("metaStartDate");
     expect(body).not.toHaveProperty("metaEndDate");
+  });
+
+  it("uses 300-ad cap for TikTok manual refresh", () => {
+    const body = buildManualRefreshLibraryBodyForPlatform("tiktok");
+    expect(body.tiktokMaxAds).toBe(300);
+    expect(body.tiktokStartDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(body.tiktokEndDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

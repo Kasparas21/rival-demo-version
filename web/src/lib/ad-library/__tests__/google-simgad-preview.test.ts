@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { resolveGoogleStillPreviewDisplayUrl } from "@/lib/ad-library/google-creative-display-url";
 import {
   googleItemToRow,
   isUsableGoogleStillImagePreviewUrl,
@@ -37,5 +38,36 @@ describe("Google TEXT simgad previews from Apify", () => {
       (isUsableGoogleStillImagePreviewUrl(row.previewUrl?.trim() || "") ? row.previewUrl!.trim() : "") ||
       (isUsableGoogleStillImagePreviewUrl(row.img || "") ? row.img! : "");
     expect(imageSrc).toContain("simgad/");
+  });
+
+  it("ignores content.js previewUrl and keeps simgad on the google row", () => {
+    const raw = {
+      status: "Success",
+      advertiserId: "AR18365585272172707841",
+      advertiserName: "UAB \"Bitė Lietuva\"",
+      creativeId: "CR09667462223512993793",
+      adFormat: "TEXT",
+      firstShown: "2025-07-09",
+      lastShown: "2026-07-04",
+      previewUrl:
+        "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&creativeId=CR09667462223512993793",
+      imageUrl: "https://tpc.googlesyndication.com/archive/simgad/9471784302321938955",
+      creativeUrl:
+        "https://adstransparency.google.com/advertiser/AR18365585272172707841/creative/CR09667462223512993793",
+    };
+
+    const item = normalizeGoogleApiItem(raw);
+    expect(item.previewUrl).toContain("simgad/");
+    expect(item.imageUrl).toContain("simgad/");
+
+    const row = googleItemToRow(item, 0, { queryDomain: "bite.lt" });
+    expect(row.type).toBe("google");
+    if (row.type !== "google") return;
+
+    expect(row.img).toContain("simgad/");
+    expect(row.previewUrl).toContain("simgad/");
+    expect(resolveGoogleStillPreviewDisplayUrl(row.previewUrl, row.img)).toContain(
+      "/api/media/google-creative?url=",
+    );
   });
 });

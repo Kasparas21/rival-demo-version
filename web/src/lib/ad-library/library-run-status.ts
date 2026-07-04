@@ -4,9 +4,9 @@ import {
   computeMetaAdRunDays,
   computeTikTokAdRunDays,
   isGoogleAdKilled,
-  isMetaAdKilled,
   isTikTokAdKilled,
 } from "./count-active-ads";
+import { isMetaCacheCardKilled } from "@/lib/ad-detail/resolve-meta-ad-killed";
 import type { GoogleAdRow, MetaAdCard, TikTokAdCard } from "./normalize";
 
 export type LibraryRunStatus = {
@@ -29,12 +29,22 @@ export function isLibraryAdKilled(
   nowMs = Date.now()
 ): boolean {
   if (runStatus != null) return !runStatus.isRunning;
-  if (platform === "meta") return isMetaAdKilled(ad as MetaAdCard, scrapeAtMs, nowMs);
+  if (platform === "meta") return isMetaCacheCardKilled(ad as MetaAdCard, scrapeAtMs, nowMs);
   if (platform === "tiktok") return isTikTokAdKilled(ad as TikTokAdCard, nowMs);
   if (platform === "google") {
     return isGoogleAdKilled(ad as GoogleAdRow, nowMs);
   }
   return false;
+}
+
+export function isLibraryAdRunning(
+  platform: AdsLibraryPlatform,
+  ad: unknown,
+  runStatus?: LibraryRunStatus,
+  scrapeAtMs?: number,
+  nowMs = Date.now()
+): boolean {
+  return !isLibraryAdKilled(platform, ad, runStatus, scrapeAtMs, nowMs);
 }
 
 export function computeLibraryAdRunDays(

@@ -5,16 +5,18 @@ import {
 } from "../infer-ad-library-regions-from-domain";
 
 describe("inferAdLibraryRegionDefaults", () => {
-  it("defaults Meta, Google, and LinkedIn to all countries regardless of TLD", () => {
+  it("defaults Meta, Google, LinkedIn, and TikTok to all countries regardless of TLD", () => {
     expect(inferAdLibraryRegionDefaults("https://supabase.de")).toMatchObject({
       metaCountry: "ALL",
       googleRegion: "anywhere",
       linkedinCountryCode: "",
+      tiktokRegion: "all",
     });
     expect(inferAdLibraryRegionDefaults("https://example.com")).toMatchObject({
       metaCountry: "ALL",
       googleRegion: "anywhere",
       linkedinCountryCode: "",
+      tiktokRegion: "all",
     });
   });
 

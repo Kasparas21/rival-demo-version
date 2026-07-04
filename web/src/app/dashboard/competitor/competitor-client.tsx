@@ -39,6 +39,12 @@ import { GoogleAdFormatIcon } from "@/components/ads-library/google-ad-format-ic
 import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-video-or-image";
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-modal";
+import { CompetitorAdLibrarySettingsPanel } from "@/components/ads-library/competitor-ad-library-settings-panel";
+import {
+  AdLibraryConnectionsPanel,
+  buildMarketSummaryLabel,
+  DEFAULT_ONBOARDING_AD_MARKETS,
+} from "@/components/ads-library/ad-library-connections-panel";
 import { MetaAdsAllModal } from "@/components/ads-library/meta-ads-all-modal";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { buildLibraryCardDetailSeed } from "@/lib/ad-detail/library-ad-seed";
@@ -59,16 +65,12 @@ import {
   DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE,
   googleAdRowHasDashboardInlinePreview,
   linkedInAdHasDashboardInlinePreview,
-  metaAdHasDashboardInlinePreview,
+  metaAdQualifiesForDashboardInlinePreview,
+  pickDashboardInlinePreviewAds,
   pinterestAdHasDashboardInlinePreview,
   snapchatAdHasDashboardInlinePreview,
   tikTokAdHasDashboardInlinePreview,
 } from "@/lib/ad-library/dashboard-inline-preview";
-import {
-  canonicalLinkedInAdLibraryUrl,
-  canonicalMetaAdsLibraryUrl,
-} from "@/lib/ad-library/canonical-library-url";
-import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import {
   channelsQueryToAdsPlatforms,
   unionAdsPlatformsFromSources,
@@ -98,7 +100,7 @@ import { WORKSPACE_RESCRAPE_ADS_PER_PLATFORM } from "@/lib/ad-library/constants"
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import {
   googleCreativeDisplayUrl,
-  resolveGoogleStillPreviewDisplayUrl,
+  resolveGoogleStillPreviewDisplayCandidates,
 } from "@/lib/ad-library/google-creative-display-url";
 import {
   extractYouTubeVideoId,
@@ -130,6 +132,7 @@ import {
 import {
   computeLibraryAdRunDays,
   isLibraryAdKilled,
+  isLibraryAdRunning,
   type LibraryRunStatus,
 } from "@/lib/ad-library/library-run-status";
 import {
@@ -179,20 +182,7 @@ import { fetchSavedCompetitorsFromAccount } from "@/lib/account/client";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { CompetitorPageBrand } from "@/lib/competitor-view-resolve";
 import type { MarketingImprovementLlmResult } from "@/lib/workspace/run-marketing-improvement-llm";
-import {
-  buildGoogleTransparencyPreviewUrl,
-  buildLinkedInAdLibraryPreviewUrl,
-  buildMetaAdsLibraryPreviewUrl,
-  buildPinterestAdsPreviewUrl,
-  buildSnapchatAdsGalleryPreviewUrl,
-  buildTikTokAdsLibraryPreviewUrl,
-} from "@/lib/onboarding/ad-library-preview-urls";
-import {
-  countryFlagEmoji,
-  DEFAULT_ONBOARDING_AD_MARKETS,
-  ONBOARDING_AD_MARKET_CODES,
-  ONBOARDING_AD_MARKETS,
-} from "@/lib/onboarding/ad-markets";
+import { ONBOARDING_AD_MARKET_CODES } from "@/lib/onboarding/ad-markets";
 import {
   OWN_BRAND_DEBUG_ONLY_TAB_IDS,
   competitorPageTabsForView,
@@ -431,6 +421,7 @@ function GoogleTransparencyCard({
   onToggleSave,
   saveDisabled,
   runStatus,
+  scrapedPreviewUrl,
 }: {
   ad: Extract<GoogleAdRow, { type: "google" }>;
   brandDomain: string;
@@ -440,22 +431,28 @@ function GoogleTransparencyCard({
   onToggleSave?: () => void;
   saveDisabled?: boolean;
   runStatus?: LibraryRunStatus;
+  scrapedPreviewUrl?: string;
 }) {
+  const [previewIdx, setPreviewIdx] = useState(0);
   const [creativeImgFailed, setCreativeImgFailed] = useState(false);
+
+  const previewCandidates = useMemo(
+    () => resolveGoogleStillPreviewDisplayCandidates(ad.previewUrl, ad.img, scrapedPreviewUrl),
+    [ad.previewUrl, ad.img, scrapedPreviewUrl],
+  );
+
   useEffect(() => {
+    setPreviewIdx(0);
     setCreativeImgFailed(false);
-  }, [ad.id]);
+  }, [ad.id, previewCandidates.join("|")]);
 
   const sn = googleTextSnippet(ad);
   const href = resolveGoogleAdRowTransparencyHref(ad, brandDomain);
   const linkCta = googleAdsExternalLinkLabel(href);
 
-  /** Prefer Transparency “Preview URL” only when it is a still image — proxy Google CDNs for ad blockers. */
-  const rawPreview = (ad.previewUrl?.trim() || "").trim();
-  const rawImg = (ad.img || "").trim();
-  const imageSrc = resolveGoogleStillPreviewDisplayUrl(rawPreview || null, rawImg || null);
+  const imageSrc = previewCandidates[previewIdx] ?? "";
   const isFaviconOnly = Boolean(
-    imageSrc.includes("google.com/s2/favicons") || imageSrc.includes("gstatic.com/favicon")
+    imageSrc.includes("google.com/s2/favicons") || imageSrc.includes("gstatic.com/favicon"),
   );
   const hasCreativeImageAsset = Boolean(imageSrc && !isFaviconOnly);
   const previewHref = ad.previewUrl?.trim() || "";
@@ -508,7 +505,13 @@ function GoogleTransparencyCard({
                   alt=""
                   className="max-h-full max-w-full rounded-xl object-contain object-center"
                   referrerPolicy="no-referrer"
-                  onError={() => setCreativeImgFailed(true)}
+                  onError={() => {
+                    if (previewIdx < previewCandidates.length - 1) {
+                      setPreviewIdx((i) => i + 1);
+                      return;
+                    }
+                    setCreativeImgFailed(true);
+                  }}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center bg-[#f1f3f4] px-3 text-center text-[12px] text-[#64748b]">
@@ -773,6 +776,7 @@ function GoogleAdRowCard({
   onToggleSave,
   saveDisabled,
   runStatus,
+  scrapedPreviewUrl,
 }: {
   ad: GoogleAdRow;
   brand: { name: string; domain: string; logoUrl?: string };
@@ -782,6 +786,7 @@ function GoogleAdRowCard({
   onToggleSave?: () => void;
   saveDisabled?: boolean;
   runStatus?: LibraryRunStatus;
+  scrapedPreviewUrl?: string;
 }) {
   if (ad.type === "google") {
     return (
@@ -794,6 +799,7 @@ function GoogleAdRowCard({
         onToggleSave={onToggleSave}
         saveDisabled={saveDisabled}
         runStatus={runStatus}
+        scrapedPreviewUrl={scrapedPreviewUrl}
       />
     );
   }
@@ -1109,29 +1115,6 @@ function workspaceInitialMarkets(setup: AdsProfileSetup | null): { auto: boolean
   return { auto: false, codes: normalized };
 }
 
-function workspacePreviewHrefForChannel(
-  id: ChannelId,
-  scrape: WorkspaceAdsScrapeHints,
-  workspaceDomain: string
-): string {
-  switch (id) {
-    case "meta":
-      return buildMetaAdsLibraryPreviewUrl(scrape.metaAdsLibraryUrl);
-    case "google":
-      return buildGoogleTransparencyPreviewUrl(scrape.googleAdsTransparencyUrl.trim());
-    case "linkedin":
-      return buildLinkedInAdLibraryPreviewUrl(scrape.linkedInUrl);
-    case "tiktok":
-      return buildTikTokAdsLibraryPreviewUrl(scrape.tiktokKeyword);
-    case "pinterest":
-      return buildPinterestAdsPreviewUrl(scrape.pinterestKeyword);
-    case "snapchat":
-      return buildSnapchatAdsGalleryPreviewUrl(scrape.snapchatKeyword);
-    default:
-      return "about:blank";
-  }
-}
-
 function AiAdAnalysisNotice({
   running,
   enrichmentRate,
@@ -1259,19 +1242,10 @@ function WorkspaceAdSourcesPanel({
     );
   }, [initialSetup, baseDomain]);
 
-  const marketSummaryLabel = useMemo(() => {
-    if (marketsAuto) {
-      return `All supported territories (${ONBOARDING_AD_MARKET_CODES.length} regions)`;
-    }
-    if (selectedMarketCodes.length === 0) {
-      return "Pick regions or switch back to Auto";
-    }
-    const tags = selectedMarketCodes
-      .map((c) => ONBOARDING_AD_MARKETS.find((m) => m.code === c)?.shortTag ?? c)
-      .slice(0, 8);
-    const more = selectedMarketCodes.length > 8 ? ` +${selectedMarketCodes.length - 8} more` : "";
-    return `${tags.join(", ")}${more}`;
-  }, [marketsAuto, selectedMarketCodes]);
+  const marketSummaryLabel = useMemo(
+    () => buildMarketSummaryLabel(marketsAuto, selectedMarketCodes),
+    [marketsAuto, selectedMarketCodes],
+  );
 
   const toggleChannel = (id: ChannelId) => {
     setChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -1521,438 +1495,61 @@ function WorkspaceAdSourcesPanel({
     }
   };
 
-  const inputClass =
-    "mt-1.5 w-full rounded-xl border border-sky-200/70 bg-white/95 px-3.5 py-2.5 text-[13px] font-medium text-sky-950 placeholder:text-sky-900/40 outline-none shadow-[inset_0_1px_2px_rgba(255,255,255,0.85)] transition-[border-color,box-shadow] focus:border-sky-500 focus:ring-2 focus:ring-sky-300/35";
-
-  /** Basics row: same visual height as the compact Ad markets bar */
-  const basicsInputClass =
-    "mt-1.5 box-border h-[42px] w-full rounded-xl border border-sky-200/70 bg-white/95 px-3.5 py-0 text-[13px] font-medium leading-normal text-sky-950 placeholder:text-sky-900/40 outline-none shadow-[inset_0_1px_2px_rgba(255,255,255,0.85)] transition-[border-color,box-shadow] focus:border-sky-500 focus:ring-2 focus:ring-sky-300/35";
-
-  type PlatformFieldSpec = {
-    label: string;
-    hint?: string;
-    placeholder?: string;
-    value: string;
-    onChange: (v: string) => void;
-    id: string;
-  };
-
-  const fieldByChannel = (id: ChannelId): PlatformFieldSpec | null => {
-    switch (id) {
-      case "meta":
-        return {
-          id: "rival-ws-meta",
-          label: "Meta Ads Library URL",
-          hint: "Use an Ad Library search URL—not a Facebook Page link.",
-          placeholder: "https://www.facebook.com/ads/library/...",
-          value: scrape.metaAdsLibraryUrl,
-          onChange: (v) => patchScrape({ metaAdsLibraryUrl: v }),
-        };
-      case "google":
-        return {
-          id: "rival-ws-google",
-          label: "URL with Advertiser ID",
-          hint:
-            "URL from Google Ads Transparency Center that includes …/advertiser/AR… in the path.",
-          placeholder: "https://adstransparency.google.com/advertiser/AR…",
-          value: scrape.googleAdsTransparencyUrl,
-          onChange: (v) => patchScrape({ googleAdsTransparencyUrl: v }),
-        };
-      case "linkedin":
-        return {
-          id: "rival-ws-li",
-          label: "LinkedIn Ad Library URL",
-          hint: "Ad Library search or company/advertiser link.",
-          value: scrape.linkedInUrl,
-          onChange: (v) => patchScrape({ linkedInUrl: v }),
-        };
-      case "tiktok":
-        return {
-          id: "rival-ws-tt",
-          label: "TikTok keyword",
-          hint: "What we pass to TikTok Ads Library search.",
-          value: scrape.tiktokKeyword,
-          onChange: (v) => patchScrape({ tiktokKeyword: v }),
-        };
-      case "pinterest":
-        return {
-          id: "rival-ws-pin",
-          label: "Pinterest search keyword",
-          hint: "Keyword-style match in Pinterest transparency.",
-          value: scrape.pinterestKeyword,
-          onChange: (v) => patchScrape({ pinterestKeyword: v }),
-        };
-      case "snapchat":
-        return {
-          id: "rival-ws-snap",
-          label: "Snapchat keyword",
-          hint: "Gallery search term for your brand.",
-          value: scrape.snapchatKeyword,
-          onChange: (v) => patchScrape({ snapchatKeyword: v }),
-        };
-      default:
-        return null;
-    }
-  };
-
-  const googleTransparencyNeedsFix =
-    scrape.googleAdsTransparencyUrl.trim().length > 0 &&
-    canonicalGoogleAdsTransparencyStartUrl(scrape.googleAdsTransparencyUrl.trim()) === null;
-
   return (
-    <div
-      className={`relative overflow-hidden rounded-[20px] border border-sky-200/65 bg-gradient-to-b from-white via-sky-50/35 to-amber-50/25 shadow-[0_10px_40px_rgba(14,116,144,0.07)] ${
-        noBottomMargin ? "" : "mb-6"
-      }`}
-    >
-      <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-sky-400/90 via-sky-300/50 to-amber-300/70"
-        aria-hidden
-      />
-      <div className="relative px-4 py-3.5 sm:px-5 sm:py-4">
-        <div className="min-w-0 pl-1">
-          <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-sky-800/90">Your workspace</p>
-          <p className="mt-0.5 text-[15px] font-bold leading-snug tracking-[-0.02em] text-sky-950">
-            Ad library connections
-          </p>
-          <p className="mt-1 max-w-[52rem] text-[12px] leading-snug text-sky-900/65">
-            Saved on your account—not the same flow as confirming a competitor during Spy. Set the links and handles
-            your account uses to find <span className="font-semibold text-sky-900/80">your</span> brand in each ad
-            library. The Ads Library tab is for browsing creatives and refreshing scrapes—keep configuration here so it
-            stays easy to scan.
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-5 border-t border-sky-200/50 px-4 py-5 sm:px-5 sm:py-6">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-sky-900/75">Basics</p>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-x-4">
-            <div className="min-w-0">
-              <label className="block text-[11px] font-semibold text-sky-900/85" htmlFor="rival-ws-site">
-                Website URL
-              </label>
-              <input
-                id="rival-ws-site"
-                className={basicsInputClass}
-                value={scrape.websiteUrl}
-                onChange={(e) => patchScrape({ websiteUrl: e.target.value })}
-              />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0">
-                <p className="text-[11px] font-semibold text-sky-900/85">Ad markets</p>
-                <p className="text-[10px] leading-tight text-sky-900/50">
-                  <span className="hidden sm:inline">Auto unless you pick countries.</span>
-                </p>
-              </div>
-              <p className="mt-0.5 text-[10px] text-sky-900/50 sm:hidden">
-                Auto by default — open Countries… to customize.
-              </p>
-
-              {!showRegionFlags ? (
-                <div
-                  className="mt-1.5 flex min-h-[42px] w-full flex-wrap items-center gap-2 rounded-xl border border-sky-200/70 bg-white/80 px-3 py-1.5 sm:flex-nowrap sm:gap-3"
-                  title={marketSummaryLabel}
-                >
-                  <p className="min-w-0 flex-1 truncate text-[13px] leading-tight text-sky-950">
-                    <span className="font-semibold">{marketsAuto ? "Auto" : "Custom"}</span>
-                    <span className="font-normal text-sky-800/70"> · {marketSummaryLabel}</span>
-                  </p>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    {marketsAuto ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMarketsAuto(false);
-                          setShowRegionFlags(true);
-                          setSelectedMarketCodes((p) =>
-                            p.length ? p : [...DEFAULT_ONBOARDING_AD_MARKETS],
-                          );
-                        }}
-                        className="rounded-lg border border-sky-300/90 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-sky-950 shadow-sm transition-colors hover:bg-sky-50/90"
-                      >
-                        Countries…
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => setShowRegionFlags(true)}
-                          className="rounded-lg border border-sky-300/90 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-sky-950 shadow-sm transition-colors hover:bg-sky-50/90"
-                        >
-                          Edit…
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMarketsAuto(true);
-                            setShowRegionFlags(false);
-                            setSelectedMarketCodes([]);
-                          }}
-                          className="rounded-lg border border-sky-200/80 bg-sky-50 px-2.5 py-1.5 text-[11px] font-semibold text-sky-900 hover:bg-sky-100/90"
-                        >
-                          Auto
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-
-              {showRegionFlags ? (
-                <div className="mt-3 min-w-0 space-y-2">
-                  <div className="relative">
-                    <div
-                      className="flex max-w-full flex-nowrap gap-1 overflow-x-auto overscroll-x-contain scroll-smooth rounded-xl border border-sky-200/60 bg-white/70 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5"
-                      role="group"
-                      aria-label="Ad markets"
-                    >
-                      <span className="inline-flex shrink-0 snap-start items-center">
-                        <button
-                          type="button"
-                          title="Use all supported regions"
-                          aria-pressed={marketsAuto}
-                          onClick={() => {
-                            setMarketsAuto(true);
-                            setSelectedMarketCodes([]);
-                            setShowRegionFlags(false);
-                          }}
-                          className={`inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                            marketsAuto
-                              ? "border-sky-700 bg-sky-700 text-white shadow-sm"
-                              : "border-sky-200/90 bg-white/90 text-sky-800 hover:bg-sky-50"
-                          }`}
-                        >
-                          <span className="text-[0.85rem] leading-none" aria-hidden>
-                            🌐
-                          </span>
-                          Auto
-                        </button>
-                      </span>
-                      {ONBOARDING_AD_MARKETS.map((m) => {
-                        const on = !marketsAuto && selectedMarketCodes.includes(m.code);
-                        return (
-                          <button
-                            key={m.code}
-                            type="button"
-                            disabled={marketsAuto}
-                            aria-pressed={on}
-                            aria-disabled={marketsAuto}
-                            title={m.label}
-                            onClick={() => toggleMarketCode(m.code)}
-                            className={`inline-flex shrink-0 snap-start items-center gap-0.5 rounded-lg border px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide transition ${
-                              marketsAuto
-                                ? "cursor-not-allowed border-sky-100/90 bg-sky-50/60 text-sky-800/35"
-                                : on
-                                  ? "border-sky-600/50 bg-sky-600 text-white shadow-sm"
-                                  : "border-sky-200/80 bg-white/85 text-sky-900/75 hover:border-sky-300 hover:bg-white"
-                            }`}
-                          >
-                            <span className="text-[0.85rem] leading-none" aria-hidden>
-                              {countryFlagEmoji(m.code)}
-                            </span>
-                            {m.shortTag}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowRegionFlags(false)}
-                      className="text-[11px] font-semibold text-sky-800 underline underline-offset-2 hover:text-sky-950"
-                    >
-                      Collapse list
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-sky-900/75">
-            Platforms you track
-          </p>
-          <p className="mt-0.5 text-[12px] text-sky-900/60">
-            Toggle networks—connection fields below appear only for platforms you enable.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-sky-200/60 bg-white/60 p-2">
-            {CHANNELS.map(({ id, name, Logo }) => {
-              const on = channels.includes(id);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => toggleChannel(id)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
-                    on
-                      ? "border-sky-400/90 bg-sky-500/15 text-sky-950 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]"
-                      : "border-transparent bg-white/90 text-sky-900/45 hover:bg-sky-50/90 hover:text-sky-900"
-                  }`}
-                >
-                  <Logo className="h-3.5 w-3.5 shrink-0 opacity-90" />
-                  {name.replace(" ads", "")}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-sky-900/75">
-            Per-platform identifiers
-          </p>
-          <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-            {CHANNELS.filter((c) => channels.includes(c.id)).map((ch) => {
-              const spec = fieldByChannel(ch.id);
-              if (!spec) return null;
-              const previewHref = workspacePreviewHrefForChannel(ch.id, scrape, baseDomain);
-              return (
-                <div
-                  key={ch.id}
-                  className="relative flex min-h-0 flex-col rounded-2xl border border-dashed border-sky-300/55 bg-white/75 px-3.5 pb-3.5 pt-3 shadow-[0_2px_12px_rgba(14,116,144,0.04)] sm:px-4 sm:pb-4 sm:pt-3.5"
-                >
-                  <div
-                    className="pointer-events-none absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-gradient-to-b from-sky-500 to-sky-400/85"
-                    aria-hidden
-                  />
-                  <div className="flex items-start justify-between gap-2 pl-1.5">
-                    <div className="flex min-w-0 flex-1 items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-sky-100 bg-gradient-to-br from-sky-100/90 to-amber-50/80 shadow-sm">
-                        <ch.Logo className="h-4 w-4 text-sky-950" />
-                      </div>
-                      <div className="min-w-0 pt-0.5">
-                        <p className="text-[13px] font-bold leading-tight text-sky-950">{ch.name}</p>
-                        <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-sky-700/55">
-                          Your brand · workspace
-                        </p>
-                      </div>
-                    </div>
-                    <a
-                      href={previewHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Preview in new tab"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-sky-200/80 bg-sky-50/90 px-2 py-1 text-[11px] font-semibold text-sky-900 transition-colors hover:bg-sky-100 sm:mt-0.5"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                      Preview
-                    </a>
-                  </div>
-                  <div className="mt-3 pl-1.5">
-                    <label className="block text-[11px] font-semibold text-sky-900/75" htmlFor={spec.id}>
-                      {spec.label}
-                    </label>
-                    <input
-                      id={spec.id}
-                      className={
-                        spec.id === "rival-ws-google" && googleTransparencyNeedsFix
-                          ? `${inputClass} border-amber-400/90 ring-1 ring-amber-300/50`
-                          : inputClass
-                      }
-                      value={spec.value}
-                      onChange={(e) => spec.onChange(e.target.value)}
-                      onBlur={() => {
-                        if (spec.id === "rival-ws-meta") {
-                          const v = scrape.metaAdsLibraryUrl.trim();
-                          if (!v) return;
-                          const c = canonicalMetaAdsLibraryUrl(v);
-                          if (c && c !== v) patchScrape({ metaAdsLibraryUrl: c });
-                          return;
-                        }
-                        if (spec.id === "rival-ws-google") {
-                          const v = scrape.googleAdsTransparencyUrl.trim();
-                          if (!v) return;
-                          const c = canonicalGoogleAdsTransparencyStartUrl(scrape.googleAdsTransparencyUrl);
-                          if (c && c !== v) patchScrape({ googleAdsTransparencyUrl: c });
-                          return;
-                        }
-                        if (spec.id === "rival-ws-li") {
-                          const v = scrape.linkedInUrl.trim();
-                          if (!v) return;
-                          const c = canonicalLinkedInAdLibraryUrl(v);
-                          if (c && c !== v) patchScrape({ linkedInUrl: c });
-                        }
-                      }}
-                      placeholder={spec.placeholder}
-                    />
-                    {spec.hint ? (
-                      <p className="mt-1.5 text-[11px] leading-snug text-sky-800/55">{spec.hint}</p>
-                    ) : null}
-                    {spec.id === "rival-ws-google" && googleTransparencyNeedsFix ? (
-                      <p className="mt-1.5 text-[11px] leading-snug font-medium text-amber-900/95" role="alert">
-                        That link doesn&apos;t include a Transparency advertiser ID (
-                        <span className="font-mono text-[10px]">…/advertiser/AR…</span>). Open Google Ads
-                        Transparency Center, search for your company, then open any creative or ad — copy the URL from
-                        that page&apos;s address bar and paste it here. Don&apos;t use only your shop domain or a{' '}
-                        <span className="font-mono text-[10px]">?domain=</span> search results page.
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {channels.length === 0 ? (
-            <p className="mt-3 rounded-xl border border-dashed border-sky-200/80 bg-sky-50/40 px-3 py-2.5 text-[12px] text-sky-900/65">
-              Turn on at least one platform above to add connection details.
-            </p>
-          ) : null}
-        </div>
-
-        {error ? (
-          <p className="text-[12px] font-medium text-[#b42318]" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
-            <button
-              type="button"
-              onClick={() => void onSaveAndStartScrape()}
-              disabled={saving || rescraping}
-              className="w-full rounded-xl bg-gradient-to-r from-sky-700 to-sky-800 px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_4px_14px_rgba(14,116,144,0.25)] transition-[filter,transform] hover:brightness-105 active:scale-[0.99] disabled:opacity-50 sm:w-auto"
-            >
-              {saving ? "Starting scrape…" : "Save and start scraping"}
-            </button>
-            {showDebugRescrapeAds ? (
-              <button
-                type="button"
-                onClick={() => void onRescrapeAds()}
-                disabled={saving || rescraping || channels.length === 0}
-                title="Hidden from users — visible only with NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION"
-                className="relative inline-flex w-full items-center justify-center gap-2 rounded-xl border border-sky-300/90 bg-white px-4 py-2.5 text-[13px] font-semibold text-sky-950 shadow-sm transition-colors hover:bg-sky-50 disabled:opacity-50 sm:w-auto"
-              >
-                <span
-                  className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-white"
-                  aria-hidden
-                />
-                {rescraping ? (
-                  <RivalLogoVideo size="inline" className="shrink-0" aria-hidden />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                )}
-                {rescraping ? "Rescraping…" : "Rescrape ads"}
-              </button>
-            ) : null}
-          </div>
-          <div className="flex items-center justify-center gap-2 sm:justify-end">
-            {savedFlash ? (
-              <span className="text-[12px] font-semibold text-emerald-700">Saved to your brand</span>
-            ) : (
-              <span className="text-[11px] text-sky-900/45">Changes apply to your workspace only.</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+    <AdLibraryConnectionsPanel
+      noBottomMargin={noBottomMargin}
+      headerOverline="Your workspace"
+      headerDescription={
+        <>
+          Saved on your account—not the same flow as confirming a competitor during Spy. Set the links and handles
+          your account uses to find <span className="font-semibold text-sky-900/80">your</span> brand in each ad
+          library. The Ads Library tab is for browsing creatives and refreshing scrapes—keep configuration here so it
+          stays easy to scan.
+        </>
+      }
+      platformCardSubline="Your brand · workspace"
+      websiteUrl={scrape.websiteUrl}
+      onWebsiteUrlChange={(v) => patchScrape({ websiteUrl: v })}
+      channels={channels}
+      onToggleChannel={toggleChannel}
+      scrape={scrape}
+      onPatchScrape={patchScrape}
+      baseDomain={baseDomain}
+      fieldIdPrefix="rival-ws"
+      marketsAuto={marketsAuto}
+      selectedMarketCodes={selectedMarketCodes}
+      showRegionFlags={showRegionFlags}
+      marketSummaryLabel={marketSummaryLabel}
+      onOpenCountries={() => {
+        setMarketsAuto(false);
+        setShowRegionFlags(true);
+        setSelectedMarketCodes((p) => (p.length ? p : [...DEFAULT_ONBOARDING_AD_MARKETS]));
+      }}
+      onEditMarkets={() => setShowRegionFlags(true)}
+      onMarketsAuto={() => {
+        setMarketsAuto(true);
+        setShowRegionFlags(false);
+        setSelectedMarketCodes([]);
+      }}
+      onToggleMarketCode={toggleMarketCode}
+      onCollapseMarkets={() => setShowRegionFlags(false)}
+      error={error}
+      saving={saving}
+      rescraping={rescraping}
+      primaryLabel="Save and start scraping"
+      primaryBusyLabel="Starting scrape…"
+      onPrimaryClick={() => void onSaveAndStartScrape()}
+      showSecondary={showDebugRescrapeAds}
+      secondaryLabel="Rescrape ads"
+      secondaryBusyLabel="Rescraping…"
+      onSecondaryClick={() => void onRescrapeAds()}
+      savedFlash={savedFlash}
+      savedFlashMessage="Saved to your brand"
+      footerHint="Changes apply to your workspace only."
+    />
   );
 }
+
 
 type CompetitorDashboardBodyProps = {
   canonicalHost: string;
@@ -2623,6 +2220,7 @@ function CompetitorDashboardBody({
     refreshLinkedInAds,
     refreshSnapchatAds,
     reloadPlatformFromCache,
+    bootstrapPlatformScrape,
     manualRefreshPlatform,
   } = useAdLibrary(
     {
@@ -3011,27 +2609,6 @@ function CompetitorDashboardBody({
       filteredPinterestAds.length,
       filteredSnapchatAds.length,
     ]
-  );
-
-  const inlinePreviewGoogleRows = useMemo(
-    () => filteredGoogleRows.filter(googleAdRowHasDashboardInlinePreview),
-    [filteredGoogleRows]
-  );
-  const inlinePreviewLinkedInAds = useMemo(
-    () => filteredLinkedInAds.filter(linkedInAdHasDashboardInlinePreview),
-    [filteredLinkedInAds]
-  );
-  const inlinePreviewTikTokAds = useMemo(
-    () => filteredTikTokAds.filter(tikTokAdHasDashboardInlinePreview),
-    [filteredTikTokAds]
-  );
-  const inlinePreviewPinterestAds = useMemo(
-    () => filteredPinterestAds.filter(pinterestAdHasDashboardInlinePreview),
-    [filteredPinterestAds]
-  );
-  const inlinePreviewSnapchatAds = useMemo(
-    () => filteredSnapchatAds.filter(snapchatAdHasDashboardInlinePreview),
-    [filteredSnapchatAds]
   );
 
   const competitorDbIdForSaved = useMemo(() => {
@@ -3913,13 +3490,103 @@ function CompetitorDashboardBody({
   }, [filteredTikTokAds, runStatusForLibraryCard]);
 
   const inlinePreviewMetaAdsDisplay = useMemo(
-    () => displayMetaAdsWithPreviews.filter(metaAdHasDashboardInlinePreview),
-    [displayMetaAdsWithPreviews]
+    () =>
+      pickDashboardInlinePreviewAds(
+        displayMetaAdsWithPreviews,
+        (ad) => {
+          const lookupKeys = metaLibraryItemLookupKeys(ad);
+          const run = runStatusForLibraryCard("meta", ad.id, lookupKeys);
+          return isLibraryAdRunning("meta", ad, run, metaScrapeAtMs);
+        },
+        (ad) => {
+          const lookupKeys = metaLibraryItemLookupKeys(ad);
+          const run = runStatusForLibraryCard("meta", ad.id, lookupKeys);
+          const scrapedPreview = previewUrlForCard("meta", ad.id, lookupKeys)?.trim();
+          return metaAdQualifiesForDashboardInlinePreview(ad, {
+            scrapedPreviewUrl: scrapedPreview,
+            archivedCreativeUrl: run?.archivedCreativeUrl,
+          });
+        },
+        META_ADS_INLINE_PREVIEW,
+        (ad) => ad.id,
+      ),
+    [displayMetaAdsWithPreviews, runStatusForLibraryCard, metaScrapeAtMs, previewUrlForCard],
   );
 
   const inlinePreviewTikTokAdsDisplay = useMemo(
-    () => displayTikTokAds.filter(tikTokAdHasDashboardInlinePreview),
-    [displayTikTokAds]
+    () =>
+      pickDashboardInlinePreviewAds(
+        displayTikTokAds,
+        (ad) => {
+          const run = runStatusForLibraryCard("tiktok", ad.id);
+          return isLibraryAdRunning("tiktok", ad, run);
+        },
+        tikTokAdHasDashboardInlinePreview,
+        META_ADS_INLINE_PREVIEW,
+        (ad) => ad.id,
+      ),
+    [displayTikTokAds, runStatusForLibraryCard],
+  );
+
+  const inlinePreviewGoogleRows = useMemo(
+    () =>
+      pickDashboardInlinePreviewAds(
+        filteredGoogleRows,
+        (row) => {
+          const pl = row.type === "youtube" ? "youtube" : "google";
+          const run = runStatusForLibraryCard(pl, row.id);
+          return isLibraryAdRunning(pl, row, run);
+        },
+        googleAdRowHasDashboardInlinePreview,
+        META_ADS_INLINE_PREVIEW,
+        (row) => row.id,
+      ),
+    [filteredGoogleRows, runStatusForLibraryCard],
+  );
+
+  const inlinePreviewLinkedInAds = useMemo(
+    () =>
+      pickDashboardInlinePreviewAds(
+        filteredLinkedInAds,
+        (ad) => {
+          const run = runStatusForLibraryCard("linkedin", ad.id);
+          return isLibraryAdRunning("linkedin", ad, run);
+        },
+        linkedInAdHasDashboardInlinePreview,
+        META_ADS_INLINE_PREVIEW,
+        (ad) => ad.id,
+      ),
+    [filteredLinkedInAds, runStatusForLibraryCard],
+  );
+
+  const inlinePreviewPinterestAds = useMemo(
+    () =>
+      pickDashboardInlinePreviewAds(
+        filteredPinterestAds,
+        (ad) => {
+          const run = runStatusForLibraryCard("pinterest", ad.id);
+          return isLibraryAdRunning("pinterest", ad, run);
+        },
+        pinterestAdHasDashboardInlinePreview,
+        META_ADS_INLINE_PREVIEW,
+        (ad) => ad.id,
+      ),
+    [filteredPinterestAds, runStatusForLibraryCard],
+  );
+
+  const inlinePreviewSnapchatAds = useMemo(
+    () =>
+      pickDashboardInlinePreviewAds(
+        filteredSnapchatAds,
+        (ad) => {
+          const run = runStatusForLibraryCard("snapchat", ad.id);
+          return isLibraryAdRunning("snapchat", ad, run);
+        },
+        snapchatAdHasDashboardInlinePreview,
+        META_ADS_INLINE_PREVIEW,
+        (ad) => ad.id,
+      ),
+    [filteredSnapchatAds, runStatusForLibraryCard],
   );
 
   /** Skeleton grid only when there are no creatives yet; platform-only refresh keeps existing cards — spinner is on the refresh button. */
@@ -4001,22 +3668,63 @@ function CompetitorDashboardBody({
 
   const adsPlatformsKey = adsPlatforms.join("\0");
 
+  /** One-time TikTok Apify run when channel is on but discovery never scraped it. */
+  useEffect(() => {
+    if (!adLibraryDataEnabled || !fetchTikTok || !adLibraryPlatforms.includes("tiktok")) return;
+    if (adLibLoading) return;
+    const lastScrape = platformTrackingByPlatform.tiktok?.lastScrapeAt;
+    if (lastScrape) return;
+    if (
+      platformHasScrapedLibraryData("tiktok", adLib, {
+        activeAdCount: platformTrackingByPlatform.tiktok?.activeAdCount,
+      })
+    ) {
+      return;
+    }
+    const storageKey = `rival-tiktok-bootstrap:${cacheDomainNorm}`;
+    try {
+      if (sessionStorage.getItem(storageKey)) return;
+      sessionStorage.setItem(storageKey, String(Date.now()));
+    } catch {
+      return;
+    }
+    void bootstrapPlatformScrape("tiktok");
+  }, [
+    adLib,
+    adLibLoading,
+    adLibraryDataEnabled,
+    adLibraryPlatforms,
+    bootstrapPlatformScrape,
+    cacheDomainNorm,
+    fetchTikTok,
+    platformTrackingByPlatform.tiktok?.activeAdCount,
+    platformTrackingByPlatform.tiktok?.lastScrapeAt,
+  ]);
+
   useEffect(() => {
     setVisibleAdPlatforms(null);
   }, [adsPlatformsKey, cacheDomainNorm]);
 
-  const platformsWithScrapedData = useMemo(
-    () =>
-      adsPlatforms.filter((platform) =>
-        platformHasScrapedLibraryData(platform, adLibLoading ? null : adLib, {
-          activeAdCount: platformTrackingByPlatform[platform]?.activeAdCount,
-        }),
-      ),
-    [adsPlatforms, adLib, adLibLoading, platformTrackingByPlatform],
-  );
-
-  /** Hide failed or never-scraped platforms until the user turns them on manually. */
-  const defaultVisibleAdPlatforms = platformsWithScrapedData;
+  /** Show all configured platforms — including never-scraped ones so users can run first scrape. */
+  const defaultVisibleAdPlatforms = useMemo(() => {
+    const visible: AdsLibraryPlatform[] = [];
+    if (fetchMeta) visible.push("meta");
+    if (fetchGoogle) visible.push("google");
+    if (fetchLinkedIn) visible.push("linkedin");
+    if (fetchTikTok) visible.push("tiktok");
+    if (fetchPinterest) visible.push("pinterest");
+    if (fetchSnapchat) visible.push("snapchat");
+    const order = new Map(adLibraryPlatforms.map((p, i) => [p, i] as const));
+    return visible.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
+  }, [
+    adLibraryPlatforms,
+    fetchMeta,
+    fetchGoogle,
+    fetchLinkedIn,
+    fetchTikTok,
+    fetchPinterest,
+    fetchSnapchat,
+  ]);
 
   const effectiveVisibleAdPlatforms = visibleAdPlatforms ?? defaultVisibleAdPlatforms;
 
@@ -4460,7 +4168,27 @@ function CompetitorDashboardBody({
       <KeepMountedTab active={navTab === "ads library"} className="!flex-none flex-col">
         <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
-            {navSub === "saved" && ownBrandSavedAdsEnabled ? (
+            {navSub === "library-settings" ? (
+              isOwnWorkspace ? (
+                <WorkspaceAdSourcesPanel
+                  brandId={myBrand.id}
+                  brandName={myBrand.name}
+                  domain={myBrand.domain ?? ""}
+                  initialSetup={myBrand.adsSetup ?? null}
+                  noBottomMargin
+                />
+              ) : (
+                <CompetitorAdLibrarySettingsPanel
+                  competitorSlug={brand.domain}
+                  competitorLabel={competitorDisplayLabel}
+                  competitorDomain={brand.domain}
+                  brandLogoUrl={brand.logoUrl}
+                  platformIds={effectivePlatformIds}
+                  channelsCsv={effectiveChannelsFromResolver}
+                  activeBrandId={myBrand.id}
+                />
+              )
+            ) : navSub === "saved" && ownBrandSavedAdsEnabled ? (
               <SavedAdsPanel
                 competitorId={competitorDbIdForSaved}
                 competitorLabel={competitorDisplayLabel}
@@ -4883,6 +4611,10 @@ function CompetitorDashboardBody({
                           key={ad.id}
                           ad={ad}
                           brand={brand}
+                          scrapedPreviewUrl={previewUrlForCard(
+                            ad.type === "youtube" ? "youtube" : "google",
+                            ad.id,
+                          )}
                           onOpenDetail={() =>
                             void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id, [], ad)
                           }
@@ -4911,6 +4643,10 @@ function CompetitorDashboardBody({
                   <GoogleAdRowCard
                     ad={ad}
                     brand={brand}
+                    scrapedPreviewUrl={previewUrlForCard(
+                      ad.type === "youtube" ? "youtube" : "google",
+                      ad.id,
+                    )}
                     onOpenDetail={() =>
                       void openAdLibraryCard(ad.type === "youtube" ? "youtube" : "google", ad.id, [], ad)
                     }

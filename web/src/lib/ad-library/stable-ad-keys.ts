@@ -19,6 +19,7 @@ import type {
   SnapchatAdCard,
   TikTokAdCard,
 } from "./normalize";
+import { tiktokAdIdFromLibraryUrl } from "./tiktok-ad-library-url";
 
 export {
   parseGoogleTransparencyAdvertiserCreative,
@@ -51,8 +52,7 @@ function linkedInDetailIdFromAdUrl(url: string): string | null {
 }
 
 function tiktokAdIdFromAdUrl(url: string): string | null {
-  const m = /\/ads\/detail\/([^/?#]+)/i.exec(url.trim());
-  return m?.[1]?.trim() ?? null;
+  return tiktokAdIdFromLibraryUrl(url);
 }
 
 function pinterestPinIdFromUrl(url: string): string | null {

@@ -26,6 +26,10 @@ import {
   harvestDeepMetaTransparencyFields,
 } from "@/lib/ad-detail/meta-ad-detail-fields";
 import { resolveMetaAdLibraryUrlFromPayload } from "@/lib/ad-library/meta-ad-library-url";
+import {
+  buildTikTokAdLibraryDetailUrl,
+  resolveTikTokAdLibraryUrlFromPayload,
+} from "@/lib/ad-library/tiktok-ad-library-url";
 
 /** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
 export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
@@ -204,8 +208,10 @@ export type TikTokAdCard = {
   /** Parsed from raw Ad Dates for header “Active nD” / lifespan (ms since epoch). */
   flightStartMs?: number;
   flightEndMs?: number;
-  /** e.g. "1K-10K" from Ad Audience / reach */
+  /** Location reach band — Lexis `adImpressions`; legacy `Ad Audience` / reach */
   uniqueUsersSeen?: string | null;
+  /** Lexis `adImpressions` when distinct from estimated audience */
+  impressions?: string | null;
   /** Library “Ad Audience” line when distinct from reach band */
   adAudienceLine?: string | null;
   targetRegion?: string | null;
@@ -213,6 +219,17 @@ export type TikTokAdCard = {
   targetGender?: string | null;
   /** “Ad target audience size” / estimated audience when disclosed */
   targetAudienceSize?: string | null;
+  /** Lexis: sponsor / paid-for-by entity */
+  paidForBy?: string | null;
+  /** Lexis: advertiser registry location */
+  advertiserLocation?: string | null;
+  /** Lexis: landing / external URL */
+  landingUrl?: string | null;
+  /** Linked TikTok account @username when disclosed */
+  tiktokUsername?: string | null;
+  tiktokDisplayName?: string | null;
+  /** Lexis library status e.g. active */
+  libraryStatus?: string | null;
   advertiserMismatch?: boolean;
 };
 
@@ -1225,6 +1242,19 @@ export function isUsableGoogleStillImagePreviewUrl(url: string): boolean {
   return true;
 }
 
+/** First renderable still URL — skips Transparency `content.js` loaders and favicons. */
+export function pickGoogleStillPreviewExternalUrl(
+  ...candidates: (string | null | undefined)[]
+): string {
+  for (const raw of candidates) {
+    const t = raw?.trim();
+    if (!t || !isUsableGoogleStillImagePreviewUrl(t)) continue;
+    if (isGoogleFaviconUrl(t)) continue;
+    return t;
+  }
+  return "";
+}
+
 /** Extract YouTube video id from watch / embed / shorts / youtu.be URLs. */
 export function extractYouTubeVideoId(url: string): string | null {
   if (!url?.trim()) return null;
@@ -1326,7 +1356,7 @@ export function googleAdsExternalLinkLabel(url: string): { primary: string; hint
 /**
  * Apify Google Transparency items often nest images under `images[]`, `creative`, `variants`, etc.
  */
-function findFirstGoogleCreativeImageUrl(obj: unknown, depth = 0): string | null {
+export function findFirstGoogleCreativeImageUrl(obj: unknown, depth = 0): string | null {
   if (depth > 6 || obj === null || obj === undefined) return null;
   if (typeof obj === "string") {
     const s = obj.trim();
@@ -1550,6 +1580,12 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
   }
 
   const deepImageUrl = findFirstGoogleCreativeImageUrl(o);
+  const imageUrlResolved = pickImage() ?? deepImageUrl ?? null;
+  const stillPreview = pickGoogleStillPreviewExternalUrl(
+    pick(["previewUrl", "preview_url", "Preview URL", "previewURL"]),
+    imageUrlResolved,
+    deepImageUrl,
+  );
 
   const rawId = o.id;
   const idStr = typeof rawId === "string" && rawId.trim() ? rawId.trim() : undefined;
@@ -1579,8 +1615,8 @@ export function normalizeGoogleApiItem(raw: unknown): GoogleCompanyAdItem {
       "advertiserNameText",
     ]),
     domain: pick(["domain", "advertiserDomain", "advertiser_domain", "destinationDomain", "destination_domain"]),
-    previewUrl: pick(["previewUrl", "preview_url", "Preview URL", "previewURL"]) ?? null,
-    imageUrl: pickImage() ?? deepImageUrl ?? null,
+    previewUrl: stillPreview || null,
+    imageUrl: imageUrlResolved,
     firstShown: pick(["firstShown", "first_shown", "firstShownDate", "first_shown_date"]),
     lastShown: pick(["lastShown", "last_shown", "lastShownDate", "last_shown_date"]),
     headline: pick(["headline", "longHeadline", "long_headline"]),
@@ -1828,8 +1864,9 @@ export function googleItemToRow(
       ? `${item.firstShown?.slice(0, 10) ?? "…"} – ${item.lastShown?.slice(0, 10) ?? "…"}`
       : null;
 
-  const previewUrl = item.previewUrl?.trim() || null;
-  let img: string | null = previewUrl || item.imageUrl?.trim() || null;
+  const stillPreview = pickGoogleStillPreviewExternalUrl(item.previewUrl, item.imageUrl);
+  const previewUrl = stillPreview || null;
+  let img: string | null = stillPreview || null;
   if (!img && displayDomain) {
     img = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(cleanHost(displayDomain))}&sz=128`;
   }
@@ -3397,6 +3434,70 @@ function collectTikTokTransparencyPairs(raw: Record<string, unknown>): Map<strin
   return out;
 }
 
+function readTikTokMetricLabel(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const raw = (value as Record<string, unknown>).raw;
+    if (typeof raw === "string" && raw.trim()) return raw.trim();
+  }
+  return undefined;
+}
+
+function readTikTokAdvertiserName(raw: Record<string, unknown>): string | undefined {
+  const nest = raw.Advertiser ?? raw.advertiser;
+  if (nest && typeof nest === "object" && !Array.isArray(nest)) {
+    const name = firstString(nest as Record<string, unknown>, ["name", "Name"]);
+    if (name) return name;
+  }
+  return firstString(raw, ["advertiserName", "Advertiser Name", "ad_sponsor", "Ad Sponsor"]);
+}
+
+/** `tiktok-ads-scraper` library mode: `Ad Targeting` with string arrays (`regions`, `age`, `gender`). */
+function mergeTikTokStringArrayTargeting(raw: Record<string, unknown>): {
+  targetRegion?: string;
+  targetAge?: string;
+  targetGender?: string;
+} {
+  const out: { targetRegion?: string; targetAge?: string; targetGender?: string } = {};
+
+  for (const nestKey of ["Ad Targeting", "adTargeting", "Targeting", "targeting"] as const) {
+    const n = raw[nestKey];
+    if (!n || typeof n !== "object" || Array.isArray(n)) continue;
+    const o = n as Record<string, unknown>;
+
+    const regions = o.regions ?? o.Regions;
+    if (Array.isArray(regions) && regions.length > 0 && regions.every((x) => typeof x === "string")) {
+      out.targetRegion = regions
+        .map((r) => expandTikTokRegionCode(String(r).trim().toUpperCase()))
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    const age = o.age ?? o.Age ?? o.ages ?? o.Ages;
+    if (Array.isArray(age) && age.length > 0 && age.every((x) => typeof x === "string")) {
+      out.targetAge = age.map((a) => String(a).trim()).filter(Boolean).join(", ");
+    }
+
+    const gender = o.gender ?? o.Gender ?? o.genders;
+    if (Array.isArray(gender) && gender.length > 0 && gender.every((x) => typeof x === "string")) {
+      out.targetGender = gender
+        .map((g) => {
+          const gl = String(g).trim().toLowerCase();
+          if (gl === "female") return "Female";
+          if (gl === "male") return "Male";
+          if (gl === "unknown") return "Unknown";
+          return String(g).trim();
+        })
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    if (out.targetRegion || out.targetAge || out.targetGender) return out;
+  }
+
+  return out;
+}
+
 const TIKTOK_AGE_BAND_KEYS = ["13-17", "18-24", "25-34", "35-44", "45-54", "55+"] as const;
 
 function isTikTokGenderTargetingEntry(item: unknown): item is Record<string, unknown> {
@@ -3416,16 +3517,14 @@ function isTikTokAgeTargetingEntry(item: unknown): item is Record<string, unknow
   return TIKTOK_AGE_BAND_KEYS.some((k) => typeof o[k] === "boolean");
 }
 
-/** TikTok library: if `unknown` is true, gender is Unknown regardless of female/male. */
+/** TikTok library gender flags — Lexis can enable female, male, and unknown together. */
 function formatTikTokGenderFromEntry(o: Record<string, unknown>): string | null {
-  if (o.unknown === true) return "Unknown";
-  if (o.other === true) return "Other";
-  const female = o.female === true;
-  const male = o.male === true;
-  if (!female && !male) return null;
-  if (female && male) return "Female, Male";
-  if (female) return "Female";
-  return "Male";
+  const parts: string[] = [];
+  if (o.female === true) parts.push("Female");
+  if (o.male === true) parts.push("Male");
+  if (o.unknown === true) parts.push("Unknown");
+  if (o.other === true) parts.push("Other");
+  return parts.length ? parts.join(", ") : null;
 }
 
 function formatTikTokAgeBandsFromEntry(o: Record<string, unknown>): string | null {
@@ -3455,7 +3554,7 @@ function firstTikTokGenderEntries(raw: Record<string, unknown>): Record<string, 
     return rows.length ? (rows as Record<string, unknown>[]) : null;
   };
 
-  for (const v of [raw.gender, raw.Gender, raw.genders]) {
+  for (const v of [raw.gender, raw.Gender, raw.genders, raw.targetingByGender]) {
     const got = tryTake(v);
     if (got) return got;
   }
@@ -3504,7 +3603,7 @@ function firstTikTokAgeEntries(raw: Record<string, unknown>): Record<string, unk
     return rows.length ? (rows as Record<string, unknown>[]) : null;
   };
 
-  for (const v of [raw.age, raw.Age, raw.ages, raw.Ages, raw.ageTargeting, raw.targetAudienceAge]) {
+  for (const v of [raw.age, raw.Age, raw.ages, raw.Ages, raw.ageTargeting, raw.targetAudienceAge, raw.targetingByAge]) {
     const got = tryTake(v);
     if (got) return got;
   }
@@ -3550,6 +3649,39 @@ function firstTikTokAgeEntries(raw: Record<string, unknown>): Record<string, unk
  * Overrides flat string classification when present.
  */
 export function mergeTikTokStructuredTargeting(raw: Record<string, unknown>): {
+  targetRegion?: string;
+  targetAge?: string;
+  targetGender?: string;
+} {
+  const stringArray = mergeTikTokStringArrayTargeting(raw);
+  const legacy = mergeTikTokStructuredTargetingLegacy(raw);
+  const location = mergeTikTokLocationTargeting(raw);
+  return {
+    targetRegion: stringArray.targetRegion || location.targetRegion || legacy.targetRegion,
+    targetAge: stringArray.targetAge || legacy.targetAge,
+    targetGender: stringArray.targetGender || legacy.targetGender,
+  };
+}
+
+/** Lexis `targetingByLocation[].region` codes → display region line. */
+function mergeTikTokLocationTargeting(raw: Record<string, unknown>): {
+  targetRegion?: string;
+} {
+  const loc = raw.targetingByLocation;
+  if (!Array.isArray(loc)) return {};
+  const codes = new Set<string>();
+  for (const item of loc) {
+    if (!item || typeof item !== "object") continue;
+    const r = (item as Record<string, unknown>).region;
+    if (typeof r === "string" && r.trim()) codes.add(r.trim().toUpperCase());
+  }
+  if (!codes.size) return {};
+  return {
+    targetRegion: [...codes].sort().map(expandTikTokRegionCode).join(", "),
+  };
+}
+
+function mergeTikTokStructuredTargetingLegacy(raw: Record<string, unknown>): {
   targetRegion?: string;
   targetAge?: string;
   targetGender?: string;
@@ -3676,8 +3808,20 @@ export function extractTikTokTransparencyFields(raw: Record<string, unknown>): {
 }
 
 function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
+  const lexisImpressions = firstString(raw, ["adImpressions", "ad_impressions"]);
+  if (lexisImpressions) return lexisImpressions;
+
+  const adReach = raw["Ad Reach"];
+  if (adReach && typeof adReach === "object" && !Array.isArray(adReach)) {
+    const totalImpressions = (adReach as Record<string, unknown>).total_impressions;
+    const fromReach = readTikTokMetricLabel(totalImpressions);
+    if (fromReach) return fromReach;
+  }
+
+  const fromAudience = readTikTokMetricLabel(raw["Ad Audience"]);
+  if (fromAudience) return fromAudience;
+
   const direct = firstString(raw, [
-    "Ad Audience",
     "adAudience",
     "audience",
     "reach",
@@ -3694,7 +3838,7 @@ function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
       if (est) return est;
     }
   }
-  return firstString(raw, ["Ad Target Audience Size", "adTargetAudienceSize"]);
+  return readTikTokMetricLabel(raw["Ad Target Audience Size"]);
 }
 
 function parseTikTokAudienceScalar(fragment: string): number | null {
@@ -3759,22 +3903,139 @@ export function sortTikTokAdsForResponse(ads: TikTokAdCard[]): TikTokAdCard[] {
   });
 }
 
-/** Map data_xplorer/tiktok-ads-library-pay-per-event dataset row → card. */
+/** `lexis-solutions/tiktok-ads-scraper` rows use camelCase (`adId`, `adImpressions`, …). */
+export function isLexisTikTokDatasetRow(raw: Record<string, unknown>): boolean {
+  if (raw.adImpressions != null || raw.adEstimatedAudience != null) return true;
+  if (raw.targetingByLocation != null || raw.targetingByAge != null) return true;
+  return typeof raw.adVideoUrl === "string" && Boolean(raw.adId ?? raw.advertiserName);
+}
+
+function readLexisTikTokEpochMs(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value > 1e12 ? value : value * 1000;
+  }
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    const n = Number(value.trim());
+    if (Number.isFinite(n) && n > 0) return n > 1e12 ? n : n * 1000;
+  }
+  return undefined;
+}
+
+function lexisTikTokRowToCard(
+  raw: Record<string, unknown>,
+  index: number,
+  ctx?: { brandName?: string; brandDomain?: string; confirmedAdvertiserQuery?: string },
+): TikTokAdCard | null {
+  const id = firstString(raw, ["adId", "ad_id", "id"]) ?? `tt-${index}`;
+  let advertiser =
+    firstString(raw, ["advertiserName", "advertiserPaidForBy"]) ?? readTikTokAdvertiserName(raw) ?? "Advertiser";
+  if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiser.trim())) {
+    const fb = effectiveCompetitorBrandLabel(ctx?.brandName, ctx?.brandDomain);
+    if (fb) advertiser = fb;
+  }
+
+  const landingUrl = firstString(raw, ["adLandingUrl", "ad_landing_url"]);
+  const headline = firstString(raw, ["adTitle", "Ad Title", "headline"]) ?? advertiser;
+  const desc = "—";
+
+  const imageUrls = raw.adImageUrls;
+  const firstImage =
+    Array.isArray(imageUrls) && typeof imageUrls[0] === "string" ? imageUrls[0].trim() : "";
+  const img =
+    firstString(raw, ["adVideoCover", "ad_video_cover", "previewUrl", "AD Preview"]) ||
+    firstImage ||
+    deepFindTikTokImageUrl(raw) ||
+    "";
+
+  const videoUrl = firstString(raw, ["adVideoUrl", "ad_video_url", "videoUrl"]);
+  const adUrl =
+    resolveTikTokAdLibraryUrlFromPayload({ ...raw, id: String(id) }) ??
+    buildTikTokAdLibraryDetailUrl(String(id));
+
+  const flightStartMs = readLexisTikTokEpochMs(raw.adStartDate);
+  const flightEndMs = readLexisTikTokEpochMs(raw.adEndDate);
+  const firstShown = flightStartMs != null ? formatTikTokUiDate(new Date(flightStartMs).toISOString()) : null;
+  const lastShown = flightEndMs != null ? formatTikTokUiDate(new Date(flightEndMs).toISOString()) : null;
+
+  const impressions = firstString(raw, ["adImpressions"]) ?? null;
+  const estimatedAudience = firstString(raw, ["adEstimatedAudience"]) ?? null;
+  const uniqueUsersSeen = impressions ?? estimatedAudience ?? pickTikTokAudience(raw) ?? null;
+
+  const structured = mergeTikTokStructuredTargeting(raw);
+  const advertiserLocation = firstString(raw, ["advertiserLocation", "advertiser_location"]);
+  const targetRegion =
+    structured.targetRegion ||
+    (advertiserLocation ? advertiserLocation : undefined);
+
+  const ttUser = raw.advertiserTtUser;
+  let tiktokUsername: string | undefined;
+  let tiktokDisplayName: string | undefined;
+  if (ttUser && typeof ttUser === "object" && !Array.isArray(ttUser)) {
+    const u = ttUser as Record<string, unknown>;
+    tiktokUsername = firstString(u, ["username"]);
+    tiktokDisplayName = firstString(u, ["display_name", "displayName"]);
+  }
+
+  const paidForBy = firstString(raw, ["advertiserPaidForBy", "advertiser_paid_for_by"]);
+  const libraryStatus = firstString(raw, ["status"]);
+
+  const bn = ctx?.brandName?.trim() ?? "";
+  const advertiserMismatch = ctx?.confirmedAdvertiserQuery?.trim()
+    ? confirmedAdvertiserQueryMismatchForCard(ctx.confirmedAdvertiserQuery, advertiser)
+    : (Boolean(bn) || Boolean(cleanDomainHost(ctx?.brandDomain))) &&
+      brandAdvertiserNameMismatchForCard(bn, advertiser, ctx?.brandDomain);
+
+  const flightStartOk = flightStartMs !== undefined && !Number.isNaN(flightStartMs);
+  const flightEndOk = flightEndMs !== undefined && !Number.isNaN(flightEndMs);
+
+  return {
+    id: String(id),
+    headline,
+    desc,
+    url: (landingUrl || adUrl).replace(/^https?:\/\//, "").slice(0, 56) || "tiktok.com",
+    img,
+    advertiser,
+    adUrl,
+    videoUrl: videoUrl || undefined,
+    firstShown,
+    lastShown,
+    ...(flightStartOk ? { flightStartMs } : {}),
+    ...(flightEndOk ? { flightEndMs } : {}),
+    uniqueUsersSeen,
+    impressions,
+    adAudienceLine: estimatedAudience,
+    targetAudienceSize: estimatedAudience,
+    ...(targetRegion ? { targetRegion } : {}),
+    ...(structured.targetAge ? { targetAge: structured.targetAge } : {}),
+    ...(structured.targetGender ? { targetGender: structured.targetGender } : {}),
+    ...(paidForBy ? { paidForBy } : {}),
+    ...(advertiserLocation ? { advertiserLocation } : {}),
+    ...(landingUrl ? { landingUrl } : {}),
+    ...(tiktokUsername ? { tiktokUsername } : {}),
+    ...(tiktokDisplayName ? { tiktokDisplayName } : {}),
+    ...(libraryStatus ? { libraryStatus } : {}),
+    ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
+  };
+}
+
+/** Map TikTok Ads Library dataset row → card (Lexis + data_xplorer). */
 export function tiktokApifyItemToCard(
   raw: Record<string, unknown>,
   index: number,
   ctx?: { brandName?: string; brandDomain?: string; confirmedAdvertiserQuery?: string }
 ): TikTokAdCard | null {
+  if (isLexisTikTokDatasetRow(raw)) {
+    return lexisTikTokRowToCard(raw, index, ctx);
+  }
+
   const id =
     firstString(raw, ["adId", "ad_id", "AD ID", "id"]) ?? `tt-${index}`;
-  let advertiser =
-    firstString(raw, ["advertiserName", "Advertiser Name", "ad_sponsor", "Ad Sponsor"]) ??
-    "Advertiser";
+  let advertiser = readTikTokAdvertiserName(raw) ?? "Advertiser";
   if (GENERIC_ADVERTISER_PLACEHOLDER.test(advertiser.trim())) {
     const fb = effectiveCompetitorBrandLabel(ctx?.brandName, ctx?.brandDomain);
     if (fb) advertiser = fb;
   }
-  const headline = firstString(raw, ["headline", "Headline"]) ?? advertiser;
+  const headline = firstString(raw, ["Ad Title", "headline", "Headline"]) ?? advertiser;
   const desc =
     firstString(raw, ["description", "body", "copy"]) ??
     firstString(
@@ -3806,8 +4067,8 @@ export function tiktokApifyItemToCard(
     deepFindTikTokImageUrl(raw) ??
     "";
   const adUrl =
-    firstString(raw, ["adLibraryUrl", "Ad Detail URL", "ad_detail_url", "url"]) ??
-    `https://library.tiktok.com/ads/detail/${encodeURIComponent(id)}`;
+    resolveTikTokAdLibraryUrlFromPayload({ ...raw, id: String(id) }) ??
+    buildTikTokAdLibraryDetailUrl(String(id));
 
   const videoUrl =
     parseTikTokVideoUrlFromMedia(adMedia) ??
@@ -3828,6 +4089,8 @@ export function tiktokApifyItemToCard(
   const targetRegion = structured.targetRegion || transparency.targetRegion;
   const targetAge = structured.targetAge || transparency.targetAge;
   const targetGender = structured.targetGender || transparency.targetGender;
+  const targetAudienceSize =
+    readTikTokMetricLabel(raw["Ad Target Audience Size"]) ?? transparency.targetAudienceSize;
 
   const bn = ctx?.brandName?.trim() ?? "";
   const advertiserMismatch = ctx?.confirmedAdvertiserQuery?.trim()
@@ -3853,7 +4116,7 @@ export function tiktokApifyItemToCard(
     ...(targetRegion ? { targetRegion } : {}),
     ...(targetAge ? { targetAge } : {}),
     ...(targetGender ? { targetGender } : {}),
-    ...(transparency.targetAudienceSize ? { targetAudienceSize: transparency.targetAudienceSize } : {}),
+    ...(targetAudienceSize ? { targetAudienceSize } : {}),
     ...(advertiserMismatch ? { advertiserMismatch: true } : {}),
   };
 }

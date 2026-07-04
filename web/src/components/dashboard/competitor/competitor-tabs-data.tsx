@@ -25,7 +25,8 @@ export type CompetitorSubTabId =
   | "copy-vault"
   | "feed"
   | "insights"
-  | "organic-settings";
+  | "organic-settings"
+  | "library-settings";
 
 export type CompetitorPageTabId =
   | "ads library"
@@ -70,6 +71,7 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     subTabs: [
       { id: "all", label: "All Ads" },
       { id: "saved", label: "Saved" },
+      { id: "library-settings", label: "Settings" },
     ],
   },
   {

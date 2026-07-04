@@ -202,7 +202,18 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
       }
     })(),
     (async () => {
-      if (!platformsRequested.has("tiktok") || !platformsNeedingScrape.has("tiktok")) return;
+      if (!platformsRequested.has("tiktok")) return;
+      if (!platformsNeedingScrape.has("tiktok")) {
+        console.info(
+          "[parallel-scrape] TikTok skipped — not in platformsNeedingScrape",
+          JSON.stringify({ domain, brandName }),
+        );
+        return;
+      }
+      console.info(
+        "[parallel-scrape] TikTok Apify run starting",
+        JSON.stringify({ domain, brandName, tiktokMaxAds, tiktokRegion }),
+      );
       try {
         out.tiktok.ads = await scrapeTikTokAdsLibrary({
           brandName,

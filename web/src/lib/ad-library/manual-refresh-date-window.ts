@@ -1,5 +1,8 @@
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
-import { MANUAL_REFRESH_ADS_PER_PLATFORM } from "@/lib/ad-library/constants";
+import {
+  manualRefreshAdsCapForPlatform,
+  type InitialScrapePlatform,
+} from "@/lib/ad-library/constants";
 import { msToUtcYmd } from "@/lib/ad-library/scheduled-scrape-date-window";
 
 export type ManualRefreshDateWindow = {
@@ -13,11 +16,11 @@ export function computeManualRefreshTodayWindow(nowMs = Date.now()): ManualRefre
   return { startYmd: today, endYmd: today };
 }
 
-/** TikTok library search works better with a rolling window than a single UTC day. */
+/** TikTok library search works better with a 1-year window (matches discovery default). */
 export function computeManualRefreshTikTokWindow(nowMs = Date.now()): ManualRefreshDateWindow {
   const endYmd = msToUtcYmd(nowMs);
   const start = new Date(nowMs);
-  start.setUTCDate(start.getUTCDate() - 30);
+  start.setUTCFullYear(start.getUTCFullYear() - 1);
   return { startYmd: msToUtcYmd(start.getTime()), endYmd };
 }
 
@@ -61,9 +64,13 @@ export function buildManualRefreshScrapeParams(
 /** POST `/api/ads/library` fields for a single-platform Pro manual refresh. */
 export function buildManualRefreshLibraryBodyForPlatform(
   platform: AdsLibraryPlatform,
-  adsPerPlatform = MANUAL_REFRESH_ADS_PER_PLATFORM,
+  adsPerPlatform?: number,
 ): Record<string, unknown> {
-  const cap = Math.max(1, adsPerPlatform);
+  const cap = Math.max(
+    1,
+    adsPerPlatform ??
+      manualRefreshAdsCapForPlatform(platform as InitialScrapePlatform),
+  );
   const dateParams = buildManualRefreshScrapeParams();
 
   const base: Record<string, unknown> = {

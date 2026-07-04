@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { isMetaAdActive, isTikTokAdActive } from "@/lib/ad-library/count-active-ads";
+import { isTikTokAdActive } from "@/lib/ad-library/count-active-ads";
 import { metaLibraryItemLookupKeys, metaScrapedRowMatchesLibraryItemId } from "@/lib/ad-library/meta-library-item-keys";
+import { isMetaRunningForLibraryRow } from "@/lib/ad-detail/resolve-meta-ad-killed";
 import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
 import type { MetaAdCard, TikTokAdCard } from "@/lib/ad-library/normalize";
 import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview-url";
@@ -155,11 +156,19 @@ export async function POST(request: Request): Promise<NextResponse> {
           resolvedToScraped[key] = row.id;
         }
         if (libraryLifecycle[key] == null) {
-          const scrapeMs = lastScrapedAt ? Date.parse(lastScrapedAt) : Number.NaN;
-          const scrapeAtMs = Number.isFinite(scrapeMs) ? scrapeMs : undefined;
           let running = false;
-          if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
-            running = isMetaAdActive(payload as MetaAdCard, scrapeAtMs);
+          if (
+            row.is_active === false &&
+            (pl === "meta" || pl === "google" || pl === "youtube" || pl === "tiktok")
+          ) {
+            running = false;
+          } else if (pl === "meta" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+            running = isMetaRunningForLibraryRow({
+              rawPayload: payload,
+              lastSeenAt: row.last_seen_at,
+              lastScrapedAt: lastScrapedAt,
+              isActiveDb: row.is_active,
+            });
           } else if (pl === "tiktok" && payload && typeof payload === "object" && !Array.isArray(payload)) {
             running = isTikTokAdActive(payload as TikTokAdCard);
           } else {

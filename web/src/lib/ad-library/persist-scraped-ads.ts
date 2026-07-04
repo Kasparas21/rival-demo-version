@@ -4,6 +4,7 @@ import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/ap
 import { hydrateMetaAdCardForLibrary, isMetaAdActive } from "@/lib/ad-library/count-active-ads";
 import { parseGoogleShownSummaryRange } from "@/lib/ad-library/google-shown-range";
 import type { GoogleAdRow } from "@/lib/ad-library/normalize";
+import { pickGoogleStillPreviewExternalUrl } from "@/lib/ad-library/normalize";
 import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
 import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-recompute";
 import type { Database } from "@/lib/supabase/types";
@@ -296,7 +297,8 @@ export function buildScrapedAdInsertsForPlatform(params: {
               row.shownSummary,
               row.advertiserName,
             ]),
-            ad_creative_url: row.img?.trim() || null,
+            ad_creative_url:
+              pickGoogleStillPreviewExternalUrl(row.previewUrl, row.img) || row.img?.trim() || null,
             format: normalizeCreativeFormat(row.format, row.img ? "image" : "text"),
             first_seen_at: first,
             last_seen_at: last,

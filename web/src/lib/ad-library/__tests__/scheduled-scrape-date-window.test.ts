@@ -2,47 +2,27 @@ import { describe, expect, it } from "vitest";
 
 import {
   computeScheduledScrapeDateWindow,
-  linkedinDateRangeForWindow,
+  computeTikTokScheduledScrapeDateWindow,
   utcYmdSpanDays,
 } from "@/lib/ad-library/scheduled-scrape-date-window";
 
-describe("computeScheduledScrapeDateWindow", () => {
-  it("uses last scrape day through today for first refresh", () => {
-    const window = computeScheduledScrapeDateWindow(
-      "2026-05-16T18:00:00.000Z",
-      Date.parse("2026-05-19T04:00:00.000Z")
-    );
-    expect(window).toEqual({ startYmd: "2026-05-16", endYmd: "2026-05-19" });
+describe("computeTikTokScheduledScrapeDateWindow", () => {
+  it("floors same-day discovery refresh to at least 30 days", () => {
+    const nowMs = Date.parse("2026-07-04T12:00:00.000Z");
+    const lastScrapeAt = "2026-07-04T08:00:00.000Z";
+    const rolling = computeScheduledScrapeDateWindow(lastScrapeAt, nowMs);
+    expect(utcYmdSpanDays(rolling.startYmd, rolling.endYmd)).toBe(1);
+
+    const tiktok = computeTikTokScheduledScrapeDateWindow(lastScrapeAt, nowMs);
+    expect(tiktok.endYmd).toBe("2026-07-04");
+    expect(utcYmdSpanDays(tiktok.startYmd, tiktok.endYmd)).toBeGreaterThanOrEqual(30);
   });
 
-  it("uses rolling window for second refresh", () => {
-    const window = computeScheduledScrapeDateWindow(
-      "2026-05-19T04:00:00.000Z",
-      Date.parse("2026-05-22T04:00:00.000Z")
-    );
-    expect(window).toEqual({ startYmd: "2026-05-19", endYmd: "2026-05-22" });
-  });
-});
-
-describe("linkedinDateRangeForWindow", () => {
-  it("maps short windows to past-week", () => {
-    expect(
-      linkedinDateRangeForWindow({ startYmd: "2026-05-19", endYmd: "2026-05-22" })
-    ).toBe("past-week");
-  });
-
-  it("uses past-month for inactive probe", () => {
-    expect(
-      linkedinDateRangeForWindow(
-        { startYmd: "2026-05-01", endYmd: "2026-05-19" },
-        { inactiveProbe: true }
-      )
-    ).toBe("past-month");
-  });
-});
-
-describe("utcYmdSpanDays", () => {
-  it("counts inclusive span", () => {
-    expect(utcYmdSpanDays("2026-05-16", "2026-05-19")).toBe(4);
+  it("keeps wider rolling windows unchanged", () => {
+    const nowMs = Date.parse("2026-07-04T12:00:00.000Z");
+    const lastScrapeAt = "2026-06-01T08:00:00.000Z";
+    const rolling = computeScheduledScrapeDateWindow(lastScrapeAt, nowMs);
+    const tiktok = computeTikTokScheduledScrapeDateWindow(lastScrapeAt, nowMs);
+    expect(tiktok).toEqual(rolling);
   });
 });

@@ -3,6 +3,7 @@ import { FULL_SWEEP_ADS_PER_PLATFORM, type InitialScrapePlatform } from "@/lib/a
 import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
 import {
   computeScheduledScrapeDateWindow,
+  computeTikTokScheduledScrapeDateWindow,
   linkedinDateRangeForWindow,
 } from "@/lib/ad-library/scheduled-scrape-date-window";
 
@@ -38,6 +39,7 @@ export function buildParallelScrapeScalars(
 ): ParallelScrapeScalars {
   const defaultLim = buildScheduledScrapeLimits("SECONDARY");
   const defaultWindow = computeScheduledScrapeDateWindow(firstScrapeAt ?? nowStamp, nowMs);
+  const defaultTiktokWindow = computeTikTokScheduledScrapeDateWindow(firstScrapeAt ?? nowStamp, nowMs);
   const defaultLinkedinRange = linkedinDateRangeForWindow(defaultWindow, { inactiveProbe: false });
 
   const scalars: ParallelScrapeScalars = {
@@ -48,8 +50,8 @@ export function buildParallelScrapeScalars(
     linkedinMaxAds: defaultLim.linkedinMaxAds,
     linkedinDateRange: defaultLinkedinRange,
     tiktokMaxAds: defaultLim.tiktokMaxAds,
-    tiktokStartDate: defaultWindow.startYmd,
-    tiktokEndDate: defaultWindow.endYmd,
+    tiktokStartDate: defaultTiktokWindow.startYmd,
+    tiktokEndDate: defaultTiktokWindow.endYmd,
     pinterestMaxResults: defaultLim.pinterestMaxResults,
     pinterestStartDate: defaultWindow.startYmd,
     pinterestEndDate: defaultWindow.endYmd,
@@ -67,6 +69,7 @@ export function buildParallelScrapeScalars(
     const lim = buildScheduledScrapeLimits(classification, { isInactiveProbe });
     const lastScrapeAt = lastScrapeByPlatform.get(platform) ?? firstScrapeAt ?? nowStamp;
     const dateWindow = computeScheduledScrapeDateWindow(lastScrapeAt, nowMs);
+    const tiktokDateWindow = computeTikTokScheduledScrapeDateWindow(lastScrapeAt, nowMs);
 
     switch (platform) {
       case "meta":
@@ -91,10 +94,10 @@ export function buildParallelScrapeScalars(
         });
         break;
       case "tiktok":
-        /** Full sweep for TikTok too — lifecycle comes from flight dates in each returned row. */
-        scalars.tiktokMaxAds = isInactiveProbe ? lim.tiktokMaxAds : FULL_SWEEP_ADS_PER_PLATFORM;
-        scalars.tiktokStartDate = "";
-        scalars.tiktokEndDate = "";
+        /** Rolling window + refresh cap — TikTok lifecycle comes from flight dates in each row. */
+        scalars.tiktokMaxAds = lim.tiktokMaxAds;
+        scalars.tiktokStartDate = tiktokDateWindow.startYmd;
+        scalars.tiktokEndDate = tiktokDateWindow.endYmd;
         break;
       case "pinterest":
         scalars.pinterestMaxResults = lim.pinterestMaxResults;

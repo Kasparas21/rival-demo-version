@@ -82,3 +82,22 @@ describe("resolveGoogleAdRowTransparencyHref", () => {
     );
   });
 });
+
+describe("resolveAdLibrarySourceUrl — TikTok", () => {
+  it("builds canonical ?ad_id= library URL from payload id", () => {
+    expect(
+      resolveAdLibrarySourceUrl("tiktok", {
+        id: "1868064758433793",
+      }),
+    ).toBe("https://library.tiktok.com/ads/detail/?ad_id=1868064758433793");
+  });
+
+  it("normalizes legacy path-style library URLs", () => {
+    expect(
+      resolveAdLibrarySourceUrl("tiktok", {
+        id: "1867625146670401",
+        adUrl: "https://library.tiktok.com/ads/detail/1867625146670401",
+      }),
+    ).toBe("https://library.tiktok.com/ads/detail/?ad_id=1867625146670401");
+  });
+});

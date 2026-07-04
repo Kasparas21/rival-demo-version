@@ -147,11 +147,14 @@ export function buildCanonicalDetailSlices(
       const firstShown = typeof p.firstShown === "string" ? p.firstShown.trim() : "";
       if (firstShown) runStartUtcMs = parseLooseDateStringToUtcMs(firstShown);
     }
-    const audience = typeof p.adAudienceLine === "string" ? p.adAudienceLine.trim() : "";
-    const reachBand = typeof p.uniqueUsersSeen === "string" ? p.uniqueUsersSeen.trim() : "";
-    impressionsFormatted = mergeReachAndImpressionsLine(audience, reachBand);
+    const impressions =
+      (typeof p.impressions === "string" ? p.impressions.trim() : "") ||
+      (typeof p.adImpressions === "string" ? p.adImpressions.trim() : "") ||
+      (typeof p.uniqueUsersSeen === "string" ? p.uniqueUsersSeen.trim() : "");
+    impressionsFormatted = impressions ? formatImpressionsDetailLabel(impressions) : null;
     const tr = typeof p.targetRegion === "string" ? p.targetRegion.trim() : "";
-    if (tr) regionDisplay = tr;
+    const advLoc = typeof p.advertiserLocation === "string" ? p.advertiserLocation.trim() : "";
+    regionDisplay = tr || advLoc;
   }
 
   return { runStartUtcMs, impressionsFormatted, regionDisplay };

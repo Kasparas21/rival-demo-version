@@ -2,6 +2,8 @@ import { coerceAdsLibraryResponse, type AdsLibraryResponse } from "./api-types";
 import {
   deepFindMetaPreviewUrl,
   looksLikeMetaRasterPreviewUrl,
+  pickGoogleStillPreviewExternalUrl,
+  type GoogleAdRow,
   type MetaAdCard,
   type TikTokAdCard,
 } from "./normalize";
@@ -133,6 +135,14 @@ export function repairMetaAdCardMedia(ad: MetaAdCard): MetaAdCard {
   return ad;
 }
 
+export function repairGoogleAdRowMedia(row: GoogleAdRow): GoogleAdRow {
+  if (row.type === "youtube") return row;
+  const still = pickGoogleStillPreviewExternalUrl(row.previewUrl, row.img);
+  if (!still) return row;
+  if (row.img === still && row.previewUrl === still) return row;
+  return { ...row, img: still, previewUrl: still };
+}
+
 export function repairTikTokAdCardMedia(ad: TikTokAdCard): TikTokAdCard {
   if (ad.img?.trim()) return ad;
   const loose = ad as unknown as Record<string, unknown>;
@@ -171,6 +181,10 @@ export function repairAdsLibraryResponseMedia(
     tiktok: {
       ...shell.tiktok,
       ads: (shell.tiktok.ads ?? []).map(repairTikTokAdCardMedia),
+    },
+    google: {
+      ...shell.google,
+      rows: (shell.google.rows ?? []).map(repairGoogleAdRowMedia),
     },
   };
 }

@@ -3,7 +3,11 @@
  * Persist layer often stores only thumbnails in `ad_creative_url` while `videoUrl` lives in `raw_payload`.
  */
 
-import { pickSnapchatHeroStillUrlFromPayload } from "@/lib/ad-library/normalize";
+import {
+  findFirstGoogleCreativeImageUrl,
+  pickGoogleStillPreviewExternalUrl,
+  pickSnapchatHeroStillUrlFromPayload,
+} from "@/lib/ad-library/normalize";
 import { googleCreativeDisplayUrl } from "@/lib/ad-library/google-creative-display-url";
 
 export function looksLikePlayableVideoUrl(url: string): boolean {
@@ -71,6 +75,10 @@ export function resolveAdDetailCreativeMedia(ad: {
       "Ad Preview",
     ]);
     if (pImg) pushDistinctPoster(pImg);
+    if (pl === "google" || pl === "youtube") {
+      const deep = findFirstGoogleCreativeImageUrl(payload);
+      if (deep) pushDistinctPoster(deep);
+    }
   }
 
   const videoCandidates: string[] = [];
@@ -98,8 +106,12 @@ export function resolveAdDetailCreativeMedia(ad: {
   const still = poster ?? (creative && !looksLikePlayableVideoUrl(creative) ? creative : null);
   if (still) {
     const pl = ad.platform.trim().toLowerCase();
+    const external =
+      pl === "google" || pl === "youtube"
+        ? pickGoogleStillPreviewExternalUrl(still, ...posterCandidates) || still
+        : still;
     const src =
-      pl === "google" || pl === "youtube" ? (googleCreativeDisplayUrl(still) ?? still) : still;
+      pl === "google" || pl === "youtube" ? (googleCreativeDisplayUrl(external) ?? external) : external;
     return { kind: "image", src };
   }
 

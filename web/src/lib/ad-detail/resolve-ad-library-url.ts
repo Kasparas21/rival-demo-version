@@ -5,6 +5,7 @@
 
 import { normalizeAdDetailPlatformKey } from "@/lib/ad-detail/ad-detail-platform";
 import { resolveMetaAdLibraryUrlFromPayload } from "@/lib/ad-library/meta-ad-library-url";
+import { resolveTikTokAdLibraryUrlFromPayload } from "@/lib/ad-library/tiktok-ad-library-url";
 import { extractDomainFromTransparencyDomainSearchUrl } from "@/lib/ad-library/google-transparency-url";
 import {
   buildGoogleTransparencyCreativeUrl,
@@ -111,16 +112,8 @@ export function resolveAdLibrarySourceUrl(platform: string, rawPayload: unknown)
     case "meta":
       return resolveMetaAdLibraryUrlFromPayload(p);
 
-    case "tiktok": {
-      const u = stringField(p, ["adUrl", "adLibraryUrl", "Ad Detail URL", "ad_detail_url", "url"]);
-      if (u && isHttpUrl(u) && /library\.tiktok\.com|tiktok\.com\/ads/i.test(u)) return u;
-
-      const id = typeof p.id === "string" ? p.id.trim() : "";
-      if (id && !isSyntheticFallbackId("tiktok", id)) {
-        return `https://library.tiktok.com/ads/detail/${encodeURIComponent(id)}`;
-      }
-      return null;
-    }
+    case "tiktok":
+      return resolveTikTokAdLibraryUrlFromPayload(p);
 
     case "linkedin": {
       const detail = stringField(p, ["adDetailUrl", "ad_detail_url", "detailUrl"]);

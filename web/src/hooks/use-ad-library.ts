@@ -29,7 +29,8 @@ import {
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { DEFAULT_TIKTOK_ADS_REGION } from "@/lib/ad-library/tiktok-regions";
 import type { ScrapeRequestFields } from "@/lib/ad-library/scrape-request-fields";
-import { buildManualRefreshLibraryBodyForPlatform } from "@/lib/ad-library/manual-refresh-date-window";
+import { buildManualRefreshLibraryBodyForPlatform, computeManualRefreshTikTokWindow } from "@/lib/ad-library/manual-refresh-date-window";
+import { REFRESH_ADS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { clearFreshDiscoveryScan, isFreshDiscoveryScan } from "@/lib/ad-library/discovery-scan-guard";
 import {
   clearWorkspaceBrandScrapeHandoff,
@@ -204,6 +205,8 @@ export function useAdLibrary(
       notifyLibraryUpdated?: boolean;
       /** Pro manual refresh — sets `intent: manual` and platform-specific Apify params. */
       manualRefresh?: boolean;
+      /** One-time first scrape for a platform that was never run (e.g. TikTok before discovery fix). */
+      bootstrapFirstScrape?: AdsLibraryPlatform;
     }) => {
       const platforms = opts?.platforms;
       const isManualRefresh = opts?.manualRefresh === true;
@@ -259,6 +262,12 @@ export function useAdLibrary(
           if (platforms[0] === "google") {
             body.filterGoogleActiveToday = true;
           }
+        }
+        if (opts?.bootstrapFirstScrape === "tiktok") {
+          const tw = computeManualRefreshTikTokWindow();
+          body.tiktokMaxAds = REFRESH_ADS_PER_PLATFORM;
+          body.tiktokStartDate = tw.startYmd;
+          body.tiktokEndDate = tw.endYmd;
         }
         const forceFresh = opts?.skipCache === true;
         /** Opening a competitor page must never trigger Apify — only `skipCache: true` (manual refresh / discovery). */
@@ -607,6 +616,14 @@ export function useAdLibrary(
     [load],
   );
 
+  const bootstrapPlatformScrape = useCallback(
+    (platform: AdsLibraryPlatform) => {
+      clearFreshDiscoveryScan(brand.domain);
+      return load({ skipCache: true, platforms: [platform], bootstrapFirstScrape: platform });
+    },
+    [load, brand.domain],
+  );
+
   const manualRefreshPlatform = useCallback(
     (platform: AdsLibraryPlatform) => {
       clearFreshDiscoveryScan(brand.domain);
@@ -636,6 +653,7 @@ export function useAdLibrary(
     refreshMicrosoftAds,
     refreshSnapchatAds,
     reloadPlatformFromCache,
+    bootstrapPlatformScrape,
     manualRefreshPlatform,
   };
 }

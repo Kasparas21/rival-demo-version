@@ -6,7 +6,7 @@ import {
   DEFAULT_PINTEREST_ADS_COUNTRY,
   PINTEREST_ADS_ALLOWED_COUNTRY_CODES,
 } from "./pinterest-regions";
-import { DEFAULT_TIKTOK_ADS_REGION, TIKTOK_ADS_LIBRARY_REGION_OPTIONS } from "./tiktok-regions";
+import { DEFAULT_TIKTOK_ADS_REGION } from "./tiktok-regions";
 
 const ISO_SET = new Set(ISO_3166_1_ALPHA2_CODES);
 
@@ -46,8 +46,6 @@ const GENERIC_TLD = new Set([
   "localhost",
 ]);
 
-const TIKTOK_REGION_SET = new Set(TIKTOK_ADS_LIBRARY_REGION_OPTIONS.map((o) => o.value));
-
 function cleanHost(raw: string): string {
   return (
     raw
@@ -80,7 +78,7 @@ export function inferIso2FromCompetitorDomain(raw: string | null | undefined): s
 
 /**
  * Defaults when confirming a competitor on the searching flow.
- * Meta / Google / LinkedIn start at “all countries”; Pinterest is guessed from the site TLD when possible.
+ * Meta / Google / LinkedIn / TikTok start at “all countries”; Pinterest is guessed from the site TLD when possible.
  */
 export function inferAdLibraryRegionDefaults(rawDomain: string | null | undefined): AdLibraryRegionPrefs {
   const iso = inferIso2FromCompetitorDomain(rawDomain);
@@ -89,7 +87,7 @@ export function inferAdLibraryRegionDefaults(rawDomain: string | null | undefine
   const metaCountry = "ALL";
   const googleRegion = "anywhere";
   const linkedinCountryCode = "";
-  const tiktokRegion = iso && TIKTOK_REGION_SET.has(iso) ? iso : DEFAULT_TIKTOK_ADS_REGION;
+  const tiktokRegion = DEFAULT_TIKTOK_ADS_REGION;
   const pinterestCountry =
     iso && PINTEREST_ADS_ALLOWED_COUNTRY_CODES.has(iso) ? iso : DEFAULT_PINTEREST_ADS_COUNTRY;
   const snapchatCountry = iso && eu.has(iso) ? iso : "DE";
