@@ -8,7 +8,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { CheckoutNavigationAnchor } from "@/components/analytics/checkout-navigation-link";
-import { AgentSettingsPanel } from "@/components/agent/AgentSettingsPanel";
+import { McpKeysSection } from "@/components/settings/McpKeysSection";
 import {
   buildCheckoutHref,
   buildUpgradeToProHref,
@@ -694,7 +694,7 @@ export default function SettingsPage() {
           </Link>
         </section>
 
-        <AgentSettingsPanel />
+        <McpKeysSection />
 
         <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>

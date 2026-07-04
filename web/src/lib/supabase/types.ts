@@ -755,8 +755,12 @@ export type Database = {
           enabled: boolean;
           watch_enabled: boolean;
           watch_sensitivity: string;
+          watch_min_score: number | null;
           watch_channels: Json;
           slack_webhook_url: string | null;
+          slack_connection: Json | null;
+          discord_webhook_url: string | null;
+          discord_connection: Json | null;
           watch_competitor_ids: string[] | null;
           watch_quiet_hours: Json;
           report_enabled: boolean;
@@ -773,8 +777,12 @@ export type Database = {
           enabled?: boolean;
           watch_enabled?: boolean;
           watch_sensitivity?: string;
+          watch_min_score?: number | null;
           watch_channels?: Json;
           slack_webhook_url?: string | null;
+          slack_connection?: Json | null;
+          discord_webhook_url?: string | null;
+          discord_connection?: Json | null;
           watch_competitor_ids?: string[] | null;
           watch_quiet_hours?: Json;
           report_enabled?: boolean;
@@ -791,8 +799,12 @@ export type Database = {
           enabled?: boolean;
           watch_enabled?: boolean;
           watch_sensitivity?: string;
+          watch_min_score?: number | null;
           watch_channels?: Json;
           slack_webhook_url?: string | null;
+          slack_connection?: Json | null;
+          discord_webhook_url?: string | null;
+          discord_connection?: Json | null;
           watch_competitor_ids?: string[] | null;
           watch_quiet_hours?: Json;
           report_enabled?: boolean;
@@ -802,6 +814,135 @@ export type Database = {
           brief_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      mcp_api_keys: {
+        Row: {
+          id: string;
+          user_id: string;
+          key_hash: string;
+          key_hint: string;
+          label: string;
+          last_used_at: string | null;
+          created_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          key_hash: string;
+          key_hint?: string;
+          label?: string;
+          last_used_at?: string | null;
+          created_at?: string;
+          revoked_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          key_hash?: string;
+          key_hint?: string;
+          label?: string;
+          last_used_at?: string | null;
+          created_at?: string;
+          revoked_at?: string | null;
+        };
+        Relationships: [];
+      };
+      mcp_oauth_clients: {
+        Row: {
+          id: string;
+          client_id: string;
+          client_name: string | null;
+          redirect_uris: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          client_name?: string | null;
+          redirect_uris?: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          client_id?: string;
+          client_name?: string | null;
+          redirect_uris?: Json;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      mcp_oauth_authorization_codes: {
+        Row: {
+          id: string;
+          code_hash: string;
+          user_id: string;
+          client_id: string;
+          redirect_uri: string;
+          code_challenge: string;
+          code_challenge_method: string;
+          scope: string;
+          expires_at: string;
+          used_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code_hash: string;
+          user_id: string;
+          client_id: string;
+          redirect_uri: string;
+          code_challenge: string;
+          code_challenge_method?: string;
+          scope?: string;
+          expires_at: string;
+          used_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          code_hash?: string;
+          user_id?: string;
+          client_id?: string;
+          redirect_uri?: string;
+          code_challenge?: string;
+          code_challenge_method?: string;
+          scope?: string;
+          expires_at?: string;
+          used_at?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      mcp_oauth_refresh_tokens: {
+        Row: {
+          id: string;
+          user_id: string;
+          client_id: string;
+          token_hash: string;
+          expires_at: string;
+          revoked_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          client_id: string;
+          token_hash: string;
+          expires_at: string;
+          revoked_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          client_id?: string;
+          token_hash?: string;
+          expires_at?: string;
+          revoked_at?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
