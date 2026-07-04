@@ -35,7 +35,7 @@
     },
     {
       "path": "/api/cron/autopilot-watch",
-      "schedule": "*/30 * * * *"
+      "schedule": "15 7 * * *"
     },
     {
       "path": "/api/cron/autopilot-report",
