@@ -3,7 +3,8 @@ import { createHash } from "crypto";
 import { Resend } from "resend";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { isAlertType } from "@/lib/alerts/alert-types";
+import { isAlertType, type AlertSeverity } from "@/lib/alerts/alert-types";
+import { digestListUnsubscribeHeaders } from "@/lib/digest/send-weekly-digest-batch";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 import { getResendApiKey, getResendFromEmail } from "@/lib/email/resend-config";
 import { getCachedStrategyOverview } from "@/lib/strategy-overview/recompute-strategy-overview";
@@ -13,10 +14,11 @@ import { acquireAutopilotCronLock, releaseAutopilotCronLock } from "./cron-lock"
 import { buildAutopilotSettingsUrl, buildWatchAlertInvestigateUrl } from "./watch-deep-links";
 import { buildAutopilotUnsubscribeUrl } from "./unsubscribe-token";
 import { parseWatchQuietHours, isInQuietHours } from "./watch-quiet-hours";
-import { passesWatchSensitivity } from "./watch-sensitivity";
+import { passesWatchFilter } from "./watch-sensitivity";
 import { generateWatchRecommendation } from "./watch-recommendation";
 import { buildWatchEmailHtml, buildWatchEmailText, watchEmailSubject } from "./watch-email";
 import { sendWatchSlackWebhook } from "./watch-slack";
+import { sendWatchDiscordWebhook } from "./watch-discord";
 import type {
   AutopilotSettingsRow,
   AutopilotWatchRunSummary,
@@ -29,14 +31,21 @@ const MAX_BLOCKS_PER_EMAIL = 5;
 const ALERT_LOOKBACK_DAYS = 7;
 const MAX_SEND_ATTEMPTS = 3;
 
+const SEVERITY_RANK: Record<AlertSeverity, number> = {
+  high: 3,
+  notable: 2,
+  info: 1,
+};
+
 function parseWatchChannels(raw: unknown): WatchChannels {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { email: true, slack: false };
+    return { email: true, slack: false, discord: false };
   }
   const o = raw as Record<string, unknown>;
   return {
     email: o.email !== false,
     slack: o.slack === true,
+    discord: o.discord === true,
   };
 }
 
@@ -47,9 +56,17 @@ function settingsFromRow(row: Record<string, unknown>): AutopilotSettingsRow {
     enabled: row.enabled === true,
     watch_enabled: row.watch_enabled !== false,
     watch_sensitivity: (row.watch_sensitivity as AutopilotSettingsRow["watch_sensitivity"]) ?? "balanced",
+    watch_min_score:
+      typeof row.watch_min_score === "number" && Number.isFinite(row.watch_min_score)
+        ? row.watch_min_score
+        : null,
     watch_channels: parseWatchChannels(row.watch_channels),
     slack_webhook_url:
       typeof row.slack_webhook_url === "string" ? row.slack_webhook_url : null,
+    slack_connection: null,
+    discord_webhook_url:
+      typeof row.discord_webhook_url === "string" ? row.discord_webhook_url : null,
+    discord_connection: null,
     watch_competitor_ids: Array.isArray(row.watch_competitor_ids)
       ? (row.watch_competitor_ids as string[])
       : null,
@@ -75,6 +92,28 @@ function batchDedupeKey(userId: string, alertIds: string[]): string {
   const sorted = [...alertIds].sort();
   const hash = createHash("sha256").update(sorted.join(",")).digest("hex").slice(0, 16);
   return `watch_batch:${userId}:${hash}`;
+}
+
+function parseChannelsSent(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((c): c is string => typeof c === "string");
+}
+
+function sortAlertsByPriority<T extends { severity: string; detected_at: string }>(alerts: T[]): T[] {
+  return [...alerts].sort((a, b) => {
+    const sa = SEVERITY_RANK[a.severity as AlertSeverity] ?? 0;
+    const sb = SEVERITY_RANK[b.severity as AlertSeverity] ?? 0;
+    if (sb !== sa) return sb - sa;
+    return Date.parse(b.detected_at) - Date.parse(a.detected_at);
+  });
+}
+
+async function persistChannelsSent(
+  admin: SupabaseClient<Database>,
+  outputId: string,
+  channelsSent: string[],
+): Promise<void> {
+  await admin.from("autopilot_outputs").update({ channels_sent: channelsSent }).eq("id", outputId);
 }
 
 function competitorHost(row: { brand_domain: string | null; slug: string }): string {
@@ -120,6 +159,7 @@ async function deliverWatchBatch(params: {
   dedupeKey: string;
   outputId?: string;
   appOrigin: string;
+  existingChannelsSent?: string[];
   existingAttempts?: number;
 }): Promise<"sent" | "failed" | "skipped"> {
   const { admin, userId, settings, blocks, overflowCount, alertIds, dedupeKey, appOrigin } = params;
@@ -129,12 +169,52 @@ async function deliverWatchBatch(params: {
   const settingsUrl = buildAutopilotSettingsUrl(appOrigin);
   const unsubscribeUrl = buildAutopilotUnsubscribeUrl(appOrigin, userId);
 
+  let channelsSent = [...(params.existingChannelsSent ?? [])];
+  const prevAttempts = params.existingAttempts ?? 0;
+  let outputId = params.outputId;
+
+  const payload: PendingPayload = {
+    blocks,
+    overflowCount,
+    alertIds,
+    _meta: { sendAttempts: prevAttempts },
+  };
+
+  const pendingRow = {
+    user_id: userId,
+    output_type: "watch_alert" as const,
+    dedupe_key: dedupeKey,
+    payload,
+    channels_sent: channelsSent,
+    status: "pending" as const,
+    error: null,
+    sent_at: null as string | null,
+  };
+
+  if (outputId) {
+    await admin.from("autopilot_outputs").update(pendingRow).eq("id", outputId);
+  } else {
+    const { data: upserted } = await admin
+      .from("autopilot_outputs")
+      .upsert(pendingRow, { onConflict: "dedupe_key" })
+      .select("id, channels_sent")
+      .maybeSingle();
+    outputId = upserted?.id;
+    if (upserted?.channels_sent) {
+      channelsSent = parseChannelsSent(upserted.channels_sent);
+    }
+  }
+
+  if (!outputId) {
+    console.error("[autopilot-FAILED] pending_row", userId, "could_not_persist_output");
+    return "failed";
+  }
+
+  let sendError: string | null = null;
   const { data: authUser } = await admin.auth.admin.getUserById(userId);
   const email = authUser.user?.email?.trim();
-  const channelsSent: string[] = [];
-  let sendError: string | null = null;
 
-  if (channels.email && email) {
+  if (channels.email && email && !channelsSent.includes("email")) {
     const apiKey = getResendApiKey();
     if (!apiKey) {
       sendError = "resend_not_configured";
@@ -147,55 +227,71 @@ async function deliverWatchBatch(params: {
         subject,
         html: buildWatchEmailHtml({ blocks, overflowCount, settingsUrl, unsubscribeUrl }),
         text: buildWatchEmailText({ blocks, overflowCount, settingsUrl, unsubscribeUrl }),
+        headers: digestListUnsubscribeHeaders(unsubscribeUrl),
       });
       if (error) {
         sendError = error.message ?? "resend_failed";
         console.error("[autopilot-FAILED] email", userId, sendError);
       } else {
-        channelsSent.push("email");
+        channelsSent = [...channelsSent, "email"];
+        await persistChannelsSent(admin, outputId, channelsSent);
       }
     }
   }
 
-  if (channels.slack && settings.slack_webhook_url?.trim()) {
+  if (channels.slack && settings.slack_webhook_url?.trim() && !channelsSent.includes("slack")) {
+    const slackBlocks = blocks.map((b) => ({
+      ...b,
+      investigateUrl: buildWatchAlertInvestigateUrl(appOrigin, b.competitorHost, "slack", b.alert_type),
+    }));
     const slackResult = await sendWatchSlackWebhook({
       webhookUrl: settings.slack_webhook_url,
-      blocks,
+      blocks: slackBlocks,
       overflowCount,
       settingsUrl,
     });
     if (slackResult.ok) {
-      channelsSent.push("slack");
+      channelsSent = [...channelsSent, "slack"];
+      await persistChannelsSent(admin, outputId, channelsSent);
     } else {
       console.error("[autopilot-FAILED] slack", userId, slackResult.error);
+      if (!sendError) sendError = slackResult.error ?? "slack_failed";
     }
   }
 
-  const prevAttempts = params.existingAttempts ?? 0;
+  if (channels.discord && settings.discord_webhook_url?.trim() && !channelsSent.includes("discord")) {
+    const discordBlocks = blocks.map((b) => ({
+      ...b,
+      investigateUrl: buildWatchAlertInvestigateUrl(appOrigin, b.competitorHost, "discord", b.alert_type),
+    }));
+    const discordResult = await sendWatchDiscordWebhook({
+      webhookUrl: settings.discord_webhook_url,
+      blocks: discordBlocks,
+      overflowCount,
+      settingsUrl,
+    });
+    if (discordResult.ok) {
+      channelsSent = [...channelsSent, "discord"];
+      await persistChannelsSent(admin, outputId, channelsSent);
+    } else {
+      console.error("[autopilot-FAILED] discord", userId, discordResult.error);
+      if (!sendError) sendError = discordResult.error ?? "discord_failed";
+    }
+  }
 
   if (channelsSent.length === 0) {
     const newAttempts = prevAttempts + 1;
     const permanent = newAttempts >= MAX_SEND_ATTEMPTS;
-    const row = {
-      user_id: userId,
-      output_type: "watch_alert" as const,
-      dedupe_key: dedupeKey,
-      payload: {
-        blocks,
-        overflowCount,
-        alertIds,
-        _meta: { sendAttempts: newAttempts },
-      } satisfies PendingPayload,
-      channels_sent: [],
-      status: permanent ? ("failed" as const) : ("failed" as const),
-      error: sendError ?? "no_channel_delivered",
-      sent_at: null as string | null,
-    };
-    if (params.outputId) {
-      await admin.from("autopilot_outputs").update(row).eq("id", params.outputId);
-    } else {
-      await admin.from("autopilot_outputs").upsert(row, { onConflict: "dedupe_key" });
-    }
+    await admin
+      .from("autopilot_outputs")
+      .update({
+        payload: { ...payload, _meta: { sendAttempts: newAttempts } } satisfies PendingPayload,
+        channels_sent: [],
+        status: "failed",
+        error: sendError ?? "no_channel_delivered",
+        sent_at: null,
+      })
+      .eq("id", outputId);
     if (permanent) {
       const nowIso = new Date().toISOString();
       await admin.from("competitor_alerts").update({ autopilot_processed_at: nowIso }).in("id", alertIds);
@@ -204,22 +300,16 @@ async function deliverWatchBatch(params: {
   }
 
   const nowIso = new Date().toISOString();
-  const successRow = {
-    user_id: userId,
-    output_type: "watch_alert" as const,
-    dedupe_key: dedupeKey,
-    payload: { blocks, overflowCount, alertIds, _meta: { sendAttempts: prevAttempts } } satisfies PendingPayload,
-    channels_sent: channelsSent,
-    status: "sent" as const,
-    error: null,
-    sent_at: nowIso,
-  };
-
-  if (params.outputId) {
-    await admin.from("autopilot_outputs").update(successRow).eq("id", params.outputId);
-  } else {
-    await admin.from("autopilot_outputs").upsert(successRow, { onConflict: "dedupe_key" });
-  }
+  await admin
+    .from("autopilot_outputs")
+    .update({
+      payload: { ...payload, _meta: { sendAttempts: prevAttempts } } satisfies PendingPayload,
+      channels_sent: channelsSent,
+      status: "sent",
+      error: null,
+      sent_at: nowIso,
+    })
+    .eq("id", outputId);
 
   await admin.from("competitor_alerts").update({ autopilot_processed_at: nowIso }).in("id", alertIds);
   return "sent";
@@ -236,7 +326,7 @@ async function flushPendingOutputs(params: {
 
   const { data: pendingRows } = await admin
     .from("autopilot_outputs")
-    .select("id, user_id, dedupe_key, payload, status")
+    .select("id, user_id, dedupe_key, payload, status, channels_sent")
     .eq("output_type", "watch_alert")
     .eq("status", "pending");
 
@@ -267,6 +357,31 @@ async function flushPendingOutputs(params: {
     const payload = row.payload as PendingPayload;
     if (!payload?.blocks?.length) continue;
 
+    const existingChannels = parseChannelsSent(row.channels_sent);
+    const allChannelsDone =
+      (!settings.watch_channels.email || existingChannels.includes("email")) &&
+      (!settings.watch_channels.slack ||
+        !settings.slack_webhook_url?.trim() ||
+        existingChannels.includes("slack")) &&
+      (!settings.watch_channels.discord ||
+        !settings.discord_webhook_url?.trim() ||
+        existingChannels.includes("discord"));
+    if (allChannelsDone && existingChannels.length > 0) {
+      const nowIso = new Date().toISOString();
+      await admin
+        .from("autopilot_outputs")
+        .update({ status: "sent", sent_at: nowIso })
+        .eq("id", row.id);
+      if (payload.alertIds?.length) {
+        await admin
+          .from("competitor_alerts")
+          .update({ autopilot_processed_at: nowIso })
+          .in("id", payload.alertIds);
+      }
+      summary.sent += 1;
+      continue;
+    }
+
     const result = await deliverWatchBatch({
       admin,
       userId: row.user_id,
@@ -277,6 +392,7 @@ async function flushPendingOutputs(params: {
       dedupeKey: row.dedupe_key,
       outputId: row.id,
       appOrigin,
+      existingChannelsSent: existingChannels,
       existingAttempts: payload._meta?.sendAttempts ?? 0,
     });
 
@@ -345,6 +461,7 @@ export async function runAutopilotWatch(params: {
       .select("id, user_id, competitor_id, alert_type, severity, title, body, metadata, detected_at")
       .in("user_id", userIds)
       .is("autopilot_processed_at", null)
+      .is("notified_at", null)
       .gte("detected_at", lookbackIso)
       .order("detected_at", { ascending: false })
       .limit(500);
@@ -380,7 +497,7 @@ export async function runAutopilotWatch(params: {
       const watchIds = settings.watch_competitor_ids;
       if (watchIds?.length && !watchIds.includes(alert.competitor_id)) continue;
 
-      if (!passesWatchSensitivity(alert.alert_type, alert.severity, settings.watch_sensitivity)) {
+      if (!passesWatchFilter(alert.alert_type, alert.severity, settings)) {
         continue;
       }
 
@@ -392,12 +509,23 @@ export async function runAutopilotWatch(params: {
 
     for (const [userId, userAlerts] of byUser) {
       const settings = settingsByUser.get(userId)!;
+      const sorted = sortAlertsByPriority(userAlerts);
+      const topAlerts = sorted.slice(0, MAX_BLOCKS_PER_EMAIL);
+      const overflowAlerts = sorted.slice(MAX_BLOCKS_PER_EMAIL);
 
-      const candidates: WatchAlertCandidate[] = userAlerts.map((a) => {
+      if (overflowAlerts.length > 0) {
+        const overflowIds = overflowAlerts.map((a) => a.id);
+        const nowIso = new Date().toISOString();
+        await params.admin
+          .from("competitor_alerts")
+          .update({ autopilot_processed_at: nowIso })
+          .in("id", overflowIds);
+      }
+
+      const candidates: WatchAlertCandidate[] = topAlerts.map((a) => {
         const comp = compById.get(a.competitor_id)!;
         return {
           id: a.id,
-          user_id: a.user_id,
           competitor_id: a.competitor_id,
           alert_type: isAlertType(a.alert_type) ? a.alert_type : "new_angle",
           severity: a.severity as WatchAlertCandidate["severity"],
@@ -407,6 +535,7 @@ export async function runAutopilotWatch(params: {
           detected_at: a.detected_at,
           competitorName: comp.brand_name?.trim() || comp.name?.trim() || "Competitor",
           competitorHost: competitorHost(comp),
+          user_id: a.user_id,
         };
       });
 
@@ -427,18 +556,23 @@ export async function runAutopilotWatch(params: {
         return {
           ...c,
           ...rec,
-          investigateUrl: buildWatchAlertInvestigateUrl(appOrigin, c.competitorHost, "email"),
+          investigateUrl: buildWatchAlertInvestigateUrl(
+            appOrigin,
+            c.competitorHost,
+            "email",
+            c.alert_type,
+          ),
         } satisfies WatchAlertBlock;
       });
 
-      const emailBlocks = blocks.slice(0, MAX_BLOCKS_PER_EMAIL);
-      const overflowCount = Math.max(0, blocks.length - MAX_BLOCKS_PER_EMAIL);
-      const alertIds = blocks.map((b) => b.id);
-      const dedupeKey = batchDedupeKey(userId, alertIds);
+      const emailBlocks = blocks;
+      const overflowCount = overflowAlerts.length;
+      const alertIds = [...topAlerts.map((a) => a.id), ...overflowAlerts.map((a) => a.id)];
+      const dedupeKey = batchDedupeKey(userId, topAlerts.map((a) => a.id));
 
       const { data: existing } = await params.admin
         .from("autopilot_outputs")
-        .select("id, status")
+        .select("id, status, channels_sent, payload")
         .eq("dedupe_key", dedupeKey)
         .maybeSingle();
 
@@ -463,7 +597,7 @@ export async function runAutopilotWatch(params: {
             output_type: "watch_alert",
             dedupe_key: dedupeKey,
             payload,
-            channels_sent: [],
+            channels_sent: parseChannelsSent(existing?.channels_sent),
             status: "pending",
             error: null,
           },
@@ -472,6 +606,8 @@ export async function runAutopilotWatch(params: {
         summary.quietHoursQueued += 1;
         continue;
       }
+
+      const existingPayload = existing?.payload as PendingPayload | null;
 
       const result = await deliverWatchBatch({
         admin: params.admin,
@@ -483,6 +619,8 @@ export async function runAutopilotWatch(params: {
         dedupeKey,
         outputId: existing?.id,
         appOrigin,
+        existingChannelsSent: parseChannelsSent(existing?.channels_sent),
+        existingAttempts: existingPayload?._meta?.sendAttempts ?? 0,
       });
 
       if (result === "sent") summary.sent += 1;

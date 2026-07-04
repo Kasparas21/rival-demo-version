@@ -20,6 +20,7 @@ const OPTIONS: { id: WatchSensitivity; title: string; description: string }[] = 
   },
 ];
 
+/** @deprecated Replaced by AutopilotThresholdRadios + watch_min_score */
 export function WatchSensitivityCards(props: {
   value: WatchSensitivity;
   onChange: (v: WatchSensitivity) => void;

@@ -47,6 +47,8 @@ function parseReportWorkspaces(raw: unknown): Record<string, boolean> {
   return out;
 }
 
+const MAX_REPORT_SEND_ATTEMPTS = 3;
+
 function monthDedupeKey(userId: string, brandId: string, now: Date): string {
   const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
   return `report:${userId}:${brandId}:${ym}`;
@@ -68,7 +70,7 @@ export async function generateMonthlyReportForWorkspace(params: {
   planTier: PlanTier;
   preview?: boolean;
   now?: Date;
-}): Promise<{ outputId: string; reportUrl: string } | { error: string }> {
+}): Promise<{ outputId: string; reportUrl: string; retrySendOnly?: boolean } | { error: string }> {
   const now = params.now ?? new Date();
   const data = await aggregateWorkspaceReport(params.admin, params.userId, params.brandId, now);
   if (!data) return { error: "workspace_not_found" };
@@ -80,11 +82,24 @@ export async function generateMonthlyReportForWorkspace(params: {
   if (!params.preview) {
     const { data: existing } = await params.admin
       .from("autopilot_outputs")
-      .select("id, status")
+      .select("id, status, payload")
       .eq("dedupe_key", dedupeKey)
       .maybeSingle();
     if (existing?.status === "sent") {
       return { outputId: existing.id, reportUrl: "" };
+    }
+    if (existing?.status === "failed") {
+      const payload = existing.payload as { _meta?: { sendAttempts?: number } } | null;
+      const attempts = payload?._meta?.sendAttempts ?? 0;
+      if (attempts >= MAX_REPORT_SEND_ATTEMPTS) {
+        return { outputId: existing.id, reportUrl: "" };
+      }
+      const appOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://spy-rival.com";
+      return {
+        outputId: existing.id,
+        reportUrl: buildReportPublicUrl(appOrigin, existing.id, "email"),
+        retrySendOnly: true,
+      };
     }
   }
 
@@ -117,6 +132,7 @@ export async function generateMonthlyReportForWorkspace(params: {
         periodLabel: data.periodLabel,
         summary,
         preview: params.preview === true,
+        _meta: { sendAttempts: 0 },
       },
       channels_sent: [],
       status: "pending",
@@ -191,8 +207,24 @@ export async function runAutopilotReport(params: {
       const reportWorkspaces = parseReportWorkspaces(raw.report_workspaces);
 
       if (!params.previewBrandId && !params.testMode && reportDay !== utcDay) {
-        summary.skipped += 1;
-        continue;
+        // Off report day: only proceed when this month has a failed send that can still be retried.
+        const ym = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+        const { data: failedRows } = await params.admin
+          .from("autopilot_outputs")
+          .select("id, status, payload")
+          .eq("user_id", userId)
+          .eq("output_type", "monthly_report")
+          .eq("status", "failed")
+          .like("dedupe_key", `report:${userId}:%:${ym}`);
+        const canRetry = (failedRows ?? []).some((row) => {
+          const failedPayload = row.payload as { _meta?: { sendAttempts?: number } } | null;
+          const attempts = failedPayload?._meta?.sendAttempts ?? 0;
+          return attempts > 0 && attempts < MAX_REPORT_SEND_ATTEMPTS;
+        });
+        if (!canRetry) {
+          summary.skipped += 1;
+          continue;
+        }
       }
 
       const billing = await getBillingEntitlement(params.admin, userId);
@@ -235,7 +267,9 @@ export async function runAutopilotReport(params: {
           continue;
         }
 
-        summary.generated += 1;
+        if (!("retrySendOnly" in gen && gen.retrySendOnly)) {
+          summary.generated += 1;
+        }
 
         if (params.previewBrandId) continue;
 
@@ -245,7 +279,12 @@ export async function runAutopilotReport(params: {
           .eq("id", gen.outputId)
           .maybeSingle();
 
-        const payload = outputRow?.payload as { summary?: { focusNextMonth?: string[]; executiveSummary?: string } } | null;
+        const payload = outputRow?.payload as {
+          summary?: { focusNextMonth?: string[]; executiveSummary?: string };
+          brandName?: string;
+          _meta?: { sendAttempts?: number };
+        } | null;
+        const prevAttempts = payload?._meta?.sendAttempts ?? 0;
         const bullets = payload?.summary
           ? reportEmailPreviewBullets({
               executiveSummary: payload.summary.executiveSummary ?? "",
@@ -264,7 +303,11 @@ export async function runAutopilotReport(params: {
           summary.failed += 1;
           await params.admin
             .from("autopilot_outputs")
-            .update({ status: "failed", error: "email_not_available" })
+            .update({
+              status: "failed",
+              error: "email_not_available",
+              payload: { ...payload, _meta: { sendAttempts: prevAttempts + 1 } },
+            })
             .eq("id", gen.outputId);
           continue;
         }
@@ -284,9 +327,14 @@ export async function runAutopilotReport(params: {
         if (sendErr) {
           console.error("[autopilot-FAILED] report email", userId, sendErr.message);
           summary.failed += 1;
+          const newAttempts = prevAttempts + 1;
           await params.admin
             .from("autopilot_outputs")
-            .update({ status: "failed", error: sendErr.message })
+            .update({
+              status: "failed",
+              error: sendErr.message,
+              payload: { ...payload, _meta: { sendAttempts: newAttempts } },
+            })
             .eq("id", gen.outputId);
           continue;
         }
@@ -298,6 +346,8 @@ export async function runAutopilotReport(params: {
             status: "sent",
             sent_at: nowIso,
             channels_sent: ["email"],
+            error: null,
+            payload: { ...payload, _meta: { sendAttempts: prevAttempts } },
           })
           .eq("id", gen.outputId);
         summary.sent += 1;

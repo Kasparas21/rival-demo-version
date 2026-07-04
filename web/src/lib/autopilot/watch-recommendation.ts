@@ -1,5 +1,5 @@
 import { isAlertType, type AlertType } from "@/lib/alerts/alert-types";
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 
 import { watchFallbackRecommendation } from "./watch-fallback-templates";
@@ -65,7 +65,8 @@ async function callHaikuOnce(params: {
     .filter(Boolean)
     .join("\n");
 
-  const result = await anthropicHaiku({
+  const result = await llmFast({
+    task: "watch_recommendation",
     systemPrompt,
     messages: [{ role: "user", content: userContent }],
     maxTokens: 512,

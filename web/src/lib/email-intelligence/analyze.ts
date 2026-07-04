@@ -1,4 +1,4 @@
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 import { generateAlertsForEmail } from "@/lib/alerts/generate-alerts-for-email";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import {
@@ -173,7 +173,8 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
   }
   body = body.slice(0, 3000);
 
-  const res = await anthropicHaiku({
+  const res = await llmFast({
+    task: "email_intelligence",
     systemPrompt: SYSTEM_PROMPT,
     messages: [
       {

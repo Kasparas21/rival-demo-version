@@ -5,6 +5,7 @@ export const watchSensitivitySchema = z.enum(["paranoid", "balanced", "big_moves
 export const watchChannelsSchema = z.object({
   email: z.boolean(),
   slack: z.boolean(),
+  discord: z.boolean(),
 });
 
 export const watchQuietHoursSchema = z.object({
@@ -28,8 +29,12 @@ export const autopilotSettingsPutSchema = z.object({
   enabled: z.boolean().optional(),
   watch_enabled: z.boolean().optional(),
   watch_sensitivity: watchSensitivitySchema.optional(),
+  watch_min_score: z.union([z.literal(6), z.literal(8), z.literal(9), z.literal(10)]).nullable().optional(),
   watch_channels: watchChannelsSchema.optional(),
   slack_webhook_url: z.string().url().nullable().optional(),
+  slack_connection: z.null().optional(),
+  discord_webhook_url: z.string().url().nullable().optional(),
+  discord_connection: z.null().optional(),
   watch_competitor_ids: z.array(z.string().uuid()).nullable().optional(),
   watch_quiet_hours: watchQuietHoursSchema.optional(),
   report_enabled: z.boolean().optional(),

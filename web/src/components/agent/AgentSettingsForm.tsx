@@ -1,188 +1,189 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
+import { useEffect, useState } from "react";
 
-import { readApiJson } from "@/lib/agent/api-errors";
+import {
+  autopilotGlassCardClass,
+  autopilotGlassCardActiveClass,
+  GlassSection,
+  GlassToggle,
+} from "@/components/autopilot/autopilot-glass-ui";
+import { AutopilotAutoReportSection, AutopilotCompetitorsSection, AutopilotQuietHoursSection } from "@/components/autopilot/AutopilotWatchSections";
+import { AutopilotChannelsSection } from "@/components/autopilot/AutopilotChannelsSection";
+import { AutopilotThresholdRadios } from "@/components/autopilot/AutopilotThresholdRadios";
+import type { AutopilotBillingMeta, AutopilotSettingsUiState, BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
+import { uiMinScore } from "@/components/autopilot/use-autopilot-settings";
 import { cn } from "@/lib/utils";
 
-import { AGENT_THRESHOLD_OPTIONS, type AgentSettingsState } from "./agent-settings-types";
-
 type AgentSettingsFormProps = {
-  settings: AgentSettingsState;
+  settings: AutopilotSettingsUiState;
+  billing: AutopilotBillingMeta | null;
+  competitors: CompetitorOption[];
+  brands: BrandOption[];
   saving: boolean;
   savedFlash: boolean;
   error: string | null;
-  onChange: (next: AgentSettingsState) => void;
+  onSettingsChange: (next: AutopilotSettingsUiState) => void;
+  onPatch: (patch: Record<string, unknown>) => void | Promise<void>;
   onSave: () => void;
-  showEnableToggle?: boolean;
-  onEnableChange?: (enabled: boolean) => void;
+  onRefresh?: () => void | Promise<void>;
 };
 
 export function AgentSettingsForm({
   settings,
+  billing,
+  competitors,
+  brands,
   saving,
   savedFlash,
   error,
-  onChange,
+  onSettingsChange,
+  onPatch,
   onSave,
-  showEnableToggle = false,
-  onEnableChange,
+  onRefresh,
 }: AgentSettingsFormProps) {
-  const [testingChannel, setTestingChannel] = useState<"slack" | "discord" | null>(null);
-  const [testMessage, setTestMessage] = useState<string | null>(null);
+  const [slackInput, setSlackInput] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
 
-  const updateChannel = (key: "slack" | "discord" | "email", patch: { enabled?: boolean; webhook_url?: string }) => {
-    onChange({
-      ...settings,
-      channels: {
-        ...settings.channels,
-        [key]: { ...settings.channels[key], ...patch },
-      },
-    });
+  useEffect(() => {
+    setSlackInput("");
+  }, [settings.id]);
+
+  const applyPatch = (partial: Partial<AutopilotSettingsUiState>) => {
+    onSettingsChange({ ...settings, ...partial });
+    void onPatch(partial as Record<string, unknown>);
   };
 
-  const testWebhook = async (channel: "slack" | "discord") => {
-    const webhookUrl = settings.channels[channel]?.webhook_url?.trim() ?? "";
-    if (!webhookUrl) {
-      setTestMessage("Enter a webhook URL first.");
-      return;
-    }
-
-    setTestingChannel(channel);
-    setTestMessage(null);
-    try {
-      const res = await fetch("/api/agent/test-webhook", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel, webhook_url: webhookUrl }),
-      });
-      const data = await readApiJson<{ ok?: boolean; error?: string }>(res);
-      if (!res.ok || !data.ok) throw new Error(data.error ?? "Test failed");
-      setTestMessage(`${channel === "slack" ? "Slack" : "Discord"} test message sent.`);
-    } catch (err) {
-      setTestMessage(err instanceof Error ? err.message : "Test failed");
-    } finally {
-      setTestingChannel(null);
-    }
+  const handlePatch = async (body: Record<string, unknown>) => {
+    onSettingsChange({ ...settings, ...body } as AutopilotSettingsUiState);
+    await onPatch(body);
+    if (body.slack_webhook_url) setSlackInput("");
   };
+
+  const thresholdDisabled = saving || !settings.enabled || !settings.watch_enabled;
 
   return (
-    <div className="space-y-5">
-      {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-700">{error}</div>
+    <div className="space-y-4 pb-1">
+      {(error || localError) ? (
+        <div className="rounded-xl border border-red-200/80 bg-red-50/80 px-3 py-2 text-[12px] text-red-700 backdrop-blur-sm">
+          {error ?? localError}
+        </div>
       ) : null}
 
-      {showEnableToggle ? (
-        <label className="flex cursor-pointer items-center gap-3">
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={(e) => onEnableChange?.(e.target.checked)}
-            className="h-4 w-4 rounded border-[#d4d4d8]"
-          />
-          <span className="text-[14px] font-medium text-[#1a1a2e]">Agent enabled</span>
-        </label>
-      ) : null}
-
-      <div>
-        <h3 className="text-[13px] font-semibold text-[#1a1a2e]">Delivery channels</h3>
-        <p className="mt-1 text-[12px] text-[#71717a]">
-          Where high-signal intel is sent — separate from the weekly digest.
-        </p>
-
-        <div className="mt-3 space-y-3">
-          {(["slack", "discord"] as const).map((channel) => (
-            <div key={channel} className="rounded-xl border border-[#ececef] p-3">
-              <label className="mb-2 flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.channels[channel]?.enabled ?? false}
-                  onChange={(e) => updateChannel(channel, { enabled: e.target.checked })}
-                  className="h-4 w-4 rounded border-[#d4d4d8]"
-                />
-                <span className="text-[13px] font-medium capitalize text-[#1a1a2e]">{channel}</span>
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  type="url"
-                  placeholder={`${channel === "slack" ? "Slack" : "Discord"} webhook URL`}
-                  value={settings.channels[channel]?.webhook_url ?? ""}
-                  onChange={(e) => updateChannel(channel, { webhook_url: e.target.value })}
-                  className="flex-1 rounded-xl border border-[#e4e4e7] px-3 py-2 text-[13px] outline-none focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20"
-                />
-                <button
-                  type="button"
-                  disabled={testingChannel === channel || saving}
-                  onClick={() => void testWebhook(channel)}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-[#e4e4e7] px-3 py-2 text-[12px] font-semibold text-[#3f3f46] hover:bg-[#fafafa] disabled:opacity-50"
-                >
-                  <RefreshCw className={cn("h-3.5 w-3.5", testingChannel === channel && "animate-spin")} />
-                  Test
-                </button>
-              </div>
-            </div>
-          ))}
-
-          <div className="rounded-xl border border-[#ececef] p-3">
-            <label className="mb-1 flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={settings.channels.email?.enabled ?? false}
-                onChange={(e) => updateChannel("email", { enabled: e.target.checked })}
-                className="h-4 w-4 rounded border-[#d4d4d8]"
-              />
-              <span className="text-[13px] font-medium text-[#1a1a2e]">Email</span>
-            </label>
-            <p className="text-[12px] text-[#71717a]">Sends to: {settings.user_email ?? "your account email"}</p>
-          </div>
-        </div>
-
-        {testMessage ? <p className="mt-2 text-[12px] text-emerald-700">{testMessage}</p> : null}
-      </div>
-
-      <div>
-        <h3 className="text-[13px] font-semibold text-[#1a1a2e]">Alert threshold</h3>
-        <div className="mt-2 space-y-2">
-          {AGENT_THRESHOLD_OPTIONS.map((opt) => (
-            <label key={opt.value} className="flex cursor-pointer items-center gap-2">
-              <input
-                type="radio"
-                name="min_threat_score"
-                checked={settings.min_threat_score === opt.value}
-                onChange={() => onChange({ ...settings, min_threat_score: opt.value })}
-                className="h-4 w-4 border-[#d4d4d8]"
-              />
-              <span className="text-[13px] text-[#3f3f46]">{opt.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <label className="flex cursor-pointer items-start gap-3">
-        <input
-          type="checkbox"
-          checked={settings.weekly_brief_enabled}
-          onChange={(e) => onChange({ ...settings, weekly_brief_enabled: e.target.checked })}
-          className="mt-0.5 h-4 w-4 rounded border-[#d4d4d8]"
-        />
+      <div
+        className={cn(
+          autopilotGlassCardClass,
+          "flex items-center justify-between gap-3 p-3.5",
+          settings.enabled && autopilotGlassCardActiveClass,
+        )}
+      >
         <div>
-          <span className="text-[13px] font-medium text-[#1a1a2e]">Weekly brief (Mondays)</span>
-          <p className="mt-0.5 text-[12px] text-[#71717a]">Opt-in email summary of the week&apos;s signals.</p>
+          <p className="text-[14px] font-semibold text-[#1a1a2e]">Autopilot</p>
+          <p className="text-[11px] text-[#71717a]">
+            {settings.enabled ? "Watching competitors & delivering alerts" : "Paused — no alerts sent"}
+          </p>
         </div>
-      </label>
+        <GlassToggle enabled={settings.enabled} disabled={saving} onChange={(v) => applyPatch({ enabled: v })} />
+      </div>
 
-      <div className="flex items-center gap-3 pt-1">
+      <AutopilotChannelsSection
+        settings={settings}
+        saving={saving}
+        variant="modal"
+        slackInput={slackInput}
+        onSlackInputChange={setSlackInput}
+        onPatch={handlePatch}
+        onError={setLocalError}
+        onRefresh={onRefresh}
+      />
+
+      <GlassSection title="Alert threshold" subtitle="How sensitive alerts should be.">
+        <AutopilotThresholdRadios
+          variant="modal"
+          value={uiMinScore(settings)}
+          disabled={thresholdDisabled}
+          onChange={(minScore, patch) => {
+            onSettingsChange({
+              ...settings,
+              watch_min_score: patch.watch_min_score,
+              watch_sensitivity: patch.watch_sensitivity as AutopilotSettingsUiState["watch_sensitivity"],
+            });
+            void onPatch(patch);
+          }}
+        />
+      </GlassSection>
+
+      <div className={cn(autopilotGlassCardClass, "space-y-3 p-3.5")}>
+        <AutopilotCompetitorsSection
+          settings={settings}
+          competitors={competitors}
+          saving={saving}
+          variant="modal"
+          onPatch={(body) => {
+            if (body.watch_competitor_ids !== undefined) {
+              onSettingsChange({
+                ...settings,
+                watch_competitor_ids: body.watch_competitor_ids as string[] | null,
+              });
+            }
+            void onPatch(body);
+          }}
+        />
+        <div className="border-t border-white/50 pt-3">
+          <AutopilotQuietHoursSection
+            settings={settings}
+            saving={saving}
+            variant="modal"
+            onPatch={(body) => {
+              if (body.watch_quiet_hours) {
+                onSettingsChange({
+                  ...settings,
+                  watch_quiet_hours: body.watch_quiet_hours as AutopilotSettingsUiState["watch_quiet_hours"],
+                });
+              }
+              void onPatch(body);
+            }}
+          />
+        </div>
+      </div>
+
+      <AutopilotAutoReportSection
+        settings={settings}
+        billing={billing}
+        brands={brands}
+        saving={saving}
+        variant="modal"
+        onPatch={(body) => {
+          onSettingsChange({ ...settings, ...body } as AutopilotSettingsUiState);
+          void onPatch(body);
+        }}
+      />
+
+      <div className="flex items-center gap-3 pt-0.5">
         <button
           type="button"
           disabled={saving}
           onClick={onSave}
-          className="rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-60"
+          className="flex-1 rounded-2xl bg-gradient-to-b from-[#1a1a2e] to-[#2d2d44] px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(26,26,46,0.5)] transition hover:shadow-[0_12px_28px_-8px_rgba(26,26,46,0.55)] disabled:opacity-60"
         >
           {saving ? "Saving…" : "Save settings"}
         </button>
-        {savedFlash ? <span className="text-[12px] font-medium text-emerald-600">Saved</span> : null}
+        {savedFlash ? (
+          <span className="text-[12px] font-medium text-emerald-600 motion-safe:animate-in motion-safe:fade-in">
+            Saved
+          </span>
+        ) : null}
       </div>
+
+      <Link
+        href="/dashboard/settings/autopilot#history"
+        className="group flex items-center justify-between rounded-2xl border border-white/60 bg-white/40 px-3.5 py-2.5 text-[12px] font-medium text-[#52525b] shadow-sm backdrop-blur-sm transition hover:bg-white/60 hover:text-[#1a1a2e]"
+      >
+        View alert history
+        <ChevronRight className="h-4 w-4 text-[#a1a1aa] transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+      </Link>
     </div>
   );
 }

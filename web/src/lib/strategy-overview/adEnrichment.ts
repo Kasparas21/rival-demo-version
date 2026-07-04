@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import type { Database, Json } from "@/lib/supabase/types";
-import { anthropicHaiku, HAIKU_MODEL } from "@/lib/llm/anthropic";
+import { llmFast, modelLabelForTask } from "@/lib/llm/anthropic";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 import {
   SCRAPED_ADS_DERIVATION_SELECT,
@@ -234,11 +234,12 @@ Return **only** a valid JSON array (no markdown):
 async function enrichBatchWithLlm(
   items: EnrichItem[]
 ): Promise<{ rows: z.infer<typeof modelRowSchema>[] | null; costUsd: number; preZodCount: number }> {
-  console.log("[enrich-trace] enrichBatch called, items=", items.length, "model=", HAIKU_MODEL);
+  console.log("[enrich-trace] enrichBatch called, items=", items.length, "model=", modelLabelForTask("ad_enrichment"));
   const userPrompt = buildEnrichmentUserPrompt(items);
 
   console.log("[enrich-trace] sending to OpenRouter");
-  const out = await anthropicHaiku({
+  const out = await llmFast({
+    task: "ad_enrichment",
     systemPrompt:
       "You output strict JSON only. Multilingual ads: classify funnel and angle by intent in any language. funnel_stage must be exactly TOF, MOF, or BOF. Never invent platforms or brands not in the copy.",
     messages: [{ role: "user", content: userPrompt }],
@@ -430,7 +431,7 @@ export async function enrichScrapedAdsIfNeeded(
 
   console.log("[enrich-trace] toEnrich count=", workQueue.length);
   console.log("[enrich-trace] starting batch loop, batchMax=", BATCH_MAX);
-  const modelLabel = HAIKU_MODEL;
+  const modelLabel = modelLabelForTask("ad_enrichment");
   let enriched = 0;
   const maxBatches = opts?.maxBatches;
   for (let i = 0; i < workQueue.length; i += BATCH_MAX) {

@@ -1,3 +1,6 @@
+/**
+ * @deprecated Superseded by autopilot watch delivery (`lib/autopilot/watch-discord.ts`).
+ */
 export function buildDiscordEmbed(bodyMarkdown: string, screenshotUrls: string[]) {
   return {
     title: "Rival Intel",

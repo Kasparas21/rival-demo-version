@@ -1,4 +1,4 @@
-import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { llmSmart } from "@/lib/llm/anthropic";
 
 import type { ReportWorkspaceData } from "./report-aggregate";
 
@@ -53,7 +53,8 @@ export async function generateReportExecutiveSummary(
 
   const systemPrompt = `You write client-ready competitive intelligence summaries. Respond with ONLY valid JSON: {"executiveSummary": string (2-4 sentences), "focusNextMonth": string[] (3 concrete recommendations, imperative voice)}.`;
 
-  const result = await anthropicSonnet({
+  const result = await llmSmart({
+    task: "report_summary",
     systemPrompt,
     messages: [
       {

@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
+
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type ReportPageProps = {
   params: Promise<{ reportId: string }>;
+};
+
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
 };
 
 export default async function PublicReportPage({ params }: ReportPageProps) {

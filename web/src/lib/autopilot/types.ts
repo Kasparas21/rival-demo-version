@@ -10,6 +10,7 @@ export type AutopilotOutputStatus = "pending" | "sent" | "failed" | "suppressed"
 export type WatchChannels = {
   email: boolean;
   slack: boolean;
+  discord: boolean;
 };
 
 export type WatchQuietHours = {
@@ -25,14 +26,31 @@ export type ReportBranding = {
   hide_powered_by: boolean;
 };
 
+export type SlackConnection = {
+  team_name: string;
+  channel: string;
+  configuration_url: string | null;
+  connected_at: string;
+};
+
+export type DiscordConnection = {
+  guild_name: string;
+  channel_name: string;
+  connected_at: string;
+};
+
 export type AutopilotSettingsRow = {
   id: string;
   user_id: string;
   enabled: boolean;
   watch_enabled: boolean;
   watch_sensitivity: WatchSensitivity;
+  watch_min_score: number | null;
   watch_channels: WatchChannels;
   slack_webhook_url: string | null;
+  slack_connection: SlackConnection | null;
+  discord_webhook_url: string | null;
+  discord_connection: DiscordConnection | null;
   watch_competitor_ids: string[] | null;
   watch_quiet_hours: WatchQuietHours;
   report_enabled: boolean;

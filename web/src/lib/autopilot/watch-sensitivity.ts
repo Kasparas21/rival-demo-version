@@ -1,6 +1,7 @@
 import type { AlertSeverity, AlertType } from "@/lib/alerts/alert-types";
 import { ALL_ALERT_TYPES } from "@/lib/alerts/alert-types";
 
+import { passesWatchMinScore } from "./watch-alert-score";
 import type { WatchSensitivity } from "./types";
 
 export type WatchSensitivityRule = {
@@ -53,4 +54,15 @@ export function passesWatchSensitivity(
     return severity === rule.activitySpikeMinSeverity;
   }
   return true;
+}
+
+export function passesWatchFilter(
+  alertType: string,
+  severity: string,
+  settings: { watch_min_score: number | null; watch_sensitivity: WatchSensitivity },
+): boolean {
+  if (settings.watch_min_score != null) {
+    return passesWatchMinScore(alertType, severity, settings.watch_min_score);
+  }
+  return passesWatchSensitivity(alertType, severity, settings.watch_sensitivity);
 }

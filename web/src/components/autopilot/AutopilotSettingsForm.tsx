@@ -4,12 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { WatchSensitivityCards } from "@/components/autopilot/WatchSensitivityCards";
+import { AutopilotChannelsSection } from "@/components/autopilot/AutopilotChannelsSection";
+import { useAutopilotOAuthToast } from "@/components/autopilot/use-autopilot-oauth-toast";
+import { AutopilotThresholdHeading, AutopilotThresholdRadios } from "@/components/autopilot/AutopilotThresholdRadios";
+import { AutopilotCompetitorsSection, AutopilotQuietHoursSection } from "@/components/autopilot/AutopilotWatchSections";
 import {
   AutopilotHistoryList,
   type AutopilotHistoryItem,
 } from "@/components/autopilot/AutopilotHistoryList";
-import type { AutopilotSettingsRow, ReportBranding, WatchSensitivity } from "@/lib/autopilot/types";
+import { uiMinScore } from "@/components/autopilot/use-autopilot-settings";
+import type { AutopilotSettingsRow, ReportBranding } from "@/lib/autopilot/types";
 
 type BrandOption = { id: string; name: string };
 
@@ -24,17 +28,9 @@ type BillingMeta = {
 
 type SettingsResponse = AutopilotSettingsRow & {
   slack_webhook_configured?: boolean;
+  discord_webhook_configured?: boolean;
+  user_email?: string | null;
 };
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i);
-
-function browserTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London";
-  } catch {
-    return "Europe/London";
-  }
-}
 
 export function AutopilotSettingsForm() {
   const [loading, setLoading] = useState(true);
@@ -48,7 +44,6 @@ export function AutopilotSettingsForm() {
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([]);
   const [previewBusy, setPreviewBusy] = useState<string | null>(null);
-  const [slackTestBusy, setSlackTestBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,6 +104,10 @@ export function AutopilotSettingsForm() {
     void load();
   }, [load]);
 
+  useAutopilotOAuthToast(() => {
+    void load();
+  });
+
   const patch = useCallback(
     async (body: Record<string, unknown>) => {
       setSaving(true);
@@ -151,8 +150,11 @@ export function AutopilotSettingsForm() {
     void patch({ report_workspaces: next });
   };
 
-  const watchAllCompetitors =
-    !settings?.watch_competitor_ids || settings.watch_competitor_ids.length === 0;
+  const patchWithState = async (body: Record<string, unknown>) => {
+    if (!settings) return;
+    setSettings({ ...settings, ...body } as SettingsResponse);
+    await patch(body);
+  };
 
   if (loading) {
     return <p className="text-sm text-[#6B7280]">loading autopilot settings…</p>;
@@ -219,180 +221,51 @@ export function AutopilotSettingsForm() {
         </div>
 
         <div>
-          <div className="text-xs font-medium text-[#6B7280] mb-2 uppercase tracking-wide">Sensitivity</div>
-          <WatchSensitivityCards
-            value={settings.watch_sensitivity as WatchSensitivity}
+          <AutopilotThresholdHeading variant="page" />
+          <AutopilotThresholdRadios
+            variant="page"
+            value={uiMinScore(settings)}
             disabled={saving || !settings.enabled || !settings.watch_enabled}
-            onChange={(watch_sensitivity) => {
-              setSettings({ ...settings, watch_sensitivity });
-              void patch({ watch_sensitivity });
+            onChange={(minScore, scorePatch) => {
+              setSettings({
+                ...settings,
+                watch_min_score: scorePatch.watch_min_score,
+                watch_sensitivity: scorePatch.watch_sensitivity as SettingsResponse["watch_sensitivity"],
+              });
+              void patch(scorePatch);
             }}
           />
         </div>
 
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">Channels</div>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={settings.watch_channels.email}
-              disabled={saving || !settings.enabled}
-              onChange={(e) => {
-                const watch_channels = { ...settings.watch_channels, email: e.target.checked };
-                setSettings({ ...settings, watch_channels });
-                void patch({ watch_channels });
-              }}
-            />
-            email
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={settings.watch_channels.slack}
-              disabled={saving || !settings.enabled}
-              onChange={(e) => {
-                const watch_channels = { ...settings.watch_channels, slack: e.target.checked };
-                setSettings({ ...settings, watch_channels });
-                void patch({ watch_channels });
-              }}
-            />
-            slack
-          </label>
-          <input
-            type="url"
-            placeholder={
-              settings.slack_webhook_configured ? "webhook saved — paste new URL to replace" : "Slack webhook URL"
-            }
-            value={slackInput}
-            disabled={saving || !settings.enabled}
-            onChange={(e) => setSlackInput(e.target.value)}
-            onBlur={() => {
-              if (slackInput.trim()) void patch({ slack_webhook_url: slackInput.trim() });
-            }}
-            className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm"
-          />
-          <button
-            type="button"
-            disabled={slackTestBusy || !settings.slack_webhook_configured && !slackInput.trim()}
-            onClick={async () => {
-              if (slackInput.trim()) await patch({ slack_webhook_url: slackInput.trim() });
-              setSlackTestBusy(true);
-              try {
-                const res = await fetch("/api/autopilot/test-slack", { method: "POST", credentials: "include" });
-                const json = (await res.json()) as { ok?: boolean; error?: string };
-                if (!json.ok) setError(json.error ?? "Slack test failed");
-                else setSaved(true);
-              } finally {
-                setSlackTestBusy(false);
-              }
-            }}
-            className="text-sm font-medium text-[#2563EB] hover:underline disabled:opacity-50"
-          >
-            {slackTestBusy ? "sending…" : "send test"}
-          </button>
-        </div>
+        <AutopilotChannelsSection
+          settings={settings}
+          saving={saving}
+          disabled={!settings.watch_enabled}
+          variant="page"
+          slackInput={slackInput}
+          onSlackInputChange={setSlackInput}
+          onPatch={async (body) => {
+            await patch(body);
+            if (body.slack_webhook_url) setSlackInput("");
+          }}
+          onError={setError}
+          onRefresh={load}
+        />
 
-        <div>
-          <div className="text-xs font-medium text-[#6B7280] mb-2 uppercase tracking-wide">Competitors</div>
-          <label className="flex items-center gap-2 text-sm mb-2">
-            <input
-              type="checkbox"
-              checked={watchAllCompetitors}
-              disabled={saving || !settings.enabled}
-              onChange={(e) => {
-                const watch_competitor_ids = e.target.checked ? null : competitors.slice(0, 1).map((c) => c.id);
-                setSettings({ ...settings, watch_competitor_ids });
-                void patch({ watch_competitor_ids });
-              }}
-            />
-            all tracked competitors
-          </label>
-          {!watchAllCompetitors ? (
-            <div className="max-h-40 overflow-y-auto space-y-1 border border-[#E5E7EB] rounded-lg p-2">
-              {competitors.map((c) => (
-                <label key={c.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={settings.watch_competitor_ids?.includes(c.id) ?? false}
-                    disabled={saving}
-                    onChange={(e) => {
-                      const set = new Set(settings.watch_competitor_ids ?? []);
-                      if (e.target.checked) set.add(c.id);
-                      else set.delete(c.id);
-                      const watch_competitor_ids = [...set];
-                      setSettings({ ...settings, watch_competitor_ids });
-                      void patch({ watch_competitor_ids });
-                    }}
-                  />
-                  {c.name}
-                </label>
-              ))}
-            </div>
-          ) : null}
-        </div>
+        <AutopilotCompetitorsSection
+          settings={settings}
+          competitors={competitors}
+          saving={saving}
+          variant="page"
+          onPatch={patchWithState}
+        />
 
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="text-xs text-[#6B7280]">quiet from</label>
-            <select
-              className="w-full mt-1 rounded-lg border border-[#E5E7EB] px-2 py-2 text-sm"
-              value={settings.watch_quiet_hours.start}
-              disabled={saving}
-              onChange={(e) => {
-                const watch_quiet_hours = {
-                  ...settings.watch_quiet_hours,
-                  start: Number(e.target.value),
-                };
-                setSettings({ ...settings, watch_quiet_hours });
-                void patch({ watch_quiet_hours });
-              }}
-            >
-              {HOURS.map((h) => (
-                <option key={h} value={h}>
-                  {String(h).padStart(2, "0")}:00
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-[#6B7280]">quiet until</label>
-            <select
-              className="w-full mt-1 rounded-lg border border-[#E5E7EB] px-2 py-2 text-sm"
-              value={settings.watch_quiet_hours.end}
-              disabled={saving}
-              onChange={(e) => {
-                const watch_quiet_hours = {
-                  ...settings.watch_quiet_hours,
-                  end: Number(e.target.value),
-                };
-                setSettings({ ...settings, watch_quiet_hours });
-                void patch({ watch_quiet_hours });
-              }}
-            >
-              {HOURS.map((h) => (
-                <option key={h} value={h}>
-                  {String(h).padStart(2, "0")}:00
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-[#6B7280]">timezone</label>
-            <input
-              className="w-full mt-1 rounded-lg border border-[#E5E7EB] px-2 py-2 text-sm"
-              value={settings.watch_quiet_hours.timezone || browserTimezone()}
-              disabled={saving}
-              onChange={(e) => {
-                const watch_quiet_hours = {
-                  ...settings.watch_quiet_hours,
-                  timezone: e.target.value,
-                };
-                setSettings({ ...settings, watch_quiet_hours });
-              }}
-              onBlur={() => void patch({ watch_quiet_hours: settings.watch_quiet_hours })}
-            />
-          </div>
-        </div>
+        <AutopilotQuietHoursSection
+          settings={settings}
+          saving={saving}
+          variant="page"
+          onPatch={patchWithState}
+        />
       </section>
 
       <section className="rounded-2xl border border-[#E5E7EB] bg-white p-5 space-y-4">
@@ -479,7 +352,7 @@ export function AutopilotSettingsForm() {
         ) : null}
 
         {billing?.isAgency ? (
-          <div className="space-y-3 pt-2 border-t border-[#E5E7EB]">
+          <div id="branding" className="space-y-3 pt-2 border-t border-[#E5E7EB]">
             <div className="text-xs font-medium text-[#6B7280] uppercase tracking-wide">agency branding</div>
             <input
               type="url"
@@ -547,7 +420,7 @@ export function AutopilotSettingsForm() {
         <input type="checkbox" disabled checked={false} className="mt-3 h-5 w-5 opacity-40" />
       </section>
 
-      <section>
+      <section id="history">
         <h2 className="text-sm font-semibold text-[#111827] mb-3">History</h2>
         <AutopilotHistoryList items={history} />
       </section>

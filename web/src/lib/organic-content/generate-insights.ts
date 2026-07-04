@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { stripJsonFences } from "@/lib/email-intelligence/analyze";
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 import type { Database } from "@/lib/supabase/types";
 
 import { ORGANIC_INSIGHTS_MAX_TOKENS } from "./constants";
@@ -190,7 +190,8 @@ Return ONLY a JSON object with this exact structure:
 Provide 2-4 whats_working items and 1-3 whats_flopping items when patterns exist.
 No preamble. No markdown. Pure JSON only.`;
 
-  const out = await anthropicHaiku({
+  const out = await llmFast({
+    task: "organic_insights",
     systemPrompt: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: ORGANIC_INSIGHTS_MAX_TOKENS,

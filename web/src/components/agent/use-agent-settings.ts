@@ -6,6 +6,7 @@ import { readApiJson } from "@/lib/agent/api-errors";
 
 import type { AgentMessageRow, AgentSettingsState } from "./agent-settings-types";
 
+/** @deprecated Superseded by `use-autopilot-settings.ts` */
 export function useAgentSettings(opts?: { loadMessages?: boolean }) {
   const loadMessages = opts?.loadMessages ?? false;
   const [settingsLoading, setSettingsLoading] = useState(true);

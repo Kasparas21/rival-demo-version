@@ -1,4 +1,4 @@
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 
 export type HaikuBatchScores = {
   production_quality: number;
@@ -63,7 +63,8 @@ export async function scoreWithHaikuBatch(params: {
     "}",
   ].join("\n");
 
-  const res = await anthropicHaiku({
+  const res = await llmFast({
+    task: "activity_score",
     systemPrompt:
       "You are scoring an advertiser's operational sophistication from ad-library metadata only (no live web). Return ONLY valid JSON, no prose outside the JSON object.",
     messages: [{ role: "user", content: user }],

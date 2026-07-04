@@ -4,14 +4,25 @@ import type { Database } from "@/lib/supabase/types";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 
 import { parseWatchQuietHours } from "./watch-quiet-hours";
-import type { AutopilotSettingsRow, ReportBranding, WatchChannels, WatchSensitivity } from "./types";
+import type {
+  AutopilotSettingsRow,
+  DiscordConnection,
+  ReportBranding,
+  SlackConnection,
+  WatchChannels,
+  WatchSensitivity,
+} from "./types";
 
 export const DEFAULT_AUTOPLIOT_SETTINGS: Omit<AutopilotSettingsRow, "id" | "user_id" | "created_at" | "updated_at"> = {
   enabled: false,
   watch_enabled: true,
   watch_sensitivity: "balanced",
-  watch_channels: { email: true, slack: false },
+  watch_min_score: 6,
+  watch_channels: { email: true, slack: false, discord: false },
   slack_webhook_url: null,
+  slack_connection: null,
+  discord_webhook_url: null,
+  discord_connection: null,
   watch_competitor_ids: null,
   watch_quiet_hours: { start: 22, end: 7, timezone: "Europe/London" },
   report_enabled: false,
@@ -23,10 +34,45 @@ export const DEFAULT_AUTOPLIOT_SETTINGS: Omit<AutopilotSettingsRow, "id" | "user
 
 function parseWatchChannels(raw: unknown): WatchChannels {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { email: true, slack: false };
+    return { email: true, slack: false, discord: false };
   }
   const o = raw as Record<string, unknown>;
-  return { email: o.email !== false, slack: o.slack === true };
+  return {
+    email: o.email !== false,
+    slack: o.slack === true,
+    discord: o.discord === true,
+  };
+}
+
+function parseSlackConnection(raw: unknown): SlackConnection | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.team_name !== "string" || typeof o.channel !== "string" || typeof o.connected_at !== "string") {
+    return null;
+  }
+  return {
+    team_name: o.team_name,
+    channel: o.channel,
+    configuration_url: typeof o.configuration_url === "string" ? o.configuration_url : null,
+    connected_at: o.connected_at,
+  };
+}
+
+function parseDiscordConnection(raw: unknown): DiscordConnection | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  if (
+    typeof o.guild_name !== "string" ||
+    typeof o.channel_name !== "string" ||
+    typeof o.connected_at !== "string"
+  ) {
+    return null;
+  }
+  return {
+    guild_name: o.guild_name,
+    channel_name: o.channel_name,
+    connected_at: o.connected_at,
+  };
 }
 
 function parseReportBranding(raw: unknown): ReportBranding {
@@ -49,8 +95,15 @@ export function rowToAutopilotSettings(row: Record<string, unknown>): AutopilotS
     enabled: row.enabled === true,
     watch_enabled: row.watch_enabled !== false,
     watch_sensitivity: (row.watch_sensitivity as WatchSensitivity) ?? "balanced",
+    watch_min_score:
+      typeof row.watch_min_score === "number" && Number.isFinite(row.watch_min_score)
+        ? row.watch_min_score
+        : null,
     watch_channels: parseWatchChannels(row.watch_channels),
     slack_webhook_url: typeof row.slack_webhook_url === "string" ? row.slack_webhook_url : null,
+    slack_connection: parseSlackConnection(row.slack_connection),
+    discord_webhook_url: typeof row.discord_webhook_url === "string" ? row.discord_webhook_url : null,
+    discord_connection: parseDiscordConnection(row.discord_connection),
     watch_competitor_ids: Array.isArray(row.watch_competitor_ids)
       ? (row.watch_competitor_ids as string[])
       : null,

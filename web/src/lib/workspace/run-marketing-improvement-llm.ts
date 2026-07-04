@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { llmSmart } from "@/lib/llm/anthropic";
 
 function stripJsonFences(text: string): string {
   let t = text.trim();
@@ -64,7 +64,8 @@ export async function runMarketingImprovementLlm(params: {
       ? `PUBLIC ADS LIBRARY DIGESTS (scraped creatives for brands they follow + their own workspace when available).\nOnly use this text — do not invent campaigns, budgets, or platforms not shown.\nIf evidence is thin, say so and stay cautious.\n\n${evidenceText.trim()}`
       : "(No ad samples were available.)";
 
-  const res = await anthropicSonnet({
+  const res = await llmSmart({
+    task: "marketing_improvement",
     maxTokens: 4_096,
     systemPrompt: `You are a strategic marketing advisor. The user runs "${userBrandName}" and follows several competitors in one workspace.
 

@@ -7,6 +7,7 @@ import {
   shouldSkipDetection,
 } from "@/lib/agent/baseline";
 import { deliverAgentMessage } from "@/lib/agent/deliver-agent-message";
+import { isAutopilotDeliveryActive } from "@/lib/autopilot/is-autopilot-delivery-active";
 import { detectAdsSignals } from "@/lib/agent/detectors/ads";
 import { detectCrossCompetitorTrends } from "@/lib/agent/detectors/cross-competitor";
 import { detectEmailSignals } from "@/lib/agent/detectors/email";
@@ -77,6 +78,9 @@ async function insertSignals(
   return inserted;
 }
 
+/**
+ * @deprecated Agent signal delivery superseded by autopilot watch; detection paths remain for migration.
+ */
 export async function runAgentForUserCompetitor(
   admin: SupabaseClient<Database>,
   params: {
@@ -153,6 +157,11 @@ export async function runAgentForUserCompetitor(
 
     const inserted = await insertSignals(admin, userId, competitorId, allSignals);
 
+    if (await isAutopilotDeliveryActive(admin, userId)) {
+      console.info("[agent] delivery skipped (autopilot active) user=%s", userId);
+      return { signalsDetected: inserted.length, delivered: false, skippedReason: "Autopilot watch is active." };
+    }
+
     const { email, brandContext } = await loadUserContext(admin, userId);
     const competitorName = await loadCompetitorName(admin, competitorId);
 
@@ -195,6 +204,12 @@ export async function runCrossCompetitorCheck(
     if (trendSignals.length === 0) return;
 
     const inserted = await insertSignals(admin, userId, null, trendSignals);
+
+    if (await isAutopilotDeliveryActive(admin, userId)) {
+      console.info("[agent] delivery skipped (autopilot active) user=%s", userId);
+      return;
+    }
+
     const { email, brandContext } = await loadUserContext(admin, userId);
 
     await deliverAgentMessage({

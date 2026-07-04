@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { llmSmart } from "@/lib/llm/anthropic";
 import type { BenchmarkAiSummary, BenchmarkPlatformId } from "@/lib/benchmark/benchmark-types";
 import { BENCHMARK_PLATFORM_LABELS } from "@/lib/benchmark/benchmark-types";
 
@@ -36,7 +36,8 @@ export async function runBenchmarkLlm(params: {
     .join(", ");
   const gapAngles = params.angleGaps.slice(0, 6).join(", ") || "none noted";
 
-  const res = await anthropicSonnet({
+  const res = await llmSmart({
+    task: "benchmark",
     maxTokens: 1_024,
     systemPrompt: `You summarize a competitive benchmark for the marketer's own brand "${params.userBrandName}" vs their tracked rivals.
 

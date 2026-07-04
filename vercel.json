@@ -26,10 +26,6 @@
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/agent-weekly-brief",
-      "schedule": "0 8 * * 1"
-    },
-    {
       "path": "/api/cron/autopilot-watch",
       "schedule": "15 7 * * *"
     },

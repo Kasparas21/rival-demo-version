@@ -42,10 +42,23 @@ async function runSendAlertEmails(req: Request): Promise<NextResponse> {
   }
 
   const userIds = [...new Set((emailRules ?? []).map((r) => r.user_id))];
+
+  const { data: autopilotActive } = await admin
+    .from("autopilot_settings")
+    .select("user_id")
+    .eq("enabled", true)
+    .eq("watch_enabled", true);
+  const autopilotActiveIds = new Set((autopilotActive ?? []).map((r) => r.user_id));
+
   let emailsSent = 0;
   let alertsNotified = 0;
 
   for (const userId of userIds) {
+    if (autopilotActiveIds.has(userId)) {
+      console.info(`[alert-emails] skipped user ${userId} (autopilot active)`);
+      continue;
+    }
+
     const userRules = (emailRules ?? []).filter((r) => r.user_id === userId);
     const enabledTypes = new Set(userRules.map((r) => r.alert_type));
 

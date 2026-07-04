@@ -1,4 +1,4 @@
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 import {
   organicPostPreviewAnalysisSchema,
   type OrganicPostPreviewAnalysis,
@@ -63,7 +63,8 @@ Engagement: ${input.likes} likes, ${input.comments} comments, ${input.shares} sh
 Caption:
 """${input.content || "(no caption — infer from format/platform context)"}"""`;
 
-  const res = await anthropicHaiku({
+  const res = await llmFast({
+    task: "organic_post_analysis",
     systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 2200,

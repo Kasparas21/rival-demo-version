@@ -9,7 +9,7 @@ import {
   canRunAdPreviewAnalysis,
   loadAdPreviewAnalysisUsage,
 } from "@/lib/billing/usage-quotas";
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
 
@@ -143,7 +143,8 @@ Has creative URL: ${ad.ad_creative_url ? "yes" : "no"}
 Ad text:
 """${adText || "(no text — infer from format/platform context)"}"""`;
 
-  const res = await anthropicHaiku({
+  const res = await llmFast({
+    task: "ad_detail_analysis",
     systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 2200,

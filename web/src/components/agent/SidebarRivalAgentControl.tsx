@@ -3,10 +3,11 @@
 import { ArrowRight, Bot } from "lucide-react";
 import { useState } from "react";
 
+import { useAutopilotSettings } from "@/components/autopilot/use-autopilot-settings";
+import { useAutopilotOAuthToast } from "@/components/autopilot/use-autopilot-oauth-toast";
 import { cn } from "@/lib/utils";
 
 import { AgentSettingsModal } from "./AgentSettingsModal";
-import { useAgentSettings } from "./use-agent-settings";
 
 type SidebarRivalAgentControlProps = {
   collapsed?: boolean;
@@ -59,7 +60,7 @@ function AgentToggleSwitch({
           ? "bg-gradient-to-b from-emerald-400 to-emerald-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
           : "bg-[#e5e7eb] shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]",
       )}
-      title={enabled ? "Turn Rival autopilot off" : "Turn Rival autopilot on"}
+      title={enabled ? "Turn Autopilot off" : "Turn Autopilot on"}
     >
       <span
         className={cn(
@@ -75,9 +76,12 @@ function AgentToggleSwitch({
 
 export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgentControlProps) {
   const [modalOpen, setModalOpen] = useState(false);
-  const controller = useAgentSettings({ loadMessages: true });
-  const { settingsLoading, settings, setEnabled, error } = controller;
-  const toggleId = "sidebar-rival-agent-toggle";
+  const controller = useAutopilotSettings();
+  const { settingsLoading, settings, setEnabled, error, loadSettings } = controller;
+  useAutopilotOAuthToast(() => {
+    void loadSettings();
+  });
+  const toggleId = "sidebar-autopilot-toggle";
 
   const openModal = () => setModalOpen(true);
 
@@ -88,7 +92,7 @@ export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgen
           type="button"
           onClick={openModal}
           className="flex flex-col items-center gap-1.5 py-1 rounded-lg hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/30"
-          title="Rival autopilot — tap to customize"
+          title="Autopilot — tap to customize"
         >
           <AgentIconButton className="h-9 w-9 rounded-xl" iconClassName="h-5 w-5" />
           <AgentToggleSwitch
@@ -118,10 +122,10 @@ export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgen
             type="button"
             onClick={openModal}
             className="group min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/30 rounded -my-0.5 py-0.5"
-            title="Open Rival autopilot settings"
+            title="Open Autopilot settings"
           >
             <span className="block text-[12px] font-semibold leading-tight text-[#343434] group-hover:text-[#1a1a2e]">
-              Rival autopilot
+              Autopilot
             </span>
             <span className="mt-0.5 flex items-center gap-0.5 text-[11px] font-medium text-[#71717a] group-hover:text-[#52525b]">
               <span className="group-hover:underline underline-offset-2">Customize</span>

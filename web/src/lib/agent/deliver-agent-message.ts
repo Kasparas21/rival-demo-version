@@ -15,6 +15,9 @@ import type { DetectedAgentSignal } from "@/lib/agent/types";
 import { getResendApiKey } from "@/lib/email/resend-config";
 import type { Database } from "@/lib/supabase/types";
 
+/**
+ * @deprecated Superseded by autopilot watch delivery (`lib/autopilot/run-autopilot-watch.ts`).
+ */
 export async function deliverAgentMessage(params: {
   admin: SupabaseClient<Database>;
   userId: string;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { llmSmart } from "@/lib/llm/anthropic";
 
 /** Bumps cache rows in `brand_comparison_results` when prompt/schema changes. */
 export const BRAND_COMPARISON_CACHE_MODEL_VERSION = "deepseek-v4-flash-v1";
@@ -87,7 +87,8 @@ export async function runBrandComparisonLlm(params: {
       ? `Optional raw ad creative samples (secondary):\n${adEvidence.trim()}`
       : "No raw ad creative blocks provided; rely on STRUCTURED_STRATEGY_AND_NUMERIC_FACTS_JSON.";
 
-  const res = await anthropicSonnet({
+  const res = await llmSmart({
+    task: "brand_comparison",
     maxTokens: 3_000,
     systemPrompt: `You are Rival's tactical comparison analyst. You output ONLY actionable moves for a paid social / search operator comparing their brand vs a competitor.
 

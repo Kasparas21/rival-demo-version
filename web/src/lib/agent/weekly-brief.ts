@@ -6,6 +6,9 @@ import { getOrCreateAgentSettings, parseAgentChannels } from "@/lib/agent/settin
 import { getResendApiKey } from "@/lib/email/resend-config";
 import type { Database } from "@/lib/supabase/types";
 
+/**
+ * @deprecated Superseded by autopilot Phase 3 Auto-Brief (`autopilot_settings.brief_enabled`).
+ */
 export async function sendWeeklyBriefForUser(
   admin: SupabaseClient<Database>,
   userId: string,

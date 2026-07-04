@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+/** @deprecated Cron removed from vercel.json — superseded by autopilot Phase 3 Auto-Brief. */
 import { authorizeCron } from "@/lib/cron/authorize-cron";
 import { sendWeeklyBriefForUser } from "@/lib/agent/weekly-brief";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";

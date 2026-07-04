@@ -1,4 +1,4 @@
-import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { llmSmart } from "@/lib/llm/anthropic";
 import { isBrandBidAngle } from "@/lib/comparison/move-brand-bid";
 import type { CompetitorStrategyOverviewPayload, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
@@ -197,7 +197,8 @@ Avoid vague phrases like "strategic shift" or "key change." Output only the sent
 Change: ${moveDescriptionForNarrative(move)}
 ${evidence ? `Evidence (ad hook): ${evidence}` : ""}`;
 
-  const result = await anthropicSonnet({
+  const result = await llmSmart({
+    task: "move_detector",
     systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 200,

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import { anthropicHaiku } from "@/lib/llm/anthropic";
+import { llmFast } from "@/lib/llm/anthropic";
 import {
   parseStrategyCardsFromUnknown,
   type StrategyOverviewRequestBody,
@@ -149,7 +149,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     "Respond with ONLY a JSON array of 5 to 8 strategy cards. No markdown fences, no explanation.",
   ].join("\n");
 
-  const completion = await anthropicHaiku({
+  const completion = await llmFast({
+    task: "strategy_overview",
     systemPrompt: SYSTEM_PROMPT,
     messages: [{ role: "user", content: userContent }],
     maxTokens: 2000,

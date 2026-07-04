@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { anthropicSonnet } from "@/lib/llm/anthropic";
+import { llmSmart } from "@/lib/llm/anthropic";
 import type {
   AudienceInferenceResult,
   CompetitorStrategyOverviewPayload,
@@ -110,7 +110,8 @@ ${input.formatMix.map((f) => `- ${f.format}: ${f.share}%`).join("\n")}
 Return JSON: { "segments": [{ "name", "confidence", "signals": [string] }], "primarySegmentName", "summary" }
 Summary: 2 sentences describing the brand's audience strategy overall.`;
 
-  const result = await anthropicSonnet({
+  const result = await llmSmart({
+    task: "audience_inference",
     systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
     maxTokens: 1500,

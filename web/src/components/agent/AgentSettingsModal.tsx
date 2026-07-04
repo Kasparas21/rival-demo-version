@@ -1,33 +1,37 @@
 "use client";
 
-import { Bot, X } from "lucide-react";
+import { Bot, Sparkles, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { glassModalShellClass } from "@/components/ui/glass-styles";
+
 import { AgentSettingsForm } from "./AgentSettingsForm";
-import { AgentMessagesSkeleton, AgentSettingsFormSkeleton } from "./AgentSettingsSkeleton";
-import type { AgentMessageRow } from "./agent-settings-types";
-import type { AgentSettingsController } from "./use-agent-settings";
+import { AgentSettingsFormSkeleton } from "./AgentSettingsSkeleton";
+import type { AutopilotSettingsController } from "@/components/autopilot/use-autopilot-settings";
+import type { BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
 
 type AgentSettingsModalProps = {
   open: boolean;
   onClose: () => void;
-  controller: AgentSettingsController;
+  controller: AutopilotSettingsController;
 };
 
 export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsModalProps) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
+  const [competitors, setCompetitors] = useState<CompetitorOption[]>([]);
+  const [brands, setBrands] = useState<BrandOption[]>([]);
   const {
     settingsLoading,
-    messagesLoading,
     saving,
     error,
     savedFlash,
     settings,
-    messages,
+    billing,
     setSettings,
     saveSettings,
+    loadSettings,
   } = controller;
 
   useEffect(() => {
@@ -43,14 +47,53 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      try {
+        const [brandsRes, compsRes] = await Promise.all([
+          fetch("/api/account/brands", { credentials: "include" }),
+          fetch("/api/account/saved-competitors", { credentials: "include" }),
+        ]);
+        const brandsJson = (await brandsRes.json()) as { brands?: { id: string; name: string }[] };
+        setBrands((brandsJson.brands ?? []).map((b) => ({ id: b.id, name: b.name })));
+
+        const compsJson = (await compsRes.json()) as {
+          competitors?: {
+            savedCompetitorDbId?: string;
+            id?: string;
+            name?: string;
+            brand?: { name?: string };
+          }[];
+        };
+        setCompetitors(
+          (compsJson.competitors ?? [])
+            .map((c) => ({
+              id: c.savedCompetitorDbId ?? c.id ?? "",
+              name: c.brand?.name?.trim() || c.name?.trim() || "Competitor",
+            }))
+            .filter((c) => c.id),
+        );
+      } catch {
+        setCompetitors([]);
+        setBrands([]);
+      }
+    })();
+  }, [open]);
+
   if (!mounted || !open) return null;
 
   const handleSave = () => {
     if (!settings) return;
     void saveSettings({
-      channels: settings.channels,
-      min_threat_score: settings.min_threat_score,
-      weekly_brief_enabled: settings.weekly_brief_enabled,
+      watch_channels: settings.watch_channels,
+      watch_min_score: settings.watch_min_score,
+      watch_sensitivity: settings.watch_sensitivity,
+      watch_competitor_ids: settings.watch_competitor_ids,
+      watch_quiet_hours: settings.watch_quiet_hours,
+      report_enabled: settings.report_enabled,
+      report_day_of_month: settings.report_day_of_month,
+      report_workspaces: settings.report_workspaces,
     });
   };
 
@@ -60,85 +103,73 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
     <div className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-[#1a1a2e]/40 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e]/50 via-indigo-950/30 to-emerald-950/20 backdrop-blur-md motion-reduce:backdrop-blur-none"
         aria-label="Close"
         onClick={onClose}
       />
+
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative z-10 flex max-h-[min(90vh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-[#ececef] bg-white shadow-[0_24px_80px_rgba(0,0,0,0.18)] sm:rounded-2xl"
+        className={`relative z-10 flex max-h-[min(92vh,680px)] w-full max-w-[440px] flex-col overflow-hidden ${glassModalShellClass} shadow-[0_32px_80px_-20px_rgba(15,23,42,0.35)] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-300 sm:max-w-lg`}
       >
-        <div className="flex items-start justify-between gap-3 border-b border-[#f0f0f2] px-5 py-4">
+        {/* Ambient gradient */}
+        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-emerald-400/20 blur-3xl" aria-hidden />
+        <div className="pointer-events-none absolute -bottom-12 -left-12 h-36 w-36 rounded-full bg-indigo-400/15 blur-3xl" aria-hidden />
+
+        <div className="relative flex items-start justify-between gap-3 border-b border-white/50 bg-white/30 px-5 py-4 backdrop-blur-xl">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1a1a2e] text-white">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1a1a2e] to-indigo-900 text-white shadow-[0_8px_24px_-8px_rgba(26,26,46,0.6)] ring-1 ring-white/20">
               <Bot className="h-5 w-5" aria-hidden />
             </div>
             <div>
-              <h2 id={titleId} className="text-[16px] font-semibold text-[#1a1a2e]">
-                Rival autopilot
-              </h2>
-              <p className="mt-0.5 text-[12px] text-[#71717a]">Channels, alert threshold, and weekly brief.</p>
+              <div className="flex items-center gap-1.5">
+                <h2 id={titleId} className="text-[17px] font-semibold tracking-tight text-[#1a1a2e]">
+                  Autopilot
+                </h2>
+                <Sparkles className="h-3.5 w-3.5 text-emerald-500" aria-hidden />
+              </div>
+              <p className="mt-0.5 text-[12px] leading-snug text-[#71717a]">
+                Channels, thresholds & delivery
+              </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-[#71717a] hover:bg-[#f4f4f5] hover:text-[#1a1a2e]"
+            className="rounded-xl border border-white/60 bg-white/50 p-2 text-[#71717a] shadow-sm backdrop-blur-sm transition hover:bg-white/80 hover:text-[#1a1a2e]"
             aria-label="Close settings"
           >
-            <X className="h-5 w-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
           {showFormSkeleton ? (
             <AgentSettingsFormSkeleton />
           ) : !settings ? (
             <p className="text-[13px] text-red-700">{error ?? "Could not load settings."}</p>
           ) : (
-            <>
-              <AgentSettingsForm
-                settings={settings}
-                saving={saving}
-                savedFlash={savedFlash}
-                error={error}
-                onChange={setSettings}
-                onSave={handleSave}
-              />
-              {messagesLoading ? (
-                <AgentMessagesSkeleton />
-              ) : (
-                <MessageHistoryCompact messages={messages} />
-              )}
-            </>
+            <AgentSettingsForm
+              settings={settings!}
+              billing={billing}
+              competitors={competitors}
+              brands={brands}
+              saving={saving}
+              savedFlash={savedFlash}
+              error={error}
+              onSettingsChange={setSettings}
+              onPatch={async (body) => {
+                await saveSettings(body);
+              }}
+              onSave={handleSave}
+              onRefresh={loadSettings}
+            />
           )}
         </div>
       </div>
     </div>,
     document.body,
-  );
-}
-
-function MessageHistoryCompact({ messages }: { messages: AgentMessageRow[] }) {
-  if (messages.length === 0) return null;
-
-  return (
-    <div className="mt-6 border-t border-[#f0f0f2] pt-5">
-      <h3 className="text-[13px] font-semibold text-[#1a1a2e]">Recent messages</h3>
-      <ul className="mt-2 space-y-2">
-        {messages.slice(0, 5).map((m) => (
-          <li key={m.id} className="rounded-lg bg-[#fafafa] px-3 py-2 text-[12px] text-[#52525b]">
-            <span className="font-medium text-[#1a1a2e]">{m.competitor_name}</span>
-            {" · "}
-            {m.subject ?? "Intel alert"}
-            <span className="mt-0.5 block text-[11px] text-[#a1a1aa]">
-              {new Date(m.sent_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
