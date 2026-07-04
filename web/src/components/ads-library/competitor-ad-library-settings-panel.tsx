@@ -10,7 +10,7 @@ import {
 } from "@/components/ads-library/ad-library-connections-panel";
 import { CHANNELS, type ChannelId, DEFAULT_SELECTED_CHANNELS } from "@/components/channel-picker-modal";
 import { saveCompetitorToAccount } from "@/lib/account/client";
-import { writeAdLibraryRegionPrefsToSession } from "@/lib/ad-library/ad-library-region-prefs";
+import { writeAdLibraryRegionPrefsToSession, readAdLibraryRegionPrefsFromSession } from "@/lib/ad-library/ad-library-region-prefs";
 import { mergeScrapeFieldsWithWorkspaceMarkets } from "@/lib/ad-library/scrape-request-fields";
 import { readScrapeRequestFieldsFromStorage } from "@/lib/ad-library/scrape-request-fields";
 import {
@@ -139,7 +139,11 @@ export function CompetitorAdLibrarySettingsPanel({
     const upsert = upsertSidebarCompetitor(row);
     if (!upsert.ok) {
       setSaving(false);
-      setError(upsert.error ?? "Could not update competitor in sidebar.");
+      setError(
+        upsert.reason === "max_watched_competitors"
+          ? "You've reached the maximum number of watched competitors."
+          : "Could not update competitor in sidebar.",
+      );
       return;
     }
 
@@ -165,13 +169,12 @@ export function CompetitorAdLibrarySettingsPanel({
       readScrapeRequestFieldsFromStorage(),
       adMarketCountryCodes,
     );
+    const regionPrefs = readAdLibraryRegionPrefsFromSession();
     writeAdLibraryRegionPrefsToSession({
+      ...regionPrefs,
       metaCountry: scrapeFields.metaCountry,
       linkedinCountryCode: scrapeFields.linkedinCountryCode,
       snapchatCountry: scrapeFields.snapchatCountry,
-      googleRegion: scrapeFields.googleRegion,
-      tiktokRegion: scrapeFields.tiktokRegion,
-      pinterestCountry: scrapeFields.pinterestCountry,
     });
 
     setSavedFlash(true);

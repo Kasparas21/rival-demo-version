@@ -3533,9 +3533,9 @@ function CompetitorDashboardBody({
       pickDashboardInlinePreviewAds(
         filteredGoogleRows,
         (row) => {
-          const pl = row.type === "youtube" ? "youtube" : "google";
-          const run = runStatusForLibraryCard(pl, row.id);
-          return isLibraryAdRunning(pl, row, run);
+          const lifecyclePlatform = row.type === "youtube" ? "youtube" : "google";
+          const run = runStatusForLibraryCard(lifecyclePlatform, row.id);
+          return isLibraryAdRunning("google", row, run);
         },
         googleAdRowHasDashboardInlinePreview,
         META_ADS_INLINE_PREVIEW,
