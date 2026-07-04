@@ -205,7 +205,6 @@ export const landingCopyDe: LandingCopy = {
     ],
   },
   faq: {
-    eyebrow: "noch nicht überzeugt?",
     titleLine1: "häufig gestellte",
     titleHighlight: "fragen",
     items: [
