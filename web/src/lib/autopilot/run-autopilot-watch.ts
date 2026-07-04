@@ -66,7 +66,6 @@ function settingsFromRow(row: Record<string, unknown>): AutopilotSettingsRow {
     slack_connection: null,
     discord_webhook_url:
       typeof row.discord_webhook_url === "string" ? row.discord_webhook_url : null,
-    discord_connection: null,
     watch_competitor_ids: Array.isArray(row.watch_competitor_ids)
       ? (row.watch_competitor_ids as string[])
       : null,

@@ -6,7 +6,6 @@ import type { PlanTier } from "@/lib/billing/plan-limits";
 import { parseWatchQuietHours } from "./watch-quiet-hours";
 import type {
   AutopilotSettingsRow,
-  DiscordConnection,
   ReportBranding,
   SlackConnection,
   WatchChannels,
@@ -22,7 +21,6 @@ export const DEFAULT_AUTOPLIOT_SETTINGS: Omit<AutopilotSettingsRow, "id" | "user
   slack_webhook_url: null,
   slack_connection: null,
   discord_webhook_url: null,
-  discord_connection: null,
   watch_competitor_ids: null,
   watch_quiet_hours: { start: 22, end: 7, timezone: "Europe/London" },
   report_enabled: false,
@@ -58,23 +56,6 @@ function parseSlackConnection(raw: unknown): SlackConnection | null {
   };
 }
 
-function parseDiscordConnection(raw: unknown): DiscordConnection | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  if (
-    typeof o.guild_name !== "string" ||
-    typeof o.channel_name !== "string" ||
-    typeof o.connected_at !== "string"
-  ) {
-    return null;
-  }
-  return {
-    guild_name: o.guild_name,
-    channel_name: o.channel_name,
-    connected_at: o.connected_at,
-  };
-}
-
 function parseReportBranding(raw: unknown): ReportBranding {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { logo_url: null, agency_name: null, accent_color: null, hide_powered_by: false };
@@ -103,7 +84,6 @@ export function rowToAutopilotSettings(row: Record<string, unknown>): AutopilotS
     slack_webhook_url: typeof row.slack_webhook_url === "string" ? row.slack_webhook_url : null,
     slack_connection: parseSlackConnection(row.slack_connection),
     discord_webhook_url: typeof row.discord_webhook_url === "string" ? row.discord_webhook_url : null,
-    discord_connection: parseDiscordConnection(row.discord_connection),
     watch_competitor_ids: Array.isArray(row.watch_competitor_ids)
       ? (row.watch_competitor_ids as string[])
       : null,

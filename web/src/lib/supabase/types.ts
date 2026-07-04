@@ -760,7 +760,6 @@ export type Database = {
           slack_webhook_url: string | null;
           slack_connection: Json | null;
           discord_webhook_url: string | null;
-          discord_connection: Json | null;
           watch_competitor_ids: string[] | null;
           watch_quiet_hours: Json;
           report_enabled: boolean;
@@ -782,7 +781,6 @@ export type Database = {
           slack_webhook_url?: string | null;
           slack_connection?: Json | null;
           discord_webhook_url?: string | null;
-          discord_connection?: Json | null;
           watch_competitor_ids?: string[] | null;
           watch_quiet_hours?: Json;
           report_enabled?: boolean;
@@ -804,7 +802,6 @@ export type Database = {
           slack_webhook_url?: string | null;
           slack_connection?: Json | null;
           discord_webhook_url?: string | null;
-          discord_connection?: Json | null;
           watch_competitor_ids?: string[] | null;
           watch_quiet_hours?: Json;
           report_enabled?: boolean;

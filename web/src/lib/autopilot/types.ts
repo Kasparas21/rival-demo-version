@@ -33,12 +33,6 @@ export type SlackConnection = {
   connected_at: string;
 };
 
-export type DiscordConnection = {
-  guild_name: string;
-  channel_name: string;
-  connected_at: string;
-};
-
 export type AutopilotSettingsRow = {
   id: string;
   user_id: string;
@@ -50,7 +44,6 @@ export type AutopilotSettingsRow = {
   slack_webhook_url: string | null;
   slack_connection: SlackConnection | null;
   discord_webhook_url: string | null;
-  discord_connection: DiscordConnection | null;
   watch_competitor_ids: string[] | null;
   watch_quiet_hours: WatchQuietHours;
   report_enabled: boolean;

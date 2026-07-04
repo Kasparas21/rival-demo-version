@@ -34,8 +34,6 @@ export async function GET(): Promise<NextResponse> {
         ...settings,
         slack_webhook_url: settings.slack_webhook_url ? "••••••••" : null,
         slack_webhook_configured: Boolean(settings.slack_webhook_url?.trim()),
-        discord_webhook_url: settings.discord_webhook_url ? "••••••••" : null,
-        discord_webhook_configured: Boolean(settings.discord_webhook_url?.trim()),
         user_email: user.email ?? null,
       },
       billing: {
@@ -99,15 +97,6 @@ export async function PUT(req: Request): Promise<NextResponse> {
     patch.slack_connection = null;
   }
 
-  if (parsed.data.discord_webhook_url === null) {
-    patch.discord_webhook_url = null;
-    patch.discord_connection = null;
-  } else if (parsed.data.discord_webhook_url === undefined) {
-    delete patch.discord_webhook_url;
-  } else if (typeof parsed.data.discord_webhook_url === "string") {
-    patch.discord_connection = null;
-  }
-
   const { data: updated, error } = await supabase
     .from("autopilot_settings")
     .update(patch as Database["public"]["Tables"]["autopilot_settings"]["Update"])
@@ -126,8 +115,6 @@ export async function PUT(req: Request): Promise<NextResponse> {
       ...settings,
       slack_webhook_url: settings.slack_webhook_url ? "••••••••" : null,
       slack_webhook_configured: Boolean(settings.slack_webhook_url?.trim()),
-      discord_webhook_url: settings.discord_webhook_url ? "••••••••" : null,
-      discord_webhook_configured: Boolean(settings.discord_webhook_url?.trim()),
     },
   });
 }

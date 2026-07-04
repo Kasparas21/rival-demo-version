@@ -28,7 +28,6 @@ type BillingMeta = {
 
 type SettingsResponse = AutopilotSettingsRow & {
   slack_webhook_configured?: boolean;
-  discord_webhook_configured?: boolean;
   user_email?: string | null;
 };
 
