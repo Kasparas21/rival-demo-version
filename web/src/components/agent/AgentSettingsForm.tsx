@@ -12,7 +12,7 @@ import {
 } from "@/components/autopilot/autopilot-glass-ui";
 import { AutopilotAutoReportSection, AutopilotClientBrandsSection, AutopilotCompetitorsSection, AutopilotQuietHoursSection } from "@/components/autopilot/AutopilotWatchSections";
 import { AutopilotChannelsSection } from "@/components/autopilot/AutopilotChannelsSection";
-import { AutopilotThresholdRadios } from "@/components/autopilot/AutopilotThresholdRadios";
+import { AutopilotThresholdSlider } from "@/components/autopilot/AutopilotThresholdRadios";
 import type { AutopilotBillingMeta, AutopilotSettingsUiState, BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
 import { uiMinScore } from "@/components/autopilot/use-autopilot-settings";
 import type { AutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
@@ -107,11 +107,11 @@ export function AgentSettingsForm({
       />
 
       <GlassSection title="Alert threshold" subtitle="How sensitive alerts should be.">
-        <AutopilotThresholdRadios
+        <AutopilotThresholdSlider
           variant="modal"
           value={uiMinScore(settings)}
           disabled={thresholdDisabled}
-          onChange={(minScore, patch) => {
+          onChange={(_minScore, patch) => {
             onSettingsChange({
               ...settings,
               watch_min_score: patch.watch_min_score,

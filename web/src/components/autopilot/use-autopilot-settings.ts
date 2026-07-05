@@ -22,12 +22,12 @@ export type AutopilotSettingsUiState = AutopilotSettingsRow & {
 export type CompetitorOption = { id: string; name: string; brandId?: string; brandName?: string };
 export type BrandOption = { id: string; name: string; isPrimary?: boolean };
 
-export function uiMinScore(settings: AutopilotSettingsUiState): 6 | 8 | 9 {
+export function uiMinScore(settings: AutopilotSettingsUiState): number {
   if (settings.watch_min_score != null) {
     return normalizeWatchMinScoreForUi(settings.watch_min_score);
   }
   if (settings.watch_sensitivity === "big_moves") return 8;
-  if (settings.watch_sensitivity === "paranoid") return 6;
+  if (settings.watch_sensitivity === "paranoid") return 4;
   return 6;
 }
 

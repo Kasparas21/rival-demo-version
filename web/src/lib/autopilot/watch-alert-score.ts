@@ -1,6 +1,8 @@
 import type { AlertSeverity, AlertType } from "@/lib/alerts/alert-types";
 import { isAlertType } from "@/lib/alerts/alert-types";
 
+import type { WatchSensitivity } from "./types";
+
 /** Base watch score by alert type + severity (1–10, aligned with agent min_threat_score UX). */
 const ALERT_WATCH_SCORE: Partial<Record<AlertType, Partial<Record<AlertSeverity, number>>>> = {
   new_platform: { high: 10, notable: 9, info: 7 },
@@ -18,6 +20,10 @@ const SEVERITY_ORDER: AlertSeverity[] = ["high", "notable", "info"];
 function isAlertSeverity(value: string): value is AlertSeverity {
   return value === "high" || value === "notable" || value === "info";
 }
+
+export const WATCH_MIN_SCORE_MIN = 1;
+export const WATCH_MIN_SCORE_MAX = 10;
+export const WATCH_MIN_SCORE_DEFAULT = 6;
 
 /** Derived score for competitor_alerts rows (comparable to agent threat_score thresholds). */
 export function alertWatchScore(alertType: string, severity: string): number {
@@ -38,23 +44,30 @@ export function passesWatchMinScore(alertType: string, severity: string, minScor
   return alertWatchScore(alertType, severity) >= minScore;
 }
 
-/** Map UI threshold selection to stored sensitivity (written together with watch_min_score). */
-export function watchSensitivityForMinScore(minScore: number): "balanced" | "big_moves" {
-  return minScore >= 8 ? "big_moves" : "balanced";
+/** Map slider value to stored sensitivity (written together with watch_min_score). */
+export function watchSensitivityForMinScore(minScore: number): WatchSensitivity {
+  if (minScore <= 5) return "paranoid";
+  if (minScore <= 7) return "balanced";
+  return "big_moves";
 }
 
-/** Normalize legacy DB values for UI radios (6 / 8 / 9). */
-export function normalizeWatchMinScoreForUi(raw: number | null | undefined): 6 | 8 | 9 {
-  if (raw == null) return 6;
-  if (raw >= 9) return 9;
-  if (raw >= 8) return 8;
-  return 6;
+export function normalizeWatchMinScoreForUi(raw: number | null | undefined): number {
+  if (raw == null) return WATCH_MIN_SCORE_DEFAULT;
+  return Math.min(WATCH_MIN_SCORE_MAX, Math.max(WATCH_MIN_SCORE_MIN, Math.round(raw)));
 }
 
-export const WATCH_THRESHOLD_OPTIONS = [
-  { value: 6 as const, label: "Meaningful moves — score 6+", sensitivity: "balanced" as const },
-  { value: 8 as const, label: "Big moves only — score 8+", sensitivity: "big_moves" as const },
-  { value: 9 as const, label: "Critical only — score 9+", sensitivity: "big_moves" as const },
-];
+export function watchThresholdLabel(minScore: number): string {
+  const s = normalizeWatchMinScoreForUi(minScore);
+  if (s <= 2) return "Catch almost everything";
+  if (s <= 4) return "Most competitor moves";
+  if (s <= 6) return "Meaningful moves";
+  if (s <= 8) return "Big moves only";
+  return "Critical only";
+}
+
+export function watchThresholdHint(minScore: number): string {
+  const s = normalizeWatchMinScoreForUi(minScore);
+  return `Alerts scoring ${s}+ on our 1–10 scale will trigger Autopilot. Lower = more alerts.`;
+}
 
 export { SEVERITY_ORDER };
