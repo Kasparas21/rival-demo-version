@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -10,7 +9,7 @@ import {
   GlassSection,
   GlassToggle,
 } from "@/components/autopilot/autopilot-glass-ui";
-import { AutopilotAutoReportSection, AutopilotCompetitorsSection, AutopilotQuietHoursSection } from "@/components/autopilot/AutopilotWatchSections";
+import { AutopilotAutoReportSection, AutopilotClientBrandsSection, AutopilotCompetitorsSection, AutopilotQuietHoursSection } from "@/components/autopilot/AutopilotWatchSections";
 import { AutopilotChannelsSection } from "@/components/autopilot/AutopilotChannelsSection";
 import { AutopilotThresholdRadios } from "@/components/autopilot/AutopilotThresholdRadios";
 import type { AutopilotBillingMeta, AutopilotSettingsUiState, BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
@@ -29,6 +28,7 @@ type AgentSettingsFormProps = {
   onPatch: (patch: Record<string, unknown>) => void | Promise<void>;
   onSave: () => void;
   onRefresh?: () => void | Promise<void>;
+  onViewHistory?: () => void;
 };
 
 export function AgentSettingsForm({
@@ -43,6 +43,7 @@ export function AgentSettingsForm({
   onPatch,
   onSave,
   onRefresh,
+  onViewHistory,
 }: AgentSettingsFormProps) {
   const [slackInput, setSlackInput] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -116,9 +117,25 @@ export function AgentSettingsForm({
       </GlassSection>
 
       <div className={cn(autopilotGlassCardClass, "space-y-3 p-3.5")}>
+        <AutopilotClientBrandsSection
+          settings={settings}
+          brands={brands}
+          saving={saving}
+          onPatch={(body) => {
+            if (body.watch_workspaces) {
+              onSettingsChange({
+                ...settings,
+                watch_workspaces: body.watch_workspaces as Record<string, boolean>,
+              });
+            }
+            void onPatch(body);
+          }}
+        />
+        {brands.length > 1 ? <div className="border-t border-white/50 pt-3" /> : null}
         <AutopilotCompetitorsSection
           settings={settings}
           competitors={competitors}
+          brands={brands}
           saving={saving}
           variant="modal"
           onPatch={(body) => {
@@ -177,13 +194,14 @@ export function AgentSettingsForm({
         ) : null}
       </div>
 
-      <Link
-        href="/dashboard/settings/autopilot#history"
-        className="group flex items-center justify-between rounded-2xl border border-white/60 bg-white/40 px-3.5 py-2.5 text-[12px] font-medium text-[#52525b] shadow-sm backdrop-blur-sm transition hover:bg-white/60 hover:text-[#1a1a2e]"
+      <button
+        type="button"
+        onClick={onViewHistory}
+        className="group flex w-full items-center justify-between rounded-2xl border border-white/60 bg-white/40 px-3.5 py-3 text-left text-[12px] font-medium text-[#52525b] shadow-sm backdrop-blur-sm transition hover:bg-white/60 hover:text-[#1a1a2e] active:scale-[0.99]"
       >
         View alert history
         <ChevronRight className="h-4 w-4 text-[#a1a1aa] transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
-      </Link>
+      </button>
     </div>
   );
 }

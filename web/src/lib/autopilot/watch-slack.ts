@@ -9,18 +9,21 @@ export async function sendWatchSlackWebhook(params: {
   const url = params.webhookUrl.trim();
   if (!url) return { ok: false, error: "no webhook" };
 
-  const sections = params.blocks.map((b) => ({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: `*${b.competitorName}*\n${b.headline}\n\n*Suggested move:* ${b.recommendation}`,
-    },
-    accessory: {
-      type: "button",
-      text: { type: "plain_text", text: "Investigate in Rival" },
-      url: b.investigateUrl,
-    },
-  }));
+  const sections = params.blocks.map((b) => {
+    const brandTag = b.clientBrandName ? ` · for ${b.clientBrandName}` : "";
+    return {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*${b.competitorName}*${brandTag}\n${b.headline}\n\n_${b.context}_\n\n*Your move:* ${b.recommendation}`,
+      },
+      accessory: {
+        type: "button",
+        text: { type: "plain_text", text: "Investigate in Rival" },
+        url: b.investigateUrl,
+      },
+    };
+  });
 
   if (params.overflowCount > 0) {
     sections.push({
@@ -38,7 +41,7 @@ export async function sendWatchSlackWebhook(params: {
   }
 
   const body = {
-    text: "Autopilot watch — competitor moves need your attention",
+    text: "Autopilot watch - competitor moves need your attention",
     blocks: [
       {
         type: "header",
@@ -84,7 +87,10 @@ export async function sendTestSlackWebhook(webhookUrl: string, settingsUrl: stri
     competitorName: "Sample competitor",
     competitorHost: "example.com",
     headline: "Sample competitor activity spiked",
-    recommendation: "Review their newest ads this week and note any offer or angle shifts.",
+    context:
+      "Sample competitor increased paid output sharply on Meta over the past week - typical of scaling a winning creative or launching a promo.",
+    recommendation:
+      "Review their newest Meta ads in Rival this week. If the spike is offer-driven, run a time-boxed counter-promo test; if creative-driven, brief a hook-variant test on the same placements.",
     confidence: "medium",
     investigateUrl: settingsUrl,
   };

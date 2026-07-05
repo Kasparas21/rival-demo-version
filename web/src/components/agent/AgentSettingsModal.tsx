@@ -5,7 +5,8 @@ import { useEffect, useId, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { glassModalShellClass } from "@/components/ui/glass-styles";
-
+import { AutopilotHistoryModal } from "@/components/autopilot/AutopilotHistoryModal";
+import { fetchSavedCompetitorsFromAccount } from "@/lib/account/client";
 import { AgentSettingsForm } from "./AgentSettingsForm";
 import { AgentSettingsFormSkeleton } from "./AgentSettingsSkeleton";
 import type { AutopilotSettingsController } from "@/components/autopilot/use-autopilot-settings";
@@ -15,11 +16,22 @@ type AgentSettingsModalProps = {
   open: boolean;
   onClose: () => void;
   controller: AutopilotSettingsController;
+  historyOpen?: boolean;
+  onHistoryOpenChange?: (open: boolean) => void;
 };
 
-export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsModalProps) {
+export function AgentSettingsModal({
+  open,
+  onClose,
+  controller,
+  historyOpen: historyOpenProp,
+  onHistoryOpenChange,
+}: AgentSettingsModalProps) {
   const titleId = useId();
   const [mounted, setMounted] = useState(false);
+  const [historyOpenInternal, setHistoryOpenInternal] = useState(false);
+  const historyOpen = historyOpenProp ?? historyOpenInternal;
+  const setHistoryOpen = onHistoryOpenChange ?? setHistoryOpenInternal;
   const [competitors, setCompetitors] = useState<CompetitorOption[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const {
@@ -39,41 +51,66 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
   }, []);
 
   useEffect(() => {
+    if (!open) {
+      if (historyOpenProp === undefined) setHistoryOpenInternal(false);
+    }
+  }, [open, historyOpenProp]);
+
+  useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (historyOpen) setHistoryOpen(false);
+      else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, historyOpen]);
 
   useEffect(() => {
     if (!open) return;
     void (async () => {
       try {
-        const [brandsRes, compsRes] = await Promise.all([
-          fetch("/api/account/brands", { credentials: "include" }),
-          fetch("/api/account/saved-competitors", { credentials: "include" }),
-        ]);
-        const brandsJson = (await brandsRes.json()) as { brands?: { id: string; name: string }[] };
-        setBrands((brandsJson.brands ?? []).map((b) => ({ id: b.id, name: b.name })));
-
-        const compsJson = (await compsRes.json()) as {
-          competitors?: {
-            savedCompetitorDbId?: string;
-            id?: string;
-            name?: string;
-            brand?: { name?: string };
-          }[];
+        const brandsRes = await fetch("/api/account/brands", { credentials: "include" });
+        const brandsJson = (await brandsRes.json()) as {
+          brands?: { id: string; name: string; is_primary?: boolean }[];
         };
-        setCompetitors(
-          (compsJson.competitors ?? [])
-            .map((c) => ({
-              id: c.savedCompetitorDbId ?? c.id ?? "",
-              name: c.brand?.name?.trim() || c.name?.trim() || "Competitor",
-            }))
-            .filter((c) => c.id),
+        const brandRows = brandsJson.brands ?? [];
+        setBrands(
+          brandRows.map((b, i) => ({
+            id: b.id,
+            name: b.name,
+            isPrimary: b.is_primary === true || (i === 0 && !brandRows.some((x) => x.is_primary)),
+          })),
         );
+
+        type CompetitorRow = {
+          savedCompetitorDbId?: string;
+          id?: string;
+          name?: string;
+          brand?: { name?: string };
+        };
+        const perBrand = await Promise.all(
+          brandRows.map(async (b) => ({
+            brand: b,
+            comps: (await fetchSavedCompetitorsFromAccount(b.id)) as CompetitorRow[],
+          })),
+        );
+
+        const seen = new Map<string, CompetitorOption>();
+        for (const { brand, comps } of perBrand) {
+          for (const c of comps) {
+            const id = c.savedCompetitorDbId ?? c.id ?? "";
+            if (!id || seen.has(id)) continue;
+            seen.set(id, {
+              id,
+              name: c.brand?.name?.trim() || c.name?.trim() || "Competitor",
+              brandId: brand.id,
+              brandName: brand.name,
+            });
+          }
+        }
+        setCompetitors([...seen.values()]);
       } catch {
         setCompetitors([]);
         setBrands([]);
@@ -91,6 +128,7 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
       watch_sensitivity: settings.watch_sensitivity,
       watch_competitor_ids: settings.watch_competitor_ids,
       watch_quiet_hours: settings.watch_quiet_hours,
+      watch_workspaces: settings.watch_workspaces,
       report_enabled: settings.report_enabled,
       report_day_of_month: settings.report_day_of_month,
       report_workspaces: settings.report_workspaces,
@@ -99,7 +137,9 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
 
   const showFormSkeleton = settingsLoading && !settings;
 
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div className="fixed inset-0 z-[200] flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
@@ -165,11 +205,15 @@ export function AgentSettingsModal({ open, onClose, controller }: AgentSettingsM
               }}
               onSave={handleSave}
               onRefresh={loadSettings}
+              onViewHistory={() => setHistoryOpen(true)}
             />
           )}
         </div>
       </div>
     </div>,
     document.body,
+      )}
+      <AutopilotHistoryModal open={historyOpen && open} onClose={() => setHistoryOpen(false)} />
+    </>
   );
 }

@@ -23,6 +23,7 @@ export const DEFAULT_AUTOPLIOT_SETTINGS: Omit<AutopilotSettingsRow, "id" | "user
   discord_webhook_url: null,
   watch_competitor_ids: null,
   watch_quiet_hours: { start: 22, end: 7, timezone: "Europe/London" },
+  watch_workspaces: {},
   report_enabled: false,
   report_day_of_month: 1,
   report_branding: { logo_url: null, agency_name: null, accent_color: null, hide_powered_by: false },
@@ -69,6 +70,7 @@ const AUTOPILOT_SETTINGS_UPDATE_KEYS = [
   "slack_connection",
   "watch_competitor_ids",
   "watch_quiet_hours",
+  "watch_workspaces",
   "report_enabled",
   "report_day_of_month",
   "report_branding",
@@ -145,6 +147,15 @@ function parseSlackConnection(raw: unknown): SlackConnection | null {
   };
 }
 
+function parseBooleanRecord(raw: unknown): Record<string, boolean> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === "boolean") out[k] = v;
+  }
+  return out;
+}
+
 function parseReportBranding(raw: unknown): ReportBranding {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { logo_url: null, agency_name: null, accent_color: null, hide_powered_by: false };
@@ -177,6 +188,7 @@ export function rowToAutopilotSettings(row: Record<string, unknown>): AutopilotS
       ? (row.watch_competitor_ids as string[])
       : null,
     watch_quiet_hours: parseWatchQuietHours(row.watch_quiet_hours),
+    watch_workspaces: parseBooleanRecord(row.watch_workspaces),
     report_enabled: row.report_enabled === true,
     report_day_of_month: typeof row.report_day_of_month === "number" ? row.report_day_of_month : 1,
     report_branding: parseReportBranding(row.report_branding),

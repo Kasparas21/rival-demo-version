@@ -46,6 +46,11 @@ export type AutopilotSettingsRow = {
   discord_webhook_url: string | null;
   watch_competitor_ids: string[] | null;
   watch_quiet_hours: WatchQuietHours;
+  /**
+   * Per-client-brand watch toggles (brand id -> enabled) for agency accounts.
+   * Missing key: primary brand defaults on, other brands off.
+   */
+  watch_workspaces: Record<string, boolean>;
   report_enabled: boolean;
   report_day_of_month: number;
   report_branding: ReportBranding;
@@ -57,6 +62,8 @@ export type AutopilotSettingsRow = {
 
 export type WatchRecommendation = {
   headline: string;
+  /** Detailed explanation of what the competitor changed and why it matters. */
+  context: string;
   recommendation: string;
   confidence: "high" | "medium" | "low";
 };
@@ -77,6 +84,8 @@ export type WatchAlertCandidate = {
 
 export type WatchAlertBlock = WatchAlertCandidate & WatchRecommendation & {
   investigateUrl: string;
+  /** Client brand this alert belongs to — set only for multi-brand (agency) sends. */
+  clientBrandName?: string | null;
 };
 
 export type AutopilotWatchRunSummary = {

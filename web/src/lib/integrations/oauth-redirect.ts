@@ -8,7 +8,7 @@ export function integrationOAuthRedirect(
   params: Record<string, string>,
 ): NextResponse {
   const base =
-    returnTo === "modal" ? `${origin}/dashboard` : `${origin}/dashboard/settings/autopilot`;
+    returnTo === "modal" ? `${origin}/dashboard` : `${origin}/dashboard/settings?autopilot=open`;
   const url = new URL(base);
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);

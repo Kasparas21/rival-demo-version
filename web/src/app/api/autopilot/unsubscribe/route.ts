@@ -19,7 +19,7 @@ function confirmationHtml(message: string): string {
   return `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;max-width:480px;margin:0 auto;">
 <h1 style="font-size:20px;">Autopilot</h1>
 <p>${message}</p>
-<p><a href="/dashboard/settings/autopilot">Manage autopilot settings</a></p>
+<p><a href="/dashboard/settings">Manage autopilot settings</a></p>
 </body></html>`;
 }
 

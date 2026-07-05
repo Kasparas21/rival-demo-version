@@ -828,6 +828,32 @@ export async function DELETE(request: Request) {
     }
   }
 
+  // When no brand tracks this competitor anymore, purge the saved row entirely.
+  // FKs cascade (alerts, ads, strategy overview…) so stale data can't resurface
+  // in autopilot or anywhere else.
+  if (existing?.id) {
+    const { data: remainingMappings, error: remainingErr } = await supabase
+      .from("brand_competitors")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("competitor_id", existing.id)
+      .limit(1);
+
+    const mappingsUnavailable = Boolean(
+      remainingErr && /brand_competitors/i.test(remainingErr.message),
+    );
+    if (mappingsUnavailable || (!remainingErr && (remainingMappings ?? []).length === 0)) {
+      const { error: delRowError } = await supabase
+        .from("saved_competitors")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("id", existing.id);
+      if (delRowError) {
+        return NextResponse.json({ error: delRowError.message }, { status: 500 });
+      }
+    }
+  }
+
   if (existing && !entitlement.isUnlimited) {
     await supabase.rpc("increment_competitor_swap_usage");
   }

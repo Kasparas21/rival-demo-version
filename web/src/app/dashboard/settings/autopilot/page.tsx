@@ -1,9 +1,24 @@
-import { AutopilotSettingsForm } from "@/components/autopilot/AutopilotSettingsForm";
+"use client";
 
-export default function AutopilotSettingsPage() {
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+/** Legacy URL — redirects to settings with autopilot modal (or history) instead of a separate page. */
+export default function AutopilotLegacyRedirectPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    const target =
+      hash === "history"
+        ? "/dashboard/settings?autopilot=history"
+        : "/dashboard/settings?autopilot=open";
+    router.replace(target);
+  }, [router]);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-4 py-6 sm:px-6 lg:px-8">
-      <AutopilotSettingsForm />
+    <div className="flex min-h-[40vh] items-center justify-center px-6 text-[14px] text-[#71717a]">
+      Opening Autopilot…
     </div>
   );
 }

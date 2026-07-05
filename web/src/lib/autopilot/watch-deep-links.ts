@@ -61,5 +61,5 @@ export function buildReportPublicUrl(appOrigin: string, reportId: string, medium
 }
 
 export function buildAutopilotSettingsUrl(appOrigin: string): string {
-  return `${appOrigin.replace(/\/$/, "")}/dashboard/settings/autopilot`;
+  return `${appOrigin.replace(/\/$/, "")}/dashboard/settings?autopilot=open`;
 }

@@ -31,11 +31,22 @@ export async function GET(): Promise<NextResponse> {
   const items = (data ?? []).map((row) => {
     const payload = row.payload as Record<string, unknown> | null;
     let reopenUrl: string | null = null;
+    let title =
+      row.output_type === "monthly_report"
+        ? String((payload as { brandName?: string } | null)?.brandName ?? "Monthly report")
+        : row.output_type === "watch_alert"
+          ? "Watch alert"
+          : "Weekly brief";
+
     if (row.output_type === "monthly_report") {
       reopenUrl = `${appOrigin.replace(/\/$/, "")}/reports/${row.id}`;
     } else if (row.output_type === "watch_alert" && payload?.blocks) {
-      reopenUrl = `${appOrigin.replace(/\/$/, "")}/dashboard/settings/autopilot`;
+      const blocks = payload.blocks as { investigateUrl?: string; competitorName?: string }[];
+      const first = Array.isArray(blocks) ? blocks[0] : null;
+      reopenUrl = first?.investigateUrl ?? null;
+      if (first?.competitorName) title = `Watch alert — ${first.competitorName}`;
     }
+
     return {
       id: row.id,
       outputType: row.output_type,
@@ -43,12 +54,7 @@ export async function GET(): Promise<NextResponse> {
       channelsSent: row.channels_sent,
       createdAt: row.created_at,
       sentAt: row.sent_at,
-      title:
-        row.output_type === "monthly_report"
-          ? String(payload?.brandName ?? "Monthly report")
-          : row.output_type === "watch_alert"
-            ? "Watch alert"
-            : "Weekly brief",
+      title,
       reopenUrl,
     };
   });

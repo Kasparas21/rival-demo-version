@@ -766,6 +766,7 @@ export type Database = {
           report_day_of_month: number;
           report_branding: Json;
           report_workspaces: Json;
+          watch_workspaces: Json;
           brief_enabled: boolean;
           created_at: string;
           updated_at: string;
@@ -787,6 +788,7 @@ export type Database = {
           report_day_of_month?: number;
           report_branding?: Json;
           report_workspaces?: Json;
+          watch_workspaces?: Json;
           brief_enabled?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -808,6 +810,7 @@ export type Database = {
           report_day_of_month?: number;
           report_branding?: Json;
           report_workspaces?: Json;
+          watch_workspaces?: Json;
           brief_enabled?: boolean;
           created_at?: string;
           updated_at?: string;

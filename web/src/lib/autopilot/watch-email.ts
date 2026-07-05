@@ -25,10 +25,11 @@ function alertBlockHtml(block: WatchAlertBlock): string {
               <div style="width:8px;height:8px;border-radius:50%;background:${dot};"></div>
             </td>
             <td>
-              <div style="font-size:11px;color:#6B7280;margin-bottom:4px;">${escapeHtml(block.competitorName)}</div>
-              <div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:10px;line-height:1.35;">${escapeHtml(block.headline)}</div>
+              <div style="font-size:11px;color:#6B7280;margin-bottom:4px;">${escapeHtml(block.competitorName)}${block.clientBrandName ? ` · for ${escapeHtml(block.clientBrandName)}` : ""}</div>
+              <div style="font-size:15px;font-weight:600;color:#111827;margin-bottom:8px;line-height:1.35;">${escapeHtml(block.headline)}</div>
+              <div style="font-size:13px;color:#374151;line-height:1.55;margin-bottom:12px;">${escapeHtml(block.context)}</div>
               <div style="background:#F3F4F6;border-left:3px solid #2563EB;padding:10px 12px;border-radius:0 6px 6px 0;margin-bottom:12px;">
-                <div style="font-size:11px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">Suggested move</div>
+                <div style="font-size:11px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">Your move</div>
                 <div style="font-size:13px;color:#1F2937;line-height:1.5;">${escapeHtml(block.recommendation)}</div>
               </div>
               <a href="${escapeHtml(block.investigateUrl)}" style="font-size:13px;font-weight:600;color:#2563EB;text-decoration:none;">Investigate in Rival →</a>
@@ -97,7 +98,7 @@ export function buildWatchEmailText(params: {
 }): string {
   const lines = params.blocks.map(
     (b) =>
-      `${b.competitorName}: ${b.headline}\nSuggested move: ${b.recommendation}\n${b.investigateUrl}`,
+      `${b.competitorName}${b.clientBrandName ? ` (for ${b.clientBrandName})` : ""}: ${b.headline}\n${b.context}\nYour move: ${b.recommendation}\n${b.investigateUrl}`,
   );
   if (params.overflowCount > 0) {
     lines.push(`+${params.overflowCount} more in Rival`);

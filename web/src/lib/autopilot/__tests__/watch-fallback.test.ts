@@ -8,10 +8,34 @@ describe("watchFallbackRecommendation", () => {
     for (const type of ALL_ALERT_TYPES) {
       const rec = watchFallbackRecommendation(type, "Acme");
       expect(rec.headline.length).toBeGreaterThan(0);
-      expect(rec.headline.length).toBeLessThanOrEqual(90);
+      expect(rec.headline.length).toBeLessThanOrEqual(100);
+      expect(rec.context.length).toBeGreaterThan(30);
+      expect(rec.context.length).toBeLessThanOrEqual(450);
       expect(rec.recommendation.length).toBeGreaterThan(10);
-      expect(rec.recommendation.length).toBeLessThanOrEqual(220);
+      expect(rec.recommendation.length).toBeLessThanOrEqual(550);
       expect(["high", "medium", "low"]).toContain(rec.confidence);
     }
+  });
+
+  it("never contains em or en dashes in any field", () => {
+    for (const type of ALL_ALERT_TYPES) {
+      const rec = watchFallbackRecommendation(type, "Acme", {
+        brandName: "Nike",
+        brandContext: null,
+        brandDomain: "nike.com",
+      });
+      expect(rec.headline).not.toMatch(/[—–]/);
+      expect(rec.context).not.toMatch(/[—–]/);
+      expect(rec.recommendation).not.toMatch(/[—–]/);
+    }
+  });
+
+  it("personalizes copy with the client brand name when provided", () => {
+    const rec = watchFallbackRecommendation("activity_spike", "Acme", {
+      brandName: "Nike",
+      brandContext: null,
+      brandDomain: "nike.com",
+    });
+    expect(rec.recommendation).toContain("Nike");
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, RefreshCw } from "lucide-react";
+import { ChevronDown, RefreshCw, Zap } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -54,6 +54,10 @@ export function AutopilotChannelsSection({
   onRefresh,
 }: AutopilotChannelsSectionProps) {
   const [testingSlack, setTestingSlack] = useState(false);
+  const [devFiring, setDevFiring] = useState(false);
+  const [devFirePreview, setDevFirePreview] = useState<
+    Array<{ competitor: string; headline: string; context: string; recommendation: string }> | null
+  >(null);
   const [disconnectingSlack, setDisconnectingSlack] = useState(false);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -66,6 +70,42 @@ export function AutopilotChannelsSection({
       return;
     }
     void onPatch({ watch_channels: { ...settings.watch_channels, [key]: enabled } });
+  };
+
+  const devFireWatch = async () => {
+    setDevFiring(true);
+    setTestMessage(null);
+    setDevFirePreview(null);
+    try {
+      const res = await fetch("/api/autopilot/dev-fire-watch", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relaxSensitivity: true }),
+      });
+      const json = (await res.json()) as {
+        ok?: boolean;
+        sent?: boolean;
+        blockCount?: number;
+        error?: string;
+        usedRelaxSensitivity?: boolean;
+        preview?: Array<{ competitor: string; headline: string; context: string; recommendation: string }>;
+      };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Dev fire failed");
+      if (!json.sent) {
+        setTestMessage(json.error ?? "Nothing to send");
+        return;
+      }
+      setDevFirePreview(json.preview ?? null);
+      const suffix = json.usedRelaxSensitivity ? " (relaxed threshold)" : "";
+      setTestMessage(`Sent ${json.blockCount ?? 0} real autopilot alert(s) to Slack${suffix}.`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Dev fire failed";
+      setTestMessage(msg);
+      onError?.(msg);
+    } finally {
+      setDevFiring(false);
+    }
   };
 
   const testSlack = async () => {
@@ -343,11 +383,47 @@ export function AutopilotChannelsSection({
           <p
             className={cn(
               "text-[11px] font-medium",
-              testMessage.toLowerCase().includes("fail") ? "text-red-600" : "text-emerald-600",
+              testMessage.toLowerCase().includes("fail") || testMessage.startsWith("No ")
+                ? "text-amber-700"
+                : "text-emerald-600",
             )}
           >
             {testMessage}
           </p>
+        ) : null}
+
+        {settings.dev_can_fire_watch_slack ? (
+          <div className="rounded-2xl border border-dashed border-violet-300/70 bg-violet-50/35 p-3 backdrop-blur-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-800">Dev QA</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-violet-900/80">
+              Fire a real autopilot batch — LLM headlines + suggested moves from your latest alerts. Does not mark
+              alerts as processed.
+            </p>
+            <button
+              type="button"
+              disabled={devFiring || saving || !settings.watch_channels.slack || !slackConfigured}
+              onClick={() => void devFireWatch()}
+              className="mt-2.5 inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-violet-300/80 bg-white/70 px-3 py-2 text-[11px] font-semibold text-violet-900 shadow-sm transition hover:bg-white active:scale-[0.98] disabled:opacity-45"
+            >
+              <Zap className={cn("h-3.5 w-3.5", devFiring && "animate-pulse")} />
+              {devFiring ? "Generating & sending…" : "Fire real Slack autopilot"}
+            </button>
+            {devFirePreview?.length ? (
+              <ul className="mt-3 space-y-2">
+                {devFirePreview.map((p) => (
+                  <li
+                    key={`${p.competitor}-${p.headline}`}
+                    className="rounded-xl border border-white/60 bg-white/55 px-2.5 py-2 text-[11px] text-[#52525b]"
+                  >
+                    <span className="font-semibold text-[#1a1a2e]">{p.competitor}</span>
+                    <span className="mt-0.5 block font-medium text-[#3f3f46]">{p.headline}</span>
+                    <span className="mt-1 block text-[#52525b]">{p.context}</span>
+                    <span className="mt-1 block text-[#71717a]">→ {p.recommendation}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </GlassSection>

@@ -15,10 +15,11 @@ export type AutopilotBillingMeta = {
 export type AutopilotSettingsUiState = AutopilotSettingsRow & {
   slack_webhook_configured?: boolean;
   user_email?: string | null;
+  dev_can_fire_watch_slack?: boolean;
 };
 
-export type CompetitorOption = { id: string; name: string };
-export type BrandOption = { id: string; name: string };
+export type CompetitorOption = { id: string; name: string; brandId?: string; brandName?: string };
+export type BrandOption = { id: string; name: string; isPrimary?: boolean };
 
 export function uiMinScore(settings: AutopilotSettingsUiState): 6 | 8 | 9 {
   if (settings.watch_min_score != null) {
@@ -34,6 +35,7 @@ type SettingsGetResponse = {
   error?: string;
   settings?: AutopilotSettingsUiState;
   billing?: AutopilotBillingMeta;
+  devTools?: { canFireWatchSlack?: boolean };
 };
 
 export function useAutopilotSettings() {
@@ -53,7 +55,10 @@ export function useAutopilotSettings() {
       if (!res.ok || !data.ok || !data.settings) {
         throw new Error(typeof data.error === "string" ? data.error : "Failed to load autopilot settings");
       }
-      setSettings(data.settings);
+      setSettings({
+        ...data.settings,
+        dev_can_fire_watch_slack: data.devTools?.canFireWatchSlack === true,
+      });
       setBilling(data.billing ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -92,6 +97,7 @@ export function useAutopilotSettings() {
         setSettings((prev) => ({
           ...data.settings!,
           user_email: prev?.user_email ?? data.settings!.user_email,
+          dev_can_fire_watch_slack: prev?.dev_can_fire_watch_slack ?? data.devTools?.canFireWatchSlack === true,
         }));
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 2000);

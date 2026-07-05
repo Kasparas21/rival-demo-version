@@ -35,6 +35,7 @@ export const autopilotSettingsPutSchema = z.object({
   slack_connection: z.null().optional(),
   watch_competitor_ids: z.array(z.string().uuid()).nullable().optional(),
   watch_quiet_hours: watchQuietHoursSchema.optional(),
+  watch_workspaces: z.record(z.string().uuid(), z.boolean()).optional(),
   report_enabled: z.boolean().optional(),
   report_day_of_month: z.number().int().min(1).max(28).optional(),
   report_branding: reportBrandingSchema.optional(),

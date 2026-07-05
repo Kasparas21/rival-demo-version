@@ -1,9 +1,9 @@
 "use client";
 
 import { ArrowRight, Bot } from "lucide-react";
-import { useState } from "react";
 
 import { useAutopilotSettings } from "@/components/autopilot/use-autopilot-settings";
+import { useAutopilotModalQuery } from "@/components/autopilot/use-autopilot-modal-query";
 import { useAutopilotOAuthToast } from "@/components/autopilot/use-autopilot-oauth-toast";
 import { cn } from "@/lib/utils";
 
@@ -75,22 +75,26 @@ function AgentToggleSwitch({
 }
 
 export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgentControlProps) {
-  const [modalOpen, setModalOpen] = useState(false);
   const controller = useAutopilotSettings();
   const { settingsLoading, settings, setEnabled, error, loadSettings } = controller;
+  const {
+    settingsOpen,
+    historyOpen,
+    openSettings,
+    closeSettings,
+    setHistoryOpen,
+  } = useAutopilotModalQuery("sidebar");
   useAutopilotOAuthToast(() => {
     void loadSettings();
   });
   const toggleId = "sidebar-autopilot-toggle";
-
-  const openModal = () => setModalOpen(true);
 
   if (collapsed) {
     return (
       <>
         <button
           type="button"
-          onClick={openModal}
+          onClick={openSettings}
           className="flex flex-col items-center gap-1.5 py-1 rounded-lg hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/30"
           title="Autopilot — tap to customize"
         >
@@ -102,7 +106,13 @@ export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgen
             onChange={(next) => void setEnabled(next)}
           />
         </button>
-        <AgentSettingsModal open={modalOpen} onClose={() => setModalOpen(false)} controller={controller} />
+        <AgentSettingsModal
+          open={settingsOpen}
+          onClose={closeSettings}
+          controller={controller}
+          historyOpen={historyOpen}
+          onHistoryOpenChange={setHistoryOpen}
+        />
       </>
     );
   }
@@ -120,7 +130,7 @@ export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgen
 
           <button
             type="button"
-            onClick={openModal}
+            onClick={openSettings}
             className="group min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/30 rounded -my-0.5 py-0.5"
             title="Open Autopilot settings"
           >
@@ -149,7 +159,13 @@ export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgen
         ) : null}
       </div>
 
-      <AgentSettingsModal open={modalOpen} onClose={() => setModalOpen(false)} controller={controller} />
+      <AgentSettingsModal
+        open={settingsOpen}
+        onClose={closeSettings}
+        controller={controller}
+        historyOpen={historyOpen}
+        onHistoryOpenChange={setHistoryOpen}
+      />
     </>
   );
 }

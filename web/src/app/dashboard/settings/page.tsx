@@ -2,13 +2,25 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ExternalLink } from "lucide-react";
-import Link from "next/link";
+import { ExternalLink, BarChart3, CreditCard, LogOut, Trash2, User } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsStorageForSignOut } from "@/lib/sidebar-competitors";
 import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { CheckoutNavigationAnchor } from "@/components/analytics/checkout-navigation-link";
 import { McpKeysSection } from "@/components/settings/McpKeysSection";
+import { SettingsAutopilotSection } from "@/components/settings/SettingsAutopilotSection";
+import {
+  SettingsFieldHint,
+  SettingsFieldLabel,
+  SettingsGlassBanner,
+  SettingsGlassButton,
+  SettingsGlassInsetPanel,
+  SettingsGlassModalShell,
+  SettingsGlassSection,
+  SettingsGlassStatCard,
+  settingsGlassInputClass,
+  settingsGlassInputReadonlyClass,
+} from "@/components/settings/settings-glass-ui";
 import {
   buildCheckoutHref,
   buildUpgradeToProHref,
@@ -559,58 +571,56 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-[720px] px-6 py-10 pb-16">
       <header className="mb-8">
-        <h1 className="text-[22px] font-bold tracking-tight text-[#1a1a2e]">Account settings</h1>
-        <p className="mt-1 text-[14px] text-[#71717a]">Profile, workspace usage, and subscription.</p>
+        <h1 className="text-[26px] font-bold tracking-tight text-[#1a1a2e]">Account settings</h1>
+        <p className="mt-1.5 text-[15px] text-[#71717a]">Profile, workspace usage, and subscription.</p>
       </header>
 
       {loadError ? (
-        <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] font-medium text-[#b42318]">
-          {loadError}
+        <SettingsGlassBanner tone="error" className="mb-6">
+          {loadError}{" "}
           <button
             type="button"
-            className="ml-3 underline underline-offset-2 hover:no-underline"
+            className="font-semibold underline underline-offset-2 hover:no-underline"
             onClick={() => void hydrate()}
           >
             Retry
           </button>
-        </div>
+        </SettingsGlassBanner>
       ) : null}
 
       <div className="flex flex-col gap-6">
-        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Profile</h2>
-              <p className="text-[12px] text-[#71717a]">Used across the dashboard and reports.</p>
-            </div>
-            {savedFlash ? (
-              <span className="text-[12px] font-medium text-emerald-600">Saved</span>
+        <SettingsGlassSection
+          icon={User}
+          accent="default"
+          title="Profile"
+          subtitle="Used across the dashboard and reports."
+          headerRight={
+            savedFlash ? (
+              <span className="text-[12px] font-semibold text-emerald-600">Saved</span>
             ) : (
-              <span className="text-[12px] text-[#a1a1aa]">{loading ? "Loading…" : isDirty ? "Unsaved changes" : ""}</span>
-            )}
-          </div>
-
+              <span className="text-[12px] text-[#a1a1aa]">
+                {loading ? "Loading…" : isDirty ? "Unsaved changes" : ""}
+              </span>
+            )
+          }
+        >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="email">
-                Email
-              </label>
+              <SettingsFieldLabel htmlFor="email">Email</SettingsFieldLabel>
               <input
                 id="email"
                 type="email"
                 value={profile.email}
                 readOnly
-                className="w-full cursor-not-allowed rounded-xl border border-[#e4e4e7] bg-[#f4f4f5] px-3.5 py-2.5 text-[14px] text-[#3f3f46]"
+                className={settingsGlassInputReadonlyClass}
               />
-              <p className="mt-1.5 text-[11px] leading-relaxed text-[#a1a1aa]">
+              <SettingsFieldHint>
                 Used for login and billing receipts. Contact support to change your email.
-              </p>
+              </SettingsFieldHint>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="company_name">
-                Company name
-              </label>
+              <SettingsFieldLabel htmlFor="company_name">Company name</SettingsFieldLabel>
               <input
                 id="company_name"
                 type="text"
@@ -619,14 +629,12 @@ export default function SettingsPage() {
                 placeholder="Acme Inc."
                 value={profile.company_name}
                 onChange={(e) => setProfile((p) => ({ ...p, company_name: e.target.value }))}
-                className="w-full rounded-xl border border-[#e4e4e7] px-3.5 py-2.5 text-[14px] text-[#18181b] placeholder:text-[#a1a1aa] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:bg-[#fafafa]"
+                className={settingsGlassInputClass}
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="company_url">
-                Company website
-              </label>
+              <SettingsFieldLabel htmlFor="company_url">Company website</SettingsFieldLabel>
               <input
                 id="company_url"
                 type="text"
@@ -635,31 +643,29 @@ export default function SettingsPage() {
                 placeholder="acme.com"
                 value={profile.company_url}
                 onChange={(e) => setProfile((p) => ({ ...p, company_url: e.target.value }))}
-                className="w-full rounded-xl border border-[#e4e4e7] px-3.5 py-2.5 text-[14px] text-[#18181b] placeholder:text-[#a1a1aa] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:bg-[#fafafa]"
+                className={settingsGlassInputClass}
               />
-              <p className="mt-1.5 text-[11px] leading-relaxed text-[#a1a1aa]">
+              <SettingsFieldHint>
                 Use a public domain (e.g. <span className="text-[#71717a]">yourbrand.com</span>). This updates your
                 workspace brand and ad-library lookups.
-              </p>
+              </SettingsFieldHint>
             </div>
 
             <div className="sm:col-span-2">
-              <label className="mb-1.5 block text-[12px] font-medium text-[#3f3f46]" htmlFor="brand_context">
-                Brand context
-              </label>
+              <SettingsFieldLabel htmlFor="brand_context">Brand context</SettingsFieldLabel>
               <textarea
                 id="brand_context"
                 rows={5}
                 maxLength={12000}
                 disabled={loading}
-                placeholder="What you do, who you serve, and how you position — same idea as the “About” we pull during onboarding."
+                placeholder='What you do, who you serve, and how you position — same idea as the "About" we pull during onboarding.'
                 value={profile.brand_context}
                 onChange={(e) => setProfile((p) => ({ ...p, brand_context: e.target.value }))}
-                className="w-full resize-y rounded-xl border border-[#e4e4e7] px-3.5 py-2.5 text-[14px] text-[#18181b] placeholder:text-[#a1a1aa] outline-none transition focus:border-[#6366f1] focus:ring-2 focus:ring-[#6366f1]/20 disabled:bg-[#fafafa] min-h-[120px]"
+                className={`${settingsGlassInputClass} min-h-[120px] resize-y`}
               />
-              <p className="mt-1.5 text-[11px] leading-relaxed text-[#a1a1aa]">
+              <SettingsFieldHint>
                 Shown to AI features as grounding for your company. Up to 12,000 characters.
-              </p>
+              </SettingsFieldHint>
             </div>
           </div>
 
@@ -669,81 +675,75 @@ export default function SettingsPage() {
             </p>
           ) : null}
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              disabled={loading || saving || !isDirty}
-              onClick={() => void handleSave()}
-              className="rounded-xl bg-[#1a1a2e] px-5 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44] disabled:cursor-not-allowed disabled:opacity-45"
-            >
+          <div className="mt-6">
+            <SettingsGlassButton disabled={loading || saving || !isDirty} onClick={() => void handleSave()}>
               {saving ? "Saving…" : "Save changes"}
-            </button>
+            </SettingsGlassButton>
           </div>
-        </section>
+        </SettingsGlassSection>
 
-        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Autopilot</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
-            Alerts with suggested moves and monthly client-ready reports — delivered without you checking in.
-          </p>
-          <Link
-            href="/dashboard/settings/autopilot"
-            className="mt-4 inline-flex rounded-xl border border-[#ececef] bg-[#fafafa] px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-[#f4f4f5]"
-          >
-            Open autopilot settings
-          </Link>
-        </section>
+        <SettingsAutopilotSection />
 
         <McpKeysSection />
 
-        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Usage this period</h2>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#71717a]">
-            Totals from your workspace mapped to your current subscription quotas. Monthly figures use the calendar
-            month in UTC. <span className="text-[#52525b]">Ad-library refreshes</span> (
-            {formatNum(usage.adLibraryRefreshes)}) count cached platform snapshots;{" "}
-            <span className="text-[#52525b]">Scrape runs (month)</span> (
-            {formatNum(usage.adLibraryScrapeRunsThisMonth)}) are fresh Apify jobs not served from cache.
-          </p>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Ads processed (month, UTC)</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.scrapedAdsThisMonth)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
-                {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">Competitors watched</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.competitorsWatched)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
-                slots remaining (shared across up to {formatNum(usage.limits.maxOwnBrandWorkspaces)} brand
-                workspaces).
-              </p>
-            </div>
-            <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a1a1aa]">AI strategy overviews</p>
-              <p className="mt-1 text-[22px] font-semibold tabular-nums text-[#1a1a2e]">
-                {formatNum(usage.aiStrategyOverviews)}
-              </p>
-              <p className="mt-1 text-[11px] leading-snug text-[#a1a1aa]">
-                Generated summaries (token cost)—good limit target alongside ads volume.
-              </p>
-            </div>
+        <SettingsGlassSection
+          icon={BarChart3}
+          accent="indigo"
+          title="Usage this period"
+          subtitle={
+            <>
+              Totals from your workspace mapped to your current subscription quotas. Monthly figures use the calendar
+              month in UTC. <span className="text-[#52525b]">Ad-library refreshes</span> (
+              {formatNum(usage.adLibraryRefreshes)}) count cached platform snapshots;{" "}
+              <span className="text-[#52525b]">Scrape runs (month)</span> (
+              {formatNum(usage.adLibraryScrapeRunsThisMonth)}) are fresh Apify jobs not served from cache.
+            </>
+          }
+        >
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <SettingsGlassStatCard
+              label="Ads processed (month, UTC)"
+              value={formatNum(usage.scrapedAdsThisMonth)}
+              hint={
+                <>
+                  {formatNum(usage.remaining.adsProcessedThisMonth)} of{" "}
+                  {formatNum(usage.limits.maxAdsProcessedPerMonth)} remaining.
+                </>
+              }
+            />
+            <SettingsGlassStatCard
+              label="Competitors watched"
+              value={formatNum(usage.competitorsWatched)}
+              hint={
+                <>
+                  {formatNum(usage.remaining.competitorsWatched)} of {formatNum(usage.limits.maxWatchedCompetitors)}{" "}
+                  slots remaining (shared across up to {formatNum(usage.limits.maxOwnBrandWorkspaces)} brand
+                  workspaces).
+                </>
+              }
+            />
+            <SettingsGlassStatCard
+              label="AI strategy overviews"
+              value={formatNum(usage.aiStrategyOverviews)}
+              hint="Generated summaries (token cost)—good limit target alongside ads volume."
+            />
           </div>
-        </section>
+        </SettingsGlassSection>
 
-        <section className="rounded-2xl border border-[#e8eafd] bg-gradient-to-br from-[#fafaff] to-[#f8fafc] p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Subscription</h2>
-              <p className="mt-1 max-w-xl text-[13px] leading-relaxed text-[#52525b]">
+        <SettingsGlassSection
+          icon={CreditCard}
+          accent="subscription"
+          title="Subscription"
+          headerRight={
+            <span
+              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[11px] font-semibold ${subscriptionStatusBadgeClassName(statusBadge.tone)}`}
+            >
+              {statusBadge.label}
+            </span>
+          }
+          subtitle={
+            <>
+              <span>
                 Status:{" "}
                 <span className="font-semibold text-[#1a1a2e]">
                   {labelStatus(billing.status, billingActivating, subscriptionActions.cancelScheduled)}
@@ -762,58 +762,54 @@ export default function SettingsPage() {
                     {subscriptionActions.cancelScheduled ? " · Cancels at period end" : ""}
                   </>
                 )}
-              </p>
-              <p className="mt-2 text-[12px] text-[#71717a]">
+              </span>
+              <span className="mt-2 block text-[12px]">
                 Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span>
-              </p>
+              </span>
               {!billing.isUnlimited ? (
-                <p className="mt-2 text-[11px] leading-relaxed text-[#a1a1aa]">
+                <span className="mt-2 block text-[11px] leading-relaxed text-[#a1a1aa]">
                   Checkout, upgrades, and cancellations are handled securely by Polar. After you cancel in Polar,
                   access continues until the end of your billing period.
-                </p>
+                </span>
               ) : null}
-            </div>
-            <span
-              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-semibold ${subscriptionStatusBadgeClassName(statusBadge.tone)}`}
-            >
-              {statusBadge.label}
-            </span>
-          </div>
-
+            </>
+          }
+        >
           {upgradeBanner ? (
-            <div
-              className={`mt-4 rounded-xl border px-4 py-3 text-[12px] leading-relaxed ${
+            <SettingsGlassBanner
+              tone={
                 upgradeBanner.kind === "success"
-                  ? "border-emerald-200 bg-emerald-50/80 text-emerald-950"
+                  ? "success"
                   : upgradeBanner.kind === "error"
-                    ? "border-red-200 bg-red-50/80 text-red-950"
-                    : "border-sky-200 bg-sky-50/80 text-sky-950"
-              }`}
+                    ? "error"
+                    : "info"
+              }
+              className="mb-4"
             >
               {upgradeBanner.text}
-            </div>
+            </SettingsGlassBanner>
           ) : null}
 
           {subscriptionActions.cancelScheduled ? (
-            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-[12px] leading-relaxed text-amber-950">
+            <SettingsGlassBanner tone="warning" className="mb-4">
               Your subscription is set to cancel on{" "}
               <span className="font-semibold">{formatDate(subscriptionActions.accessEndsAt)}</span>. You can reopen
               Polar billing to keep your plan or change it before that date.
-            </div>
+            </SettingsGlassBanner>
           ) : null}
 
           {subscriptionActions.isFullyCanceled ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-[12px] leading-relaxed text-red-950">
+            <SettingsGlassBanner tone="error" className="mb-4">
               Your subscription was canceled
               {subscriptionActions.accessEndsAt
                 ? ` on ${formatDate(subscriptionActions.accessEndsAt)}`
                 : ""}
               . Resubscribe below to restore access.
-            </div>
+            </SettingsGlassBanner>
           ) : null}
 
           {billing.canUseDevPlanSwitcher ? (
-            <div className="mt-5 rounded-xl border border-dashed border-[#c7d2fe] bg-[#eef2ff]/60 p-4">
+            <SettingsGlassInsetPanel className="mb-4 border border-dashed border-indigo-200/70 bg-indigo-50/30">
               <p className="text-[12px] font-semibold text-[#3730a3]">Dev plan switcher</p>
               <p className="mt-1 text-[11px] text-[#6366f1]">
                 Simulate Free trial, Starter, Pro, or Admin without Polar checkout.
@@ -833,10 +829,10 @@ export default function SettingsPage() {
                     type="button"
                     disabled={devPlanSaving}
                     onClick={() => void applyDevPlan(id)}
-                    className={`rounded-lg px-3 py-1.5 text-[12px] font-medium transition ${
+                    className={`min-h-[40px] rounded-xl px-3.5 py-2 text-[12px] font-semibold transition active:scale-[0.98] ${
                       billing.planTier === id
-                        ? "bg-[#4f46e5] text-white"
-                        : "bg-white text-[#4338ca] ring-1 ring-[#c7d2fe] hover:bg-[#e0e7ff]"
+                        ? "bg-[#4f46e5] text-white shadow-sm"
+                        : "border border-white/70 bg-white/60 text-[#4338ca] backdrop-blur-sm hover:bg-white/85"
                     }`}
                   >
                     {label}
@@ -846,7 +842,7 @@ export default function SettingsPage() {
                   type="button"
                   disabled={devPlanSaving}
                   onClick={() => void applyDevPlan(null)}
-                  className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-[#64748b] ring-1 ring-[#e2e8f0] hover:bg-white"
+                  className="min-h-[40px] rounded-xl border border-white/70 bg-white/50 px-3.5 py-2 text-[12px] font-semibold text-[#64748b] backdrop-blur-sm hover:bg-white/80"
                 >
                   Clear override
                 </button>
@@ -854,10 +850,10 @@ export default function SettingsPage() {
               {devPlanError ? (
                 <p className="mt-2 text-[11px] font-medium text-[#b42318]">{devPlanError}</p>
               ) : null}
-            </div>
+            </SettingsGlassInsetPanel>
           ) : null}
 
-          <div className="mt-5 flex flex-col gap-3">
+          <div className="flex flex-col gap-3">
             {billing.isUnlimited ? (
               <p className="text-[13px] leading-relaxed text-[#52525b]">
                 No subscription or checkout needed — your account is enabled for full usage.
@@ -866,13 +862,13 @@ export default function SettingsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <CheckoutNavigationAnchor
                   href={buildCheckoutHref("starter")}
-                  className="inline-flex items-center justify-center rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-[#1a1a2e] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_6px_20px_-8px_rgba(26,26,46,0.5)] transition hover:bg-[#2d2d44] active:scale-[0.98]"
                 >
                   Start 7-day free trial — Starter
                 </CheckoutNavigationAnchor>
                 <CheckoutNavigationAnchor
                   href={upgradeToProHref}
-                  className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/70 bg-white/60 px-5 py-2.5 text-[14px] font-semibold text-[#1a1a2e] shadow-sm backdrop-blur-sm transition hover:bg-white/85 active:scale-[0.98]"
                 >
                   Upgrade to Pro
                 </CheckoutNavigationAnchor>
@@ -881,7 +877,7 @@ export default function SettingsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <a
                   href={POLAR_BILLING_PORTAL}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1a1a2e] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#2d2d44]"
+                  className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#1a1a2e] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_6px_20px_-8px_rgba(26,26,46,0.5)] transition hover:bg-[#2d2d44] active:scale-[0.98]"
                 >
                   Manage subscription
                   <ExternalLink className="h-3.5 w-3.5 opacity-80" aria-hidden />
@@ -889,7 +885,7 @@ export default function SettingsPage() {
                 {subscriptionActions.showUpgradeToPro ? (
                   <CheckoutNavigationAnchor
                     href={upgradeToProHref}
-                    className="inline-flex items-center justify-center rounded-xl border border-[#d4d4d8] bg-white/90 px-4 py-2.5 text-[13px] font-medium text-[#1a1a2e] transition hover:bg-white"
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-white/70 bg-white/60 px-5 py-2.5 text-[14px] font-semibold text-[#1a1a2e] shadow-sm backdrop-blur-sm transition hover:bg-white/85 active:scale-[0.98]"
                   >
                     Upgrade to Pro
                   </CheckoutNavigationAnchor>
@@ -907,51 +903,34 @@ export default function SettingsPage() {
               </p>
             ) : null}
           </div>
-        </section>
+        </SettingsGlassSection>
 
-        <section className="rounded-2xl border border-[#fee2e2] bg-white p-6">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Sign out</h2>
-          <p className="mt-1 text-[13px] text-[#71717a]">Ends your session on this device.</p>
-          <button
-            type="button"
-            disabled={signingOut}
-            onClick={() => void handleSignOut()}
-            className="mt-4 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2] disabled:opacity-60"
-          >
+        <SettingsGlassSection
+          icon={LogOut}
+          accent="danger"
+          title="Sign out"
+          subtitle="Ends your session on this device."
+        >
+          <SettingsGlassButton variant="dangerGhost" disabled={signingOut} onClick={() => void handleSignOut()}>
             {signingOut ? "Signing out…" : "Sign out"}
-          </button>
-        </section>
+          </SettingsGlassButton>
+        </SettingsGlassSection>
 
-        <section className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <h2 className="text-[15px] font-semibold text-[#1a1a2e]">Delete account</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-[#71717a]">
-            Permanently removes your workspace, billing profile, and all data. Any active subscription is canceled in
-            Polar automatically.
-          </p>
-          <button
-            type="button"
-            onClick={openDeleteModal}
-            className="mt-4 rounded-xl border border-[#fca5a5] bg-white px-4 py-2.5 text-[13px] font-medium text-[#dc2626] transition hover:bg-[#fef2f2]"
-          >
+        <SettingsGlassSection
+          icon={Trash2}
+          accent="danger"
+          title="Delete account"
+          subtitle="Permanently removes your workspace, billing profile, and all data. Any active subscription is canceled in Polar automatically."
+        >
+          <SettingsGlassButton variant="danger" onClick={openDeleteModal}>
             Delete my account permanently
-          </button>
-        </section>
+          </SettingsGlassButton>
+        </SettingsGlassSection>
       </div>
 
       {deleteModalOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/25 p-4 backdrop-blur-sm sm:items-center"
-          role="presentation"
-          onClick={closeDeleteModal}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-account-title"
-            className="w-full max-w-md rounded-2xl border border-[#ececef] bg-white p-6 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="delete-account-title" className="text-[16px] font-semibold text-[#1a1a2e]">
+        <SettingsGlassModalShell onBackdropClick={closeDeleteModal} labelledBy="delete-account-title">
+            <h2 id="delete-account-title" className="text-[18px] font-semibold text-[#1a1a2e]">
               Delete account?
             </h2>
             <p className="mt-2 text-[13px] leading-relaxed text-[#71717a]">
@@ -967,7 +946,7 @@ export default function SettingsPage() {
               autoFocus
               autoComplete="off"
               spellCheck={false}
-              className="mt-4 w-full rounded-xl border border-[#e4e4e7] px-3.5 py-2.5 text-[14px] text-[#18181b] placeholder:text-[#d4d4d8] outline-none transition focus:border-[#dc2626] focus:ring-2 focus:ring-[#dc2626]/15"
+              className={`${settingsGlassInputClass} mt-4 focus:border-red-300/70 focus:ring-red-400/20`}
             />
             {deleteError ? (
               <p className="mt-3 text-[13px] font-medium text-[#b42318]" role="alert">
@@ -975,25 +954,19 @@ export default function SettingsPage() {
               </p>
             ) : null}
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <button
-                type="button"
-                disabled={deleting}
-                onClick={closeDeleteModal}
-                className="rounded-xl border border-[#e4e4e7] bg-white px-4 py-2.5 text-[13px] font-medium text-[#52525b] transition hover:bg-[#fafafa] disabled:opacity-60"
-              >
+              <SettingsGlassButton variant="secondary" disabled={deleting} onClick={closeDeleteModal}>
                 Cancel
-              </button>
-              <button
-                type="button"
+              </SettingsGlassButton>
+              <SettingsGlassButton
+                variant="danger"
                 disabled={deleting || deleteConfirm !== "DELETE"}
                 onClick={() => void handleDeleteAccount()}
-                className="rounded-xl bg-[#dc2626] px-4 py-2.5 text-[13px] font-medium text-white transition hover:bg-[#b91c1c] disabled:cursor-not-allowed disabled:opacity-45"
+                className="bg-[#dc2626] text-white hover:bg-[#b91c1c] disabled:opacity-45"
               >
                 {deleting ? "Deleting…" : "Delete account"}
-              </button>
+              </SettingsGlassButton>
             </div>
-          </div>
-        </div>
+        </SettingsGlassModalShell>
       ) : null}
     </div>
   );

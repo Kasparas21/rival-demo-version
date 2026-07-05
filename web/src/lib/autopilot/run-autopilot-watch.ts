@@ -19,6 +19,11 @@ import { generateWatchRecommendation } from "./watch-recommendation";
 import { buildWatchEmailHtml, buildWatchEmailText, watchEmailSubject } from "./watch-email";
 import { sendWatchSlackWebhook } from "./watch-slack";
 import { sendWatchDiscordWebhook } from "./watch-discord";
+import {
+  loadBrandWatchTargets,
+  resolveWatchScope,
+  type ResolvedWatchScope,
+} from "./active-watched-competitors";
 import type {
   AutopilotSettingsRow,
   AutopilotWatchRunSummary,
@@ -70,6 +75,10 @@ function settingsFromRow(row: Record<string, unknown>): AutopilotSettingsRow {
       ? (row.watch_competitor_ids as string[])
       : null,
     watch_quiet_hours: parseWatchQuietHours(row.watch_quiet_hours),
+    watch_workspaces:
+      row.watch_workspaces && typeof row.watch_workspaces === "object" && !Array.isArray(row.watch_workspaces)
+        ? (row.watch_workspaces as Record<string, boolean>)
+        : {},
     report_enabled: row.report_enabled === true,
     report_day_of_month:
       typeof row.report_day_of_month === "number" ? row.report_day_of_month : 1,
@@ -485,16 +494,29 @@ export async function runAutopilotWatch(params: {
 
     const compById = new Map((comps ?? []).map((c) => [c.id, c]));
 
-    const byUser = new Map<string, typeof alerts>();
-    for (const alert of alerts) {
-      const comp = compById.get(alert.competitor_id);
-      if (!comp || comp.is_workspace_brand) continue;
+    const scopeByUser = new Map<string, ResolvedWatchScope>();
+    await Promise.all(
+      userIds.map(async (userId) => {
+        const settings = settingsByUser.get(userId)!;
+        const targets = await loadBrandWatchTargets(params.admin, userId);
+        scopeByUser.set(userId, resolveWatchScope(targets, settings));
+      }),
+    );
 
+    const byUser = new Map<string, typeof alerts>();
+    const staleAlertIds: string[] = [];
+    for (const alert of alerts) {
       const settings = settingsByUser.get(alert.user_id);
       if (!settings) continue;
 
-      const watchIds = settings.watch_competitor_ids;
-      if (watchIds?.length && !watchIds.includes(alert.competitor_id)) continue;
+      const comp = compById.get(alert.competitor_id);
+      const scope = scopeByUser.get(alert.user_id);
+      if (!comp || comp.is_workspace_brand || !scope?.allowedCompetitorIds.has(alert.competitor_id)) {
+        // Competitor was removed from all sidebars or belongs to a workspace
+        // with autopilot off. Mark processed so stale alerts never resurface.
+        staleAlertIds.push(alert.id);
+        continue;
+      }
 
       if (!passesWatchFilter(alert.alert_type, alert.severity, settings)) {
         continue;
@@ -504,6 +526,14 @@ export async function runAutopilotWatch(params: {
       const list = byUser.get(alert.user_id) ?? [];
       list.push(alert);
       byUser.set(alert.user_id, list);
+    }
+
+    if (staleAlertIds.length > 0) {
+      const nowIso = new Date().toISOString();
+      await params.admin
+        .from("competitor_alerts")
+        .update({ autopilot_processed_at: nowIso })
+        .in("id", staleAlertIds);
     }
 
     for (const [userId, userAlerts] of byUser) {
@@ -538,6 +568,9 @@ export async function runAutopilotWatch(params: {
         };
       });
 
+      const scope = scopeByUser.get(userId);
+      const multiBrand = (scope?.enabledBrands.length ?? 0) > 1;
+
       const blocks = await mapLimit(candidates, 5, async (c) => {
         const strategyPayload = await getCachedStrategyOverview(
           params.admin,
@@ -545,16 +578,26 @@ export async function runAutopilotWatch(params: {
           c.competitor_id,
           c.competitorHost,
         );
+        const owningBrand = scope?.brandByCompetitorId.get(c.competitor_id) ?? null;
         const rec = await generateWatchRecommendation({
           alertType: c.alert_type,
           competitorName: c.competitorName,
           alertTitle: c.title,
           alertBody: c.body,
+          alertMetadata: c.metadata,
           strategyPayload,
+          userBrand: owningBrand
+            ? {
+                brandName: owningBrand.brandName,
+                brandContext: owningBrand.brandContext,
+                brandDomain: owningBrand.brandDomain,
+              }
+            : null,
         });
         return {
           ...c,
           ...rec,
+          clientBrandName: multiBrand && owningBrand ? owningBrand.brandName : null,
           investigateUrl: buildWatchAlertInvestigateUrl(
             appOrigin,
             c.competitorHost,

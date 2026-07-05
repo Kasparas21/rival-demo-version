@@ -1,8 +1,20 @@
 "use client";
 
-import { Check, Copy, KeyRound, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Bot, Check, Copy, KeyRound, Sparkles, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
+import { autopilotGlassCardClass } from "@/components/autopilot/autopilot-glass-ui";
+import {
+  SettingsFieldLabel,
+  SettingsGlassButton,
+  SettingsGlassSection,
+  settingsGlassInputClass,
+} from "@/components/settings/settings-glass-ui";
+import { cn } from "@/lib/utils";
+import { getPublicConnectorOrigin } from "@/lib/http/public-app-origin";
+
+import { McpSetupGuideModal } from "./McpSetupGuideModal";
 
 type McpKeyRow = {
   id: string;
@@ -27,7 +39,37 @@ type OAuthConnection = {
   connected_at: string;
 };
 
+function GlassCopyButton({
+  label,
+  copied,
+  onClick,
+  variant = "secondary",
+}: {
+  label: string;
+  copied: boolean;
+  onClick: () => void;
+  variant?: "primary" | "secondary";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-semibold transition active:scale-[0.98]",
+        variant === "primary"
+          ? "bg-[#1a1a2e] text-white shadow-[0_6px_20px_-8px_rgba(26,26,46,0.5)] hover:bg-[#2d2d44]"
+          : "border border-white/70 bg-white/60 text-[#1a1a2e] shadow-sm backdrop-blur-sm hover:bg-white/85",
+      )}
+    >
+      {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+      {copied ? "Copied" : label}
+    </button>
+  );
+}
+
 export function McpKeysSection() {
+  const keysSectionRef = useRef<HTMLDivElement>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [keys, setKeys] = useState<McpKeyRow[]>([]);
   const [connections, setConnections] = useState<OAuthConnection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,124 +155,147 @@ export function McpKeysSection() {
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const appOrigin =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL ?? "https://spy-rival.com";
+  const appOrigin = getPublicConnectorOrigin();
 
   return (
-    <section className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-sm">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#1a1a2e] text-white">
-          <KeyRound className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-lg font-semibold text-[#111827]">MCP / AI assistants</h2>
-          <p className="mt-1 text-sm text-[#6B7280]">
-            Connect Claude, Cursor, or ChatGPT to query your competitor data read-only.{" "}
-            <a href="/docs/mcp" className="text-[#2563EB] hover:underline">
-              Setup guide
-            </a>
-          </p>
+  <div ref={keysSectionRef}>
+    <SettingsGlassSection
+      icon={KeyRound}
+      accent="indigo"
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          MCP / AI assistants
+          <Sparkles className="h-4 w-4 text-indigo-500" aria-hidden />
+        </span>
+      }
+      subtitle={
+        <>
+          Connect Claude, Cursor, or ChatGPT to query your competitor data read-only.
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            className="mt-2 inline-flex min-h-[44px] items-center gap-1.5 text-[13px] font-semibold text-[#4f46e5] transition hover:text-[#4338ca] hover:underline"
+          >
+            Setup guide
+            <Sparkles className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </>
+      }
+    >
+      <div className={cn("rounded-2xl p-4", autopilotGlassCardClass)}>
+        <div className="flex items-center gap-2 text-[12px] font-medium text-[#52525b]">
+          <Bot className="h-4 w-4 text-[#6366f1]" aria-hidden />
+          <span>
+            Claude.ai / ChatGPT: add connector URL{" "}
+            <code className="rounded-md bg-white/60 px-1.5 py-0.5 text-[11px]">{appOrigin}/api/mcp/mcp</code> — OAuth,
+            no API key
+          </span>
         </div>
       </div>
 
       {created ? (
-        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 p-4">
-          <p className="text-sm font-medium text-amber-900">Copy your API key now — it won&apos;t be shown again.</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <code className="flex-1 break-all rounded bg-white px-2 py-1.5 text-xs text-[#1f2937]">
+        <div
+          className={cn(
+            "mt-4 space-y-4 rounded-2xl border border-amber-200/70 bg-amber-50/50 p-4 backdrop-blur-xl sm:p-5",
+            "shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]",
+          )}
+        >
+          <p className="text-[14px] font-semibold text-amber-950">
+            Copy your API key now — it won&apos;t be shown again.
+          </p>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            <code className="flex-1 break-all rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-[12px] text-[#1f2937]">
               {created.plaintext}
             </code>
-            <button
-              type="button"
+            <GlassCopyButton
+              label="Copy key"
+              copied={copied === "key"}
               onClick={() => void copyText(created.plaintext, "key")}
-              className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1.5 text-xs font-medium hover:bg-[#F9FAFB]"
-            >
-              {copied === "key" ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              Copy key
-            </button>
+              variant="primary"
+            />
           </div>
-          <p className="mt-3 text-xs font-medium text-[#374151]">Claude Code (one paste)</p>
-          <pre className="mt-1 overflow-x-auto rounded bg-[#1a1a2e] p-3 text-[11px] text-emerald-100">
-            {created.claude_mcp_add}
-          </pre>
+
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-[#6b7280]">Claude Code</p>
+            <pre className="mt-2 overflow-x-auto rounded-xl bg-[#1a1a2e] p-3.5 text-[11px] leading-relaxed text-emerald-100">
+              {created.claude_mcp_add}
+            </pre>
+            <div className="mt-2">
+              <GlassCopyButton
+                label="Copy command"
+                copied={copied === "claude"}
+                onClick={() => void copyText(created.claude_mcp_add, "claude")}
+              />
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-[#6b7280]">Cursor</p>
+            <pre className="mt-2 overflow-x-auto rounded-xl border border-white/60 bg-white/70 p-3.5 text-[11px] text-[#1f2937]">
+              {JSON.stringify(created.cursor_config_snippet, null, 2)}
+            </pre>
+            <div className="mt-2">
+              <GlassCopyButton
+                label="Copy snippet"
+                copied={copied === "cursor"}
+                onClick={() => void copyText(JSON.stringify(created.cursor_config_snippet, null, 2), "cursor")}
+              />
+            </div>
+          </div>
+
           <button
             type="button"
-            onClick={() => void copyText(created.claude_mcp_add, "claude")}
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] hover:underline"
-          >
-            {copied === "claude" ? "Copied" : "Copy claude mcp add command"}
-          </button>
-          <p className="mt-3 text-xs font-medium text-[#374151]">Cursor (mcp.json snippet)</p>
-          <pre className="mt-1 overflow-x-auto rounded bg-[#F3F4F6] p-3 text-[11px] text-[#1f2937]">
-            {JSON.stringify(created.cursor_config_snippet, null, 2)}
-          </pre>
-          <button
-            type="button"
-            onClick={() =>
-              void copyText(JSON.stringify(created.cursor_config_snippet, null, 2), "cursor")
-            }
-            className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-[#2563EB] hover:underline"
-          >
-            {copied === "cursor" ? "Copied" : "Copy Cursor snippet"}
-          </button>
-          <button
-            type="button"
-            className="mt-3 block text-xs text-[#6B7280] hover:underline"
+            className="min-h-[44px] text-[13px] font-medium text-[#71717a] underline-offset-2 hover:text-[#1a1a2e] hover:underline"
             onClick={() => setCreated(null)}
           >
             Dismiss
           </button>
         </div>
       ) : (
-        <div className="mt-4 flex flex-wrap items-end gap-2">
-          <div className="min-w-[200px] flex-1">
-            <label className="text-xs font-medium text-[#6B7280]">Label (optional)</label>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <SettingsFieldLabel>Label (optional)</SettingsFieldLabel>
             <input
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="MacBook Claude"
-              className="mt-1 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm"
+              className={cn(settingsGlassInputClass, "mt-1.5")}
             />
           </div>
-          <button
-            type="button"
-            disabled={creating}
-            onClick={() => void createKey()}
-            className="rounded-lg bg-[#1a1a2e] px-4 py-2 text-sm font-medium text-white hover:bg-[#2d2d44] disabled:opacity-50"
-          >
+          <SettingsGlassButton disabled={creating} onClick={() => void createKey()} className="shrink-0">
             {creating ? "Generating…" : "Generate API key"}
-          </button>
+          </SettingsGlassButton>
         </div>
       )}
 
-      <div className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-[#9CA3AF]">Active keys</p>
+      <div className="mt-6">
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a1a1aa]">Active keys</p>
         {loading ? (
-          <p className="mt-2 text-sm text-[#6B7280]">Loading…</p>
+          <p className="mt-3 text-[13px] text-[#71717a]">Loading…</p>
         ) : keys.length === 0 ? (
-          <p className="mt-2 text-sm text-[#6B7280]">No keys yet.</p>
+          <p className="mt-3 text-[13px] text-[#71717a]">No keys yet.</p>
         ) : (
-          <ul className="mt-2 divide-y divide-[#F3F4F6]">
+          <ul className="mt-3 space-y-2">
             {keys.map((k) => (
-              <li key={k.id} className="flex items-center justify-between gap-2 py-2.5">
-                <div>
-                  <p className="text-sm font-medium text-[#111827]">{k.label}</p>
-                  <p className="text-xs text-[#6B7280]">
+              <li
+                key={k.id}
+                className={cn(
+                  "flex flex-col gap-3 rounded-2xl px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between",
+                  autopilotGlassCardClass,
+                )}
+              >
+                <div className="min-w-0">
+                  <p className="text-[14px] font-semibold text-[#1a1a2e]">{k.label}</p>
+                  <p className="mt-0.5 text-[12px] text-[#71717a]">
                     {k.masked} · created {new Date(k.created_at).toLocaleDateString()}
                     {k.last_used_at ? ` · last used ${new Date(k.last_used_at).toLocaleDateString()}` : ""}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void revoke(k.id)}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
+                <SettingsGlassButton variant="danger" onClick={() => void revoke(k.id)}>
+                  <Trash2 className="h-4 w-4" />
                   Revoke
-                </button>
+                </SettingsGlassButton>
               </li>
             ))}
           </ul>
@@ -238,39 +303,48 @@ export function McpKeysSection() {
       </div>
 
       <div className="mt-6">
-        <p className="text-xs font-medium uppercase tracking-wide text-[#9CA3AF]">Connected AI apps (OAuth)</p>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[#a1a1aa]">Connected AI apps (OAuth)</p>
         {loading ? (
-          <p className="mt-2 text-sm text-[#6B7280]">Loading…</p>
+          <p className="mt-3 text-[13px] text-[#71717a]">Loading…</p>
         ) : connections.length === 0 ? (
-          <p className="mt-2 text-sm text-[#6B7280]">No OAuth connections yet.</p>
+          <p className="mt-3 text-[13px] text-[#71717a]">No OAuth connections yet — connect via Claude.ai settings.</p>
         ) : (
-          <ul className="mt-2 divide-y divide-[#F3F4F6]">
+          <ul className="mt-3 space-y-2">
             {connections.map((c) => (
-              <li key={c.client_id} className="flex items-center justify-between gap-2 py-2.5">
+              <li
+                key={c.client_id}
+                className={cn(
+                  "flex flex-col gap-3 rounded-2xl px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between",
+                  autopilotGlassCardClass,
+                )}
+              >
                 <div>
-                  <p className="text-sm font-medium text-[#111827]">{c.client_name}</p>
-                  <p className="text-xs text-[#6B7280]">
+                  <p className="text-[14px] font-semibold text-[#1a1a2e]">{c.client_name}</p>
+                  <p className="mt-0.5 text-[12px] text-[#71717a]">
                     Connected {new Date(c.connected_at).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void revokeConnection(c.client_id)}
-                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
+                <SettingsGlassButton variant="danger" onClick={() => void revokeConnection(c.client_id)}>
+                  <Trash2 className="h-4 w-4" />
                   Revoke
-                </button>
+                </SettingsGlassButton>
               </li>
             ))}
           </ul>
         )}
       </div>
+    </SettingsGlassSection>
 
-      <p className="mt-3 text-xs text-[#9CA3AF]">
-        MCP URL: <code>{appOrigin}/api/mcp/mcp</code> (streamable HTTP — recommended for Claude.ai, ChatGPT, Claude
-        Code, and Cursor)
-      </p>
-    </section>
+    <McpSetupGuideModal
+      open={guideOpen}
+      onClose={() => setGuideOpen(false)}
+      hasApiKey={keys.length > 0 || created !== null}
+      claudeCommand={created?.claude_mcp_add}
+      cursorSnippet={created?.cursor_config_snippet}
+      onScrollToKeys={() => {
+        keysSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }}
+    />
+  </div>
   );
 }

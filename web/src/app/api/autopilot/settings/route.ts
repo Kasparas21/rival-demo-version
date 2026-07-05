@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
 
-import {
-  canEnableBrief,
-  canEnableReports,
-  ensureAutopilotSettings,
-  rowToAutopilotSettings,
-  sanitizeAutopilotSettingsPatch,
-  stripAgencyOnlyFields,
-} from "@/lib/autopilot/settings-db";
+import { canEnableBrief, canEnableReports, ensureAutopilotSettings, rowToAutopilotSettings, stripAgencyOnlyFields, sanitizeAutopilotSettingsPatch } from "@/lib/autopilot/settings-db";
+import { isAutopilotDevFireAllowed } from "@/lib/autopilot/is-autopilot-dev-fire-allowed";
 import { autopilotSettingsPutSchema } from "@/lib/autopilot/settings-schema";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -42,6 +36,9 @@ export async function GET(): Promise<NextResponse> {
         canReports: canEnableReports(billing.planTier),
         canBrief: canEnableBrief(billing.planTier),
         isAgency: billing.planTier === "agency" || billing.planTier === "admin",
+      },
+      devTools: {
+        canFireWatchSlack: isAutopilotDevFireAllowed(user.email),
       },
     });
   } catch (e) {

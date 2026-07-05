@@ -1,7 +1,8 @@
 import type { WatchAlertBlock } from "./types";
 
 function blockToEmbedDescription(block: WatchAlertBlock): string {
-  return `**${block.competitorName}**\n${block.headline}\n\n**Suggested move:** ${block.recommendation}`;
+  const brandTag = block.clientBrandName ? ` · for ${block.clientBrandName}` : "";
+  return `**${block.competitorName}**${brandTag}\n${block.headline}\n\n${block.context}\n\n**Your move:** ${block.recommendation}`;
 }
 
 export async function sendWatchDiscordWebhook(params: {
@@ -24,7 +25,7 @@ export async function sendWatchDiscordWebhook(params: {
   const body: Record<string, unknown> = {
     content:
       params.blocks.length > 0
-        ? "Autopilot watch — competitor moves need your attention"
+        ? "Autopilot watch - competitor moves need your attention"
         : undefined,
     embeds,
   };
@@ -72,7 +73,10 @@ export async function sendTestDiscordWebhook(
     competitorName: "Sample competitor",
     competitorHost: "example.com",
     headline: "Sample competitor activity spiked",
-    recommendation: "Review their newest ads this week and note any offer or angle shifts.",
+    context:
+      "Sample competitor increased paid output sharply on Meta over the past week - typical of scaling a winning creative or launching a promo.",
+    recommendation:
+      "Review their newest Meta ads in Rival this week. If the spike is offer-driven, run a time-boxed counter-promo test; if creative-driven, brief a hook-variant test on the same placements.",
     confidence: "medium",
     investigateUrl: settingsUrl,
   };
