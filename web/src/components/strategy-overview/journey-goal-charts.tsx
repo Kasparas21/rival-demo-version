@@ -109,7 +109,18 @@ export function PathMixDonut({ data }: { data: JourneyChartSlice[] }) {
             <Cell key={entry.key ?? entry.name} fill={entry.fill} stroke="transparent" />
           ))}
         </Pie>
-        <Tooltip formatter={(v: number) => [`${v}%`, "Share"]} />
+        <Tooltip
+          content={({ active, payload }) => {
+            if (!active || !payload?.length) return null;
+            const row = payload[0];
+            return (
+              <div className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] shadow-md">
+                <p className="font-semibold text-slate-900">{row.name}</p>
+                <p className="text-slate-600">{row.value}%</p>
+              </div>
+            );
+          }}
+        />
       </PieChart>
     </ResponsiveContainer>
   );
