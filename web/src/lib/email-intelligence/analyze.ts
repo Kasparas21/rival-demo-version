@@ -10,15 +10,25 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 
 import { MAX_AI_ANALYSIS_ATTEMPTS } from "./constants";
-import { emailIntelligenceAnalysisSchema } from "./types";
+import {
+  EMAIL_AI_ANALYSIS_VERSION,
+  emailDeepAnalysisSchema,
+  emailNeedsDeepAnalysis,
+  legacySummaryFromDeep,
+  type EmailDeepAnalysis,
+} from "./email-deep-analysis-types";
 
-const SYSTEM_PROMPT = `You are a competitive intelligence analyst specializing in email marketing.
+const SYSTEM_PROMPT = `You are a senior competitive intelligence analyst specializing in email marketing.
+
+Study the competitor email like a strategist: subject line hooks, preheader role, funnel stage, audience signals, persuasion and urgency tactics, copy structure, offers, positioning, what works, weaknesses, and an adaptation playbook the user can apply to their own campaigns.
 
 Return ONLY a valid JSON object. No markdown, no preamble, no explanation.`;
 
 export type AnalyzeCompetitorEmailResult =
   | { ok: true }
   | { ok: false; error: string; quotaExceeded?: boolean; attemptsExhausted?: boolean };
+
+export { EMAIL_AI_ANALYSIS_VERSION, emailNeedsDeepAnalysis };
 
 export function stripJsonFences(text: string): string {
   let t = text.trim();
@@ -28,8 +38,7 @@ export function stripJsonFences(text: string): string {
   return t.trim();
 }
 
-export function parseEmailIntelligenceAnalysisFromLlmText(text: string) {
-  const json = JSON.parse(stripJsonFences(text)) as Record<string, unknown>;
+function normalizeEspInJson(json: Record<string, unknown>): void {
   if (typeof json.esp_detected === "string") {
     const espMap: Record<string, string> = {
       klaviyo: "Klaviyo",
@@ -43,7 +52,25 @@ export function parseEmailIntelligenceAnalysisFromLlmText(text: string) {
     const key = json.esp_detected.trim().toLowerCase();
     json.esp_detected = espMap[key] ?? json.esp_detected;
   }
-  return emailIntelligenceAnalysisSchema.parse(json);
+}
+
+export function parseEmailDeepAnalysisFromLlmText(text: string): EmailDeepAnalysis {
+  const json = JSON.parse(stripJsonFences(text)) as Record<string, unknown>;
+  normalizeEspInJson(json);
+  return emailDeepAnalysisSchema.parse(json);
+}
+
+/** @deprecated Use parseEmailDeepAnalysisFromLlmText — kept for legacy tests */
+export function parseEmailIntelligenceAnalysisFromLlmText(text: string) {
+  const deep = parseEmailDeepAnalysisFromLlmText(text);
+  return {
+    email_type: deep.email_type,
+    ai_summary: legacySummaryFromDeep(deep),
+    ai_offers: deep.ai_offers,
+    ai_cta: deep.copy_structure.cta_pattern || null,
+    ai_angle: deep.ai_angle,
+    esp_detected: deep.esp_detected,
+  };
 }
 
 export function stripHtmlToPlainText(html: string): string {
@@ -57,20 +84,24 @@ export function stripHtmlToPlainText(html: string): string {
 
 function buildUserPrompt(args: {
   subject: string | null;
+  preview_text: string | null;
   from_name: string | null;
   from_email: string | null;
   body: string;
 }): string {
   const subject = args.subject?.trim() || "(no subject)";
+  const preheader = args.preview_text?.trim() || "(none)";
   const fromName = args.from_name?.trim() || "";
   const fromEmail = args.from_email?.trim() || "";
   const fromLine =
     fromName && fromEmail ? `${fromName} <${fromEmail}>` : fromEmail || fromName || "unknown";
 
   return `Analyze this competitor marketing email and return JSON.
-Subject: ${subject}
 
+Subject: ${subject}
+Preheader / preview text: ${preheader}
 From: ${fromLine}
+
 Body:
 
 ${args.body}
@@ -79,14 +110,32 @@ Return this exact JSON shape:
 
 {
   "email_type": "promotional|nurture|cart_abandonment|reengagement|newsletter|transactional|other",
-  "ai_summary": "2 sentences max describing what this email does and how",
-  "ai_offers": [{ "type": "discount|free_trial|free_shipping|gift|other", "value": "string", "code": "string or null" }],
-  "ai_cta": "main call to action text or null",
   "ai_angle": "urgency|social_proof|scarcity|curiosity|value|authority|other",
+  "executive_summary": "3-4 sentences on strategy, offer, and competitive positioning",
+  "funnel_stage": "awareness|consideration|conversion|retention|winback",
+  "confidence": "high|medium|low",
+  "subject_line": { "hook": "what makes the subject work or fail", "tactics": ["2-4 specific tactics"] },
+  "preheader_role": "how preview text supports the subject or null",
+  "audience_signals": ["2-4 inferred audience segments or intents"],
+  "persona_hint": "likely persona or null",
+  "persuasion_triggers": ["2-4 triggers e.g. social proof, exclusivity"],
+  "emotional_drivers": ["2-3 emotions targeted"],
+  "urgency_tactics": ["0-3 urgency/scarcity devices"],
+  "copy_structure": {
+    "hook": "opening hook pattern",
+    "body_framework": ["2-4 structural beats in order"],
+    "cta_pattern": "primary CTA wording or pattern",
+    "secondary_ctas": ["0-3 secondary CTAs"]
+  },
+  "ai_offers": [{ "type": "discount|free_trial|free_shipping|gift|other", "value": "string", "code": "string or null" }],
+  "positioning": "how the brand positions itself vs alternatives",
+  "what_works": ["2-4 strengths worth studying"],
+  "weaknesses": ["0-3 gaps or risks"],
+  "adaptation_playbook": ["3-5 actionable bullets for the user's own campaigns"],
   "esp_detected": "Klaviyo|Mailchimp|HubSpot|Brevo|ActiveCampaign|other|unknown"
 }
 
-If no offers exist, return ai_offers as an empty array [].`;
+If no offers exist, return ai_offers as [].`;
 }
 
 function normalizeEspForDb(aiEsp: string, existingEsp: string | null): string {
@@ -124,6 +173,8 @@ export async function resetEmailAnalysisForRetry(emailId: string): Promise<{ ok:
       ai_analysis_error: null,
       ai_analysis_attempts: 0,
       ai_processed_at: null,
+      ai_deep_analysis: null,
+      ai_analysis_version: null,
     })
     .eq("id", emailId);
 
@@ -139,7 +190,7 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
   const { data: row, error: fetchErr } = await admin
     .from("competitor_emails")
     .select(
-      "id, user_id, competitor_id, subject, from_name, from_email, plain_text, html_body, esp_detected, ai_processed_at, ai_analysis_attempts, ai_analysis_error, received_at",
+      "id, user_id, competitor_id, subject, preview_text, from_name, from_email, plain_text, html_body, esp_detected, ai_processed_at, ai_analysis_attempts, ai_analysis_error, ai_analysis_version, ai_deep_analysis, received_at",
     )
     .eq("id", emailId)
     .maybeSingle();
@@ -148,11 +199,18 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
     return { ok: false, error: fetchErr?.message ?? "Email not found" };
   }
 
-  if (row.ai_processed_at) {
+  const needsUpgrade = emailNeedsDeepAnalysis(row);
+
+  if (row.ai_processed_at && !needsUpgrade) {
     return { ok: true };
   }
 
-  if ((row.ai_analysis_attempts ?? 0) >= MAX_AI_ANALYSIS_ATTEMPTS) {
+  if (needsUpgrade && row.ai_processed_at) {
+    await admin
+      .from("competitor_emails")
+      .update({ ai_analysis_error: null, ai_analysis_attempts: 0 })
+      .eq("id", emailId);
+  } else if ((row.ai_analysis_attempts ?? 0) >= MAX_AI_ANALYSIS_ATTEMPTS) {
     return {
       ok: false,
       error: row.ai_analysis_error ?? "Analysis failed after multiple attempts",
@@ -171,7 +229,7 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
   if (!body && row.html_body?.trim()) {
     body = stripHtmlToPlainText(row.html_body);
   }
-  body = body.slice(0, 3000);
+  body = body.slice(0, 6000);
 
   const res = await llmFast({
     task: "email_intelligence",
@@ -181,13 +239,14 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
         role: "user",
         content: buildUserPrompt({
           subject: row.subject,
+          preview_text: row.preview_text,
           from_name: row.from_name,
           from_email: row.from_email,
           body: body || "(empty body)",
         }),
       },
     ],
-    maxTokens: 1024,
+    maxTokens: 2200,
   });
 
   if (!res.ok) {
@@ -195,9 +254,9 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
     return { ok: false, error: res.error };
   }
 
-  let parsed: ReturnType<typeof emailIntelligenceAnalysisSchema.parse>;
+  let parsed: EmailDeepAnalysis;
   try {
-    parsed = parseEmailIntelligenceAnalysisFromLlmText(res.text);
+    parsed = parseEmailDeepAnalysisFromLlmText(res.text);
   } catch {
     const msg = "Invalid AI JSON response";
     await recordAnalysisFailure(emailId, row.ai_analysis_attempts ?? 0, msg);
@@ -205,16 +264,20 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
   }
 
   const espDetected = normalizeEspForDb(parsed.esp_detected, row.esp_detected);
+  const aiSummary = legacySummaryFromDeep(parsed);
+  const aiCta = parsed.copy_structure.cta_pattern?.trim() || null;
 
   const { error: updateErr } = await admin
     .from("competitor_emails")
     .update({
       email_type: parsed.email_type,
-      ai_summary: parsed.ai_summary,
+      ai_summary: aiSummary,
       ai_offers: parsed.ai_offers as Json,
-      ai_cta: parsed.ai_cta,
+      ai_cta: aiCta,
       ai_angle: parsed.ai_angle,
       esp_detected: espDetected,
+      ai_deep_analysis: parsed as Json,
+      ai_analysis_version: EMAIL_AI_ANALYSIS_VERSION,
       ai_processed_at: new Date().toISOString(),
       ai_analysis_error: null,
     })
@@ -241,7 +304,7 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
         competitor_id: row.competitor_id,
         subject: row.subject,
         email_type: parsed.email_type,
-        ai_summary: parsed.ai_summary,
+        ai_summary: aiSummary,
         ai_offers: parsed.ai_offers,
         ai_angle: parsed.ai_angle,
         received_at: row.received_at,

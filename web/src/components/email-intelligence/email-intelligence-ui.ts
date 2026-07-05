@@ -192,8 +192,77 @@ export function emailFromLabel(email: CompetitorEmailRow): string {
 export function emailListPreview(email: CompetitorEmailRow): string {
   return (
     email.ai_summary?.trim() ||
-    email.preview_text?.trim() ||
+    cleanPreheaderForDisplay(email.preview_text).text ||
     email.plain_text?.trim().slice(0, 120) ||
     "No preview available"
   );
+}
+
+const URL_RE = /https?:\/\/[^\s<>"']+/gi;
+const URL_FRAGMENT_RE = /https?:\/?\/?/gi;
+
+export function truncateDisplayText(text: string, max = 160): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  const cut = trimmed.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max * 0.55 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+}
+
+export function cleanPreheaderForDisplay(raw: string | null | undefined): {
+  text: string;
+  raw: string;
+  urlCount: number;
+  displayCharCount: number;
+} {
+  const rawText = raw?.trim() ?? "";
+  if (!rawText) {
+    return { text: "", raw: "", urlCount: 0, displayCharCount: 0 };
+  }
+  const urls = rawText.match(URL_RE) ?? [];
+  const text = rawText
+    .replace(URL_RE, " ")
+    .replace(URL_FRAGMENT_RE, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    text: text || "(tracking links only)",
+    raw: rawText,
+    urlCount: urls.length,
+    displayCharCount: text.length,
+  };
+}
+
+export function mergeEmailRowUpdate(
+  existing: CompetitorEmailRow,
+  updated: CompetitorEmailRow,
+): CompetitorEmailRow {
+  return {
+    ...existing,
+    ...updated,
+    html_body: updated.html_body ?? existing.html_body,
+    plain_text: updated.plain_text ?? existing.plain_text,
+    ai_deep_analysis: updated.ai_deep_analysis ?? existing.ai_deep_analysis,
+    ai_analysis_version: updated.ai_analysis_version ?? existing.ai_analysis_version,
+  };
+}
+
+export function estimatePlainBodyLength(email: CompetitorEmailRow): number | null {
+  const plain = email.plain_text?.trim();
+  if (plain) return plain.length;
+  const html = email.html_body?.trim();
+  if (!html) return null;
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().length;
+}
+
+export function formatReceivedDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }

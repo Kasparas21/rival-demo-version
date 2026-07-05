@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 
 import { analyzePendingCompetitorEmails } from "@/lib/email-intelligence/analyze-pending";
 import {
+  analyzeCompetitorEmail,
+  emailNeedsDeepAnalysis,
+} from "@/lib/email-intelligence/analyze";
+import {
   buildInsightsResponse,
   countCompetitorEmails,
   EMAIL_INSIGHTS_MIN_COUNT,
@@ -83,9 +87,13 @@ export async function GET(
       return NextResponse.json({ error: "Invalid email_id" }, { status: 400 });
     }
     try {
-      const email = await fetchCompetitorEmailById(supabase, user.id, competitorId, emailId);
+      let email = await fetchCompetitorEmailById(supabase, user.id, competitorId, emailId);
       if (!email) {
         return NextResponse.json({ error: "Email not found" }, { status: 404 });
+      }
+      if (emailNeedsDeepAnalysis(email)) {
+        await analyzeCompetitorEmail(emailId);
+        email = (await fetchCompetitorEmailById(supabase, user.id, competitorId, emailId)) ?? email;
       }
       return NextResponse.json({ tracker: tracker ?? null, email });
     } catch (err) {

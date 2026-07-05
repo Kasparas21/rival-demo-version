@@ -126,6 +126,16 @@ export async function scrapeOrganicCompetitor(
     posts: allPosts,
   });
 
+  const scrapedPlatforms = [...new Set(allPosts.map((p) => p.platform))];
+  if (scrapedPlatforms.length > 0) {
+    const { archiveOrganicPreviewsForCompetitor } = await import("./archive-organic-previews");
+    await archiveOrganicPreviewsForCompetitor(admin, {
+      userId: competitor.user_id,
+      competitorId: competitor.id,
+      platforms: scrapedPlatforms,
+    }).catch((e) => console.error("[organic-scrape] archiveOrganicPreviews", e));
+  }
+
   if (allPosts.length > 0) {
     await extractAndUpsertCollaborators(admin, {
       competitorId: competitor.id,

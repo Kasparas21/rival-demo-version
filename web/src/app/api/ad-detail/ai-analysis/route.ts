@@ -180,7 +180,11 @@ Ad text:
     onConflict: "ad_id",
   });
   if (upErr) {
-    console.warn("[ad-preview-analysis] cache upsert", upErr.message);
+    console.error("[ad-preview-analysis] cache upsert", upErr.message);
+    return NextResponse.json(
+      { ok: false, error: "Failed to save analysis. Please try again." },
+      { status: 500 },
+    );
   }
 
   const { error: usageErr } = await supabase.rpc("increment_ad_preview_analysis_usage");

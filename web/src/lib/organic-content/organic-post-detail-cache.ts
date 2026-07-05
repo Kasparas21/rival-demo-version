@@ -116,6 +116,24 @@ export function setCachedOrganicPostDetail(
   });
 }
 
+/** Keep in-memory drawer cache in sync after a successful AI analysis save. */
+export function patchCachedOrganicPostDetailAnalysis(
+  competitorId: string,
+  postId: string,
+  patch: NonNullable<OrganicPostDetailPayload["context"]>,
+): void {
+  const key = cacheKey(competitorId, postId);
+  const hit = detailCache.get(key);
+  if (!hit?.payload.ok || !hit.payload.post || !hit.payload.competitor) return;
+  setCachedOrganicPostDetail(competitorId, postId, {
+    ...hit.payload,
+    context: {
+      ...hit.payload.context,
+      ...patch,
+    },
+  });
+}
+
 export async function fetchOrganicPostDetailPayload(
   competitorId: string,
   postId: string,

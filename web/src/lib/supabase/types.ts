@@ -361,6 +361,87 @@ export type Database = {
         };
         Relationships: [];
       };
+      saved_emails: {
+        Row: {
+          id: string;
+          user_id: string;
+          competitor_id: string;
+          source_competitor_email_id: string | null;
+          from_email: string | null;
+          from_name: string | null;
+          subject: string | null;
+          preview_text: string | null;
+          html_body: string | null;
+          plain_text: string | null;
+          received_at: string | null;
+          esp_detected: string | null;
+          email_type: string | null;
+          ai_summary: string | null;
+          ai_offers: Json | null;
+          ai_cta: string | null;
+          ai_angle: string | null;
+          ai_deep_analysis: Json | null;
+          ai_analysis_version: string | null;
+          notes: string | null;
+          saved_by_user_id: string;
+          saved_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          competitor_id: string;
+          source_competitor_email_id?: string | null;
+          from_email?: string | null;
+          from_name?: string | null;
+          subject?: string | null;
+          preview_text?: string | null;
+          html_body?: string | null;
+          plain_text?: string | null;
+          received_at?: string | null;
+          esp_detected?: string | null;
+          email_type?: string | null;
+          ai_summary?: string | null;
+          ai_offers?: Json | null;
+          ai_cta?: string | null;
+          ai_angle?: string | null;
+          ai_deep_analysis?: Json | null;
+          ai_analysis_version?: string | null;
+          notes?: string | null;
+          saved_by_user_id: string;
+          saved_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          competitor_id?: string;
+          source_competitor_email_id?: string | null;
+          from_email?: string | null;
+          from_name?: string | null;
+          subject?: string | null;
+          preview_text?: string | null;
+          html_body?: string | null;
+          plain_text?: string | null;
+          received_at?: string | null;
+          esp_detected?: string | null;
+          email_type?: string | null;
+          ai_summary?: string | null;
+          ai_offers?: Json | null;
+          ai_cta?: string | null;
+          ai_angle?: string | null;
+          ai_deep_analysis?: Json | null;
+          ai_analysis_version?: string | null;
+          notes?: string | null;
+          saved_by_user_id?: string;
+          saved_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       weekly_digest_sends: {
         Row: {
           id: string;
@@ -1341,6 +1422,8 @@ export type Database = {
           ai_processed_at: string | null;
           ai_analysis_error: string | null;
           ai_analysis_attempts: number;
+          ai_deep_analysis: Json | null;
+          ai_analysis_version: string | null;
           created_at: string;
         };
         Insert: {
@@ -1365,6 +1448,8 @@ export type Database = {
           ai_processed_at?: string | null;
           ai_analysis_error?: string | null;
           ai_analysis_attempts?: number;
+          ai_deep_analysis?: Json | null;
+          ai_analysis_version?: string | null;
           created_at?: string;
         };
         Update: {
@@ -1389,6 +1474,8 @@ export type Database = {
           ai_processed_at?: string | null;
           ai_analysis_error?: string | null;
           ai_analysis_attempts?: number;
+          ai_deep_analysis?: Json | null;
+          ai_analysis_version?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -1439,6 +1526,7 @@ export type Database = {
           posted_at: string | null;
           scraped_at: string;
           raw_data: Json;
+          archived_preview_url: string | null;
         };
         Insert: {
           id?: string;
@@ -1455,6 +1543,7 @@ export type Database = {
           posted_at?: string | null;
           scraped_at?: string;
           raw_data?: Json;
+          archived_preview_url?: string | null;
         };
         Update: {
           id?: string;
@@ -1471,6 +1560,7 @@ export type Database = {
           posted_at?: string | null;
           scraped_at?: string;
           raw_data?: Json;
+          archived_preview_url?: string | null;
         };
         Relationships: [];
       };

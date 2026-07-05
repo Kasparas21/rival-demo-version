@@ -773,6 +773,13 @@ export function extractLinkedInMediaFromRaw(raw_data: unknown): string[] {
   return pickMediaUrls(row).filter((url) => /media\.licdn\.com/i.test(url));
 }
 
+/** Re-extract TikTok cover URLs from stored Apify raw_data. */
+export function extractTikTokMediaFromRaw(raw_data: unknown): string[] {
+  const row = asRecord(raw_data);
+  if (!row) return [];
+  return pickTikTokMediaUrls(row);
+}
+
 function normalizeHarvestapiLinkedInPost(
   platform: OrganicPlatform,
   row: Record<string, unknown>,
