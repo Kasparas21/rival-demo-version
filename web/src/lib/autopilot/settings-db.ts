@@ -38,8 +38,97 @@ function parseWatchChannels(raw: unknown): WatchChannels {
   return {
     email: o.email !== false,
     slack: o.slack === true,
-    discord: o.discord === true,
+    discord: false,
   };
+}
+
+/** Columns present in the original autopilot_settings migration (safe on all envs). */
+const AUTOPILOT_SETTINGS_BASE_INSERT: Omit<
+  Database["public"]["Tables"]["autopilot_settings"]["Insert"],
+  "user_id" | "id" | "created_at" | "updated_at"
+> = {
+  enabled: DEFAULT_AUTOPLIOT_SETTINGS.enabled,
+  watch_enabled: DEFAULT_AUTOPLIOT_SETTINGS.watch_enabled,
+  watch_sensitivity: DEFAULT_AUTOPLIOT_SETTINGS.watch_sensitivity,
+  watch_channels: { email: true, slack: false },
+  watch_quiet_hours: DEFAULT_AUTOPLIOT_SETTINGS.watch_quiet_hours,
+  report_enabled: DEFAULT_AUTOPLIOT_SETTINGS.report_enabled,
+  report_day_of_month: DEFAULT_AUTOPLIOT_SETTINGS.report_day_of_month,
+  report_branding: DEFAULT_AUTOPLIOT_SETTINGS.report_branding,
+  report_workspaces: DEFAULT_AUTOPLIOT_SETTINGS.report_workspaces,
+  brief_enabled: DEFAULT_AUTOPLIOT_SETTINGS.brief_enabled,
+};
+
+const AUTOPILOT_SETTINGS_UPDATE_KEYS = [
+  "enabled",
+  "watch_enabled",
+  "watch_sensitivity",
+  "watch_min_score",
+  "watch_channels",
+  "slack_webhook_url",
+  "slack_connection",
+  "watch_competitor_ids",
+  "watch_quiet_hours",
+  "report_enabled",
+  "report_day_of_month",
+  "report_branding",
+  "report_workspaces",
+  "brief_enabled",
+] as const satisfies readonly (keyof Database["public"]["Tables"]["autopilot_settings"]["Update"])[];
+
+/** Strip unknown / deprecated columns so PostgREST never sees discord_connection. */
+export function sanitizeAutopilotSettingsPatch(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of AUTOPILOT_SETTINGS_UPDATE_KEYS) {
+    if (key in patch) out[key] = patch[key];
+  }
+  if (out.watch_channels && typeof out.watch_channels === "object" && !Array.isArray(out.watch_channels)) {
+    const channels = out.watch_channels as Record<string, unknown>;
+    out.watch_channels = {
+      email: channels.email !== false,
+      slack: channels.slack === true,
+      discord: false,
+    };
+  }
+  return out;
+}
+
+async function applyExtendedAutopilotDefaults(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("autopilot_settings")
+    .update({ watch_min_score: DEFAULT_AUTOPLIOT_SETTINGS.watch_min_score })
+    .eq("user_id", userId);
+  if (error) {
+    console.warn("[autopilot] extended defaults skipped:", error.message);
+  }
+}
+
+async function insertAutopilotSettingsRow(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const { data: inserted, error } = await supabase
+    .from("autopilot_settings")
+    .insert({ user_id: userId, ...AUTOPILOT_SETTINGS_BASE_INSERT })
+    .select("*")
+    .single();
+
+  if (error || !inserted) {
+    throw new Error(error?.message ?? "Failed to create autopilot settings");
+  }
+
+  await applyExtendedAutopilotDefaults(supabase, userId);
+
+  const { data: refreshed } = await supabase
+    .from("autopilot_settings")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return (refreshed ?? inserted) as Record<string, unknown>;
 }
 
 function parseSlackConnection(raw: unknown): SlackConnection | null {
@@ -113,16 +202,8 @@ export async function ensureAutopilotSettings(
 
   if (existing) return rowToAutopilotSettings(existing as Record<string, unknown>);
 
-  const { data: inserted, error } = await supabase
-    .from("autopilot_settings")
-    .insert({ user_id: userId, ...DEFAULT_AUTOPLIOT_SETTINGS })
-    .select("*")
-    .single();
-
-  if (error || !inserted) {
-    throw new Error(error?.message ?? "Failed to create autopilot settings");
-  }
-  return rowToAutopilotSettings(inserted as Record<string, unknown>);
+  const inserted = await insertAutopilotSettingsRow(supabase, userId);
+  return rowToAutopilotSettings(inserted);
 }
 
 export function stripAgencyOnlyFields(

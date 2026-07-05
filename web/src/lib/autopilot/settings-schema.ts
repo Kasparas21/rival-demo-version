@@ -5,7 +5,7 @@ export const watchSensitivitySchema = z.enum(["paranoid", "balanced", "big_moves
 export const watchChannelsSchema = z.object({
   email: z.boolean(),
   slack: z.boolean(),
-  discord: z.boolean(),
+  discord: z.boolean().optional(),
 });
 
 export const watchQuietHoursSchema = z.object({

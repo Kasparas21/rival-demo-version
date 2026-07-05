@@ -5,6 +5,7 @@ import {
   canEnableReports,
   ensureAutopilotSettings,
   rowToAutopilotSettings,
+  sanitizeAutopilotSettingsPatch,
   stripAgencyOnlyFields,
 } from "@/lib/autopilot/settings-db";
 import { autopilotSettingsPutSchema } from "@/lib/autopilot/settings-schema";
@@ -87,6 +88,7 @@ export async function PUT(req: Request): Promise<NextResponse> {
   }
 
   patch = stripAgencyOnlyFields(patch, billing.planTier);
+  patch = sanitizeAutopilotSettingsPatch(patch);
 
   if (parsed.data.slack_webhook_url === null) {
     patch.slack_webhook_url = null;

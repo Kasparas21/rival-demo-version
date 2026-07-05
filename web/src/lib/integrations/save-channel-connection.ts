@@ -12,7 +12,7 @@ function parseWatchChannels(raw: unknown): WatchChannels {
   return {
     email: o.email !== false,
     slack: o.slack === true,
-    discord: o.discord === true,
+    discord: false,
   };
 }
 
