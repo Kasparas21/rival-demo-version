@@ -3,6 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { AutopilotDeliveryStatusBanner } from "@/components/autopilot/AutopilotDeliveryStatusBanner";
 import {
   autopilotGlassCardClass,
   autopilotGlassCardActiveClass,
@@ -14,6 +15,7 @@ import { AutopilotChannelsSection } from "@/components/autopilot/AutopilotChanne
 import { AutopilotThresholdRadios } from "@/components/autopilot/AutopilotThresholdRadios";
 import type { AutopilotBillingMeta, AutopilotSettingsUiState, BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
 import { uiMinScore } from "@/components/autopilot/use-autopilot-settings";
+import type { AutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
 import { cn } from "@/lib/utils";
 
 type AgentSettingsFormProps = {
@@ -29,6 +31,7 @@ type AgentSettingsFormProps = {
   onSave: () => void;
   onRefresh?: () => void | Promise<void>;
   onViewHistory?: () => void;
+  deliveryStatus?: AutopilotDeliveryStatus | null;
 };
 
 export function AgentSettingsForm({
@@ -44,6 +47,7 @@ export function AgentSettingsForm({
   onSave,
   onRefresh,
   onViewHistory,
+  deliveryStatus,
 }: AgentSettingsFormProps) {
   const [slackInput, setSlackInput] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -72,6 +76,8 @@ export function AgentSettingsForm({
           {error ?? localError}
         </div>
       ) : null}
+
+      <AutopilotDeliveryStatusBanner status={deliveryStatus ?? null} />
 
       <div
         className={cn(

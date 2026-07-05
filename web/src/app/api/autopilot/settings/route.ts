@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { canEnableBrief, canEnableReports, ensureAutopilotSettings, rowToAutopilotSettings, stripAgencyOnlyFields, sanitizeAutopilotSettingsPatch } from "@/lib/autopilot/settings-db";
+import { loadAutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
 import { isAutopilotDevFireAllowed } from "@/lib/autopilot/is-autopilot-dev-fire-allowed";
 import { autopilotSettingsPutSchema } from "@/lib/autopilot/settings-schema";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
@@ -23,6 +24,7 @@ export async function GET(): Promise<NextResponse> {
   try {
     const settings = await ensureAutopilotSettings(supabase, user.id);
     const billing = await getBillingEntitlement(supabase, user.id);
+    const deliveryStatus = await loadAutopilotDeliveryStatus(supabase, user.id, settings, user.email ?? null);
     return NextResponse.json({
       ok: true,
       settings: {
@@ -31,6 +33,7 @@ export async function GET(): Promise<NextResponse> {
         slack_webhook_configured: Boolean(settings.slack_webhook_url?.trim()),
         user_email: user.email ?? null,
       },
+      deliveryStatus,
       billing: {
         planTier: billing.planTier,
         canReports: canEnableReports(billing.planTier),
@@ -87,6 +90,10 @@ export async function PUT(req: Request): Promise<NextResponse> {
   patch = stripAgencyOnlyFields(patch, billing.planTier);
   patch = sanitizeAutopilotSettingsPatch(patch);
 
+  if (parsed.data.enabled === true) {
+    patch.watch_enabled = true;
+  }
+
   if (parsed.data.slack_webhook_url === null) {
     patch.slack_webhook_url = null;
     patch.slack_connection = null;
@@ -108,6 +115,7 @@ export async function PUT(req: Request): Promise<NextResponse> {
   }
 
   const settings = rowToAutopilotSettings(updated as Record<string, unknown>);
+  const deliveryStatus = await loadAutopilotDeliveryStatus(supabase, user.id, settings, user.email ?? null);
   return NextResponse.json({
     ok: true,
     settings: {
@@ -115,5 +123,6 @@ export async function PUT(req: Request): Promise<NextResponse> {
       slack_webhook_url: settings.slack_webhook_url ? "••••••••" : null,
       slack_webhook_configured: Boolean(settings.slack_webhook_url?.trim()),
     },
+    deliveryStatus,
   });
 }

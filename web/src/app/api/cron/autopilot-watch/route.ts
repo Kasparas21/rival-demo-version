@@ -26,7 +26,7 @@ async function handleAutopilotWatch(req: Request): Promise<NextResponse> {
   const body: Record<string, unknown> = { ...summary };
   if (process.env.VERCEL === "1") {
     body.note =
-      "Vercel Hobby only supports daily crons — autopilot-watch may not run every 30 min until Pro. Manual ?test=1 triggers process all backlog.";
+      "Vercel cron runs daily at 07:15 UTC. Use ?test=1&userId=<uuid> with CRON_SECRET to process backlog manually.";
   }
 
   return NextResponse.json(body);

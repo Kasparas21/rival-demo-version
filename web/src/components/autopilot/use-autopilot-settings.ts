@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import type { AutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
 import type { AutopilotSettingsRow } from "@/lib/autopilot/types";
 import { normalizeWatchMinScoreForUi } from "@/lib/autopilot/watch-alert-score";
 
@@ -35,6 +36,7 @@ type SettingsGetResponse = {
   error?: string;
   settings?: AutopilotSettingsUiState;
   billing?: AutopilotBillingMeta;
+  deliveryStatus?: AutopilotDeliveryStatus;
   devTools?: { canFireWatchSlack?: boolean };
 };
 
@@ -45,6 +47,7 @@ export function useAutopilotSettings() {
   const [savedFlash, setSavedFlash] = useState(false);
   const [settings, setSettings] = useState<AutopilotSettingsUiState | null>(null);
   const [billing, setBilling] = useState<AutopilotBillingMeta | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<AutopilotDeliveryStatus | null>(null);
 
   const loadSettings = useCallback(async () => {
     setError(null);
@@ -60,6 +63,7 @@ export function useAutopilotSettings() {
         dev_can_fire_watch_slack: data.devTools?.canFireWatchSlack === true,
       });
       setBilling(data.billing ?? null);
+      setDeliveryStatus(data.deliveryStatus ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
       setSettings(null);
@@ -99,6 +103,7 @@ export function useAutopilotSettings() {
           user_email: prev?.user_email ?? data.settings!.user_email,
           dev_can_fire_watch_slack: prev?.dev_can_fire_watch_slack ?? data.devTools?.canFireWatchSlack === true,
         }));
+        if (data.deliveryStatus) setDeliveryStatus(data.deliveryStatus);
         setSavedFlash(true);
         setTimeout(() => setSavedFlash(false), 2000);
         return true;
@@ -115,8 +120,9 @@ export function useAutopilotSettings() {
   const setEnabled = useCallback(
     async (enabled: boolean) => {
       if (!settings) return;
-      setSettings({ ...settings, enabled });
-      await saveSettings({ enabled });
+      const patch = enabled ? { enabled: true, watch_enabled: true } : { enabled: false };
+      setSettings({ ...settings, ...patch });
+      await saveSettings(patch);
     },
     [settings, saveSettings],
   );
@@ -128,6 +134,7 @@ export function useAutopilotSettings() {
     savedFlash,
     settings,
     billing,
+    deliveryStatus,
     setSettings,
     loadSettings,
     saveSettings,

@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/types";
 
-const LOCK_TTL_MS = 4 * 60_000;
+const LOCK_TTL_MS = 6 * 60_000;
 
 export type AutopilotCronJob = "autopilot-watch" | "autopilot-report";
 
