@@ -12,6 +12,7 @@ import {
   Globe,
   Link2,
   Loader2,
+  Play,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import {
 } from "@/components/competitor/landing-page-preview-fallback";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
+import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
 
 /** Brand colors for platform breakdown bars (same family as Analytics gauge). */
 const PLATFORM_BAR_COLORS: Record<string, string> = {
@@ -52,6 +54,13 @@ const PLATFORM_SORT_ORDER = ["meta", "google", "tiktok", "linkedin", "pinterest"
 
 const PREVIEW_MOBILE = { outerW: 383, outerH: 708, iframeW: 375, iframeH: 700 } as const;
 const PREVIEW_DESKTOP = { iframeW: 1200, iframeH: 720, border: 4 } as const;
+
+/** Sidebar list: show this many URLs before "Show more". */
+const LANDING_PAGES_LIST_INITIAL = 8;
+/** Max characters for URL text in the sidebar list row. */
+const LANDING_PAGES_URL_DISPLAY_MAX = 36;
+/** Ads grid: one row on desktop (4 cols) before "Show more". */
+const LANDING_PAGE_ADS_INITIAL = 4;
 
 /** Viewport + iframe resize when switching mobile ↔ desktop */
 const PREVIEW_VIEWPORT_TRANSITION =
@@ -189,6 +198,7 @@ export function LandingPagesTab({
   const loadError = listHookError?.message ?? null;
 
   const [query, setQuery] = useState("");
+  const [listExpanded, setListExpanded] = useState(false);
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
 
   const [previewState, setPreviewState] = useState<"loading" | "ok" | "blocked">("loading");
@@ -199,7 +209,7 @@ export function LandingPagesTab({
   const [pageAdsTotal, setPageAdsTotal] = useState(0);
   const [pageAdsLimit, setPageAdsLimit] = useState(30);
   const [adsExpanded, setAdsExpanded] = useState(false);
-  const [previewDevice, setPreviewDevice] = useState<"mobile" | "desktop">("mobile");
+  const [previewDevice, setPreviewDevice] = useState<"mobile" | "desktop">("desktop");
 
   const adsCacheKey = `${domainKey}:landing-pages-ads:${competitorId}:${encodeURIComponent(selectedUrl || "__none__")}:${stamp}:${pageAdsLimit}`;
 
@@ -242,6 +252,21 @@ export function LandingPagesTab({
     if (!q) return rows;
     return rows.filter((r) => r.url.toLowerCase().includes(q) || r.host.toLowerCase().includes(q));
   }, [rows, query]);
+
+  useEffect(() => {
+    setListExpanded(false);
+  }, [query]);
+
+  const visibleRows = useMemo(() => {
+    if (listExpanded) return filteredRows;
+    const slice = filteredRows.slice(0, LANDING_PAGES_LIST_INITIAL);
+    if (!selectedUrl || slice.some((r) => r.url === selectedUrl)) return slice;
+    const selected = filteredRows.find((r) => r.url === selectedUrl);
+    return selected ? [...slice, selected] : slice;
+  }, [filteredRows, listExpanded, selectedUrl]);
+  const hiddenRowCount = Math.max(0, filteredRows.length - LANDING_PAGES_LIST_INITIAL);
+  const showListMoreControl = hiddenRowCount > 0 && !listExpanded;
+  const showListLessControl = listExpanded && hiddenRowCount > 0;
 
   const selectedRow = useMemo(
     () => (selectedUrl ? rows.find((r) => r.url === selectedUrl) ?? null : null),
@@ -399,14 +424,34 @@ export function LandingPagesTab({
                 No URLs match your search.
               </div>
             ) : (
-              filteredRows.map((row) => (
-                <LandingPageListRow
-                  key={row.groupId}
-                  row={row}
-                  selected={selectedUrl === row.url}
-                  onSelect={() => setSelectedUrl(row.url)}
-                />
-              ))
+              <>
+                {visibleRows.map((row) => (
+                  <LandingPageListRow
+                    key={row.groupId}
+                    row={row}
+                    selected={selectedUrl === row.url}
+                    onSelect={() => setSelectedUrl(row.url)}
+                  />
+                ))}
+                {showListMoreControl ? (
+                  <button
+                    type="button"
+                    onClick={() => setListExpanded(true)}
+                    className="rounded-lg py-2 text-left text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
+                  >
+                    Show more ({hiddenRowCount})
+                  </button>
+                ) : null}
+                {showListLessControl ? (
+                  <button
+                    type="button"
+                    onClick={() => setListExpanded(false)}
+                    className="rounded-lg py-2 text-left text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
+                  >
+                    Show less
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
         </aside>
@@ -440,6 +485,7 @@ export function LandingPagesTab({
                     setAdsExpanded(true);
                     setPageAdsLimit(100);
                   }}
+                  onCollapse={() => setAdsExpanded(false)}
                   onOpenAd={onOpenAd}
                 />
               ) : null}
@@ -493,8 +539,7 @@ function LandingPageListRow({
   const [faviconFailed, setFaviconFailed] = useState(false);
   const shares = sortedPlatformShares(row.platformBreakdown);
   const cap = captionTopPlatforms(row.platformBreakdown, 2);
-  const stripProto = row.url.replace(/^https?:\/\//, "");
-  const display = stripProto.length > 52 ? `${stripProto.slice(0, 51)}…` : stripProto;
+  const display = displayUrlShort(row.url, LANDING_PAGES_URL_DISPLAY_MAX);
 
   return (
     <button
@@ -608,15 +653,11 @@ function PreviewPane({
   }, [isMobile, previewState, previewDevice, url]);
 
   if (previewState === "blocked") {
-    const cap = row ? captionTopPlatforms(row.platformBreakdown, 3) : "";
-    const metaLine = row ? `Used in ${row.count} ads${cap ? ` · ${cap}` : ""}` : null;
     return (
       <LandingPagePreviewFallbackCard
         url={url}
         displayPath={displayPath}
         faviconUrl={row?.faviconUrl ?? null}
-        onCopy={onCopy}
-        metaLine={metaLine}
         competitorLabel={competitorLabel}
         competitorDomainNorm={competitorDomainNorm}
       />
@@ -755,73 +796,150 @@ function PreviewPane({
   );
 }
 
+function isVideoAd(format: string, creativeUrl: string | null): boolean {
+  const f = format.toLowerCase();
+  if (f.includes("video")) return true;
+  const u = (creativeUrl ?? "").toLowerCase();
+  return /\.(mp4|webm|mov)(\?|$)/i.test(u);
+}
+
 function AdsForPageSection({
   ads,
   total,
   expanded,
   onExpand,
+  onCollapse,
   onOpenAd,
 }: {
   ads: NonNullable<AdsForUrlResponse["ads"]>;
   total: number;
   expanded: boolean;
   onExpand: () => void;
+  onCollapse: () => void;
   onOpenAd: (id: string) => void;
 }) {
   if (ads.length === 0) return null;
 
-  const showCount = expanded ? ads.length : Math.min(20, ads.length);
+  const showCount = expanded ? ads.length : Math.min(LANDING_PAGE_ADS_INITIAL, ads.length);
   const visible = ads.slice(0, showCount);
-  const showMoreControl = !expanded && total > 20;
+  const hiddenCount = Math.max(0, total - LANDING_PAGE_ADS_INITIAL);
+  const showMoreControl = !expanded && hiddenCount > 0;
+  const showLessControl = expanded && hiddenCount > 0;
 
   return (
     <div className="mt-8 w-full border-t border-slate-100 pt-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h3 className="text-[13px] font-semibold text-slate-900">Ads using this page</h3>
-        <span className="text-[12px] font-bold text-[color:var(--rival-primary)]">{total}</span>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h3 className="text-[14px] font-semibold text-slate-900">Ads using this page</h3>
+        <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[12px] font-bold text-[color:var(--rival-primary)]">
+          {total}
+        </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {visible.map((ad) => (
-          <button
-            key={ad.id}
-            type="button"
-            title={(ad.ad_text ?? "").slice(0, 60)}
-            onClick={() => onOpenAd(ad.id)}
-            className="group relative h-20 w-full overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200/80"
-          >
-            <div
-              className="absolute inset-0 flex items-center justify-center"
-              style={{ backgroundColor: PLATFORM_BAR_COLORS[ad.platform] ?? "#e2e8f0" }}
-            >
-              <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-6 w-6 opacity-80" />
-            </div>
-            {ad.ad_creative_url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- remote creative CDN URLs
-              <img
-                src={ad.ad_creative_url}
-                alt=""
-                className="relative z-[1] h-full w-full object-cover"
-                loading="lazy"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            ) : null}
-            <span className="absolute bottom-1 right-1 z-[2] flex h-6 w-6 items-center justify-center rounded-md bg-white/95 shadow">
-              <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-4 w-4" />
-            </span>
-          </button>
+          <LandingPageAdCard key={ad.id} ad={ad} onOpen={() => onOpenAd(ad.id)} />
         ))}
       </div>
       {showMoreControl ? (
         <button
           type="button"
           onClick={onExpand}
-          className="mt-3 text-[12px] font-semibold text-sky-700 hover:underline"
+          className="mt-4 text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
         >
-          Show all {total}
+          Show more ({hiddenCount})
+        </button>
+      ) : null}
+      {showLessControl ? (
+        <button
+          type="button"
+          onClick={onCollapse}
+          className="mt-4 text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
+        >
+          Show less
         </button>
       ) : null}
     </div>
+  );
+}
+
+function LandingPageAdCard({
+  ad,
+  onOpen,
+}: {
+  ad: NonNullable<AdsForUrlResponse["ads"]>[number];
+  onOpen: () => void;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const creativeUrl = ad.ad_creative_url?.trim() ?? "";
+  const hasCreative = Boolean(creativeUrl) && !imageFailed;
+  const isVideo = isVideoAd(ad.format, creativeUrl);
+  const previewText = (ad.ad_text ?? "").trim();
+  const angle = (ad.ai_extracted_angle ?? "").trim();
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [ad.id, creativeUrl]);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={previewText.slice(0, 120)}
+      className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white text-left shadow-[0_1px_3px_rgba(15,23,42,0.06)] transition-all hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_8px_24px_rgba(15,23,42,0.1)]"
+    >
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200/80">
+        <div className="aspect-[4/5] w-full">
+          {hasCreative ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote creative CDN URLs
+            <img
+              src={creativeUrl}
+              alt=""
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              onError={() => setImageFailed(true)}
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-3 py-4 text-center">
+              <ComparisonPlatformIcon
+                platform={ad.platform as StrategyPlatform}
+                className="h-7 w-7 opacity-50"
+              />
+              {previewText ? (
+                <p className="line-clamp-3 text-[10px] font-medium leading-snug text-slate-600">
+                  {previewText}
+                </p>
+              ) : (
+                <p className="text-[10px] font-medium text-slate-500">No preview</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {hasCreative && isVideo ? (
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/30 via-transparent to-black/5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm">
+              <Play className="ml-0.5 h-4 w-4" fill="currentColor" aria-hidden />
+            </span>
+          </span>
+        ) : null}
+
+        <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-white/95 shadow-sm ring-1 ring-slate-200/80 backdrop-blur-sm">
+          <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-3.5 w-3.5" />
+        </span>
+      </div>
+
+      <div className="flex min-h-[52px] flex-col justify-center gap-0.5 border-t border-slate-100 px-2.5 py-2">
+        <p className="line-clamp-2 text-[11px] font-medium leading-snug text-slate-800">
+          {previewText || "Untitled ad"}
+        </p>
+        {angle ? (
+          <p className="line-clamp-1 text-[10px] text-slate-500">{angle}</p>
+        ) : (
+          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+            {isVideo ? "Video" : "Image"} · {PLATFORM_LABELS[ad.platform] ?? ad.platform}
+          </p>
+        )}
+      </div>
+    </button>
   );
 }

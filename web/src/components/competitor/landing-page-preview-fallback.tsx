@@ -8,9 +8,6 @@ type Props = {
   /** Path or full display without forcing scheme (matches list row styling). */
   displayPath: string;
   faviconUrl: string | null;
-  onCopy: () => void;
-  /** e.g. `Used in 3 ads · Meta · Google` */
-  metaLine: string | null;
   competitorLabel: string;
   competitorDomainNorm: string;
 };
@@ -118,8 +115,6 @@ export function LandingPagePreviewFallbackCard({
   url,
   displayPath,
   faviconUrl,
-  onCopy,
-  metaLine,
   competitorLabel,
   competitorDomainNorm,
 }: Props) {
@@ -136,7 +131,7 @@ export function LandingPagePreviewFallbackCard({
         Live preview unavailable
       </p>
 
-      <div className="mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         {faviconFailed || !faviconUrl ? (
           <Globe className="h-8 w-8 text-slate-400" aria-hidden />
         ) : (
@@ -155,11 +150,7 @@ export function LandingPagePreviewFallbackCard({
       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{kindLabel}</p>
       <p className="mb-3 break-all font-mono text-[13px] font-semibold leading-snug text-slate-900">{displayPath}</p>
 
-      <p className="mb-2 text-left text-[13px] leading-relaxed text-slate-600">{explanation}</p>
-      <p className="mb-6 text-left text-[12px] leading-relaxed text-slate-500">
-        Browsers block many sites from opening inside Rival if they forbid framing (security). You can still inspect the
-        page safely in a new tab.
-      </p>
+      <p className="mb-6 text-left text-[13px] leading-relaxed text-slate-600">{explanation}</p>
 
       <a
         href={url}
@@ -170,15 +161,6 @@ export function LandingPagePreviewFallbackCard({
         Open in new tab
         <ExternalLink className="h-4 w-4" aria-hidden />
       </a>
-      <button
-        type="button"
-        onClick={onCopy}
-        className="mt-3 text-[11px] font-medium text-blue-600 underline decoration-blue-200 underline-offset-2 hover:text-blue-700"
-      >
-        Copy URL
-      </button>
-      {metaLine ? <p className="mt-5 text-[11px] text-slate-500">{metaLine}</p> : null}
-      <p className="mt-2 text-[10px] text-slate-400">Preview blocked by this site&apos;s security headers (e.g. CSP / X-Frame-Options)</p>
     </div>
   );
 }
