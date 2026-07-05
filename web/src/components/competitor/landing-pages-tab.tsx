@@ -741,30 +741,35 @@ function PreviewPane({
         >
           {previewState === "loading" ? (
             <div
-              className={`absolute inset-0 z-10 flex flex-col items-center justify-center border border-slate-100 bg-slate-50/95 text-center ${PREVIEW_VIEWPORT_TRANSITION}`}
+              className={`absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#f8fafc] text-center ${PREVIEW_VIEWPORT_TRANSITION}`}
               style={{ borderRadius: isMobile ? 24 : 16 }}
             >
-              <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+              <Loader2 className="h-8 w-8 animate-spin text-slate-400" aria-hidden />
               <p className="mt-3 text-[13px] text-slate-600">Loading preview…</p>
             </div>
           ) : null}
 
           <div
             className={
-              isMobile
-                ? "relative flex h-full w-full items-center justify-center"
-                : `absolute left-0 top-0 ${PREVIEW_DESKTOP_SCALE_TRANSITION}`
+              previewState === "loading"
+                ? "pointer-events-none absolute inset-0 -z-10 opacity-0"
+                : isMobile
+                  ? "relative flex h-full w-full items-center justify-center"
+                  : `absolute left-0 top-0 ${PREVIEW_DESKTOP_SCALE_TRANSITION}`
             }
             style={
-              isMobile
+              previewState === "loading"
                 ? undefined
-                : {
-                    width: desktopChromeW,
-                    height: desktopChromeH,
-                    transform: `scale(${desktopScale})`,
-                    transformOrigin: "top left",
-                  }
+                : isMobile
+                  ? undefined
+                  : {
+                      width: desktopChromeW,
+                      height: desktopChromeH,
+                      transform: `scale(${desktopScale})`,
+                      transformOrigin: "top left",
+                    }
             }
+            aria-hidden={previewState === "loading"}
           >
             <div
               className={`flex flex-col items-center justify-center overflow-hidden border-[4px] border-[#1f2937] bg-[#e5e7eb] shadow-lg ${PREVIEW_VIEWPORT_TRANSITION}`}
@@ -781,7 +786,7 @@ function PreviewPane({
                 src={previewIframeSrc(url)}
                 className={`block border-0 bg-white ${PREVIEW_IFRAME_TRANSITION} ${
                   isMobile ? "rounded-[20px]" : "rounded-xl"
-                } ${previewState === "loading" ? "opacity-0" : "opacity-100"}`}
+                }`}
                 style={iframeStyle}
                 sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
                 referrerPolicy="no-referrer"
