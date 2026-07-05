@@ -57,7 +57,7 @@ export function setCachedAdDetail(adId: string, payload: AdDetailDrawerPayload):
 /** Keep in-memory drawer cache in sync after a successful AI analysis save. */
 export function patchCachedAdDetailAnalysis(
   adId: string,
-  patch: NonNullable<AdDetailDrawerPayload["context"]>,
+  patch: Partial<NonNullable<AdDetailDrawerPayload["context"]>>,
 ): void {
   const hit = detailCache.get(adId);
   if (!hit?.payload.ok || !hit.payload.ad || !hit.payload.competitor) return;
