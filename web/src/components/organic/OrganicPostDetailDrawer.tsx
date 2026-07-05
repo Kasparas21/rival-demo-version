@@ -10,6 +10,7 @@ import { AdDetailDrawerSkeleton } from "@/components/ui/feature-skeleton";
 import type { OrganicPostPreviewAnalysis } from "@/lib/organic-content/organic-post-ai-analysis-types";
 import {
   fetchOrganicPostDetailPayload,
+  patchCachedOrganicPostDetailAnalysis,
   type OrganicPostDetailOpenSeed,
 } from "@/lib/organic-content/organic-post-detail-cache";
 import {
@@ -273,6 +274,12 @@ export function OrganicPostDetailDrawer({
 
   const handleAnalysisSaved = useCallback(
     (analysis: OrganicPostPreviewAnalysis, quota: OrganicPostAnalysisQuota) => {
+      const computedAt = new Date().toISOString();
+      patchCachedOrganicPostDetailAnalysis(competitorId, data?.post.id ?? postId ?? "", {
+        preview_analysis: analysis,
+        preview_analysis_computed_at: computedAt,
+        preview_analysis_quota: quota,
+      });
       setData((prev) => {
         if (!prev) return prev;
         return {
@@ -280,13 +287,13 @@ export function OrganicPostDetailDrawer({
           context: {
             ...prev.context,
             preview_analysis: analysis,
-            preview_analysis_computed_at: new Date().toISOString(),
+            preview_analysis_computed_at: computedAt,
             preview_analysis_quota: quota,
           },
         };
       });
     },
-    [],
+    [competitorId, data?.post.id, postId],
   );
 
   if (!showDrawer) return null;

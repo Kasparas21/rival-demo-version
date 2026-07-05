@@ -54,6 +54,22 @@ export function setCachedAdDetail(adId: string, payload: AdDetailDrawerPayload):
   detailCache.set(adId, { payload, fetchedAt: Date.now() });
 }
 
+/** Keep in-memory drawer cache in sync after a successful AI analysis save. */
+export function patchCachedAdDetailAnalysis(
+  adId: string,
+  patch: NonNullable<AdDetailDrawerPayload["context"]>,
+): void {
+  const hit = detailCache.get(adId);
+  if (!hit?.payload.ok || !hit.payload.ad || !hit.payload.competitor) return;
+  setCachedAdDetail(adId, {
+    ...hit.payload,
+    context: {
+      ...hit.payload.context,
+      ...patch,
+    },
+  });
+}
+
 export async function fetchAdDetailPayload(adId: string): Promise<AdDetailDrawerPayload | null> {
   const existing = inflight.get(adId);
   if (existing) return existing;

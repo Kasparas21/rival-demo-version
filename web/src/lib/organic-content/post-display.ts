@@ -1,6 +1,11 @@
 import type { OrganicPlatform } from "./types";
 
-import { extractFacebookMediaFromRaw, extractLinkedInMediaFromRaw, extractTwitterViewsFromRaw } from "./normalize";
+import {
+  extractFacebookMediaFromRaw,
+  extractLinkedInMediaFromRaw,
+  extractTikTokMediaFromRaw,
+  extractTwitterViewsFromRaw,
+} from "./normalize";
 
 export type OrganicMediaAspect = "square" | "vertical" | "landscape";
 
@@ -260,7 +265,13 @@ export function organicPostDisplayFields(
 }
 
 export function enrichOrganicPostForApi<
-  T extends { raw_data?: unknown; views?: number; platform?: string; media_urls?: string[] },
+  T extends {
+    raw_data?: unknown;
+    views?: number;
+    platform?: string;
+    media_urls?: string[];
+    archived_preview_url?: string | null;
+  },
 >(post: T): T & OrganicPostDisplayFields & { views: number; media_urls: string[] } {
   const platform = (post.platform ?? "instagram") as OrganicPlatform;
   const display = organicPostDisplayFields(post.raw_data, platform);
@@ -270,9 +281,20 @@ export function enrichOrganicPostForApi<
     platform === "facebook" ? extractFacebookMediaFromRaw(post.raw_data) : [];
   const linkedinMedia =
     platform === "linkedin" ? extractLinkedInMediaFromRaw(post.raw_data) : [];
-  const repairedMedia = facebookMedia.length > 0 ? facebookMedia : linkedinMedia;
-  const media_urls =
-    repairedMedia.length > 0 ? repairedMedia : (post.media_urls ?? []);
+  const tiktokMedia = platform === "tiktok" ? extractTikTokMediaFromRaw(post.raw_data) : [];
+  const repairedMedia =
+    facebookMedia.length > 0
+      ? facebookMedia
+      : linkedinMedia.length > 0
+        ? linkedinMedia
+        : tiktokMedia.length > 0
+          ? tiktokMedia
+          : [];
+  const fallback = repairedMedia.length > 0 ? repairedMedia : (post.media_urls ?? []);
+  const archived = post.archived_preview_url?.trim();
+  const media_urls = archived
+    ? [archived, ...fallback.filter((url) => url !== archived)]
+    : fallback;
   return {
     ...post,
     ...display,
@@ -282,7 +304,13 @@ export function enrichOrganicPostForApi<
 }
 
 export function toOrganicPostClientPayload<
-  T extends { raw_data?: unknown; views?: number; platform?: string; media_urls?: string[] },
+  T extends {
+    raw_data?: unknown;
+    views?: number;
+    platform?: string;
+    media_urls?: string[];
+    archived_preview_url?: string | null;
+  },
 >(post: T): Omit<T & OrganicPostDisplayFields, "raw_data"> & { views: number; media_urls: string[] } {
   const enriched = enrichOrganicPostForApi(post);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

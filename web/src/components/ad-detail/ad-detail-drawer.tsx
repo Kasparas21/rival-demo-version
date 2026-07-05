@@ -29,7 +29,7 @@ import { AD_SAVE_DEBUG_TITLE } from "@/components/ads-library/ad-save-row";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { AdPreviewAnalysis } from "@/lib/ad-detail/ad-ai-analysis-types";
 import type { AdDetailOpenSeed } from "@/lib/ad-detail/ad-detail-cache";
-import { fetchAdDetailPayload } from "@/lib/ad-detail/ad-detail-cache";
+import { fetchAdDetailPayload, patchCachedAdDetailAnalysis } from "@/lib/ad-detail/ad-detail-cache";
 import { readAdDetailDisplaySnapshot } from "@/lib/ad-detail/ad-detail-snapshot";
 import { isFullAdDetailPayload } from "@/lib/ad-detail/ad-detail-from-seed";
 import type { AdDetailData } from "@/lib/ad-detail/ad-detail-types";
@@ -348,6 +348,15 @@ export function AdDetailDrawer({
   }, [adId, requestClose, onPrev, onNext]);
 
   const handleAnalysisSaved = useCallback((analysis: AdPreviewAnalysis, quota: AdPreviewAnalysisQuota) => {
+    const computedAt = new Date().toISOString();
+    if (adId) {
+      patchCachedAdDetailAnalysis(adId, {
+        preview_analysis: analysis,
+        preview_analysis_computed_at: computedAt,
+        preview_analysis_quota: quota,
+        copy_structure: analysis.copy_structure,
+      });
+    }
     setData((prev) => {
       if (!prev) return prev;
       return {
@@ -355,13 +364,13 @@ export function AdDetailDrawer({
         context: {
           ...prev.context,
           preview_analysis: analysis,
-          preview_analysis_computed_at: new Date().toISOString(),
+          preview_analysis_computed_at: computedAt,
           preview_analysis_quota: quota,
           copy_structure: analysis.copy_structure,
         },
       };
     });
-  }, []);
+  }, [adId]);
 
   if (!showDrawer) return null;
   if (!mounted) return null;

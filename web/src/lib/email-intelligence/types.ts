@@ -62,6 +62,8 @@ export type CompetitorEmailRow = {
   ai_processed_at: string | null;
   ai_analysis_error: string | null;
   ai_analysis_attempts: number;
+  ai_deep_analysis: unknown;
+  ai_analysis_version: string | null;
   created_at: string;
 };
 

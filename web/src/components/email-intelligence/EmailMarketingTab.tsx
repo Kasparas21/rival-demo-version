@@ -13,9 +13,10 @@ import { cn } from "@/lib/utils";
 import { EmailMarketingInbox } from "./EmailMarketingInbox";
 import { EmailMarketingInsights } from "./EmailMarketingInsights";
 import { EmailInboxSkeleton, EmailSubTabsSkeleton } from "./EmailMarketingSkeleton";
+import { SavedEmailsPanel } from "./SavedEmailsPanel";
 import { EmailTrackerBar } from "./EmailTrackerBar";
 
-type SubTab = "inbox" | "insights";
+type SubTab = "inbox" | "saved" | "insights";
 
 function isTabVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
@@ -115,7 +116,7 @@ export function EmailMarketingTab({
         ) : trackerReady ? (
           <>
             <nav className="-mb-px flex gap-0 border-b border-slate-200/80">
-              {(["inbox", "insights"] as const).map((tab) => {
+              {(["inbox", "saved", "insights"] as const).map((tab) => {
                 const isActive = activeSubTab === tab;
                 return (
                   <button
@@ -141,6 +142,8 @@ export function EmailMarketingTab({
                 initialEmailId={initialEmailId}
                 allowCsvExport={allowCsvExport}
               />
+            ) : activeSubTab === "saved" ? (
+              <SavedEmailsPanel competitorId={competitorId} competitorName={competitorName} />
             ) : insightsUnlocked ? (
               <EmailMarketingInsights
                 competitorId={competitorId}

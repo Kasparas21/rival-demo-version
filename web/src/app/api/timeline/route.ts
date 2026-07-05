@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -49,7 +50,9 @@ export async function GET(request: Request) {
 
   const { data: ads, error: adsErr } = await supabase
     .from("scraped_ads")
-    .select("id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format")
+    .select(
+      "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, is_active, raw_payload",
+    )
     .eq("user_id", user.id)
     .eq("competitor_id", competitorId)
     .order("first_seen_at", { ascending: false })
@@ -71,10 +74,7 @@ export async function GET(request: Request) {
       .filter((id): id is string => typeof id === "string" && id.length > 0),
   );
 
-  const lastScrapedAt = competitor.last_scraped_at
-    ? new Date(competitor.last_scraped_at).getTime()
-    : Date.now();
-  const killedThreshold = lastScrapedAt - 24 * 60 * 60 * 1000;
+  const lastScrapedAt = competitor.last_scraped_at ?? null;
 
   const rows = (ads ?? []).slice().reverse();
   const hydrated: TimelineAdDto[] = rows.map((ad) => ({
@@ -87,7 +87,15 @@ export async function GET(request: Request) {
     last_seen_at: ad.last_seen_at,
     format: ad.format,
     is_winner: winnerIds.has(ad.id),
-    is_killed: new Date(ad.last_seen_at).getTime() < killedThreshold,
+    is_killed: resolveTimelineAdKilled(
+      {
+        platform: ad.platform,
+        last_seen_at: ad.last_seen_at,
+        is_active: ad.is_active,
+        raw_payload: ad.raw_payload,
+      },
+      lastScrapedAt,
+    ),
   }));
 
   const platformCounts: Record<string, number> = {};

@@ -10,9 +10,9 @@ import type { CompetitorEmailRow, EmailRowForInsights } from "@/lib/email-intell
 import type { Database } from "@/lib/supabase/types";
 
 const INBOX_LIST_COLUMNS =
-  "id, tracker_id, user_id, competitor_id, from_email, from_name, subject, preview_text, plain_text, received_at, esp_detected, email_type, ai_summary, ai_offers, ai_cta, ai_angle, ai_processed_at, ai_analysis_error, ai_analysis_attempts, created_at";
+  "id, tracker_id, user_id, competitor_id, from_email, from_name, subject, preview_text, plain_text, received_at, esp_detected, email_type, ai_summary, ai_offers, ai_cta, ai_angle, ai_processed_at, ai_analysis_error, ai_analysis_attempts, ai_analysis_version, created_at";
 
-const EMAIL_DETAIL_COLUMNS = `${INBOX_LIST_COLUMNS}, html_body`;
+const EMAIL_DETAIL_COLUMNS = `${INBOX_LIST_COLUMNS}, html_body, ai_deep_analysis`;
 
 const INSIGHTS_COLUMNS =
   "id, received_at, subject, email_type, ai_offers, ai_angle, esp_detected";

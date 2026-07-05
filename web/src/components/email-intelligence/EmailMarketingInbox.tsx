@@ -1,20 +1,16 @@
 "use client";
 
 import {
-  AlertCircle,
   Download,
   Inbox,
   Loader2,
   Mail,
   RefreshCw,
   Search,
-  Sparkles,
-  Tag,
-  Target,
-  MousePointerClick,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import {
   alertGlassChipActiveClass,
@@ -28,19 +24,20 @@ import type { CompetitorEmailRow } from "@/lib/email-intelligence/types";
 import { cn } from "@/lib/utils";
 
 import {
-  angleBadgeClass,
   buildEmailTypeFilterOptions,
   EMAIL_TYPE_FILTER_ALL,
-  emailFromLabel,
   emailListPreview,
   emailMatchesTypeFilter,
   emailTypeBadgeClass,
   type EmailTypeFilter,
   formatEmailType,
   formatRelativeTime,
-  parseOffers,
+  mergeEmailRowUpdate,
 } from "./email-intelligence-ui";
-import { EmailInboxSkeleton } from "./EmailMarketingSkeleton";
+import { EmailDetailDrawer } from "./EmailDetailDrawer";
+import { EmailInboxListSkeleton, EmailInboxSkeleton } from "./EmailMarketingSkeleton";
+import { EmailSaveButton } from "./EmailSaveButton";
+import { useSavedEmailsStatus } from "@/lib/saved-emails/use-saved-emails";
 
 type InboxListResponse = {
   emails?: CompetitorEmailRow[];
@@ -50,10 +47,8 @@ type InboxListResponse = {
   error?: string;
 };
 
-type EmailDetailResponse = {
-  email?: CompetitorEmailRow;
-  error?: string;
-};
+/** Inbox list: show this many emails before "Show more". */
+const EMAIL_INBOX_LIST_INITIAL = 5;
 
 function isTabVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
@@ -68,12 +63,6 @@ function emailAnalysisFailed(email: CompetitorEmailRow): boolean {
 
 function emailAnalysisPending(email: CompetitorEmailRow): boolean {
   return !email.ai_processed_at && !emailAnalysisFailed(email);
-}
-
-function listItemStatusClass(email: CompetitorEmailRow): string {
-  if (email.ai_processed_at) return "bg-emerald-500";
-  if (emailAnalysisFailed(email)) return "bg-red-500";
-  return "bg-amber-400";
 }
 
 function TypeFilterChip({
@@ -102,277 +91,54 @@ function TypeFilterChip({
 
 function EmailListItem({
   email,
-  selected,
   onSelect,
+  isSaved,
+  onToggleSave,
+  saveDisabled,
 }: {
   email: CompetitorEmailRow;
-  selected: boolean;
   onSelect: () => void;
+  isSaved: boolean;
+  onToggleSave: () => void;
+  saveDisabled?: boolean;
 }) {
   const preview = emailListPreview(email);
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "w-full border-b border-slate-100/90 px-4 py-3.5 text-left transition-colors",
-        selected
-          ? "bg-indigo-50/80 ring-1 ring-inset ring-indigo-200/50"
-          : "hover:bg-white/70",
-      )}
-    >
-      <div className="flex items-start gap-2">
-        <div
-          className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", listItemStatusClass(email))}
-          aria-hidden
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <p className="truncate text-[13px] font-semibold text-slate-900">
-              {email.subject?.trim() || "(no subject)"}
-            </p>
-            <span className="shrink-0 text-[11px] text-slate-400 tabular-nums">
-              {email.received_at ? formatRelativeTime(email.received_at) : ""}
-            </span>
-          </div>
-          <p className="mt-0.5 truncate text-[12px] text-slate-500">
-            {email.from_name || email.from_email || "Unknown"}
-          </p>
-          <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-slate-600">
-            {preview}
-          </p>
+    <div className="flex items-start gap-3 rounded-xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-sm transition-all hover:border-slate-300 hover:shadow">
+      <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
+        <p className="truncate text-[13px] font-semibold text-slate-900">
+          {email.subject?.trim() || "(no subject)"}
+        </p>
+        <p className="truncate text-[12px] text-slate-500">
+          {email.from_name || email.from_email || "Unknown"}
+        </p>
+        {preview ? (
+          <p className="mt-1.5 line-clamp-2 text-[12px] leading-relaxed text-slate-600">{preview}</p>
+        ) : null}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {email.email_type ? (
             <span
               className={cn(
-                "mt-2 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize",
+                "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize",
                 emailTypeBadgeClass(email.email_type),
               )}
             >
               {formatEmailType(email.email_type)}
             </span>
           ) : null}
+          {email.received_at ? (
+            <span className="text-[11px] text-slate-400">{formatRelativeTime(email.received_at)}</span>
+          ) : null}
         </div>
-      </div>
-    </button>
-  );
-}
-
-function AiInsightPanel({
-  email,
-  competitorId,
-  onRetryComplete,
-}: {
-  email: CompetitorEmailRow;
-  competitorId: string;
-  onRetryComplete: (updated: CompetitorEmailRow) => void;
-}) {
-  const offers = parseOffers(email.ai_offers);
-  const [retrying, setRetrying] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
-
-  const failed = emailAnalysisFailed(email);
-  const pending = emailAnalysisPending(email);
-
-  const retryAnalysis = async () => {
-    setRetrying(true);
-    setRetryError(null);
-    try {
-      const res = await fetch(`/api/email-trackers/${competitorId}/retry-analysis`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email_id: email.id }),
-      });
-      const data = (await res.json()) as { ok?: boolean; error?: string; quotaExceeded?: boolean };
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error ?? "Retry failed");
-      }
-      const detailRes = await fetch(
-        `/api/email-trackers/${competitorId}?email_id=${encodeURIComponent(email.id)}`,
-      );
-      const detail = (await detailRes.json()) as EmailDetailResponse;
-      if (detail.email) {
-        onRetryComplete(detail.email);
-      }
-    } catch (err) {
-      setRetryError(err instanceof Error ? err.message : "Retry failed");
-    } finally {
-      setRetrying(false);
-    }
-  };
-
-  if (failed) {
-    return (
-      <div className="rounded-2xl border border-red-200 bg-red-50/80 p-4">
-        <div className="flex items-center gap-2 text-[13px] font-medium text-red-800">
-          <AlertCircle className="h-4 w-4" />
-          Analysis failed
-        </div>
-        <p className="mt-2 text-[12px] text-red-700/90">
-          {email.ai_analysis_error ?? "Could not analyze this email after several attempts."}
-        </p>
-        {retryError ? (
-          <p className="mt-2 text-[12px] font-medium text-red-800">{retryError}</p>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => void retryAnalysis()}
-          disabled={retrying}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-red-900 px-3 py-1.5 text-[12px] font-semibold text-white transition hover:bg-red-950 disabled:opacity-60"
-        >
-          {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          Retry analysis
-        </button>
-      </div>
-    );
-  }
-
-  if (pending) {
-    return (
-      <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/90 via-white to-violet-50/50 p-4">
-        <div className="flex items-center gap-2 text-[13px] font-medium text-indigo-800">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Analyzing email with AI…
-        </div>
-        <p className="mt-2 text-[12px] text-indigo-700/80">
-          Summary, offers, and marketing angle will appear shortly. This usually takes under a
-          minute.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-2xl border border-indigo-100/80 bg-gradient-to-br from-indigo-50/70 via-white to-sky-50/40 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-      <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
-          <Sparkles className="h-3.5 w-3.5" />
-        </div>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-indigo-700">
-            AI analysis
-          </p>
-          <p className="text-[12px] text-slate-500">Competitive intelligence summary</p>
-        </div>
-      </div>
-
-      {email.ai_summary ? (
-        <p className="mt-3 text-[13px] leading-relaxed text-slate-800">{email.ai_summary}</p>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {email.email_type ? (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize",
-              emailTypeBadgeClass(email.email_type),
-            )}
-          >
-            <Tag className="h-3 w-3" />
-            {formatEmailType(email.email_type)}
-          </span>
-        ) : null}
-        {email.ai_angle ? (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ring-1",
-              angleBadgeClass(email.ai_angle),
-            )}
-          >
-            <Target className="h-3 w-3" />
-            {email.ai_angle.replace(/_/g, " ")}
-          </span>
-        ) : null}
-        {email.esp_detected && email.esp_detected !== "Unknown" ? (
-          <span className="inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
-            {email.esp_detected}
-          </span>
-        ) : null}
-      </div>
-
-      {offers.length > 0 ? (
-        <div className="mt-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">Offers</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {offers.map((offer, i) => (
-              <span
-                key={`${offer.type}-${offer.value}-${i}`}
-                className={cn(
-                  alertGlassChipBaseClass,
-                  "border-emerald-200/80 bg-emerald-50/95 text-emerald-900",
-                )}
-              >
-                {offer.value}
-                {offer.code ? ` · ${offer.code}` : ""}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {email.ai_cta ? (
-        <div className="mt-4 flex items-start gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2.5">
-          <MousePointerClick className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-              Main CTA
-            </p>
-            <p className="text-[13px] font-medium text-slate-800">{email.ai_cta}</p>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function EmailDetailPane({
-  email,
-  competitorId,
-  onEmailUpdated,
-}: {
-  email: CompetitorEmailRow;
-  competitorId: string;
-  onEmailUpdated: (updated: CompetitorEmailRow) => void;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-slate-100 px-5 py-4">
-        <h3 className="text-[17px] font-semibold leading-snug text-slate-900">
-          {email.subject?.trim() || "(no subject)"}
-        </h3>
-        <p className="mt-1 text-[12px] text-slate-500">
-          {emailFromLabel(email)}
-          {email.received_at ? ` · ${formatRelativeTime(email.received_at)}` : null}
-        </p>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-        <AiInsightPanel
-          email={email}
-          competitorId={competitorId}
-          onRetryComplete={onEmailUpdated}
-        />
-
-        <div className="mt-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500">
-            Email preview
-          </p>
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            {email.html_body ? (
-              <iframe
-                title={email.subject ?? "Email preview"}
-                sandbox=""
-                srcDoc={email.html_body}
-                className="h-[min(520px,55vh)] w-full border-0 bg-white"
-              />
-            ) : (
-              <pre className="max-h-[min(520px,55vh)] overflow-auto whitespace-pre-wrap p-4 text-[12px] leading-relaxed text-slate-700">
-                {email.plain_text || "No body content"}
-              </pre>
-            )}
-          </div>
-        </div>
-      </div>
+      </button>
+      <EmailSaveButton
+        compact
+        isSaved={isSaved}
+        onToggle={onToggleSave}
+        disabled={saveDisabled}
+        saving={saveDisabled}
+      />
     </div>
   );
 }
@@ -386,6 +152,10 @@ export function EmailMarketingInbox({
   initialEmailId?: string | null;
   allowCsvExport?: boolean;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [emails, setEmails] = useState<CompetitorEmailRow[]>([]);
   const [emailCount, setEmailCount] = useState(0);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -394,18 +164,46 @@ export function EmailMarketingInbox({
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(initialEmailId);
-  const [selectedEmail, setSelectedEmail] = useState<CompetitorEmailRow | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [mobileShowDetail, setMobileShowDetail] = useState(Boolean(initialEmailId));
+  const [drawerEmailId, setDrawerEmailId] = useState<string | null>(initialEmailId ?? null);
   const [typeFilter, setTypeFilter] = useState<EmailTypeFilter>(EMAIL_TYPE_FILTER_ALL);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [savingEmailId, setSavingEmailId] = useState<string | null>(null);
+  const [listExpanded, setListExpanded] = useState(false);
   const initialSyncDone = useRef(false);
+  const hasLoadedOnce = useRef(false);
+
+  const setEmailInUrl = useCallback(
+    (emailId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (emailId) {
+        params.set("email_id", emailId);
+      } else {
+        params.delete("email_id");
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
+  const openEmail = useCallback(
+    (emailId: string) => {
+      setDrawerEmailId(emailId);
+      setEmailInUrl(emailId);
+    },
+    [setEmailInUrl],
+  );
+
+  const closeEmail = useCallback(() => {
+    setDrawerEmailId(null);
+    setEmailInUrl(null);
+  }, [setEmailInUrl]);
 
   const mergeEmailInList = useCallback((updated: CompetitorEmailRow) => {
-    setEmails((prev) => prev.map((row) => (row.id === updated.id ? { ...row, ...updated } : row)));
-    setSelectedEmail(updated);
+    setEmails((prev) =>
+      prev.map((row) => (row.id === updated.id ? mergeEmailRowUpdate(row, updated) : row)),
+    );
   }, []);
 
   const loadEmails = useCallback(
@@ -429,24 +227,26 @@ export function EmailMarketingInbox({
           throw new Error(data.error ?? "Failed to load emails");
         }
         const next = data.emails ?? [];
-        setEmails(next);
+        setEmails((prev) => {
+          const prevById = new Map(prev.map((row) => [row.id, row]));
+          return next.map((row) => {
+            const existing = prevById.get(row.id);
+            return existing ? mergeEmailRowUpdate(existing, row) : row;
+          });
+        });
         setNextCursor(data.nextCursor ?? null);
         setEmailCount(data.emailCount ?? next.length);
-        setSelectedId((prev) => {
-          if (prev && next.some((e) => e.id === prev)) return prev;
-          if (initialEmailId && next.some((e) => e.id === initialEmailId)) return initialEmailId;
-          return next[0]?.id ?? null;
-        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load emails");
       } finally {
         if (!opts?.background) {
           setLoading(false);
+          hasLoadedOnce.current = true;
         }
         setSyncing(false);
       }
     },
-    [competitorId, searchQuery, initialEmailId],
+    [competitorId, searchQuery],
   );
 
   const loadOlderEmails = useCallback(async () => {
@@ -472,28 +272,6 @@ export function EmailMarketingInbox({
       setLoadingOlder(false);
     }
   }, [competitorId, nextCursor, loadingOlder, searchQuery]);
-
-  const loadEmailDetail = useCallback(
-    async (emailId: string) => {
-      setDetailLoading(true);
-      try {
-        const res = await fetch(
-          `/api/email-trackers/${competitorId}?email_id=${encodeURIComponent(emailId)}`,
-        );
-        const data = (await res.json()) as EmailDetailResponse;
-        if (!res.ok || !data.email) {
-          throw new Error(data.error ?? "Failed to load email");
-        }
-        setSelectedEmail(data.email);
-        mergeEmailInList(data.email);
-      } catch {
-        setSelectedEmail((prev) => (prev?.id === emailId ? prev : null));
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [competitorId, mergeEmailInList],
-  );
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -545,8 +323,7 @@ export function EmailMarketingInbox({
 
   useEffect(() => {
     if (!initialEmailId) return;
-    setSelectedId(initialEmailId);
-    setMobileShowDetail(true);
+    setDrawerEmailId(initialEmailId);
   }, [initialEmailId]);
 
   useEffect(() => {
@@ -569,19 +346,41 @@ export function EmailMarketingInbox({
     return () => window.clearInterval(interval);
   }, [hasPendingAnalysis, loadEmails]);
 
-  useEffect(() => {
-    if (!selectedId) {
-      setSelectedEmail(null);
-      return;
-    }
-    void loadEmailDetail(selectedId);
-  }, [selectedId, loadEmailDetail]);
-
   const typeFilterOptions = useMemo(() => buildEmailTypeFilterOptions(emails), [emails]);
 
   const filteredEmails = useMemo(
     () => emails.filter((email) => emailMatchesTypeFilter(email, typeFilter)),
     [emails, typeFilter],
+  );
+
+  useEffect(() => {
+    setListExpanded(false);
+  }, [searchQuery, typeFilter]);
+
+  const visibleEmails = useMemo(() => {
+    if (listExpanded) return filteredEmails;
+    const slice = filteredEmails.slice(0, EMAIL_INBOX_LIST_INITIAL);
+    if (!drawerEmailId || slice.some((email) => email.id === drawerEmailId)) return slice;
+    const selected = filteredEmails.find((email) => email.id === drawerEmailId);
+    return selected ? [...slice, selected] : slice;
+  }, [filteredEmails, listExpanded, drawerEmailId]);
+
+  const hiddenEmailCount = Math.max(0, filteredEmails.length - EMAIL_INBOX_LIST_INITIAL);
+  const showListMoreControl = hiddenEmailCount > 0 && !listExpanded;
+
+  const emailIds = useMemo(() => emails.map((row) => row.id), [emails]);
+  const { isSaved, toggleSave } = useSavedEmailsStatus(competitorId, emailIds);
+
+  const handleToggleSave = useCallback(
+    async (emailId: string) => {
+      setSavingEmailId(emailId);
+      try {
+        await toggleSave(emailId);
+      } finally {
+        setSavingEmailId(null);
+      }
+    },
+    [toggleSave],
   );
 
   useEffect(() => {
@@ -593,19 +392,26 @@ export function EmailMarketingInbox({
   }, [typeFilter, typeFilterOptions]);
 
   useEffect(() => {
-    setSelectedId((prev) => {
-      if (prev && filteredEmails.some((email) => email.id === prev)) return prev;
-      return filteredEmails[0]?.id ?? null;
-    });
-  }, [filteredEmails, typeFilter]);
+    if (!drawerEmailId) return;
+    if (!filteredEmails.some((email) => email.id === drawerEmailId)) {
+      closeEmail();
+    }
+  }, [filteredEmails, drawerEmailId, closeEmail]);
+
+  const drawerListEmail = useMemo(
+    () => emails.find((email) => email.id === drawerEmailId) ?? null,
+    [emails, drawerEmailId],
+  );
 
   const isFiltered = typeFilter !== EMAIL_TYPE_FILTER_ALL;
   const isSearching = searchQuery.length > 0;
   const activeFilterLabel =
     typeFilterOptions.find((option) => option.id === typeFilter)?.label ?? "All";
   const totalCount = emailCount || emails.length;
+  const isInitialLoad = loading && !hasLoadedOnce.current;
+  const isSearchRefreshing = loading && hasLoadedOnce.current;
 
-  if (loading) {
+  if (isInitialLoad) {
     return <EmailInboxSkeleton />;
   }
 
@@ -650,7 +456,12 @@ export function EmailMarketingInbox({
         <div className="flex items-center gap-2 text-[12px] font-medium text-slate-600">
           <Mail className="h-3.5 w-3.5" />
           <span>
-            {isSearching
+            {isSearchRefreshing && isSearching ? (
+              <span className="inline-flex items-center gap-1.5 text-slate-500">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Searching…
+              </span>
+            ) : isSearching
               ? `${totalCount} match${totalCount === 1 ? "" : "es"} · “${searchQuery}”`
               : isFiltered
                 ? `${filteredEmails.length} of ${totalCount} · ${activeFilterLabel}`
@@ -670,14 +481,14 @@ export function EmailMarketingInbox({
             </button>
           ) : null}
           <button
-          type="button"
-          onClick={() => void loadEmails({ sync: true, background: true })}
-          disabled={syncing}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-white/70 hover:text-slate-900 disabled:opacity-50"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
-          Sync
-        </button>
+            type="button"
+            onClick={() => void loadEmails({ sync: true, background: true })}
+            disabled={syncing}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-white/70 hover:text-slate-900 disabled:opacity-50"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
+            Sync
+          </button>
         </div>
       </div>
 
@@ -718,15 +529,13 @@ export function EmailMarketingInbox({
         </div>
       ) : null}
 
-      <div className="grid min-h-[min(640px,72vh)] grid-cols-1 lg:grid-cols-[minmax(260px,320px)_1fr]">
-        <div
-          className={cn(
-            "max-h-[min(640px,72vh)] overflow-y-auto border-b border-slate-100 bg-slate-50/40 lg:border-b-0 lg:border-r",
-            mobileShowDetail ? "hidden lg:block" : "block",
-          )}
-        >
-          {filteredEmails.length === 0 ? (
-            <div className="px-4 py-10 text-center">
+      <div className="bg-slate-100/60 p-2">
+          {isSearchRefreshing ? (
+            <div className="space-y-2">
+              <EmailInboxListSkeleton rows={Math.min(Math.max(filteredEmails.length, 3), 6)} />
+            </div>
+          ) : filteredEmails.length === 0 ? (
+            <div className="rounded-xl border border-slate-200/90 bg-white px-4 py-10 text-center shadow-sm">
               <p className="text-[13px] font-medium text-slate-700">
                 {isSearching
                   ? `No emails match “${searchQuery}”`
@@ -751,69 +560,54 @@ export function EmailMarketingInbox({
               </button>
             </div>
           ) : (
-            <>
-              {filteredEmails.map((email) => (
+            <div className="space-y-2">
+              {visibleEmails.map((email) => (
                 <EmailListItem
                   key={email.id}
                   email={email}
-                  selected={email.id === selectedId}
-                  onSelect={() => {
-                    setSelectedId(email.id);
-                    setMobileShowDetail(true);
-                  }}
+                  onSelect={() => openEmail(email.id)}
+                  isSaved={isSaved(email.id)}
+                  onToggleSave={() => void handleToggleSave(email.id)}
+                  saveDisabled={savingEmailId === email.id}
                 />
               ))}
-              {nextCursor && !isFiltered && !isSearching ? (
-                <div className="border-t border-slate-100 p-3">
+              {showListMoreControl ? (
+                <button
+                  type="button"
+                  onClick={() => setListExpanded(true)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-indigo-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+                >
+                  Show more ({hiddenEmailCount})
+                </button>
+              ) : null}
+              {listExpanded && nextCursor && !isFiltered && !isSearching ? (
+                <div className="pt-1">
                   <button
                     type="button"
                     onClick={() => void loadOlderEmails()}
                     disabled={loadingOlder}
-                    className="w-full rounded-lg border border-slate-200 bg-white/80 px-3 py-2 text-[12px] font-semibold text-slate-700 transition hover:bg-white disabled:opacity-60"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[12px] font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
                   >
                     {loadingOlder ? "Loading…" : "Load older emails"}
                   </button>
                 </div>
               ) : null}
-            </>
-          )}
-        </div>
-
-        <div
-          className={cn(
-            "min-h-[360px] bg-white/50",
-            mobileShowDetail ? "block" : "hidden lg:block",
-          )}
-        >
-          {selectedEmail ? (
-            <>
-              <button
-                type="button"
-                className="border-b border-slate-100 px-4 py-2 text-[12px] font-semibold text-indigo-700 lg:hidden"
-                onClick={() => setMobileShowDetail(false)}
-              >
-                ← Back to inbox
-              </button>
-              {detailLoading && !selectedEmail.html_body ? (
-                <div className="flex h-full items-center justify-center p-8 text-[13px] text-slate-500">
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Loading preview…
-                </div>
-              ) : (
-                <EmailDetailPane
-                  email={selectedEmail}
-                  competitorId={competitorId}
-                  onEmailUpdated={mergeEmailInList}
-                />
-              )}
-            </>
-          ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-[13px] text-slate-500">
-              Select an email to view analysis and preview
             </div>
           )}
-        </div>
       </div>
+
+      <EmailDetailDrawer
+        competitorId={competitorId}
+        emailId={drawerEmailId}
+        listEmail={drawerListEmail}
+        isSaved={drawerEmailId ? isSaved(drawerEmailId) : false}
+        saveInFlight={Boolean(drawerEmailId && savingEmailId === drawerEmailId)}
+        onToggleSave={
+          drawerEmailId ? () => void handleToggleSave(drawerEmailId) : undefined
+        }
+        onClose={closeEmail}
+        onEmailUpdated={mergeEmailInList}
+      />
     </div>
   );
 }

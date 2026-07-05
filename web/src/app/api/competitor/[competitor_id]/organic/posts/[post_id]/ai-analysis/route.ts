@@ -142,7 +142,11 @@ export async function POST(
     .upsert(upsertRow, { onConflict: "organic_post_id,user_id" });
 
   if (upErr) {
-    console.warn("[organic-post-preview-analysis] cache upsert", upErr.message);
+    console.error("[organic-post-preview-analysis] cache upsert", upErr.message);
+    return NextResponse.json(
+      { ok: false, error: "Failed to save analysis. Please try again." },
+      { status: 500 },
+    );
   }
 
   const { error: usageErr } = await supabase.rpc("increment_ad_preview_analysis_usage");

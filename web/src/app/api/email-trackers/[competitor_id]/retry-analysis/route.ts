@@ -5,7 +5,7 @@ import {
   canRunEmailAiAnalysis,
   loadEmailAiAnalysisUsage,
 } from "@/lib/billing/usage-quotas";
-import { analyzeCompetitorEmail, resetEmailAnalysisForRetry } from "@/lib/email-intelligence/analyze";
+import { analyzeCompetitorEmail, emailNeedsDeepAnalysis, resetEmailAnalysisForRetry } from "@/lib/email-intelligence/analyze";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -58,7 +58,7 @@ export async function POST(
 
   const { data: email, error: emailErr } = await supabase
     .from("competitor_emails")
-    .select("id, ai_processed_at")
+    .select("id, ai_processed_at, ai_deep_analysis, ai_analysis_version")
     .eq("id", emailId)
     .eq("user_id", user.id)
     .eq("competitor_id", competitorId)
@@ -71,7 +71,7 @@ export async function POST(
     return NextResponse.json({ error: "Email not found" }, { status: 404 });
   }
 
-  if (email.ai_processed_at) {
+  if (email.ai_processed_at && !emailNeedsDeepAnalysis(email)) {
     return NextResponse.json({ ok: true, alreadyProcessed: true });
   }
 
