@@ -60,11 +60,12 @@ export function patchCachedAdDetailAnalysis(
   patch: Partial<NonNullable<AdDetailDrawerPayload["context"]>>,
 ): void {
   const hit = detailCache.get(adId);
-  if (!hit?.payload.ok || !hit.payload.ad || !hit.payload.competitor) return;
+  const prevContext = hit?.payload.ok ? hit.payload.context : undefined;
+  if (!hit?.payload.ok || !hit.payload.ad || !hit.payload.competitor || !prevContext) return;
   setCachedAdDetail(adId, {
     ...hit.payload,
     context: {
-      ...hit.payload.context,
+      ...prevContext,
       ...patch,
     },
   });
