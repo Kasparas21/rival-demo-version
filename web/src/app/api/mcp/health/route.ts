@@ -5,7 +5,7 @@ import { isMcpOAuthEnabled } from "@/lib/mcp/oauth-enabled";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MCP_VERSION = "0.1.4";
+const MCP_VERSION = "0.1.5";
 
 export async function GET() {
   return NextResponse.json(

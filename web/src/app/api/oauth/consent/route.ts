@@ -56,7 +56,8 @@ export async function POST(req: Request) {
   if (decision === "deny") {
     redirect.searchParams.set("error", "access_denied");
     if (state) redirect.searchParams.set("state", state);
-    return NextResponse.redirect(redirect.toString());
+    // 303 required: consent is POST; Claude.ai callback only accepts GET (not 307 method-preserving).
+    return NextResponse.redirect(redirect.toString(), 303);
   }
 
   if (decision !== "allow") {
@@ -75,7 +76,8 @@ export async function POST(req: Request) {
 
     redirect.searchParams.set("code", code);
     if (state) redirect.searchParams.set("state", state);
-    return NextResponse.redirect(redirect.toString());
+    // 303 required: consent is POST; Claude.ai callback only accepts GET (not 307 method-preserving).
+    return NextResponse.redirect(redirect.toString(), 303);
   } catch {
     return oauthErrorResponse("server_error", "could not issue code", 500);
   }
