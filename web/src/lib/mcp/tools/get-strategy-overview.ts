@@ -1,5 +1,6 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { requireCompetitor } from "@/lib/mcp/resolve-competitor";
+import { summarizeStrategyForMcp } from "@/lib/mcp/summarize-strategy-for-mcp";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import { getCachedStrategyOverview } from "@/lib/strategy-overview/recompute-strategy-overview";
@@ -24,13 +25,7 @@ export async function getStrategyOverview(ctx: McpToolContext, input: { competit
 
   return mcpSuccess({
     competitor: { id: comp.id, name: comp.name, domain: comp.domain },
-    overview: {
-      pipeline_status: cached.pipelineStatus,
-      total_ad_count: cached.totalAdCount,
-      active_ad_count: cached.map?.activeAdCount ?? null,
-      enriched_ad_count: cached.enrichedAdCount ?? null,
-      derivation_quality: cached.derivationQuality ?? null,
-    },
+    overview: summarizeStrategyForMcp(cached),
     dashboard_url: mcpDashboardUrl(ctx.auth.appOrigin, comp.domain, "tab=strategy"),
   });
 }

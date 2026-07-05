@@ -1,18 +1,30 @@
+import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { assertCopyVaultAccess } from "@/lib/mcp/plan-gates";
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { MCP_EMPTY_NO_VAULT_MATCHES } from "@/lib/mcp/empty-states";
+import { paginateInMemory, parseMcpPage, MCP_PAGE_MAX_VAULT } from "@/lib/mcp/pagination";
 import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
-import { lifespanDays, truncateAdCopy } from "@/lib/mcp/truncate";
+import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 
 export async function searchCopyVault(
   ctx: McpToolContext,
-  input: { query: string; competitor?: string; platform?: string; limit?: number },
+  input: {
+    query: string;
+    competitor?: string;
+    platform?: string;
+    limit?: number;
+    offset?: number;
+    include_full_copy?: boolean;
+  },
 ) {
   assertCopyVaultAccess(ctx.billing);
 
-  const limit = Math.min(50, Math.max(1, input.limit ?? 20));
+  const { limit, offset } = parseMcpPage(input, {
+    defaultLimit: 50,
+    maxLimit: MCP_PAGE_MAX_VAULT,
+  });
   const needle = input.query.trim();
   if (!needle) {
     throw new McpToolError("invalid_input", "query is required");
@@ -39,7 +51,7 @@ export async function searchCopyVault(
     .eq("is_active", true)
     .eq("ai_enrichment_status", "enriched")
     .or(`ad_text.ilike.%${needle}%,ai_extracted_angle.ilike.%${needle}%`)
-    .limit(300);
+    .limit(3000);
 
   if (competitorIds) q = q.in("competitor_id", competitorIds);
   if (input.platform?.trim()) q = q.ilike("platform", input.platform.trim());
@@ -47,26 +59,27 @@ export async function searchCopyVault(
   const { data, error } = await q;
   if (error) throw error;
 
-  const results = (data ?? [])
-    .map((a) => {
-      const copy = truncateAdCopy(a.ad_text ?? "");
-      return {
-        id: a.id,
-        competitor_id: a.competitor_id,
-        platform: a.platform,
-        ad_text: copy.text,
-        truncated: copy.truncated,
-        angle: a.ai_extracted_angle,
-        funnel_stage: a.funnel_stage,
-        days_running: lifespanDays(a.first_seen_at, a.last_seen_at),
-      };
-    })
-    .slice(0, limit);
+  const mapped = (data ?? []).map((a) => {
+    const copy = formatAdCopyForMcp(a.ad_text ?? "", input.include_full_copy);
+    return {
+      id: a.id,
+      competitor_id: a.competitor_id,
+      platform: a.platform,
+      ad_text: copy.ad_text,
+      truncated: copy.truncated,
+      angle: a.ai_extracted_angle,
+      funnel_stage: a.funnel_stage,
+      days_running: lifespanDays(a.first_seen_at, a.last_seen_at),
+    };
+  });
+
+  const { items: results, pagination } = paginateInMemory(mapped, limit, offset);
 
   return mcpSuccess({
     query: needle,
     results,
-    ...(results.length === 0 ? { message: MCP_EMPTY_NO_VAULT_MATCHES } : {}),
+    pagination,
+    ...(results.length === 0 && mapped.length === 0 ? { message: MCP_EMPTY_NO_VAULT_MATCHES } : {}),
     dashboard_url: mcpDashboardUrl(ctx.auth.appOrigin, dashboardDomain, "tab=comparison&sub=vault"),
   });
 }

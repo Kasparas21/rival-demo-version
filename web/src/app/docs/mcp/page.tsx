@@ -79,6 +79,10 @@ export default function McpDocsPage() {
           <li>What are my competitors&apos; longest-running ads on Meta?</li>
           <li>What angles is Acme Corp using that I&apos;m not?</li>
           <li>Any competitor moves in the last 7 days?</li>
+          <li>Show organic posts and insights for adidas.com.</li>
+          <li>What deals and cadence show up in their captured emails?</li>
+          <li>Which landing pages get the most bottom-funnel ad traffic?</li>
+          <li>What is their strategy map journey end goal — paths, deals, and creatives?</li>
           <li>Search my copy vault for &quot;free trial&quot; messaging.</li>
           <li>How many competitors am I tracking on my plan?</li>
           <li>Show the strategy overview for northwindhealth.com if it&apos;s cached.</li>

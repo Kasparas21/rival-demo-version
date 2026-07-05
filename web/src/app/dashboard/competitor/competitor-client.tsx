@@ -5399,6 +5399,9 @@ function CompetitorDashboardBody({
                 fetchEnabled={navTab === "insights" && navSub === "strategy-map"}
                 externalRecomputeRunning={recomputePollState.recomputeRunning}
                 externalRecomputeError={recomputePollState.recomputeError}
+                onOpenOrganicTab={() => handleTabChange("organic")}
+                onOpenEmailTab={() => handleTabChange("email-marketing")}
+                onOpenLandingPages={navigateToLandingPagesExplorer}
               />
             </KeepMountedTab>
             <KeepMountedTab active={navSub === "activity-feed"} className="!flex-none flex-col">
@@ -5554,6 +5557,7 @@ function CompetitorDashboardBody({
           <OrganicTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorName={competitorDisplayLabel}
+            competitorDomain={brand.domain}
             activeSubTab={(navSub as CompetitorSubTabId | null) ?? "feed"}
             onSubTabChange={handleSubTabChange}
           />

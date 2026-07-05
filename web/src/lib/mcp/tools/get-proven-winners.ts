@@ -1,21 +1,32 @@
+import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { assertCopyVaultAccess } from "@/lib/mcp/plan-gates";
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import {
   MCP_EMPTY_NO_COMPETITORS,
   MCP_EMPTY_NO_WINNERS,
 } from "@/lib/mcp/empty-states";
+import { paginateInMemory, parseMcpPage, MCP_PAGE_MAX_VAULT } from "@/lib/mcp/pagination";
 import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
-import { lifespanDays, truncateAdCopy } from "@/lib/mcp/truncate";
+import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 
 export async function getProvenWinners(
   ctx: McpToolContext,
-  input: { competitor?: string; platform?: string; limit?: number },
+  input: {
+    competitor?: string;
+    platform?: string;
+    limit?: number;
+    offset?: number;
+    include_full_copy?: boolean;
+  },
 ) {
   assertCopyVaultAccess(ctx.billing);
 
-  const limit = Math.min(50, Math.max(1, input.limit ?? 20));
+  const { limit, offset } = parseMcpPage(input, {
+    defaultLimit: 50,
+    maxLimit: MCP_PAGE_MAX_VAULT,
+  });
 
   let competitorIds: string[] | null = null;
   if (input.competitor?.trim()) {
@@ -52,7 +63,7 @@ export async function getProvenWinners(
 
   if (input.platform?.trim()) q = q.ilike("platform", input.platform.trim());
 
-  const { data, error } = await q.limit(800);
+  const { data, error } = await q.limit(5000);
   if (error) throw error;
 
   const nameById = new Map<string, string>();
@@ -65,17 +76,17 @@ export async function getProvenWinners(
     nameById.set(c.id, c.brand_name?.trim() || c.name?.trim() || "Competitor");
   }
 
-  const winners = (data ?? [])
+  const allWinners = (data ?? [])
     .map((a) => {
       const days = lifespanDays(a.first_seen_at, a.last_seen_at);
-      const copy = truncateAdCopy(a.ad_text ?? "");
+      const copy = formatAdCopyForMcp(a.ad_text ?? "", input.include_full_copy);
       return {
         id: a.id,
         competitor_id: a.competitor_id,
         competitor_name: nameById.get(a.competitor_id) ?? "Competitor",
         platform: a.platform,
         format: a.format,
-        ad_text: copy.text,
+        ad_text: copy.ad_text,
         truncated: copy.truncated,
         angle: a.ai_extracted_angle,
         days_running: days,
@@ -84,13 +95,15 @@ export async function getProvenWinners(
       };
     })
     .filter((a) => a.days_running >= 30)
-    .sort((a, b) => b.days_running - a.days_running)
-    .slice(0, limit);
+    .sort((a, b) => b.days_running - a.days_running);
+
+  const { items: winners, pagination } = paginateInMemory(allWinners, limit, offset);
 
   return mcpSuccess({
     winners,
     min_days_running: 30,
-    ...(winners.length === 0 ? { message: MCP_EMPTY_NO_WINNERS } : {}),
+    pagination,
+    ...(winners.length === 0 && allWinners.length === 0 ? { message: MCP_EMPTY_NO_WINNERS } : {}),
     dashboard_url: mcpDashboardUrl(ctx.auth.appOrigin, null, "tab=insights&sub=alerts"),
   });
 }

@@ -3,8 +3,106 @@ import type {
   AudienceSignals,
   CompetitorStrategyOverviewPayload,
   InsightCardsPayload,
+  JourneyGoalEdgePayload,
+  JourneyGoalEvidence,
+  JourneyPathAlignment,
+  JourneyPathIntent,
+  StrategyChannelSignals,
+  StrategyJourneyGoal,
   StrategyMapPayload,
 } from "@/lib/strategy-overview/payload-types";
+
+/** Channel layer arrives fresh from the API; drop anything malformed from stale caches. */
+function sanitizeChannelSignals(raw: unknown): StrategyChannelSignals | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const o = raw as Partial<StrategyChannelSignals>;
+  if (o.version !== 1) return null;
+  if (!Array.isArray(o.organicNodes) || !Array.isArray(o.channelEdges)) return null;
+  return {
+    version: 1,
+    computedAt: typeof o.computedAt === "string" ? o.computedAt : new Date(0).toISOString(),
+    organicNodes: o.organicNodes,
+    emailNode: o.emailNode && typeof o.emailNode === "object" ? o.emailNode : null,
+    channelEdges: o.channelEdges,
+  };
+}
+
+/** Journey goal layer arrives fresh from the API; drop anything malformed from stale caches. */
+const EMPTY_JOURNEY_EVIDENCE: JourneyGoalEvidence = {
+  narrative: "",
+  deals: [],
+  categories: [],
+  topCreatives: [],
+  landingPreviews: [],
+  angleHighlights: [],
+  emailOfferSummary: null,
+};
+
+function sanitizeJourneyEvidence(raw: unknown): JourneyGoalEvidence {
+  if (raw == null || typeof raw !== "object") return EMPTY_JOURNEY_EVIDENCE;
+  const o = raw as Partial<JourneyGoalEvidence>;
+  return {
+    narrative: typeof o.narrative === "string" ? o.narrative : "",
+    deals: Array.isArray(o.deals) ? o.deals : [],
+    categories: Array.isArray(o.categories) ? o.categories : [],
+    topCreatives: Array.isArray(o.topCreatives) ? o.topCreatives : [],
+    landingPreviews: Array.isArray(o.landingPreviews) ? o.landingPreviews : [],
+    angleHighlights: Array.isArray(o.angleHighlights) ? o.angleHighlights : [],
+    emailOfferSummary: typeof o.emailOfferSummary === "string" ? o.emailOfferSummary : null,
+  };
+}
+
+function sanitizeJourneyGoal(raw: unknown): StrategyJourneyGoal | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const o = raw as Partial<StrategyJourneyGoal>;
+  if (o.version !== 1) return null;
+  if (typeof o.kind !== "string" || typeof o.label !== "string") return null;
+  if (!Array.isArray(o.goalEdges)) return null;
+  const goalEdges: JourneyGoalEdgePayload[] = o.goalEdges.map((e) => {
+    const edge = e as Partial<JourneyGoalEdgePayload>;
+    const pathIntent = edge.pathIntent;
+    const validIntent: JourneyPathIntent =
+      pathIntent === "discount_sale" ||
+      pathIntent === "retargeting" ||
+      pathIntent === "nurture" ||
+      pathIntent === "awareness" ||
+      pathIntent === "lead_capture"
+        ? pathIntent
+        : "direct_sale";
+    return {
+      from: String(edge.from ?? ""),
+      to: "goal",
+      kind: edge.kind === "email_to_goal" ? "email_to_goal" : "bof_to_goal",
+      pathIntent: validIntent,
+      pathIntentLabel: typeof edge.pathIntentLabel === "string" ? edge.pathIntentLabel : "Direct sale",
+      alignment: (edge.alignment === "supporting" ? "supporting" : "direct") as JourneyPathAlignment,
+      confidence: typeof edge.confidence === "number" ? edge.confidence : 0.5,
+      reasoning: typeof edge.reasoning === "string" ? edge.reasoning : "",
+      style: edge.style === "dashed" ? "dashed" : "solid",
+    };
+  });
+  const pathIntentBreakdown = Array.isArray(o.pathIntentBreakdown) ? o.pathIntentBreakdown : [];
+  return {
+    version: 1,
+    computedAt: typeof o.computedAt === "string" ? o.computedAt : new Date(0).toISOString(),
+    kind: o.kind,
+    label: o.label,
+    subtitle: typeof o.subtitle === "string" ? o.subtitle : "",
+    catalogBreadth: o.catalogBreadth ?? "unknown",
+    catalogLabel: typeof o.catalogLabel === "string" ? o.catalogLabel : "",
+    topDestinations: Array.isArray(o.topDestinations) ? o.topDestinations : [],
+    goalEdges,
+    pathIntentBreakdown,
+    evidence: sanitizeJourneyEvidence(o.evidence),
+    journeySummary: typeof o.journeySummary === "string" ? o.journeySummary : "",
+    macroFraming:
+      typeof o.macroFraming === "string"
+        ? o.macroFraming
+        : "Multiple channel paths roll up to one business outcome.",
+    signals: Array.isArray(o.signals) ? o.signals : [],
+    confidence: typeof o.confidence === "number" && Number.isFinite(o.confidence) ? o.confidence : 0.5,
+  };
+}
 
 const DEFAULT_AUDIENCE: AudienceSignals = {
   interests: [],
@@ -399,12 +497,18 @@ export function normalizeCompetitorStrategyOverviewPayload(
   if (p == null || typeof p !== "object") return p;
   const insightsNormalized = normalizeInsightCardsPayload((p as { insights?: unknown }).insights);
   const audienceInferenceNormalized = sanitizeAudienceInference(p.audience_inference);
+  const channelSignalsNormalized = sanitizeChannelSignals(
+    (p as { channelSignals?: unknown }).channelSignals
+  );
+  const journeyGoalNormalized = sanitizeJourneyGoal((p as { journeyGoal?: unknown }).journeyGoal);
   if (!p.map || typeof p.map !== "object") {
     return {
       ...p,
       map: normalizeStrategyMapPayload(null as unknown as StrategyMapPayload),
       insights: insightsNormalized,
       audience_inference: audienceInferenceNormalized,
+      channelSignals: channelSignalsNormalized,
+      journeyGoal: journeyGoalNormalized,
     };
   }
   return {
@@ -412,5 +516,7 @@ export function normalizeCompetitorStrategyOverviewPayload(
     map: normalizeStrategyMapPayload(p.map),
     insights: insightsNormalized,
     audience_inference: audienceInferenceNormalized,
+    channelSignals: channelSignalsNormalized,
+    journeyGoal: journeyGoalNormalized,
   };
 }

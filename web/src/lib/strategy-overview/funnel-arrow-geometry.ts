@@ -92,6 +92,71 @@ export function anchorsForCells(
   return { fromSide: "right", toSide: "left" };
 }
 
+export const CHANNEL_ORGANIC_COLOR = "#8b5cf6";
+export const CHANNEL_EMAIL_COLOR = "#f59e0b";
+export const CHANNEL_GOAL_COLOR = "#e11d48";
+
+/** Vertical channel + goal edges. */
+export function buildChannelArrows(params: {
+  edges: {
+    from: string;
+    to: string;
+    style: "solid" | "dashed";
+    reasoning: string;
+    confidence: number;
+    kind?: "organic_to_paid" | "paid_to_email" | "bof_to_goal" | "email_to_goal";
+  }[];
+  layout: Map<string, FunnelCellLayoutEntry>;
+}): ResolvedFunnelArrow[] {
+  const out: ResolvedFunnelArrow[] = [];
+
+  for (const e of params.edges) {
+    const fromBox = params.layout.get(e.from);
+    const toBox = params.layout.get(e.to);
+    if (!fromBox || !toBox) continue;
+
+    const fromSide: ArrowAnchor = "bottom";
+    const toSide: ArrowAnchor = "top";
+    const { path, arrowPoints } = buildFunnelArrowPath(fromBox, toBox, fromSide, toSide);
+    const start = anchor(fromBox, fromSide);
+    const end = anchor(toBox, toSide);
+    const safeKey = `ch_${e.from}__${e.to}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    const fromColor =
+      e.kind === "paid_to_email"
+        ? STAGE_THEME.BOF.border
+        : e.kind === "bof_to_goal"
+          ? STAGE_THEME.BOF.border
+          : e.kind === "email_to_goal"
+            ? CHANNEL_EMAIL_COLOR
+            : CHANNEL_ORGANIC_COLOR;
+    const toColor =
+      e.kind === "organic_to_paid"
+        ? STAGE_THEME.TOF.border
+        : e.kind === "paid_to_email"
+          ? CHANNEL_EMAIL_COLOR
+          : CHANNEL_GOAL_COLOR;
+
+    out.push({
+      id: safeKey,
+      path,
+      arrowPoints,
+      fromColor,
+      toColor,
+      dashed: e.style === "dashed",
+      reasoning: e.reasoning,
+      confidence: e.confidence,
+      gradId: `rival-ch-grad-${safeKey}`,
+      gradX1: start.x,
+      gradY1: start.y,
+      gradX2: end.x,
+      gradY2: end.y,
+    });
+  }
+
+  return out;
+}
+
 export function buildFunnelArrows(params: {
   edges: {
     from: string;

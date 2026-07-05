@@ -45,7 +45,7 @@ function FunnelCellNodeInner({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`relative flex h-full w-full flex-col rounded-2xl px-4 py-3.5 transition-all duration-200 cursor-pointer ${
+      className={`relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl px-4 py-3 transition-all duration-200 cursor-pointer ${
         selected ? "scale-[1.02] ring-2 ring-slate-400/40" : "hover:scale-[1.015]"
       }`}
       style={{
@@ -76,8 +76,10 @@ function FunnelCellNodeInner({ data, selected }: NodeProps) {
         {d.adCount}
         <span className="ml-1.5 text-[15px] font-bold text-slate-600">ads</span>
       </p>
-      <p className={`mt-2 text-[12px] font-semibold capitalize ${theme.subtle}`}>{activity} activity</p>
-      <p className={`mt-1 text-[12px] font-bold ${theme.subtle}`}>{describeSpend(d)}</p>
+      <p className={`mt-1.5 line-clamp-1 text-[12px] font-semibold capitalize ${theme.subtle}`}>
+        {activity} activity
+      </p>
+      <p className={`mt-0.5 line-clamp-1 text-[12px] font-bold ${theme.subtle}`}>{describeSpend(d)}</p>
       <Handle id="bottom" type="source" position={Position.Bottom} className={handleClass} />
       <Handle id="right" type="source" position={Position.Right} className={handleClass} />
     </div>

@@ -15,7 +15,11 @@ import {
   loadSavedCompetitorForUser,
   recomputeStrategyOverviewForCompetitor,
 } from "@/lib/strategy-overview/recompute-strategy-overview";
+import {
+  buildStrategyRuntimeLayers,
+} from "@/lib/strategy-overview/build-runtime-layers";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
+import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { tryHydrateScrapedAdsFromAdsCache } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { SCRAPED_ADS_DERIVATION_SELECT, type ScrapedAdDerivationRow } from "@/lib/strategy-overview/scraped-ads-derivation-columns";
 
@@ -81,11 +85,34 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
+  // Email + organic channel layer merged into whichever payload branch responds.
+  const attachRuntimeLayers = async (
+    p: CompetitorStrategyOverviewPayload,
+  ): Promise<CompetitorStrategyOverviewPayload> => {
+    try {
+      const { channelSignals, journeyGoal } = await buildStrategyRuntimeLayers(
+        supabase,
+        user.id,
+        meta.competitorId,
+        p.map,
+        meta.brandDomain ?? meta.cacheDomain ?? null,
+      );
+      return { ...p, channelSignals, journeyGoal };
+    } catch (e) {
+      console.warn("[compiled] runtime layers attach failed", e);
+      return { ...p, channelSignals: null, journeyGoal: null };
+    }
+  };
+
   if (!force) {
     const cached = await getCachedStrategyOverview(supabase, user.id, meta.competitorId, domain);
     if (cached) {
       return NextResponse.json(
-        { ok: true, cached: true, payload: normalizeCompetitorStrategyOverviewPayload(cached) },
+        {
+          ok: true,
+          cached: true,
+          payload: await attachRuntimeLayers(normalizeCompetitorStrategyOverviewPayload(cached)),
+        },
         {
           headers: {
             "Cache-Control": "private, max-age=300, stale-while-revalidate=3600",
@@ -106,7 +133,9 @@ export async function GET(req: Request): Promise<NextResponse> {
         cached: true,
         recomputing: running,
         staleWhileRecomputing: running,
-        payload: normalizeCompetitorStrategyOverviewPayload(staleEarly),
+        payload: await attachRuntimeLayers(
+          normalizeCompetitorStrategyOverviewPayload(staleEarly)
+        ),
       },
       {
         headers: {
@@ -139,7 +168,12 @@ export async function GET(req: Request): Promise<NextResponse> {
         });
       }
       return NextResponse.json(
-        { ok: true, cached: true, recomputing: true, payload: normalizeCompetitorStrategyOverviewPayload(stale) },
+        {
+          ok: true,
+          cached: true,
+          recomputing: true,
+          payload: await attachRuntimeLayers(normalizeCompetitorStrategyOverviewPayload(stale)),
+        },
         {
           headers: {
             "Cache-Control": "private, no-cache",
@@ -190,7 +224,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         cached: Boolean(stale),
         recomputing: running || !stale,
         staleWhileRecomputing: running || !stale,
-        payload: outPayload,
+        payload: await attachRuntimeLayers(outPayload),
       },
       {
         headers: {
@@ -245,7 +279,7 @@ export async function GET(req: Request): Promise<NextResponse> {
         cached: Boolean(stale),
         recomputing: true,
         staleWhileRecomputing: true,
-        payload: quickPayload,
+        payload: await attachRuntimeLayers(quickPayload),
       },
       {
         headers: {
@@ -271,7 +305,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       cached: false,
       recomputing: running || scrapeIsNewer,
       staleWhileRecomputing: running || scrapeIsNewer,
-      payload: quickPayload,
+      payload: await attachRuntimeLayers(quickPayload),
     },
     {
       headers: {

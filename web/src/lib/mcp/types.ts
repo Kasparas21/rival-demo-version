@@ -3,6 +3,8 @@ import type { PlanTier } from "@/lib/billing/plan-limits";
 export type McpErrorCode =
   | "not_tracked"
   | "no_cache"
+  | "no_data"
+  | "not_found"
   | "rate_limited"
   | "plan_gated"
   | "invalid_input"
