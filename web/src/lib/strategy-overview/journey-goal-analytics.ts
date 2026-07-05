@@ -201,13 +201,21 @@ export function computeJourneyGoalAnalytics(
     key: p.intent,
   }));
 
-  const destinationBars = (goal.topDestinations.length > 0 ? goal.topDestinations : ev.landingPreviews)
-    .slice(0, 6)
-    .map((d) => ({
-      name: "displayUrl" in d ? d.displayUrl : formatCategoryLabel(d.categoryLabel ?? d.displayUrl),
+  const destinationSource =
+    goal.topDestinations.length > 0 ? goal.topDestinations : ev.landingPreviews;
+
+  const destinationBars = destinationSource.slice(0, 6).map((d) => {
+    const preview = "categoryLabel" in d ? d : null;
+    const name =
+      preview?.categoryLabel != null && String(preview.categoryLabel).trim()
+        ? formatCategoryLabel(String(preview.categoryLabel))
+        : d.displayUrl;
+    return {
+      name,
       share: d.sharePct,
       ads: d.adCount,
-    }));
+    };
+  });
 
   const categoryBars = ev.categories.slice(0, 6).map((c) => ({
     name: formatCategoryLabel(c.label),
