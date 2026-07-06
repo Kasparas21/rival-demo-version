@@ -41,6 +41,7 @@ export function AgentSettingsModal({
     savedFlash,
     settings,
     billing,
+    deliveryStatus,
     setSettings,
     saveSettings,
     loadSettings,
@@ -206,6 +207,7 @@ export function AgentSettingsModal({
               onSave={handleSave}
               onRefresh={loadSettings}
               onViewHistory={() => setHistoryOpen(true)}
+              deliveryStatus={deliveryStatus}
             />
           )}
         </div>

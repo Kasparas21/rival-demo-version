@@ -8,7 +8,7 @@ type Props = {
   className?: string;
 };
 
-/** Hero-sized glow-line CTA — same component as the rest of the landing page. */
+/** Hero-sized glow-line CTA - same component as the rest of the landing page. */
 export function HeroVariantBGlowCta({ href, children, className = "" }: Props) {
   return (
     <LandingTrialCta href={href} size="hero" className={className}>

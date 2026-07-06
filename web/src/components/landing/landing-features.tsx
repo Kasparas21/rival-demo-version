@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { LandingCapabilityTiles } from "@/components/landing/landing-capability-tiles";
 import {
   LandingHeadlineHighlight,
   landingSectionHeadlineClasses,
@@ -50,7 +51,7 @@ export function LandingFeatures({ copy }: Props) {
     <section className="relative overflow-hidden pb-16 pt-8 text-center sm:pb-24 sm:pt-10">
       <LandingScrollReveal className="mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h2
-          id="solution"
+          id="features-overview"
           className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
         >
           {copy.titleLine1}
@@ -58,6 +59,12 @@ export function LandingFeatures({ copy }: Props) {
           <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-gray-500 sm:text-base">{copy.subtitle}</p>
+
+        <LandingCapabilityTiles
+          label={copy.capabilitiesLabel}
+          tiles={copy.capabilities}
+          className="mx-auto mt-8 max-w-md sm:mt-10"
+        />
 
         <div className="mt-12 grid grid-cols-1 gap-10 text-left md:mt-16 md:grid-cols-3 md:items-start md:gap-8">
           {copy.cards.map((card, index) => (

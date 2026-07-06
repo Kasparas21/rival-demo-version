@@ -5,7 +5,7 @@ import {
   type CompetitorPageTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 
-/** Top-level hero demo pillars — matches landing feature story (spy → analyze → monitor). */
+/** Top-level hero demo pillars - matches landing feature story (spy → analyze → monitor). */
 export const DEMO_FEATURE_TAB_IDS: CompetitorPageTabId[] = ["ads library", "insights", "alerts"];
 
 const DEMO_FEATURE_TABS = COMPETITOR_PAGE_TABS.filter((tab) => DEMO_FEATURE_TAB_IDS.includes(tab.id));
@@ -15,7 +15,7 @@ type Props = {
   onTabChange: (tab: CompetitorPageTabId) => void;
 };
 
-/** Segmented pill above the demo — equal columns, active fill on the tab itself. */
+/** Segmented pill above the demo - equal columns, active fill on the tab itself. */
 export function HeroVariantBDemoFeatureSwitch({ activeTab, onTabChange }: Props) {
   return (
     <div className="mb-4 flex justify-center px-3 sm:mb-5 sm:px-4">

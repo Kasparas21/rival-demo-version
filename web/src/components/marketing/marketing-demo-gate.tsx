@@ -8,7 +8,7 @@ import { MarketingTrialCountdownWidget } from "@/components/marketing/marketing-
 
 type Props = {
   children: ReactNode;
-  /** Feature / AdSpy pages — wall opens immediately on load. */
+  /** Feature / AdSpy pages - wall opens immediately on load. */
   showOnMount?: boolean;
 };
 

@@ -59,7 +59,7 @@ function DemoAnimatedBodyMobile({ children }: { children: ReactNode }) {
 }
 
 /**
- * Desktop: top-anchored height transition — card header stays put; only the bottom edge moves.
+ * Desktop: top-anchored height transition - card header stays put; only the bottom edge moves.
  * ResizeObserver + rAF batching; respects prefers-reduced-motion.
  */
 function DemoAnimatedBodyDesktop({ children, contentKey }: Props) {

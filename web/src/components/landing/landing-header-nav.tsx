@@ -223,7 +223,7 @@ function MobileNavPanel({
   );
 }
 
-/** Desktop nav links — centered in the header pill from `md` up. */
+/** Desktop nav links - centered in the header pill from `md` up. */
 export function LandingHeaderNav({ items, isDark = false, ariaLabel }: Props) {
   return (
     <nav
@@ -241,7 +241,7 @@ export function LandingHeaderNav({ items, isDark = false, ariaLabel }: Props) {
   );
 }
 
-/** Mobile hamburger + slide-down menu — sits in the header’s right action cluster. */
+/** Mobile hamburger + slide-down menu - sits in the header’s right action cluster. */
 export function LandingHeaderMobileMenu({ items, isDark = false }: Pick<Props, "items" | "isDark">) {
   const [mobileOpen, setMobileOpen] = useState(false);
 

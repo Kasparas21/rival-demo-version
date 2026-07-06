@@ -10,7 +10,7 @@ import { glassModalShellClass } from "@/components/ui/glass-styles";
 type Props = {
   open: boolean;
   onDismiss: () => void;
-  /** From the 2nd wall appearance onward — trial countdown + primary CTA layout. */
+  /** From the 2nd wall appearance onward - trial countdown + primary CTA layout. */
   showTrialCountdown?: boolean;
   secondsLeft: number;
   trialExpired: boolean;
@@ -37,14 +37,14 @@ function TrialCountdownBanner({ secondsLeft, expired }: { secondsLeft: number; e
       </p>
       <p className="mt-2 text-sm leading-relaxed text-[#4b5563]">
         {expired
-          ? "Your preview time is up. Start your free trial to keep exploring competitor ads, Strategy Maps, and Three Moves without limits."
-          : "Your 3-minute preview is ticking down. Start your free trial now to keep exploring competitor ads, Strategy Maps, and Three Moves without limits."}
+          ? "Your preview time is up. Start your free trial to keep exploring competitor ads, Strategy Maps, and Autopilot alerts without limits."
+          : "Your 3-minute preview is ticking down. Start your free trial now to keep exploring competitor ads, Strategy Maps, and Autopilot alerts without limits."}
       </p>
     </div>
   );
 }
 
-/** BigSpy-style gate — blocks demo until user joins or dismisses. */
+/** BigSpy-style gate - blocks demo until user joins or dismisses. */
 export function MarketingSignupWall({
   open,
   onDismiss,
@@ -112,7 +112,7 @@ export function MarketingSignupWall({
 
         {!isTrialMode ? (
           <p className="mt-3 text-sm leading-relaxed text-[#4b5563] sm:text-[15px]">
-            Start your free trial to search competitor ads, run Strategy Maps, and get Three Moves every
+            Start your free trial to search competitor ads, run Strategy Maps, and get Autopilot alerts every
             Monday.
           </p>
         ) : null}

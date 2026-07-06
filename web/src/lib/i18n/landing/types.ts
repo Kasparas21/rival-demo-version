@@ -2,15 +2,31 @@ import type { Locale } from "@/lib/i18n/locale";
 
 export type FaqItem = { q: string; a: string };
 
+export type LandingCapabilityKey = "paid" | "organic" | "email" | "autopilot" | "mcp";
+
+export type LandingCapabilityTile = {
+  key: LandingCapabilityKey;
+  label: string;
+};
+
 export type LandingNavItem = { label: string; sectionId: string };
 
 export type LandingReview = {
   name: string;
   photo?: string;
   initials?: string;
-  when: string;
-  stars: 1 | 2 | 3 | 4 | 5;
+  /** Footer line, e.g. "US · Jan 2026" */
+  meta: string;
+  verified?: boolean;
   text: string;
+  /** In-card photo — gradient placeholder when omitted */
+  featureImage?: string;
+  /** Overrides the section-level feature image alt template. */
+  featureImageAlt?: string;
+  /** Screenshot height tier for the crush-style staggered grid. */
+  cardSize?: "default" | "tall" | "tallest";
+  /** Faint peek card at the bottom of the grid (center column). */
+  peek?: boolean;
 };
 
 export type LandingPlanMetricHighlight = {
@@ -27,7 +43,7 @@ export type LandingPlanOffer = {
   annualYearlyUsd: number;
   /** Strikethrough "was" price on monthly billing (e.g. launch discount). */
   originalMonthlyUsd?: number;
-  /** Primary decision metric — rendered large above the feature list. */
+  /** Primary decision metric - rendered large above the feature list. */
   metricHighlight?: LandingPlanMetricHighlight;
   features: string[];
   plusLabel?: string;
@@ -62,6 +78,49 @@ export type LandingHeroHeadlineCopy = {
   highlight: string;
   line2: string;
   subline: string;
+  /** Shorter subline for narrow viewports. */
+  sublineMobile?: string;
+};
+
+export type LandingHeroCoverageKey = "paid" | "organic" | "email" | "autopilot" | "mcp";
+
+export type LandingHeroCoverageChip = {
+  key: LandingHeroCoverageKey;
+  label: string;
+  href?: string;
+  linkAriaLabel?: string;
+};
+
+export type LandingHowItWorksStep = {
+  title: string;
+  body: string;
+};
+
+export type LandingAutopilotFeedItem = {
+  time: string;
+  tag: "ad" | "email" | "organic" | "page" | "report";
+  tagLabel: string;
+  text: string;
+};
+
+export type LandingCoverageCardKey =
+  | "paid"
+  | "organic"
+  | "email"
+  | "strategy-map"
+  | "landing-tests"
+  | "winners";
+
+export type LandingCoverageCard = {
+  key: LandingCoverageCardKey;
+  title: string;
+  /** One short line under the title (the visual carries the rest). */
+  tagline: string;
+};
+
+export type LandingCoverageGroup = {
+  label: string;
+  cards: LandingCoverageCard[];
 };
 
 export type LandingCopy = {
@@ -85,11 +144,68 @@ export type LandingCopy = {
     marketersPill: string;
     brandMarqueeAria: string;
     brandMarqueeLabel: string;
+    /** Channel checklist under the hero CTA. */
+    coverage: {
+      chips: LandingHeroCoverageChip[];
+    };
+  };
+  howItWorks: {
+    titleLine1: string;
+    titleHighlight: string;
+    /** Trailing phrase on the headline line, e.g. "in 5 minutes". */
+    titleSuffix?: string;
+    steps: [LandingHowItWorksStep, LandingHowItWorksStep, LandingHowItWorksStep];
+    cta: string;
+  };
+  autopilot: {
+    titleLine1: string;
+    titleHighlight: string;
+    subtitle: string;
+    /** Big-number stat rows (replaces prose bullets - visual-first). */
+    stats: Array<{ value: string; label: string; sub: string }>;
+    feed: {
+      title: string;
+      liveLabel: string;
+      items: LandingAutopilotFeedItem[];
+      footer: string;
+      /** Rich Slack "brief" attachment on the final message - the payoff + in-chat CTA. */
+      brief: {
+        title: string;
+        highlights: string[];
+        cta: string;
+      };
+    };
+    cta: string;
+  };
+  coverage: {
+    titleLine1: string;
+    titleHighlight: string;
+    subtitle: string;
+    groups: LandingCoverageGroup[];
+    cta: string;
+  };
+  mcp: {
+    titleLine1: string;
+    titleHighlight: string;
+    subtitle: string;
+    chat: {
+      connectedLabel: string;
+      userMsg: string;
+      replyIntro: string;
+      replyBullets: string[];
+      replyOutro: string;
+      inputPlaceholder: string;
+    };
+    worksWith: string;
+    clients: string[];
+    cta: string;
   };
   features: {
     titleLine1: string;
     titleHighlight: string;
     subtitle: string;
+    capabilitiesLabel: string;
+    capabilities: LandingCapabilityTile[];
     cards: Array<{ imageAlt: string; title: string; body: string }>;
     cta: string;
   };
@@ -122,8 +238,8 @@ export type LandingCopy = {
     withTitle: string;
     platformsLabel: string;
     platformsLabelMobile: string;
-    features: string[];
-    featuresMobile: string[];
+    capabilitiesLabel: string;
+    capabilities: LandingCapabilityTile[];
     onePlanLabel: string;
     price: string;
     priceSuffix: string;
@@ -136,16 +252,22 @@ export type LandingCopy = {
     platforms: readonly string[];
   };
   reviews: {
-    titleLine1: string;
-    titleHighlight: string;
-    /** Template: `{count}` */
-    starsAria: string;
+    title: string;
+    subtitle: string;
     /** Template: `{name}` */
     photoAlt: string;
+    /** Template: `{count}` */
+    featureImageAlt: string;
+    socialProof: {
+      count: string;
+      label: string;
+      trustpilotAria: string;
+    };
     items: LandingReview[];
   };
   pricing: {
-    title: string;
+    titleLine1: string;
+    titleHighlight: string;
     riskFreeBadge: string;
     guaranteeTitle: string;
     guaranteeBody: string;
@@ -158,7 +280,7 @@ export type LandingCopy = {
     popularBadge: string;
     popularClaim: string;
     perMonth: string;
-    /** Template: `{price}` — per-competitor unit cost under the metric highlight. */
+    /** Template: `{price}` - per-competitor unit cost under the metric highlight. */
     perCompetitor: string;
     billedMonthly: string;
     /** Template: `{yearlyUsd}` */

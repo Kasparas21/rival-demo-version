@@ -39,6 +39,7 @@ type OrganicFeedPanelProps = {
   /** Bump to refetch posts (e.g. after a manual platform rescrape). */
   refreshTrigger?: number;
   onPostClick?: (post: OrganicPostCardData) => void;
+  onChannelDataUpdated?: () => void;
 };
 
 export function OrganicFeedPanel({
@@ -47,6 +48,7 @@ export function OrganicFeedPanel({
   onGoToSettings,
   refreshTrigger = 0,
   onPostClick,
+  onChannelDataUpdated,
 }: OrganicFeedPanelProps) {
   const [globalLastScrapedAt, setGlobalLastScrapedAt] = useState<string | null>(null);
 
@@ -152,6 +154,7 @@ export function OrganicFeedPanel({
               globalLastScrapedAt={globalLastScrapedAt}
               onGoToSettings={onGoToSettings}
               onPostClick={onPostClick}
+              onChannelDataUpdated={onChannelDataUpdated}
             />
           ) : null,
         )}

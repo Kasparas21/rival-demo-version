@@ -29,7 +29,7 @@ export const autopilotSettingsPutSchema = z.object({
   enabled: z.boolean().optional(),
   watch_enabled: z.boolean().optional(),
   watch_sensitivity: watchSensitivitySchema.optional(),
-  watch_min_score: z.union([z.literal(6), z.literal(8), z.literal(9), z.literal(10)]).nullable().optional(),
+  watch_min_score: z.number().int().min(1).max(10).nullable().optional(),
   watch_channels: watchChannelsSchema.optional(),
   slack_webhook_url: z.string().url().nullable().optional(),
   slack_connection: z.null().optional(),

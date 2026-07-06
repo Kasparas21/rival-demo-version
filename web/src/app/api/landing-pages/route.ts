@@ -106,7 +106,7 @@ export async function GET(request: Request) {
   const { data: ads, error: adsErr } = await supabase
     .from("scraped_ads")
     .select(
-      "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, is_active, raw_payload"
+      "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, is_active, raw_payload",
     )
     .eq("user_id", user.id)
     .eq("competitor_id", competitorId)
@@ -243,8 +243,8 @@ export async function GET(request: Request) {
     },
     landingPages,
     summary: {
-      totalUniqueUrls: groups.size,
-      totalAdsWithLp: Array.from(groups.values()).reduce((sum, g) => sum + g.totalAds, 0),
+      totalUniqueUrls: landingPagesAll.length,
+      totalAdsWithLp: landingPagesAll.reduce((sum, g) => sum + g.totalAds, 0),
       adsWithoutLp,
       platformCounts,
     },

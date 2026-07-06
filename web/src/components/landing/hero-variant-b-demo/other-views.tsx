@@ -494,7 +494,7 @@ function AudienceView() {
 function CopyVaultAdCard({ ad }: { ad: DemoAd }) {
   const [saved, setSaved] = useState(false);
   const funnelLabel =
-    ad.funnel === "top" ? "TOF" : ad.funnel === "middle" ? "MOF" : ad.funnel === "bottom" ? "BOF" : "—";
+    ad.funnel === "top" ? "TOF" : ad.funnel === "middle" ? "MOF" : ad.funnel === "bottom" ? "BOF" : "-";
 
   return (
     <article className="flex flex-col overflow-hidden rounded-xl border border-[#e5e7eb] bg-white">

@@ -47,6 +47,7 @@ type OrganicPlatformSectionProps = {
   globalLastScrapedAt?: string | null;
   onGoToSettings: () => void;
   onPostClick?: (post: OrganicPostCardData) => void;
+  onChannelDataUpdated?: () => void;
 };
 
 export function OrganicPlatformSection({
@@ -57,6 +58,7 @@ export function OrganicPlatformSection({
   globalLastScrapedAt,
   onGoToSettings,
   onPostClick,
+  onChannelDataUpdated,
 }: OrganicPlatformSectionProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -112,6 +114,7 @@ export function OrganicPlatformSection({
         throw new Error(scrapeData.error ?? scrapeData.platformErrors?.[platform] ?? "Refresh failed");
       }
       await loadPosts();
+      onChannelDataUpdated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Refresh failed");
     } finally {

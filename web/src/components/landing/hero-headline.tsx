@@ -13,7 +13,7 @@ function HeroHeadlineAccent({ label }: { label: string }) {
   return <span className="hero-headline-accent">{label}</span>;
 }
 
-/** Shared hero headline — same center axis as the header pill on mobile and desktop. */
+/** Shared hero headline - same center axis as the header pill on mobile and desktop. */
 export function HeroHeadline({
   headline,
   variant = "control",
@@ -45,7 +45,10 @@ export function HeroHeadline({
       </h1>
 
       {showSubline ? (
-        <p className="landing-hero-copy__subline hero-subline">{headline.subline}</p>
+        <p className="landing-hero-copy__subline hero-subline">
+          <span className="sm:hidden">{headline.sublineMobile ?? headline.subline}</span>
+          <span className="hidden sm:inline">{headline.subline}</span>
+        </p>
       ) : null}
     </div>
   );

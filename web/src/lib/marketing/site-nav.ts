@@ -77,7 +77,6 @@ const NAV_LABELS_DE: NavLabels = {
   featurePages: {
     "ad-library": "Multi-Plattform Ad Library",
     "strategy-map": "Strategy Map",
-    "three-moves": "Three Moves",
     "stealable-angles": "Stealable Angles",
     "copy-vault": "Copy Vault",
     timeline: "Timeline",
@@ -108,7 +107,6 @@ const NAV_LABELS_NL: NavLabels = {
   featurePages: {
     "ad-library": "Multi-platform Ad Library",
     "strategy-map": "Strategy Map",
-    "three-moves": "Three Moves",
     "stealable-angles": "Stealable Angles",
     "copy-vault": "Copy Vault",
     timeline: "Timeline",

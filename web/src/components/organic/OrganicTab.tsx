@@ -20,9 +20,12 @@ import { OrganicPostDetailDrawer } from "./OrganicPostDetailDrawer";
 import type { OrganicPostCardData } from "./OrganicPostCard";
 import { OrganicSettingsPanel } from "./OrganicSettingsPanel";
 
+import { dispatchStrategyChannelDataUpdated } from "@/lib/strategy-overview/ads-library-strategy-bridge";
+
 type OrganicTabProps = {
   competitorId?: string;
   competitorName: string;
+  competitorDomain?: string;
   activeSubTab: CompetitorSubTabId | null;
   onSubTabChange: (sub: CompetitorSubTabId) => void;
   isOwnWorkspace?: boolean;
@@ -31,6 +34,7 @@ type OrganicTabProps = {
 export function OrganicTab({
   competitorId,
   competitorName,
+  competitorDomain,
   activeSubTab,
   onSubTabChange,
   isOwnWorkspace = false,
@@ -84,6 +88,12 @@ export function OrganicTab({
     void loadSocials();
   }, [loadSocials]);
 
+  const notifyStrategyMap = useCallback(() => {
+    if (competitorDomain?.trim()) {
+      dispatchStrategyChannelDataUpdated(competitorDomain);
+    }
+  }, [competitorDomain]);
+
   if (!competitorId) {
     return (
       <div className={`flex flex-col items-center justify-center ${COMPETITOR_PAGE_X} py-24 text-center`}>
@@ -119,6 +129,7 @@ export function OrganicTab({
             refreshTrigger={feedRefreshTrigger}
             onGoToSettings={() => onSubTabChange("organic-settings")}
             onPostClick={handlePostClick}
+            onChannelDataUpdated={notifyStrategyMap}
           />
         ) : subTab === "insights" ? (
           <OrganicInsightsPanel
@@ -133,7 +144,10 @@ export function OrganicTab({
             competitorId={competitorId}
             initialSocials={socials}
             onSaved={(next) => setSocials(next)}
-            onScrapeComplete={() => setFeedRefreshTrigger((n) => n + 1)}
+            onScrapeComplete={() => {
+              setFeedRefreshTrigger((n) => n + 1);
+              notifyStrategyMap();
+            }}
             isOwnWorkspace={isOwnWorkspace}
           />
         )}

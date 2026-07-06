@@ -2,6 +2,7 @@ import type {
   FunnelCellId,
   FunnelCellNodePayload,
   FunnelStage,
+  StrategyChannelSignals,
   StrategyMapPayload,
   StrategyPlatform,
 } from "@/lib/strategy-overview/payload-types";
@@ -289,6 +290,75 @@ function demoFunnelCell(
 export const DEMO_STRATEGY_MAP_FUNNEL_CELLS: FunnelCellNodePayload[] = DEMO_STRATEGY_CELLS.map((cell) =>
   demoFunnelCell(cell.platform, cell.funnel as FunnelStage, cell.ads, cell.spend, cell.activity),
 );
+
+/** Organic + email layer for demo strategy maps (rail above TOF, capture below BOF). */
+export const DEMO_STRATEGY_CHANNEL_SIGNALS: StrategyChannelSignals = {
+  version: 1,
+  computedAt: "2026-06-09T12:00:00.000Z",
+  organicNodes: [
+    {
+      id: "organic:instagram",
+      platform: "instagram",
+      label: "Instagram",
+      postCount: 48,
+      postsPerWeek: 3.2,
+      avgEngagement: 1284,
+      lastPostAt: "2026-06-08T10:00:00.000Z",
+      topThemes: ["Glow routine", "Summer edit"],
+      pairedPaidPlatform: "meta",
+    },
+    {
+      id: "organic:tiktok",
+      platform: "tiktok",
+      label: "TikTok",
+      postCount: 31,
+      postsPerWeek: 2.1,
+      avgEngagement: 8420,
+      lastPostAt: "2026-06-07T18:00:00.000Z",
+      topThemes: ["Hook tests", "UGC formats"],
+      pairedPaidPlatform: "tiktok",
+    },
+  ],
+  emailNode: {
+    id: "email",
+    label: "Email",
+    emailCount: 24,
+    emailsPerWeek: 2.5,
+    dominantType: "promotional",
+    dominantAngle: "Flash sales & winback",
+    offerSharePct: 45,
+    lastEmailAt: "2026-06-09T09:41:00.000Z",
+    espDetected: "Klaviyo",
+  },
+  channelEdges: [
+    {
+      from: "organic:instagram",
+      to: "meta:TOF",
+      kind: "organic_to_paid",
+      confidence: 0.78,
+      reasoning:
+        "Instagram organic (48 posts, ~1.3K avg engagement) warms the audience their paid Meta ads retarget.",
+      style: "solid",
+    },
+    {
+      from: "organic:tiktok",
+      to: "tiktok:TOF",
+      kind: "organic_to_paid",
+      confidence: 0.72,
+      reasoning: "TikTok hooks from organic reposted into paid TOF tests.",
+      style: "dashed",
+    },
+    {
+      from: "meta:BOF",
+      to: "email",
+      kind: "paid_to_email",
+      confidence: 0.81,
+      reasoning:
+        "Bottom-funnel Meta traffic feeds the email list: 24 emails captured — promos mirror paid offer angles.",
+      style: "solid",
+    },
+  ],
+};
 
 /** Static strategy map payload for hero variant B — mirrors live Insights → Strategy Map. */
 export const DEMO_STRATEGY_MAP: StrategyMapPayload = {

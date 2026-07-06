@@ -8,7 +8,7 @@ type LandingScrollRevealProps = {
   delay?: number;
 };
 
-/** Lightweight scroll reveal — CSS transitions only (no framer-motion on landing). */
+/** Lightweight scroll reveal - CSS transitions only (no framer-motion on landing). */
 export function LandingScrollReveal({ children, className = "", delay = 0 }: LandingScrollRevealProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);

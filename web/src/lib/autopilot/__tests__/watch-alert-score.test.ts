@@ -66,15 +66,19 @@ describe("passesWatchFilter", () => {
 });
 
 describe("normalizeWatchMinScoreForUi", () => {
-  it("maps legacy 10 to 9", () => {
-    expect(normalizeWatchMinScoreForUi(10)).toBe(9);
+  it("clamps to 1–10", () => {
+    expect(normalizeWatchMinScoreForUi(10)).toBe(10);
+    expect(normalizeWatchMinScoreForUi(0)).toBe(1);
+    expect(normalizeWatchMinScoreForUi(99)).toBe(10);
+    expect(normalizeWatchMinScoreForUi(null)).toBe(6);
   });
 });
 
 describe("watchSensitivityForMinScore", () => {
-  it("maps tiers", () => {
+  it("maps slider tiers", () => {
+    expect(watchSensitivityForMinScore(3)).toBe("paranoid");
     expect(watchSensitivityForMinScore(6)).toBe("balanced");
     expect(watchSensitivityForMinScore(8)).toBe("big_moves");
-    expect(watchSensitivityForMinScore(9)).toBe("big_moves");
+    expect(watchSensitivityForMinScore(10)).toBe("big_moves");
   });
 });

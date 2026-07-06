@@ -17,7 +17,7 @@ type Props = {
   theme?: "light" | "dark";
 };
 
-/** Full floating pill: logo | nav | divider | CTA — fixed at top while scrolling */
+/** Full floating pill: logo | nav | divider | CTA - fixed at top while scrolling */
 export function LandingHeader({ copy, theme = "light" }: Props) {
   const isDark = theme === "dark";
   const siteNav = getSiteNav("en");

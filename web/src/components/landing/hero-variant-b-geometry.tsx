@@ -1,4 +1,4 @@
-/** Soft white outline geometry — stroke-only, diagonal/vertical lines (Madgicx-inspired). */
+/** Soft white outline geometry - stroke-only, diagonal/vertical lines (Madgicx-inspired). */
 export function HeroVariantBGeometry() {
   return (
     <div
@@ -47,7 +47,7 @@ export function HeroVariantBGeometry() {
           <path d="M 0 24 L 468 800" stroke="url(#hero-vb-ray-l)" strokeWidth="0.55" opacity="0.45" filter="url(#hero-vb-line-glow-soft)" />
           <path d="M 1200 24 L 732 800" stroke="url(#hero-vb-ray-r)" strokeWidth="0.55" opacity="0.45" filter="url(#hero-vb-line-glow-soft)" />
 
-          {/* Frame legs — diagonals only, no horizontals */}
+          {/* Frame legs - diagonals only, no horizontals */}
           <path
             d="M 168 96 L 312 760"
             stroke="url(#hero-vb-edge-fade)"
@@ -89,7 +89,7 @@ export function HeroVariantBGeometry() {
             opacity="0.14"
           />
 
-          {/* Center V — vertical + diagonals */}
+          {/* Center V - vertical + diagonals */}
           <path
             d="M 600 88 L 600 248"
             stroke="rgba(255,255,255,0.22)"

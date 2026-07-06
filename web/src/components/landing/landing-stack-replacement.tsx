@@ -15,6 +15,7 @@ import {
   SnapchatLogo,
   TikTokLogo,
 } from "@/components/platform-logos";
+import { LandingCapabilityTiles } from "@/components/landing/landing-capability-tiles";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { stackToolIcon } from "@/components/landing/stack-tool-icons";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
@@ -350,7 +351,7 @@ function WithRivalPlatformStripMobile({ copy }: { copy: LandingCopy["stackReplac
   );
 }
 
-/** Desktop — unchanged. */
+/** Desktop - unchanged. */
 function WithRivalCard({ copy }: { copy: LandingCopy["stackReplacement"] }) {
   return (
     <article className={`relative flex h-full flex-col ${rivalGlassCardClass} p-5 sm:p-7`}>
@@ -383,16 +384,12 @@ function WithRivalCard({ copy }: { copy: LandingCopy["stackReplacement"] }) {
 
         <WithRivalPlatformStrip copy={copy} />
 
-        <ul className="mt-6 space-y-3 sm:mt-7 sm:space-y-3.5">
-          {copy.features.map((feature) => (
-            <li key={feature} className="flex items-start gap-3 text-[15px] leading-snug text-[#1a1a1a] sm:text-base">
-              <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/25">
-                <Check className="size-4 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
-              </span>
-              {feature}
-            </li>
-          ))}
-        </ul>
+        <LandingCapabilityTiles
+          variant="hero"
+          label={copy.capabilitiesLabel}
+          tiles={copy.capabilities}
+          className="mt-6 sm:mt-7"
+        />
 
         <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
           <WithRivalPriceHero copy={copy} />
@@ -427,16 +424,13 @@ function WithRivalCardMobile({ copy }: { copy: LandingCopy["stackReplacement"] }
 
       <WithRivalPlatformStripMobile copy={copy} />
 
-      <ul className="mt-3 space-y-1.5">
-        {copy.featuresMobile.map((feature) => (
-          <li key={feature} className="flex items-start gap-2 text-[11px] leading-snug text-[#1a1a1a]">
-            <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[#4a7fa5]/12 ring-1 ring-[#4a7fa5]/25">
-              <Check className="size-2.5 text-[#4a7fa5]" strokeWidth={3} aria-hidden />
-            </span>
-            {feature}
-          </li>
-        ))}
-      </ul>
+      <LandingCapabilityTiles
+        variant="hero"
+        label={copy.capabilitiesLabel}
+        tiles={copy.capabilities}
+        compact
+        className="mt-3"
+      />
 
       <div className="mt-3">
         <LandingTrialCta href="/onboarding" size="lg" className="w-full">
@@ -496,7 +490,7 @@ export function LandingStackReplacement({ copy }: Props) {
             <WithRivalCardMobile copy={copy} />
           </div>
 
-          {/* Desktop — unchanged side-by-side layout */}
+          {/* Desktop - unchanged side-by-side layout */}
           <div className="hidden flex-col gap-6 md:flex lg:grid lg:grid-cols-2 lg:items-stretch lg:gap-8">
             <WithoutRivalCard copy={copy} />
             <div className="flex justify-center lg:hidden" aria-hidden>

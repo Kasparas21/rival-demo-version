@@ -1,4 +1,4 @@
-/** Barely-there sky wisps — white on the existing blue wash, faded toward the bottom. */
+/** Barely-there sky wisps - white on the existing blue wash, faded toward the bottom. */
 export function HeroVariantBSkyClouds() {
   return (
     <div
@@ -8,7 +8,7 @@ export function HeroVariantBSkyClouds() {
       {/* Upper sky haze */}
       <div className="absolute inset-x-0 top-0 h-[42%] bg-[radial-gradient(ellipse_90%_70%_at_50%_0%,rgba(255,255,255,0.14),transparent_68%)]" />
 
-      {/* Desktop: soft cloud banks — mobile uses gradient-only to avoid heavy blur paint. */}
+      {/* Desktop: soft cloud banks - mobile uses gradient-only to avoid heavy blur paint. */}
       <div className="max-md:hidden">
         <div className="absolute -left-[8%] top-[10%] h-[22%] w-[52%] rounded-[50%] bg-[rgba(255,255,255,0.11)] blur-[72px]" />
         <div className="absolute left-[18%] top-[6%] h-[16%] w-[38%] rounded-[48%] bg-[rgba(240,248,255,0.09)] blur-[64px]" />
@@ -25,7 +25,9 @@ export function HeroVariantBSkyClouds() {
       <div className="md:hidden">
         <div className="absolute -left-[10%] top-[12%] h-[18%] w-[55%] rounded-[50%] bg-[rgba(255,255,255,0.08)]" />
         <div className="absolute -right-[8%] top-[18%] h-[16%] w-[50%] rounded-[50%] bg-[rgba(255,255,255,0.06)]" />
-        <div className="absolute left-1/2 top-[32%] h-[14%] w-[70%] -translate-x-1/2 rounded-[50%] bg-[rgba(211,233,244,0.07)]" />
+        <div className="absolute left-1/2 top-[38%] h-[18%] w-[76%] -translate-x-1/2 rounded-[50%] bg-[rgba(211,233,244,0.09)]" />
+        <div className="absolute left-1/2 top-[56%] h-[14%] w-[70%] -translate-x-1/2 rounded-[50%] bg-[rgba(211,233,244,0.06)]" />
+        <div className="absolute left-1/2 top-[72%] h-[12%] w-[62%] -translate-x-1/2 rounded-[50%] bg-[rgba(227,241,248,0.04)]" />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { ArrowRight, Bot, Sparkles } from "lucide-react";
 
 import { AgentSettingsModal } from "@/components/agent/AgentSettingsModal";
+import { AutopilotDeliveryStatusBanner } from "@/components/autopilot/AutopilotDeliveryStatusBanner";
 import { autopilotGlassCardClass, GlassToggle } from "@/components/autopilot/autopilot-glass-ui";
 import { useAutopilotModalQuery } from "@/components/autopilot/use-autopilot-modal-query";
 import { useAutopilotOAuthToast } from "@/components/autopilot/use-autopilot-oauth-toast";
@@ -12,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 export function SettingsAutopilotSection() {
   const controller = useAutopilotSettings();
-  const { settingsLoading, settings, setEnabled, error, loadSettings } = controller;
+  const { settingsLoading, settings, setEnabled, error, loadSettings, deliveryStatus } = controller;
   const {
     settingsOpen,
     historyOpen,
@@ -58,6 +59,7 @@ export function SettingsAutopilotSection() {
         }
         ringClassName={settings?.enabled ? "ring-emerald-200/40" : undefined}
       >
+        <AutopilotDeliveryStatusBanner status={deliveryStatus} loading={settingsLoading} />
         <button
           type="button"
           onClick={openSettings}

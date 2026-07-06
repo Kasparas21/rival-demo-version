@@ -1,5 +1,6 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { MCP_EMPTY_NO_ALERTS } from "@/lib/mcp/empty-states";
+import { buildMcpPagination, parseMcpPage } from "@/lib/mcp/pagination";
 import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { truncateAdCopy } from "@/lib/mcp/truncate";
@@ -7,9 +8,15 @@ import { mcpDashboardUrl } from "@/lib/mcp/urls";
 
 export async function getRecentAlerts(
   ctx: McpToolContext,
-  input: { limit?: number; since_days?: number; competitor?: string },
+  input: {
+    limit?: number;
+    offset?: number;
+    since_days?: number;
+    competitor?: string;
+    include_full_body?: boolean;
+  },
 ) {
-  const limit = Math.min(50, Math.max(1, input.limit ?? 20));
+  const { limit, offset } = parseMcpPage(input, { defaultLimit: 50, maxLimit: 200 });
   const sinceDays = Math.min(90, Math.max(1, input.since_days ?? 14));
   const sinceIso = new Date(Date.now() - sinceDays * 86_400_000).toISOString();
 
@@ -27,15 +34,16 @@ export async function getRecentAlerts(
 
   let q = ctx.supabase
     .from("competitor_alerts")
-    .select("id, competitor_id, alert_type, severity, title, body, detected_at, metadata")
+    .select("id, competitor_id, alert_type, severity, title, body, detected_at, metadata", {
+      count: "exact",
+    })
     .eq("user_id", ctx.auth.userId)
     .gte("detected_at", sinceIso)
-    .order("detected_at", { ascending: false })
-    .limit(limit);
+    .order("detected_at", { ascending: false });
 
   if (competitorId) q = q.eq("competitor_id", competitorId);
 
-  const { data, error } = await q;
+  const { data, error, count } = await q.range(offset, offset + limit - 1);
   if (error) throw error;
 
   const ids = [...new Set((data ?? []).map((r) => r.competitor_id))];
@@ -52,8 +60,11 @@ export async function getRecentAlerts(
     }
   }
 
+  const bodyMax = input.include_full_body ? 10_000 : 200;
   const alerts = (data ?? []).map((row) => {
-    const body = truncateAdCopy(row.body ?? "", 200);
+    const body = input.include_full_body
+      ? { text: (row.body ?? "").trim(), truncated: false }
+      : truncateAdCopy(row.body ?? "", bodyMax);
     return {
       id: row.id,
       competitor_id: row.competitor_id,
@@ -70,6 +81,7 @@ export async function getRecentAlerts(
   return mcpSuccess({
     since_days: sinceDays,
     alerts,
+    pagination: buildMcpPagination(count ?? 0, limit, offset),
     ...(alerts.length === 0 ? { message: MCP_EMPTY_NO_ALERTS } : {}),
     dashboard_url: mcpDashboardUrl(ctx.auth.appOrigin, dashboardDomain, "tab=insights&sub=alerts"),
   });

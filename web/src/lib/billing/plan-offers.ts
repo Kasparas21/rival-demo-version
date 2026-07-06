@@ -49,7 +49,7 @@ export const PLAN_OFFERS: PlanOffer[] = [
       "Automatic refresh — no manual work",
       "Full intelligence suite",
       "Strategy Map · Activity Score · Copy Vault · Timeline · Landing Pages · Comparison",
-      "Weekly Three Moves AI report",
+      "Autopilot 24/7 alerts to Slack + email",
       "Monday digest email",
       "Competitor email capture",
       "1 brand workspace · up to 15 swaps/month",

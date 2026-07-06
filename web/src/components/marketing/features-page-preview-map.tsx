@@ -51,11 +51,6 @@ export const FEATURE_PREVIEW_MAP: Record<string, ComponentType> = {
       default: m.StrategyMapPreview,
     })),
   ),
-  "three-moves": lazyPreview(() =>
-    import("@/components/feature-previews/three-moves-preview").then((m) => ({
-      default: m.ThreeMovesPreview,
-    })),
-  ),
   "stealable-angles": lazyPreview(() =>
     import("@/components/feature-previews/stealable-angles-preview").then((m) => ({
       default: m.StealableAnglesPreview,

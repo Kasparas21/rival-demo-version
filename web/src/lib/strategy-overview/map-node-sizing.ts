@@ -60,3 +60,34 @@ export function activityLevelLabel(adCount: number, maxAdCount: number): string 
   if (r >= 0.12) return "Low";
   return "Very Low";
 }
+
+/** Visual parity with funnel cells — distinct violet / amber channel identity. */
+export const CHANNEL_ORGANIC_THEME = {
+  border: "#7c3aed",
+  bg: "linear-gradient(145deg, #f5f3ff 0%, #ede9fe 52%, #ddd6fe 100%)",
+  badge: "bg-violet-600 text-white border-violet-500",
+  metricText: "text-violet-800",
+  subtle: "text-violet-950/75",
+  glow: "0 12px 36px rgba(124, 58, 237, 0.22)",
+};
+
+export const CHANNEL_EMAIL_THEME = {
+  border: "#d97706",
+  bg: "linear-gradient(145deg, #fffbeb 0%, #fef3c7 52%, #fde68a 100%)",
+  badge: "bg-amber-600 text-white border-amber-500",
+  metricText: "text-amber-800",
+  subtle: "text-amber-950/75",
+  glow: "0 12px 36px rgba(217, 119, 6, 0.2)",
+};
+
+export const JOURNEY_GOAL_THEME = {
+  border: "#be123c",
+  ring: "rgba(225, 29, 72, 0.35)",
+  bg: "radial-gradient(ellipse at 50% 0%, #fff1f2 0%, #ffe4e6 45%, #fda4af 100%)",
+  core: "#e11d48",
+  coreGlow: "0 0 0 6px rgba(254, 205, 211, 0.9), 0 8px 28px rgba(225, 29, 72, 0.35)",
+  metricText: "text-rose-950",
+  subtle: "text-rose-900/70",
+  chip: "bg-white/90 text-rose-800 ring-1 ring-rose-200/80",
+  glow: "0 16px 48px rgba(225, 29, 72, 0.28)",
+};

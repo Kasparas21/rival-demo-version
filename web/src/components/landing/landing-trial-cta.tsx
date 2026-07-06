@@ -63,7 +63,7 @@ type LandingTrialCtaProps = {
   size?: LandingTrialCtaSize;
   /** `glow-line` = rotating arc border (landing sections). `plain` = header / legacy pill. */
   appearance?: LandingTrialCtaAppearance;
-  /** Pulsating blur — only used with `appearance="plain"`. */
+  /** Pulsating blur - only used with `appearance="plain"`. */
   showGlow?: boolean;
   className?: string;
   children: ReactNode;
@@ -72,7 +72,7 @@ type LandingTrialCtaProps = {
 const FOCUS_RING =
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4a7fa5]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent";
 
-/** Unified landing trial CTA — glow-line arc (default) or plain gradient pill. */
+/** Unified landing trial CTA - glow-line arc (default) or plain gradient pill. */
 export function LandingTrialCta({
   href,
   size = "md",

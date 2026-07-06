@@ -225,7 +225,7 @@ type Props = {
   subTab: "all" | "saved";
   savedIds: Set<string>;
   onToggleSave: (id: string) => void;
-  /** Marketing /adspy pages — lock to one platform and hide the platform picker. */
+  /** Marketing /adspy pages - lock to one platform and hide the platform picker. */
   lockedPlatform?: DemoPlatform;
 };
 
@@ -270,7 +270,7 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
         <DemoSectionHeader
           overline="Saved ads"
           title={`Saved ads from ${DEMO_COMPETITOR.name}`}
-          description={`${(showDemoSaved ? 1 : 0) + savedFromGrid.length} saved — preserved even if removed from the source`}
+          description={`${(showDemoSaved ? 1 : 0) + savedFromGrid.length} saved - preserved even if removed from the source`}
         />
         {!hasAny ? (
           <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white px-6 py-14 text-center">

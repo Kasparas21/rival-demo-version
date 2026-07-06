@@ -95,6 +95,191 @@ export type AudienceSignals = {
   targetingType: string[];
 };
 
+/** Organic social platforms that can appear as channel nodes on the map. */
+export type OrganicChannelPlatform =
+  | "linkedin"
+  | "twitter"
+  | "instagram"
+  | "tiktok"
+  | "facebook"
+  | "youtube";
+
+export type OrganicChannelNodePayload = {
+  /** Composite id: "organic:instagram" */
+  id: `organic:${OrganicChannelPlatform}`;
+  platform: OrganicChannelPlatform;
+  label: string;
+  /** Posts in the lookback window (90d). */
+  postCount: number;
+  postsPerWeek: number;
+  /** Mean likes+comments+shares per post in window. */
+  avgEngagement: number;
+  lastPostAt: string | null;
+  /** Top organic themes (from stored organic insights) used for edge scoring + tooltips. */
+  topThemes: string[];
+  /** Paid platform this organic surface feeds (audience affinity), when the competitor runs ads there. */
+  pairedPaidPlatform: StrategyPlatform | null;
+};
+
+export type EmailChannelNodePayload = {
+  id: "email";
+  label: string;
+  /** Emails captured in the lookback window (90d). */
+  emailCount: number;
+  emailsPerWeek: number;
+  dominantType: string | null;
+  dominantAngle: string | null;
+  /** Share of emails containing an offer (0-100). */
+  offerSharePct: number;
+  lastEmailAt: string | null;
+  espDetected: string | null;
+};
+
+export type ChannelEdgeKind = "organic_to_paid" | "paid_to_email";
+
+export type JourneyGoalKind =
+  | "purchase"
+  | "signup"
+  | "lead_gen"
+  | "install"
+  | "subscribe"
+  | "brand_awareness";
+
+export type JourneyCatalogBreadth = "single" | "focused" | "catalog" | "unknown";
+
+export type JourneyDestinationPayload = {
+  url: string;
+  displayUrl: string;
+  adCount: number;
+  sharePct: number;
+};
+
+export type JourneyGoalEdgeKind = "bof_to_goal" | "email_to_goal";
+
+/** How a specific channel path contributes — not every path is the same journey. */
+export type JourneyPathIntent =
+  | "direct_sale"
+  | "discount_sale"
+  | "retargeting"
+  | "nurture"
+  | "awareness"
+  | "lead_capture";
+
+export type JourneyPathAlignment = "direct" | "supporting";
+
+export type JourneyGoalEdgePayload = {
+  from: string;
+  to: "goal";
+  kind: JourneyGoalEdgeKind;
+  pathIntent: JourneyPathIntent;
+  pathIntentLabel: string;
+  /** Direct paths close the loop; supporting paths feed the macro outcome indirectly. */
+  alignment: JourneyPathAlignment;
+  confidence: number;
+  reasoning: string;
+  style: "solid" | "dashed";
+};
+
+export type JourneyPathIntentSummary = {
+  intent: JourneyPathIntent;
+  label: string;
+  pathCount: number;
+  sharePct: number;
+};
+
+export type JourneyGoalDeal = {
+  label: string;
+  source: "ad" | "email";
+  code: string | null;
+  channel: string | null;
+};
+
+export type JourneyGoalCategory = {
+  label: string;
+  url: string | null;
+  adCount: number;
+  sharePct: number;
+};
+
+export type JourneyGoalCreative = {
+  adId: string;
+  platform: string;
+  imageUrl: string | null;
+  headline: string | null;
+  angle: string | null;
+  landingUrl: string | null;
+};
+
+export type JourneyGoalLandingPreview = {
+  url: string;
+  displayUrl: string;
+  adCount: number;
+  sharePct: number;
+  categoryLabel: string | null;
+  previewImageUrl: string | null;
+  platforms: string[];
+};
+
+/** Rich evidence assembled from ads, emails, LPs, and angles — powers the goal drill-down. */
+export type JourneyGoalEvidence = {
+  narrative: string;
+  deals: JourneyGoalDeal[];
+  categories: JourneyGoalCategory[];
+  topCreatives: JourneyGoalCreative[];
+  landingPreviews: JourneyGoalLandingPreview[];
+  angleHighlights: string[];
+  emailOfferSummary: string | null;
+};
+
+/**
+ * Terminal conversion goal inferred from BOF ads, landing pages, and email.
+ * Attached fresh at API read time alongside channelSignals.
+ */
+export type StrategyJourneyGoal = {
+  version: 1;
+  computedAt: string;
+  kind: JourneyGoalKind;
+  label: string;
+  subtitle: string;
+  catalogBreadth: JourneyCatalogBreadth;
+  catalogLabel: string;
+  topDestinations: JourneyDestinationPayload[];
+  goalEdges: JourneyGoalEdgePayload[];
+  /** Per-path roles that roll up to the macro outcome (retargeting, discount, etc.). */
+  pathIntentBreakdown: JourneyPathIntentSummary[];
+  /** Scraped ads, emails, LP paths, creatives, and promos behind the inference. */
+  evidence: JourneyGoalEvidence;
+  /** e.g. "Organic → Paid ads → Email → Purchase on site" */
+  journeySummary: string;
+  /** One-line macro framing for the map. */
+  macroFraming: string;
+  signals: string[];
+  confidence: number;
+};
+
+export type ChannelEdgePayload = {
+  /** Channel node id or funnel cell id. */
+  from: string;
+  to: string;
+  kind: ChannelEdgeKind;
+  confidence: number;
+  reasoning: string;
+  style: "solid" | "dashed";
+};
+
+/**
+ * Email + organic channel layer for the strategy map. Computed fresh at read
+ * time (not persisted with the ads-fingerprinted cache) because these sources
+ * update on their own cadence.
+ */
+export type StrategyChannelSignals = {
+  version: 1;
+  computedAt: string;
+  organicNodes: OrganicChannelNodePayload[];
+  emailNode: EmailChannelNodePayload | null;
+  channelEdges: ChannelEdgePayload[];
+};
+
 export type StrategyMapPayload = {
   title: string;
   competitor: CompetitorStrategyMeta;
@@ -304,6 +489,12 @@ export type CompetitorStrategyOverviewPayload = {
   audience_inference?: AudienceInferenceResult | null;
   /** True when persisted from synchronous fast-path derive (not full LLM recompute). */
   derivedFastPath?: boolean;
+  /**
+   * Email + organic channel layer. Attached fresh at API read time; never
+   * trusted from client/session caches older than the current shape.
+   */
+  channelSignals?: StrategyChannelSignals | null;
+  journeyGoal?: StrategyJourneyGoal | null;
 };
 
 /** Keys persisted in `strategy_insights_cards` — excludes comparison-only insight augmentations. */

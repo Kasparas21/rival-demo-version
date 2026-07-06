@@ -18,44 +18,44 @@ export const WITHOUT_RIVAL_STACK: StackTool[] = [
 ];
 
 export const WITHOUT_RIVAL_PAIN_POINTS = [
-  "Cross-platform funnels — built manually in spreadsheets",
-  "Per-competitor timelines — one tool at a time",
-  "Weekly test ideas — guesswork, not scrape data",
+  "Cross-platform funnels - built manually in spreadsheets",
+  "Per-competitor timelines - one tool at a time",
+  "Weekly test ideas - guesswork, not scrape data",
   "6 logins, 6 invoices, zero shared context",
-  "No strategy map — just a pile of ads",
+  "No strategy map - just a pile of ads",
   "Monday mornings lost to tab-switching",
 ] as const;
 
 /** Shorter pain points for mobile stack card. */
 export const WITHOUT_RIVAL_PAIN_POINTS_MOBILE = [
   "Funnels built in spreadsheets",
-  "Timelines — one tool at a time",
+  "Timelines - one tool at a time",
   "Test ideas from guesswork",
   "6 logins, zero shared context",
-  "No strategy map — just ads",
+  "No strategy map - just ads",
 ] as const;
 
 export const WITHOUT_RIVAL_INTRO_MOBILE =
-  "6 tools, 6 logins — stitched together by hand every week.";
+  "6 tools, 6 logins - stitched together by hand every week.";
 
 export const WITH_RIVAL_FEATURES = [
-  "Add a competitor by domain — all 6 platforms",
+  "Add a competitor by domain - all 6 platforms",
   "Auto-refresh + timelines built in",
   "Funnel + landing-page archive",
   "AI angles + weekly Three Moves email",
   "Think in rivals, not networks",
   "Stealable Angles vs your own ad library",
   "Monday Activity Feed + digest email",
-  "One login — no per-platform upcharges",
+  "One login - no per-platform upcharges",
 ] as const;
 
 /** Fewer, shorter bullets for mobile stack card. */
 export const WITH_RIVAL_FEATURES_MOBILE = [
-  "Add competitor by domain — all 6 platforms",
+  "Add competitor by domain - all 6 platforms",
   "Auto-refresh + timelines built in",
   "Funnel + landing-page archive",
   "AI angles + weekly Three Moves",
-  "One login — no per-platform fees",
+  "One login - no per-platform fees",
 ] as const;
 
 export const WITH_RIVAL_PLATFORMS = [

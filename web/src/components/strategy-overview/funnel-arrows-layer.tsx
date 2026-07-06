@@ -11,20 +11,23 @@ type Props = {
   edges: FunnelEdgePayload[];
   layout: Map<string, FunnelCellLayoutEntry>;
   cells: { id: string; platform: string; funnelStage: FunnelStage }[];
+  /** When set, skip internal buildFunnelArrows (used for merged paid + channel arrows). */
+  prebuiltArrows?: ReturnType<typeof buildFunnelArrows>;
   onEdgeHover?: (edge: { reasoning: string; confidence: number } | null) => void;
 };
 
-export function FunnelArrowsLayer({ edges, layout, cells, onEdgeHover }: Props) {
+export function FunnelArrowsLayer({ edges, layout, cells, prebuiltArrows, onEdgeHover }: Props) {
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   const arrows = useMemo(
     () =>
+      prebuiltArrows ??
       buildFunnelArrows({
         edges,
         layout,
         cells,
       }),
-    [edges, layout, cells]
+    [prebuiltArrows, edges, layout, cells],
   );
 
   if (arrows.length === 0) return null;
@@ -53,6 +56,9 @@ export function FunnelArrowsLayer({ edges, layout, cells, onEdgeHover }: Props) 
         </defs>
         {arrows.map((a) => {
           const active = hoverId === a.id;
+          const isChannel = a.id.startsWith("ch_");
+          const baseWidth = isChannel ? 2.75 : a.dashed ? 2.5 : 3.5;
+          const activeWidth = isChannel ? 3.75 : 4.5;
           return (
             <g
               key={a.id}
@@ -78,11 +84,11 @@ export function FunnelArrowsLayer({ edges, layout, cells, onEdgeHover }: Props) 
                 d={a.path}
                 fill="none"
                 stroke={a.dashed ? a.fromColor : `url(#${a.gradId})`}
-                strokeWidth={active ? 4.5 : a.dashed ? 2.5 : 3.5}
-                strokeDasharray={a.dashed ? "12 8" : undefined}
+                strokeWidth={active ? activeWidth : baseWidth}
+                strokeDasharray={a.dashed ? "10 7" : undefined}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity={a.dashed ? 0.78 : 0.95}
+                opacity={isChannel ? (active ? 0.92 : 0.72) : a.dashed ? 0.78 : 0.95}
                 className={a.dashed ? "rival-funnel-arrow-dash" : undefined}
               />
               <polygon
@@ -91,6 +97,7 @@ export function FunnelArrowsLayer({ edges, layout, cells, onEdgeHover }: Props) 
                 stroke={a.toColor}
                 strokeWidth={1}
                 strokeLinejoin="round"
+                opacity={isChannel ? 0.85 : 1}
               />
             </g>
           );

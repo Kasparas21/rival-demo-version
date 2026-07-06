@@ -18,20 +18,16 @@ const LandingBelowFoldSections = dynamic(
 
 type Props = {
   copy: LandingCopy;
-  showFeatures: boolean;
+  /** When true, page background is rendered by the parent `LandingPostHeroBackdrop`. */
+  sharedBackdrop?: boolean;
 };
 
 function LandingBelowFoldPlaceholder() {
-  return (
-    <div
-      aria-hidden
-      className="relative isolate min-h-[120vh] bg-gradient-to-b from-[#f7fbff] to-[#f4fbf4]"
-    />
-  );
+  return <div aria-hidden className="relative min-h-[120vh]" />;
 }
 
-/** Defers below-fold landing JS until after first paint / idle — keeps hero interactive sooner. */
-export function LandingBelowFold({ copy, showFeatures }: Props) {
+/** Defers below-fold landing JS until after first paint / idle - keeps hero interactive sooner. */
+export function LandingBelowFold({ copy, sharedBackdrop = false }: Props) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -50,5 +46,5 @@ export function LandingBelowFold({ copy, showFeatures }: Props) {
     return <LandingBelowFoldPlaceholder />;
   }
 
-  return <LandingBelowFoldSections copy={copy} showFeatures={showFeatures} />;
+  return <LandingBelowFoldSections copy={copy} sharedBackdrop={sharedBackdrop} />;
 }
