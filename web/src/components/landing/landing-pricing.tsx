@@ -4,12 +4,12 @@ import { useState } from "react";
 import { Check, ShieldCheck, User, Users } from "lucide-react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
-import { landingSectionHeadlineClasses } from "@/components/landing/landing-headline-highlight";
+import { landingSectionHeadlineClasses, LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { HeroVariantBGlowCta } from "@/components/landing/hero-variant-b-glow-cta";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import type { BillingPeriod } from "@/lib/billing/config";
-import { formatPlanPrice, PLAN_PRICE_SYMBOL } from "@/lib/billing/plan-price-format";
+import { formatLandingPlanPrice, LANDING_PRICE_SYMBOL } from "@/lib/billing/plan-price-format";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { LandingCopy, LandingPlanMetricHighlight, LandingPlanOffer } from "@/lib/i18n/landing/types";
 
@@ -76,7 +76,7 @@ function formatPerCompetitorAmount(monthlyUsd: number, competitorCount: number):
   const perUnit = monthlyUsd / competitorCount;
   const rounded = Math.round(perUnit * 100) / 100;
   const amount = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
-  return `${PLAN_PRICE_SYMBOL}${amount}`;
+  return `${LANDING_PRICE_SYMBOL}${amount}`;
 }
 
 function ProPopularGlassBadge({
@@ -258,14 +258,14 @@ function planPriceDisplay(
 
   if (billing === "monthly") {
     return {
-      primary: formatPlanPrice(monthlyUsd),
+      primary: formatLandingPlanPrice(monthlyUsd),
       secondary: labels.billedMonthly,
       strikethroughUsd: originalMonthlyUsd,
     };
   }
 
   return {
-    primary: formatPlanPrice(annualMonthlyUsd),
+    primary: formatLandingPlanPrice(annualMonthlyUsd),
     secondary: fillCopyTemplate(labels.billedAnnually, { yearlyUsd: annualYearlyUsd }),
     strikethroughUsd: annualMonthlyUsd < monthlyUsd ? monthlyUsd : undefined,
   };
@@ -329,7 +329,7 @@ function PricingCard({
               isPro ? "text-white/50" : "text-gray-400"
             }`}
           >
-            <span className="text-sm font-medium line-through">{formatPlanPrice(price.strikethroughUsd)}</span>
+            <span className="text-sm font-medium line-through">{formatLandingPlanPrice(price.strikethroughUsd)}</span>
             <span className="text-sm font-medium line-through">{labels.perMonth}</span>
           </div>
         ) : null}
@@ -429,7 +429,9 @@ export function LandingPricing({ copy }: Props) {
           id="pricing"
           className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
         >
-          {copy.title}
+          {copy.titleLine1}
+          <br />
+          <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
         </h2>
 
         <div className="relative mx-auto mt-4 max-w-2xl overflow-hidden rounded-2xl border border-[#95C14B]/30 bg-[#f3f9e8]/78 px-4 py-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_10px_32px_-16px_rgba(149,193,75,0.22)] backdrop-blur-2xl backdrop-saturate-[1.45] ring-1 ring-[#95C14B]/15 sm:px-5 sm:py-3.5 sm:text-center">

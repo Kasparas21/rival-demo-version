@@ -22,7 +22,7 @@ export default function LandingHome({ copy, locale }: Props) {
     <div className="w-full overflow-x-clip font-sans text-[#1a1a1a] antialiased">
       <LandingHeader copy={copy.header} locale={locale} />
       <div className="w-full overflow-x-clip">
-        <LandingHeroVariantB headline={copy.hero.headline} trialCtaLabel={copy.hero.trialCta} />
+        <LandingHeroVariantB hero={copy.hero} />
 
         <div className="relative z-20 -mt-6 sm:-mt-10">
           <div
@@ -42,7 +42,7 @@ export default function LandingHome({ copy, locale }: Props) {
           />
         </div>
 
-        <LandingBelowFold copy={copy} showFeatures={false} />
+        <LandingBelowFold copy={copy} />
       </div>
     </div>
   );

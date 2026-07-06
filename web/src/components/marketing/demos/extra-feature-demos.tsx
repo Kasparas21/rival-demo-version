@@ -12,6 +12,7 @@ import {
 
 import { DemoSectionHeader } from "@/components/landing/hero-variant-b-demo/chrome";
 import { DemoActivityScoreCard } from "@/components/marketing/demos/demo-activity-score-card";
+import { EmailMarketingPreview } from "@/components/feature-previews/email-marketing-preview";
 import { PLATFORMS, type PlatformName } from "@/components/feature-previews/platform-utils";
 import { DEMO_COMPARISON, DEMO_YOUR_BRAND, DEMO_COMPETITOR } from "@/lib/landing/hero-variant-b-demo-data";
 
@@ -23,7 +24,7 @@ const THREE_MOVES = [
     chip: "bg-amber-100 text-amber-900",
     title: "Replace brand-only Google ads with proof-led hooks",
     evidence:
-      "They run 4 price-angle Meta ads live 90+ days — you run 0. Their longest-running proof hook outperforms your generic brand line by lifespan.",
+      "They run 4 price-angle Meta ads live 90+ days - you run 0. Their longest-running proof hook outperforms your generic brand line by lifespan.",
     primary: "Create brief",
     secondary: "See their ads",
   },
@@ -45,7 +46,7 @@ const THREE_MOVES = [
     chip: "bg-blue-100 text-blue-800",
     title: "Test their top LinkedIn case-study hook on Meta",
     evidence:
-      "MOF case-study ads on LinkedIn — 6 live, avg 48 days — not in your library. Steal the social-proof frame for Meta TOF.",
+      "MOF case-study ads on LinkedIn - 6 live, avg 48 days - not in your library. Steal the social-proof frame for Meta TOF.",
     primary: "Create brief",
     secondary: "See their ads",
   },
@@ -60,7 +61,7 @@ const STEALABLE_ROWS = [
 
 const DIGEST_BULLETS = [
   "New angle launched: \"Free consultation this week\" on Meta (3 new creatives).",
-  "Platform shift: Google spend signals up — 2 new comparison keywords detected.",
+  "Platform shift: Google spend signals up - 2 new comparison keywords detected.",
   "Budget move: LinkedIn MOF ads increased from 4 → 6 live creatives.",
   "Creative refresh: TikTok UGC hook retired after 52 days; replaced with creator duet.",
 ] as const;
@@ -167,7 +168,7 @@ export function DemoStealableAnglesMarketingView() {
     <div className="space-y-5">
       <DemoSectionHeader
         title="Stealable angles"
-        description={`${DEMO_COMPARISON.themLabel} vs ${DEMO_COMPARISON.youLabel} — gaps ranked by opportunity`}
+        description={`${DEMO_COMPARISON.themLabel} vs ${DEMO_COMPARISON.youLabel} - gaps ranked by opportunity`}
       />
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <table className="min-w-full text-left text-sm">
@@ -218,7 +219,7 @@ export function DemoMondayDigestMarketingView() {
     <div className="mx-auto max-w-xl">
       <DemoSectionHeader
         title="Monday digest"
-        description="Weekly email after each scrape — launches, kills, and platform shifts"
+        description="Weekly email after each scrape - launches, kills, and platform shifts"
       />
       <article className="overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-md">
         <div className="border-b border-[#e5e7eb] bg-[#f8fafc] px-5 py-4">
@@ -265,7 +266,7 @@ export function DemoPlatformPrioritizationMarketingView() {
     <div className="space-y-4">
       <DemoSectionHeader
         title="Smart platform prioritization"
-        description="PRIMARY · SECONDARY · MINIMAL · INACTIVE — based on live ad volume"
+        description="PRIMARY · SECONDARY · MINIMAL · INACTIVE - based on live ad volume"
       />
       <div className="rounded-2xl border border-[#e5e7eb] bg-white p-4 shadow-sm">
         <label className="block text-sm font-semibold text-[#374151]">
@@ -319,6 +320,18 @@ export function DemoActivityScoreMarketingView() {
         <ChevronDown className={`size-4 transition ${expanded ? "rotate-180" : ""}`} />
       </button>
       {expanded ? <DemoActivityScoreCard /> : null}
+    </div>
+  );
+}
+
+export function DemoEmailMarketingMarketingView() {
+  return (
+    <div className="space-y-4">
+      <DemoSectionHeader
+        title="Email marketing intelligence"
+        description={`Captured promos, flows, and cadence for ${DEMO_COMPETITOR.name}`}
+      />
+      <EmailMarketingPreview />
     </div>
   );
 }

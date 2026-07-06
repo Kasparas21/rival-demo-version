@@ -12,10 +12,10 @@ import { HeroVariantBDemoShell } from "@/components/landing/hero-variant-b-demo/
 import type { DemoPlatform } from "@/lib/landing/hero-variant-b-demo-data";
 import {
   DemoActivityScoreMarketingView,
+  DemoEmailMarketingMarketingView,
   DemoMondayDigestMarketingView,
   DemoPlatformPrioritizationMarketingView,
   DemoStealableAnglesMarketingView,
-  DemoThreeMovesMarketingView,
 } from "@/components/marketing/demos/extra-feature-demos";
 
 const DemoAdLibraryView = dynamic(
@@ -61,26 +61,30 @@ const DemoComparisonView = dynamic(
 export type MarketingFeatureDemoId =
   | "ad-library"
   | "strategy-map"
-  | "three-moves"
   | "stealable-angles"
   | "copy-vault"
   | "timeline"
   | "activity-score"
   | "audience-inference"
   | "monday-digest"
-  | "platform-prioritization";
+  | "platform-prioritization"
+  | "email-marketing";
 
 type FeatureDemoConfig = {
   mainTab: CompetitorPageTabId;
   subTab: CompetitorSubTabId;
   useShell: boolean;
-  customView?: "three-moves" | "stealable-angles" | "monday-digest" | "platform-prioritization" | "activity-score";
+  customView?:
+    | "stealable-angles"
+    | "monday-digest"
+    | "platform-prioritization"
+    | "activity-score"
+    | "email-marketing";
 };
 
 const FEATURE_DEMO_CONFIG: Record<MarketingFeatureDemoId, FeatureDemoConfig> = {
   "ad-library": { mainTab: "ads library", subTab: "all", useShell: true },
   "strategy-map": { mainTab: "insights", subTab: "strategy-map", useShell: true },
-  "three-moves": { mainTab: "comparison", subTab: "all", useShell: false, customView: "three-moves" },
   "stealable-angles": { mainTab: "comparison", subTab: "all", useShell: false, customView: "stealable-angles" },
   "copy-vault": { mainTab: "audience-copy", subTab: "copy-vault", useShell: true },
   timeline: { mainTab: "tests", subTab: "timeline", useShell: true },
@@ -92,6 +96,12 @@ const FEATURE_DEMO_CONFIG: Record<MarketingFeatureDemoId, FeatureDemoConfig> = {
     subTab: "all",
     useShell: false,
     customView: "platform-prioritization",
+  },
+  "email-marketing": {
+    mainTab: "ads library",
+    subTab: "all",
+    useShell: false,
+    customView: "email-marketing",
   },
 };
 
@@ -105,8 +115,6 @@ function DemoViewFallback() {
 
 function renderCustomView(view: FeatureDemoConfig["customView"]) {
   switch (view) {
-    case "three-moves":
-      return <DemoThreeMovesMarketingView />;
     case "stealable-angles":
       return <DemoStealableAnglesMarketingView />;
     case "monday-digest":
@@ -115,6 +123,8 @@ function renderCustomView(view: FeatureDemoConfig["customView"]) {
       return <DemoPlatformPrioritizationMarketingView />;
     case "activity-score":
       return <DemoActivityScoreMarketingView />;
+    case "email-marketing":
+      return <DemoEmailMarketingMarketingView />;
     default:
       return null;
   }
@@ -163,7 +173,7 @@ type Props =
 export function MarketingProductDemo(props: Props) {
   const config =
     props.mode === "feature"
-      ? FEATURE_DEMO_CONFIG[props.featureId]
+      ? (FEATURE_DEMO_CONFIG[props.featureId] ?? FEATURE_DEMO_CONFIG["ad-library"])
       : { mainTab: "ads library" as const, subTab: "all" as const, useShell: true };
 
   const [mainTab, setMainTab] = useState<CompetitorPageTabId>(config.mainTab);

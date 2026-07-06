@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { canEnableBrief, canEnableReports, ensureAutopilotSettings, rowToAutopilotSettings, stripAgencyOnlyFields, sanitizeAutopilotSettingsPatch } from "@/lib/autopilot/settings-db";
 import { loadAutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
 import { isAutopilotDevFireAllowed } from "@/lib/autopilot/is-autopilot-dev-fire-allowed";
+import { sendAutopilotEnabledEmail } from "@/lib/autopilot/send-autopilot-enabled-email";
 import { autopilotSettingsPutSchema } from "@/lib/autopilot/settings-schema";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -75,7 +76,8 @@ export async function PUT(req: Request): Promise<NextResponse> {
   }
 
   const billing = await getBillingEntitlement(supabase, user.id);
-  await ensureAutopilotSettings(supabase, user.id);
+  const priorSettings = await ensureAutopilotSettings(supabase, user.id);
+  const wasEnabled = priorSettings.enabled === true;
 
   let patch: Record<string, unknown> = { ...parsed.data };
 
@@ -115,6 +117,23 @@ export async function PUT(req: Request): Promise<NextResponse> {
   }
 
   const settings = rowToAutopilotSettings(updated as Record<string, unknown>);
+
+  if (!wasEnabled && settings.enabled && user.email?.trim()) {
+    try {
+      const mail = await sendAutopilotEnabledEmail({
+        to: user.email.trim(),
+        userId: user.id,
+        channels: settings.watch_channels,
+        slackWebhookConfigured: Boolean(settings.slack_webhook_url?.trim()),
+      });
+      if (!mail.ok) {
+        console.warn("[autopilot/settings] enable confirmation email failed:", mail.error);
+      }
+    } catch (e) {
+      console.warn("[autopilot/settings] enable confirmation email error", e);
+    }
+  }
+
   const deliveryStatus = await loadAutopilotDeliveryStatus(supabase, user.id, settings, user.email ?? null);
   return NextResponse.json({
     ok: true,

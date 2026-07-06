@@ -5,9 +5,9 @@ export const landingCopyNl: LandingCopy = {
   ...landingCopyEn,
   locale: "nl",
   meta: {
-    title: "Spy Rival - #1 gratis adspy-tool",
+    title: "Spy Rival - Concurrenten bespioneren op autopilot | #1 adspy-tool",
     description:
-      "Spy Rival is het #1 gratis adspy-tool voor concurrent-ads — Meta, Google, YouTube, TikTok, LinkedIn, Pinterest en Snapchat in één dashboard.",
+      "Rival draait je concurrentiespionage op autopilot - de enige tool die paid ads, organische marketing en e-mailmarketing 24/7 volgt, met MCP-toegang vanuit Claude & ChatGPT.",
   },
   header: {
     navItems: [
@@ -23,11 +23,13 @@ export const landingCopyNl: LandingCopy = {
   },
   hero: {
     headline: {
-      line1Prefix: "#1 gratis ",
-      highlight: "adspy-tool",
+      line1Prefix: "concurrenten bespioneren ",
+      highlight: "op autopilot",
       line2: "",
       subline:
-        "Spy Rival is het beste adspy-tool om elke concurrent-ad te volgen op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat — alles in één dashboard.",
+        "Volg concurrenten op ads, organic en e-mail in één platform - met ad-bibliotheken, strategy maps en alerts bij wijzigingen.",
+      sublineMobile:
+        "Concurrent ads, organic en e-mail - ad-bibliotheken, strategy maps en alerts in één platform.",
     },
     trialCta: "GRATIS PROBEREN",
     platformTrialAria: "Start proef met {platform}",
@@ -35,28 +37,198 @@ export const landingCopyNl: LandingCopy = {
     marketersPill: "Gebouwd voor performance marketeers",
     brandMarqueeAria: "Vertrouwd door performance marketeers",
     brandMarqueeLabel: "Vertrouwd door performance marketeers",
+    coverage: {
+      chips: [
+        { key: "paid", label: "Paid ads" },
+        { key: "organic", label: "Organic" },
+        { key: "email", label: "E-mail" },
+        { key: "autopilot", label: "Autopilot" },
+        {
+          key: "mcp",
+          label: "MCP",
+          href: "/docs/mcp",
+          linkAriaLabel: "Leer hoe je Rival via MCP koppelt aan Claude en ChatGPT",
+        },
+      ],
+    },
+  },
+  howItWorks: {
+    titleLine1: "van domein naar",
+    titleHighlight: "autopilot",
+    timeBadge: "live in minder dan 5 minuten",
+    steps: [
+      {
+        title: "Plak een concurrent-domein",
+        body: "URL plakken. Geen ad-library-tabs, geen spreadsheets, geen setup-call.",
+      },
+      {
+        title: "Rival scant elk kanaal",
+        body: "Betaalde ads, organische posts en e-mails komen automatisch binnen over zes platformen.",
+      },
+      {
+        title: "Autopilot kijkt 24/7",
+        body: "Slack- en e-mailalerts wanneer concurrenten ads, posts of promo's lanceren.",
+      },
+    ],
+    cta: "GRATIS PROBEREN",
+  },
+  autopilot: {
+    titleLine1: "je nieuwe",
+    titleHighlight: "24/7 spionage-medewerker",
+    subtitle:
+      "Eén keer aanzetten. Autopilot houdt elke concurrent dag en nacht in de gaten - ads, organische posts en inboxen - en pingt je in Slack en per e-mail.",
+    stats: [
+      { value: "24/7", label: "Altijd op wacht", sub: "elke concurrent, elk kanaal" },
+      { value: "~1u", label: "Vangt nieuwe launches", sub: "meteen, niet weken later" },
+      { value: "Slack", label: "Directe alerts", sub: "e-mail digests ook" },
+    ],
+    feed: {
+      title: "Nachtdienst-rapport",
+      liveLabel: "LIVE",
+      items: [
+        {
+          time: "02:14",
+          tag: "ad",
+          tagLabel: "AD",
+          text: "SmileCo lanceerde 4 nieuwe Meta-ads - nieuwe kortingsangle gedetecteerd",
+        },
+        {
+          time: "03:47",
+          tag: "email",
+          tagLabel: "E-MAIL",
+          text: "Winback-flow vastgelegd: 20%-aanbieding, 3-mail-reeks",
+        },
+        {
+          time: "05:22",
+          tag: "organic",
+          tagLabel: "ORGANISCH",
+          text: "Nieuw TikTok-hookformat - 3e repost deze week",
+        },
+        {
+          time: "06:38",
+          tag: "page",
+          tagLabel: "PAGINA",
+          text: "Landingspagina gewijzigd - nieuwe prijstabel gearchiveerd",
+        },
+        {
+          time: "07:00",
+          tag: "report",
+          tagLabel: "RAPPORT",
+          text: "Autopilot-alert naar Slack - nieuwe Meta-launch gedetecteerd",
+        },
+      ],
+      footer: "…allemaal terwijl jij sliep",
+      brief: {
+        title: "Je Autopilot nacht-digest",
+        highlights: [
+          "SmileCo lanceerde 4 Meta-ads met nieuwe 0%-financieringsangle",
+          "BrightDental startte een 4-mail winback-flow met 20% aanbieding",
+          "NovaSmile repostte een bewezen TikTok-hook voor de derde keer",
+        ],
+        cta: "Open Autopilot in Rival",
+      },
+    },
+    cta: "ZET JE SPIONAGE OP AUTOPILOT",
+  },
+  coverage: {
+    titleLine1: "bespioneer hun",
+    titleHighlight: "volledige marketing",
+    subtitle:
+      "Elk kanaal dat ze gebruiken - plus de intelligencelaag die laat zien wat werkt, wat ze testen en wat ze hebben gestopt.",
+    groups: [
+      {
+        label: "Elk kanaal dat ze gebruiken",
+        cards: [
+          {
+            key: "paid",
+            title: "Paid ads",
+            tagline: "Elke actieve ad, 6 platformen.",
+          },
+          {
+            key: "organic",
+            title: "Organisch",
+            tagline: "Hun posts, hooks & formats.",
+          },
+          {
+            key: "email",
+            title: "E-mailmarketing",
+            tagline: "Elke promo, flow & reeks.",
+          },
+        ],
+      },
+      {
+        label: "Plus de analyselaag",
+        cards: [
+          {
+            key: "strategy-map",
+            title: "Strategy Map",
+            tagline: "Platform x funnel - hun hele playbook.",
+          },
+          {
+            key: "landing-tests",
+            title: "Landingpagina-tests",
+            tagline: "A/B-varianten en welke pagina wint.",
+          },
+          {
+            key: "winners",
+            title: "Winners & losers",
+            tagline: "Bewezen ads vs. snel gestopte creatives.",
+          },
+        ],
+      },
+    ],
+    cta: "Ontdek alle features",
+  },
+  mcp: {
+    titleLine1: "chat met je",
+    titleHighlight: "spionagedata",
+    subtitle:
+      "Rival koppelt direct aan Claude en ChatGPT via MCP. Stel vragen over je concurrenten in gewone taal - je AI antwoordt met live data uit je Rival-workspace.",
+    chat: {
+      connectedLabel: "Claude - gekoppeld aan Rival",
+      userMsg: "Wat hebben mijn concurrenten deze week gelanceerd?",
+      replyIntro: "3 opvallende Autopilot-alerts van je gevolgde concurrenten:",
+      replyBullets: [
+        "SmileCo lanceerde 6 Meta-ads met een nieuwe '0% financiering'-angle",
+        "BrightDental startte een 4-mail winback-flow met 20% korting",
+        "NovaSmile maakte van z'n beste TikTok-hook een paid ad - bewezen winner",
+      ],
+      replyOutro: "Zal ik tegen-angles opstellen voor die financieringspush?",
+      inputPlaceholder: "Vraag alles over je concurrenten…",
+    },
+    worksWith: "Werkt met",
+    clients: ["Claude", "ChatGPT", "Cursor", "Claude Code"],
+    cta: "IN 2 MINUTEN INGESTELD",
   },
   features: {
     titleLine1: "van concurrent-ads naar jouw",
     titleHighlight: "wekelijkse actieplan in 30 seconden",
     subtitle:
-      "Rival haalt elke actieve ad van concurrenten over 6 platformen, decodeert hun funnel en geeft de drie moves voor deze week. Eén tool vervangt zes tabbladen.",
+      "Betaalde ads, organic, e-mail, Autopilot-alerts en MCP - één login vervangt zes tools.",
+    capabilitiesLabel: "De volledige stack in één plan",
+    capabilities: [
+      { key: "paid", label: "Betaalde ads" },
+      { key: "organic", label: "Organic" },
+      { key: "email", label: "E-mail" },
+      { key: "autopilot", label: "Autopilot" },
+      { key: "mcp", label: "MCP-chat" },
+    ],
     cards: [
       {
         imageAlt:
           "Ad Library-dashboard met ads van meerdere platformen en selectie voor Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat.",
-        title: "Elk platform waar ze adverteren — in één view.",
-        body: "Voeg een concurrent toe op domein — Rival haalt elke actieve ad over Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat. Foreplay toont Meta. AdSpy stopt bij Google. Rival toont alle zes — geen zes tabbladen en vier abonnementen meer.",
+        title: "Elk platform waar ze adverteren - in één view.",
+        body: "Zes ad-platformen. Eén domein. Geen tab-chaos meer.",
       },
       {
         imageAlt: "Strategy Map met platform-funnelraster en AI-strategie-samenvatting.",
         title: "Zie hun hele strategie op één kaart.",
-        body: "Rival legt activiteit per concurrent op een platform-funnelkaart — waar ze vol inzetten, testen of afbouwen — met een AI-samenvatting in één alinea. Het verschil tussen een stapel ads en een plan dat je ziet.",
+        body: "Platform-funnel plus organic, e-mail en landingpage-archief.",
       },
       {
-        imageAlt: "Three Moves-dashboard met wekelijkse tactische prioriteiten uit scrape-data.",
-        title: "Drie tactische moves elke week.",
-        body: "Geen 47-pagina concurrentrapporten meer. Rival leest wekelijks de strategie en levert precies drie moves — kopieer deze angle, verschuif budget, vernieuw creative — elk met echte scrape-cijfers, geen generiek advies.",
+        imageAlt: "Autopilot Slack-kanaal met nachtelijke concurrent-alerts voor ads, e-mail en organic.",
+        title: "Autopilot kijkt terwijl jij slaapt.",
+        body: "Slack- en e-mailalerts zodra concurrenten lanceren, pivoteren of promoten.",
       },
     ],
     cta: "Ontdek alle features",
@@ -80,62 +252,56 @@ export const landingCopyNl: LandingCopy = {
     painPoints: ["Spreadsheet-lijm", "Tabblad-wisselen", "Maandag giswerk"],
     painPointsMobile: ["Spreadsheets", "Tab-chaos", "Giswerk"],
     payTodayLabel: "Stack-kosten vandaag",
-    payTodayAmount: "£350",
+    payTodayAmount: "$350",
     payTodaySub: "/mnd · ~4 uur lijmwerk / week",
     payTodayBullets: [],
-    payTodayFooter: "£270+/mnd meer dan Rival",
+    payTodayFooter: "$270+/mnd meer dan Rival",
     payTodayFooterSub: "6 logins · geen strategy map",
     bottomBadge: "6 tools · nul opbrengst",
     withTitle: "Met Rival",
-    platformsLabel: "Alle 6 platformen inbegrepen",
-    platformsLabelMobile: "Alle 6 platformen",
-    features: [
-      "Concurrent op domein — alle 6 platformen",
-      "Auto-refresh + ingebouwde timelines",
-      "Funnel- + landingpage-archief",
-      "AI-angles + wekelijkse Three Moves-mail",
-      "Denk in rivalen, niet netwerken",
-      "Stealable Angles vs. eigen ad library",
-      "Maandag Activity Feed + digest-mail",
-      "Eén login — geen platformtoeslagen",
+    platformsLabel: "Alle 6 platformen",
+    platformsLabelMobile: "6 platformen",
+    capabilitiesLabel: "Plus de intelligence-laag",
+    capabilities: [
+      { key: "organic", label: "Organic" },
+      { key: "email", label: "E-mail" },
+      { key: "autopilot", label: "Autopilot" },
+      { key: "mcp", label: "MCP-chat" },
     ],
-    featuresMobile: [
-      "Concurrent op domein — alle 6 platformen",
-      "Auto-refresh + timelines",
-      "Funnel- + landingpage-archief",
-      "AI-angles + wekelijkse Three Moves",
-      "Eén login — geen platformkosten",
-    ],
-    onePlanLabel: "Eén plan · alle 6 platformen",
+    onePlanLabel: "Eén plan · volledige stack",
     zeroGlue: "Geen lijmwerk · één login",
-    saveLabel: "Bespaar £270+/maand vs. 6-tool stack",
+    saveLabel: "Bespaar $270+/maand vs. 6-tool stack",
     saveSub: "7-daagse proef · 1 concurrent · altijd opzegbaar",
-    saveSubMobile: "Bespaar £270+/maand · 7-daagse proef",
+    saveSubMobile: "Bespaar $270+/maand · 7-daagse proef",
     trialCta: "GRATIS PROBEREN",
   },
   reviews: {
-    titleLine1: "de voorkeurstool",
-    titleHighlight: "van performance marketeers",
-    starsAria: "{count} van 5 sterren",
+    title: "Vertrouwd door wie snel schakelt.",
+    subtitle: "Performance marketeers die schalen met Rival",
     photoAlt: "Foto van {name}",
+    featureImageAlt: "Foto uit de review van {name}",
+    socialProof: {
+      count: "400+",
+      label: "marketeers houden van Rival",
+      viewMore: "Meer bekijken",
+    },
     items: landingCopyEn.reviews.items.map((item, i) => {
       const nlTexts = [
-        "Vier tools vervangen door één. Three Moves geeft klanten bewijs, geen vage tips.",
-        "Alle zes platformen op één plek. Activity Feed vangt moves die Foreplay en AdSpy misten.",
+        "Vier tools vervangen door één. Autopilot-alerts geven klanten bewijs, geen vage tips.",
         "Stealable Angles toont gaten die we niet testen. Win-rate op nieuwe creative is omhoog.",
-        "Na proef met één concurrent dezelfde dag geabonneerd. Moves gevonden die ik weken miste.",
         "15 concurrenten, zes klanten, één login. Strategy Map direct in decks.",
-        "Maandag-koffieroutine kapot. Three Moves om 7 uur — ik moet echt werken. (Campagnes presteren beter.)",
+        "Na proef met één concurrent dezelfde dag geabonneerd. Moves gevonden die ik weken miste.",
       ];
       return { ...item, text: nlTexts[i] ?? item.text };
     }),
   },
   pricing: {
-    title: "kies je plan",
+    titleLine1: "kies je",
+    titleHighlight: "plan",
     riskFreeBadge: "Risicovrij",
     guaranteeTitle: "7 dagen gratis proberen, daarna 30 dagen geld terug",
     guaranteeBody:
-      "Start met een volledige proef van 7 dagen (kaart vereist). Als Rival in je eerste 30 dagen niets waardevols toont, mail ons voor volledige terugbetaling — geen vragen.",
+      "Start met een volledige proef van 7 dagen (kaart vereist). Als Rival in je eerste 30 dagen niets waardevols toont, mail ons voor volledige terugbetaling - geen vragen.",
     billingAria: "Factureringsperiode",
     monthly: "Maandelijks",
     yearly: "Jaarlijks",
@@ -147,7 +313,7 @@ export const landingCopyNl: LandingCopy = {
     perMonth: "/maand",
     perCompetitor: "{price} / concurrent",
     billedMonthly: "Maandelijks gefactureerd",
-    billedAnnually: "Jaarlijks gefactureerd (£{yearlyUsd}/jaar)",
+    billedAnnually: "Jaarlijks gefactureerd (${yearlyUsd}/jaar)",
     plans: [
       {
         slug: "starter",
@@ -158,11 +324,12 @@ export const landingCopyNl: LandingCopy = {
         annualYearlyUsd: 384,
         metricHighlight: { count: "5", label: "concurrenten" },
         features: [
-          "Alle 6 platformen — Meta, Google, TikTok, LinkedIn, Pinterest, Snapchat",
-          "Automatische refresh — geen handwerk",
-          "Volledige intelligence-suite — Strategy Map, Activity Score, Copy Vault & meer",
-          "Wekelijks Three Moves AI-rapport + maandag digest-mail",
-          "1 merk-workspace · tot 15 wissels/maand",
+          "Betaalde, organic & e-mail intelligence",
+          "Autopilot-alerts naar Slack + e-mail",
+          "MCP-toegang vanuit Claude & ChatGPT",
+          "6 ad-platformen · één dashboard",
+          "Strategy Map + Autopilot 24/7",
+          "1 workspace · tot 15 wissels/maand",
         ],
       },
       {
@@ -195,7 +362,7 @@ export const landingCopyNl: LandingCopy = {
         metricHighlight: { count: "75", label: "concurrent-slots" },
         plusLabel: "Alles in Pro, plus",
         features: [
-          "Tot 5 merk-workspaces — aparte concurrentenlijst per klant",
+          "Tot 5 merk-workspaces - aparte concurrentenlijst per klant",
           "Alle Pro-features per merk",
           "CSV-export · handmatige refresh · alertregels",
           "Dedicated onboarding voor je team",
@@ -210,11 +377,11 @@ export const landingCopyNl: LandingCopy = {
     items: [
       {
         q: "Hoe werkt de gratis proef?",
-        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen — geen kosten. Daarna vanaf £40/maand (Starter) of £384/jaar (20% korting) bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
+        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen - geen kosten. Daarna vanaf $40/maand (Starter) of $384/jaar (20% korting) bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
       },
       {
         q: "Hoe verschilt Rival van Foreplay of AdSpy?",
-        a: "Foreplay en AdSpy zijn ad libraries — ze tonen wat een concurrent draait. Rival is een intelligence-platform — toont ads én wat je ermee moet. (1) Alle 6 platformen out of the box. (2) Stealable Angles vergelijkt concurrent-angles met jouw library. (3) Three Moves levert wekelijkse aanbevelingen uit echte scrape-data.",
+        a: "Foreplay en AdSpy zijn ad libraries - ze tonen wat een concurrent draait. Rival is een intelligence-platform - toont ads en waarschuwt wanneer het ertoe doet. (1) Alle 6 platformen out of the box. (2) Stealable Angles vergelijkt concurrent-angles met jouw library. (3) Autopilot kijkt 24/7 en stuurt Slack- en e-mailalerts bij launches, pivots en promo's.",
       },
       {
         q: "Is dit legaal?",
@@ -222,15 +389,15 @@ export const landingCopyNl: LandingCopy = {
       },
       {
         q: "Hoe vaak worden data bijgewerkt?",
-        a: "Elke concurrent wordt automatisch ververst — Meta en Google elke paar dagen, andere iets langzamer. Pro-gebruikers kunnen handmatig refreshen. De meesten openen Rival maandag voor de weekwijzigingen.",
+        a: "Elke concurrent wordt automatisch ververst - Meta en Google elke paar dagen, andere iets langzamer. Pro-gebruikers kunnen handmatig refreshen. De meesten openen Rival maandag voor de weekwijzigingen.",
       },
       {
         q: "Kan ik ook mijn eigen merk volgen?",
-        a: "Ja, aanbevolen. Eigen merk ontgrendelt side-by-side stats, vergelijkingen en Stealable Angles — gaten die je moet testen.",
+        a: "Ja, aanbevolen. Eigen merk ontgrendelt side-by-side stats, vergelijkingen en Stealable Angles - gaten die je moet testen.",
       },
       {
         q: "Welke platformen ondersteunt Rival?",
-        a: "Meta (Facebook & Instagram), Google (Search, Display, YouTube), TikTok, LinkedIn, Pinterest en Snapchat. Alle zes in elk plan — geen platformtoeslagen.",
+        a: "Meta (Facebook & Instagram), Google (Search, Display, YouTube), TikTok, LinkedIn, Pinterest en Snapchat. Alle zes in elk plan - geen platformtoeslagen.",
       },
       {
         q: "Hoe nauwkeurig zijn de data?",
@@ -238,19 +405,19 @@ export const landingCopyNl: LandingCopy = {
       },
       {
         q: "Kan ik altijd opzeggen?",
-        a: "Ja. Eén klik in accountinstellingen — geen retentiegesprekken. Bij opzegging midden in de cyclus behoud je toegang tot period/einde.",
+        a: "Ja. Eén klik in accountinstellingen - geen retentiegesprekken. Bij opzegging midden in de cyclus behoud je toegang tot period/einde.",
       },
     ],
   },
   comparison: {
     titleLine1: "hoe wij scoren",
     titleHighlight: "t.o.v. andere tools",
-    subtitle: "Rival vs. Panoramata, AdSpyder, PowerAdSpy en AdLibrary.com — in één oogopslag.",
+    subtitle: "Rival vs. Panoramata, AdSpyder, PowerAdSpy en AdLibrary.com - in één oogopslag.",
     featureColumn: "Feature",
     yesAria: "Ja",
     noAria: "Nee",
     cta: "GRATIS PROBEREN",
-    ctaFootnote: "Het enige cross-platform concurrent-OS voor wekelijkse moves.",
+    ctaFootnote: "Het enige cross-platform concurrent-OS met Autopilot ingebouwd.",
     sections: landingCopyEn.comparison.sections.map((section) => ({
       ...section,
       title:
@@ -273,8 +440,8 @@ export const landingCopyNl: LandingCopy = {
     titleLine1: "zie wat je",
     titleHighlight: "concurrenten draaien",
     subtitle: "7 dagen gratis proberen.",
-    monthlyPrice: "£40/mnd",
-    annualPrice: "£32/mnd",
+    monthlyPrice: "$40/mnd",
+    annualPrice: "$32/mnd",
     monthlyLabel: "Maandelijks",
     annualLabel: "Jaarlijks",
     annualSaveBadge: "Bespaar 20%",
@@ -315,7 +482,7 @@ export const landingCopyNl: LandingCopy = {
   },
   jsonLd: {
     appDescription:
-      "#1 gratis adspy-tool voor concurrent-ads op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat.",
+      "Concurrentiespionage op autopilot - volgt paid ads, organische marketing en e-mailmarketing op Meta, Google, TikTok, LinkedIn, Pinterest en Snapchat, met MCP-toegang vanuit Claude en ChatGPT.",
     starterName: "Starter",
     proName: "Pro",
     agencyName: "Agency",

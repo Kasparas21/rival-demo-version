@@ -46,6 +46,8 @@ type Props = {
   onGoalNodeClick?: () => void;
   onEdgeHover?: (edge: { reasoning: string; confidence: number } | null) => void;
   mapHeightClass?: string;
+  /** Landing / thumbnail embed — tighter legend, no controls, zoomed-out fit */
+  compact?: boolean;
 };
 
 function FlowInner({
@@ -57,14 +59,20 @@ function FlowInner({
   onGoalNodeClick,
   onEdgeHover,
   fitContainerRef,
+  compact = false,
 }: Omit<Props, "mapKey"> & { fitContainerRef: RefObject<HTMLDivElement | null> }) {
   const { fitView } = useReactFlow();
 
   const runFit = useCallback(() => {
     requestAnimationFrame(() => {
-      fitView({ padding: 0.2, duration: 220, maxZoom: 1.1 });
+      fitView({
+        padding: compact ? 0.14 : 0.2,
+        duration: compact ? 0 : 220,
+        minZoom: compact ? 0.02 : 0.28,
+        maxZoom: compact ? 0.55 : 1.1,
+      });
     });
-  }, [fitView]);
+  }, [compact, fitView]);
 
   const platformRows = Array.isArray(map.platformNodes) ? map.platformNodes : [];
   const cellRows = Array.isArray(map.funnelCells) ? map.funnelCells : [];
@@ -374,6 +382,17 @@ function FlowInner({
         .rival-strategy-flow .react-flow__nodes {
           z-index: 2;
         }
+        .rival-strategy-flow--static .react-flow__node {
+          overflow: hidden;
+          pointer-events: none !important;
+          cursor: default !important;
+        }
+        .rival-strategy-flow--static .rival-funnel-arrow-dash {
+          animation: none;
+        }
+        .rival-strategy-flow--static .rival-funnel-arrow-group {
+          pointer-events: none !important;
+        }
         .rival-strategy-flow .react-flow__node {
           overflow: hidden;
         }
@@ -382,17 +401,23 @@ function FlowInner({
         }
       `}</style>
       <ReactFlow
-        className="rival-strategy-flow"
+        className={compact ? "rival-strategy-flow rival-strategy-flow--static" : "rival-strategy-flow"}
         nodes={nodes}
         edges={[]}
-        onNodesChange={onNodesChange}
+        onNodesChange={compact ? undefined : onNodesChange}
         nodeTypes={nodeTypes as never}
-        onNodeClick={handleNodeClick}
+        onNodeClick={compact ? undefined : handleNodeClick}
         nodesDraggable={false}
         nodesConnectable={false}
-        elementsSelectable
-        minZoom={0.28}
-        maxZoom={1.5}
+        elementsSelectable={!compact}
+        panOnDrag={!compact}
+        panOnScroll={!compact}
+        zoomOnScroll={!compact}
+        zoomOnPinch={!compact}
+        zoomOnDoubleClick={!compact}
+        preventScrolling={!compact}
+        minZoom={compact ? 0.02 : 0.28}
+        maxZoom={compact ? 0.55 : 1.5}
         proOptions={{ hideAttribution: true }}
       >
         {useCellsLayout && allArrows.length > 0 ? (
@@ -405,16 +430,18 @@ function FlowInner({
               funnelStage: c.funnelStage,
             }))}
             prebuiltArrows={allArrows}
-            onEdgeHover={onEdgeHover}
+            onEdgeHover={compact ? undefined : onEdgeHover}
           />
         ) : null}
         <Background variant={BackgroundVariant.Dots} gap={22} size={1.2} color="#cbd5e1" />
-        <Controls
-          position="bottom-center"
-          orientation="horizontal"
-          showInteractive={false}
-          className="!rounded-xl !border !border-slate-200/90 !bg-white/95 !shadow-lg"
-        />
+        {!compact ? (
+          <Controls
+            position="bottom-center"
+            orientation="horizontal"
+            showInteractive={false}
+            className="!rounded-xl !border !border-slate-200/90 !bg-white/95 !shadow-lg"
+          />
+        ) : null}
       </ReactFlow>
     </>
   );
@@ -427,6 +454,7 @@ export function StrategyMapFlow(props: Props) {
     channelSignals,
     journeyGoal,
     mapHeightClass = "h-[min(720px,82vh)]",
+    compact = false,
     ...rest
   } = props;
   const safeMap = normalizeStrategyMapPayload(map);
@@ -435,11 +463,13 @@ export function StrategyMapFlow(props: Props) {
   const hasGoal = hasJourneyGoal(journeyGoal);
 
   return (
-    <div className="w-full">
-      <StrategyMapLegend showChannels={hasChannels} showGoal={hasGoal} />
+    <div className={compact ? "flex h-full min-h-0 w-full flex-col" : "w-full"}>
+      <StrategyMapLegend showChannels={hasChannels} showGoal={hasGoal} compact={compact} />
       <div
         ref={containerRef}
-        className={`${mapHeightClass} w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]`}
+        className={`w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50/90 via-white to-slate-100/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] ${
+          compact ? "min-h-0 flex-1 pointer-events-none select-none touch-none" : mapHeightClass
+        }`}
       >
         <ReactFlowProvider>
           <FlowInner
@@ -448,6 +478,7 @@ export function StrategyMapFlow(props: Props) {
             channelSignals={channelSignals}
             journeyGoal={journeyGoal}
             fitContainerRef={containerRef}
+            compact={compact}
             {...rest}
           />
         </ReactFlowProvider>

@@ -377,6 +377,16 @@ html:has([data-dashboard-app]) body {
   animation: hero-headline-accent-color 4.5s linear infinite;
 }
 
+/** Below-hero section h2s — hero scale; dark base + flat royal blue on highlight spans. */
+.landing-section-headline {
+  color: #1a1a1a;
+}
+
+.landing-section-headline .hero-headline-accent {
+  animation: none;
+  color: #1d4ed8;
+}
+
 @keyframes hero-headline-accent-color {
   0%,
   100% {
@@ -630,16 +640,18 @@ html:has([data-dashboard-app]) body {
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.95) 0%,
-    rgba(0, 0, 0, 0.72) 38%,
-    rgba(0, 0, 0, 0.28) 58%,
-    transparent 72%
+    rgba(0, 0, 0, 0.78) 42%,
+    rgba(0, 0, 0, 0.38) 68%,
+    rgba(0, 0, 0, 0.12) 86%,
+    transparent 96%
   );
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0.95) 0%,
-    rgba(0, 0, 0, 0.72) 38%,
-    rgba(0, 0, 0, 0.28) 58%,
-    transparent 72%
+    rgba(0, 0, 0, 0.78) 42%,
+    rgba(0, 0, 0, 0.38) 68%,
+    rgba(0, 0, 0, 0.12) 86%,
+    transparent 96%
   );
 }
 
@@ -649,15 +661,17 @@ html:has([data-dashboard-app]) body {
   text-shadow: 0 1px 18px rgba(8, 28, 48, 0.22);
 }
 
+/* Variant B accent — flat royal blue so the highlight word pops off the sky. */
 .landing-hero-variant-b .hero-headline-accent {
-  color: inherit;
   animation: none;
+  color: #1d4ed8;
+  text-shadow: none;
 }
 
 .landing-hero-variant-b .hero-subline {
-  color: rgb(240 247 252 / 0.88);
+  color: rgb(23 37 61 / 0.68);
   font-weight: 500;
-  text-shadow: 0 1px 12px rgba(8, 28, 48, 0.18);
+  text-shadow: none;
 }
 
 .hero-variant-b-headline-accent {
@@ -1049,5 +1063,83 @@ html:has([data-dashboard-app]) body {
   .ad-detail-drawer-backdrop--entering,
   .ad-detail-drawer-backdrop--closing {
     animation: none;
+  }
+}
+
+/** MCP section — AI logos drifting horizontally behind the chat (motion blur is an SVG filter). */
+@keyframes mcp-logo-drift-a {
+  0%,
+  100% {
+    transform: translate3d(-26px, 0, 0);
+  }
+  50% {
+    transform: translate3d(30px, -8px, 0);
+  }
+}
+
+@keyframes mcp-logo-drift-b {
+  0%,
+  100% {
+    transform: translate3d(28px, 4px, 0);
+  }
+  50% {
+    transform: translate3d(-30px, -6px, 0);
+  }
+}
+
+@keyframes mcp-logo-drift-c {
+  0%,
+  100% {
+    transform: translate3d(-22px, -5px, 0);
+  }
+  50% {
+    transform: translate3d(24px, 6px, 0);
+  }
+}
+
+.landing-mcp-logo--a {
+  animation: mcp-logo-drift-a 11s ease-in-out infinite;
+}
+.landing-mcp-logo--b {
+  animation: mcp-logo-drift-b 13s ease-in-out infinite;
+}
+.landing-mcp-logo--c {
+  animation: mcp-logo-drift-c 9.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-mcp-logo--a,
+  .landing-mcp-logo--b,
+  .landing-mcp-logo--c {
+    animation: none;
+  }
+}
+
+/** Night-shift feed items — staggered rise once the section scrolls into view. */
+.landing-autopilot-feed-item {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.landing-scroll-reveal--visible .landing-autopilot-feed-item {
+  animation: landing-autopilot-feed-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes landing-autopilot-feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-autopilot-feed-item {
+    opacity: 1;
+    transform: none;
+    animation: none !important;
   }
 }

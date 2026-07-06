@@ -16,7 +16,7 @@ const CLOCK_SHELL = `block rounded-2xl border px-4 py-3 text-left shadow-[0_16px
 const DESKTOP_PIN_CLASS =
   "pointer-events-none fixed right-4 top-1/2 z-[45] hidden w-36 -translate-y-1/2 md:block";
 
-/** Pinned trial clock — desktop: right-center; mobile: below header. */
+/** Pinned trial clock - desktop: right-center; mobile: below header. */
 export function MarketingTrialCountdownWidget({ secondsLeft, expired }: Props) {
   if (expired) {
     return (

@@ -18,7 +18,6 @@ const LandingBelowFoldSections = dynamic(
 
 type Props = {
   copy: LandingCopy;
-  showFeatures: boolean;
 };
 
 function LandingBelowFoldPlaceholder() {
@@ -30,8 +29,8 @@ function LandingBelowFoldPlaceholder() {
   );
 }
 
-/** Defers below-fold landing JS until after first paint / idle — keeps hero interactive sooner. */
-export function LandingBelowFold({ copy, showFeatures }: Props) {
+/** Defers below-fold landing JS until after first paint / idle - keeps hero interactive sooner. */
+export function LandingBelowFold({ copy }: Props) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -50,5 +49,5 @@ export function LandingBelowFold({ copy, showFeatures }: Props) {
     return <LandingBelowFoldPlaceholder />;
   }
 
-  return <LandingBelowFoldSections copy={copy} showFeatures={showFeatures} />;
+  return <LandingBelowFoldSections copy={copy} />;
 }

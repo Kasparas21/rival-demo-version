@@ -23,7 +23,7 @@ type MenuPosition = {
 type Props = {
   currentLocale: Locale;
   ariaLabel: string;
-  /** `minimal` — small muted label for onboarding cards */
+  /** `minimal` - small muted label for onboarding cards */
   variant?: "default" | "minimal";
 };
 

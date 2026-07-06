@@ -35,7 +35,7 @@ function HeroVariantBDemoPlaceholder() {
   );
 }
 
-/** Loads the interactive hero demo after idle — mobile gets a longer defer to unblock taps. */
+/** Loads the interactive hero demo after idle - mobile gets a longer defer to unblock taps. */
 export function HeroVariantBDeferredDemo() {
   const [ready, setReady] = useState(false);
 

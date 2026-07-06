@@ -7,7 +7,7 @@ type Props = {
   className?: string;
 };
 
-/** GPU-friendly rise-in on first paint — no scroll trigger. */
+/** GPU-friendly rise-in on first paint - no scroll trigger. */
 export function HeroVariantBDemoEntrance({ children, className = "" }: Props) {
   return (
     <div

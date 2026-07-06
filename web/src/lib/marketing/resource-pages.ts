@@ -28,14 +28,14 @@ export const TUTORIAL_ITEMS: ResourceTutorial[] = [
     ],
   },
   {
-    title: "Act on Three Moves",
-    summary: "Your Monday playbook — three tactical recommendations, not a 40-page deck.",
+    title: "Turn on Autopilot 24/7",
+    summary: "Get Slack and email alerts when rivals launch, pivot, or promo.",
     steps: [
-      "Open Three Moves from the competitor dashboard or your weekly email.",
-      "Each move links to the ads that triggered the recommendation.",
-      "Prioritize by impact — copy this angle, shift budget, refresh creative.",
-      "Brief your team with one-click links to source ads.",
-      "Revisit next week — Rival refreshes after each scrape cycle.",
+      "Open Settings and enable Autopilot for your workspace.",
+      "Connect Slack or confirm your alert email.",
+      "Pick which competitors and channels to watch.",
+      "Rival scans overnight and flags fresh launches while you sleep.",
+      "Act on alerts in Slack or open the source ad in one click.",
     ],
   },
   {

@@ -1,4 +1,4 @@
-/** Solid white bridge under the hero — marquee overlaps with its own top fade. */
+/** Solid white bridge under the hero - marquee overlaps with its own top fade. */
 export function LandingHeroTransition() {
   return (
     <div

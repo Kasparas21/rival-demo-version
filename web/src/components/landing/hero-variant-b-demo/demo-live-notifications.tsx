@@ -14,7 +14,7 @@ const EXIT_MS = 240;
 
 type NotifPhase = "enter" | "exit" | "hidden";
 
-/** Compact alert toast — top-right of demo content, below header (won't cover tab arrows). */
+/** Compact alert toast - top-right of demo content, below header (won't cover tab arrows). */
 export function DemoLiveNotifications() {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<NotifPhase>("enter");

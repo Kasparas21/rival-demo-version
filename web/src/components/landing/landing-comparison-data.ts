@@ -2,7 +2,7 @@ export type CompetitorKey = "panoramata" | "adspyder" | "poweradspy" | "adlibrar
 
 export type ComparisonRow = {
   feature: string;
-  /** Shorter label for mobile comparison table — desktop uses `feature`. */
+  /** Shorter label for mobile comparison table - desktop uses `feature`. */
   featureMobile: string;
   rival: boolean;
   panoramata: boolean;
@@ -101,6 +101,47 @@ export const LANDING_COMPARISON_SECTIONS: ComparisonSection[] = [
         adspyder: true,
         poweradspy: true,
         adlibrary: true,
+      },
+    ],
+  },
+  {
+    title: "Beyond ad libraries",
+    rows: [
+      {
+        feature: "Organic social monitoring - posts, hooks, and formats",
+        featureMobile: "Organic social monitoring",
+        rival: true,
+        panoramata: false,
+        adspyder: false,
+        poweradspy: false,
+        adlibrary: false,
+      },
+      {
+        feature: "Competitor email capture - promos, flows, and sequences",
+        featureMobile: "Email flow capture",
+        rival: true,
+        panoramata: true,
+        adspyder: false,
+        poweradspy: false,
+        adlibrary: false,
+      },
+      {
+        feature: "24/7 Autopilot alerts to Slack and email",
+        featureMobile: "Autopilot Slack + email alerts",
+        rival: true,
+        panoramata: false,
+        adspyder: false,
+        poweradspy: false,
+        adlibrary: false,
+      },
+      {
+        feature: "MCP access - query live competitor data from Claude and ChatGPT",
+        featureMobile: "MCP for Claude & ChatGPT",
+        rival: true,
+        panoramata: false,
+        adspyder: false,
+        poweradspy: false,
+        adlibrary: false,
       },
     ],
   },

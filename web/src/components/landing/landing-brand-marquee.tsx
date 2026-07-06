@@ -71,7 +71,7 @@ type MarqueeProps = {
   label?: string;
 };
 
-/** Infinite logo strip — soft white gradient edges, subtle logos. */
+/** Infinite logo strip - soft white gradient edges, subtle logos. */
 export function LandingBrandMarquee({
   embedded = false,
   ariaLabel = "Brands and sectors Rival understands",

@@ -25,7 +25,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     name: "Multi-platform Ad Library",
     iconKey: "layout-grid",
     summary:
-      "Every active ad your competitor runs — Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat — in one searchable library.",
+      "Every active ad your competitor runs - Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat - in one searchable library.",
     why: "Stop juggling six tabs and four subscriptions just to see what they're running.",
     bullets: [
       "Filter by platform, status, or format in one click",
@@ -47,23 +47,10 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     ],
   },
   {
-    id: "three-moves",
-    name: "Three Moves",
-    iconKey: "sparkles",
-    summary:
-      "Three concrete tactical recommendations every week — copy this angle, shift this budget, refresh this creative.",
-    why: "Replace 47-page reports with moves you can act on Monday morning.",
-    bullets: [
-      "Each move tied to specific ads and numbers from your scrape",
-      "Prioritized by impact, not generic best practices",
-      "One-click brief links for your creative team",
-    ],
-  },
-  {
     id: "stealable-angles",
     name: "Stealable Angles",
     iconKey: "git-compare",
-    summary: "Side-by-side comparison of your ad angles vs a competitor's — with gaps ranked by opportunity.",
+    summary: "Side-by-side comparison of your ad angles vs a competitor's - with gaps ranked by opportunity.",
     why: "Find the hooks they run that you don't, without scrolling hundreds of ads.",
     bullets: [
       "Compare your library against any tracked competitor",
@@ -76,7 +63,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     name: "Copy Vault",
     iconKey: "book-open",
     summary:
-      "Every headline, hook, and CTA your competitor has run — sorted by lifespan so winners float to the top.",
+      "Every headline, hook, and CTA your competitor has run - sorted by lifespan so winners float to the top.",
     why: "Longest-running copy is proven copy. Rival surfaces it automatically.",
     bullets: [
       "Sort by lifespan or newest first",
@@ -88,7 +75,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     id: "timeline",
     name: "Timeline",
     iconKey: "timer",
-    summary: "A Gantt-style view of every ad's lifespan — what's live, what just launched, and what they killed.",
+    summary: "A Gantt-style view of every ad's lifespan - what's live, what just launched, and what they killed.",
     why: "See the rhythm of their creative testing without building spreadsheets.",
     bullets: [
       "Launch → last-seen dates on every creative",
@@ -113,7 +100,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     name: "Audience Inference",
     iconKey: "bar-chart",
     summary:
-      "AI-inferred audience profile from ad copy, creative, and platform mix — age range, tone, and primary channels.",
+      "AI-inferred audience profile from ad copy, creative, and platform mix - age range, tone, and primary channels.",
     why: "Understand who they're talking to even when targeting data isn't public.",
     bullets: [
       "Tone-of-voice tags from actual ad language",
@@ -125,7 +112,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     id: "monday-digest",
     name: "Monday Digest",
     iconKey: "mail",
-    summary: "A weekly email summarizing everything that changed — new angles, platform shifts, budget moves.",
+    summary: "A weekly email summarizing everything that changed - new angles, platform shifts, budget moves.",
     why: "Open your inbox Monday and know exactly what happened last week.",
     bullets: [
       "Bullet summary of launches, kills, and shifts",
@@ -138,7 +125,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     name: "Smart Platform Prioritization",
     iconKey: "sliders",
     summary: "Auto-classifies each platform as PRIMARY, SECONDARY, MINIMAL, or INACTIVE based on live ad volume.",
-    why: "Instantly see where they actually spend attention — not where they have a profile.",
+    why: "Instantly see where they actually spend attention - not where they have a profile.",
     bullets: [
       "Classification updates as ad counts change",
       "Compare prioritization across competitors",
@@ -150,7 +137,7 @@ export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     name: "Email Marketing Intelligence",
     iconKey: "mail",
     summary:
-      "Capture competitor newsletters and promos with a unique inbox address — AI summaries, offer codes, and send cadence.",
+      "Capture competitor newsletters and promos with a unique inbox address - AI summaries, offer codes, and send cadence.",
     why: "See what they email subscribers without signing up on every list yourself.",
     bullets: [
       "Unique tracking inbox per competitor",

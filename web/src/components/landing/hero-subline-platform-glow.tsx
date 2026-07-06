@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 
 const PLATFORM_NAMES = /(Meta|Google|TikTok|LinkedIn|Pinterest|Snapchat)/g;
 
-/** Brand neon — one tight halo per glyph via text-shadow. */
+/** Brand neon - one tight halo per glyph via text-shadow. */
 const PLATFORM_GLOW: Record<string, { neon: string }> = {
   Meta: { neon: "#1877f2" },
   Google: { neon: "#34a853" },

@@ -64,7 +64,7 @@ export function FeaturesPageHero() {
         </span>
       </h1>
       <p className="mx-auto mt-5 max-w-xl px-4 text-sm leading-relaxed text-gray-500 sm:text-base">
-        See exactly how Rival turns six fragmented ad libraries into one weekly action plan — and try each piece below.
+        See exactly how Rival turns six fragmented ad libraries into one weekly action plan - and try each piece below.
       </p>
     </div>
   );

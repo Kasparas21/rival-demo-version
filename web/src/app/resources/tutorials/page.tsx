@@ -8,7 +8,7 @@ import { getLandingCopy } from "@/lib/i18n/landing";
 export const metadata: Metadata = {
   title: "Tutorials | Rival",
   description:
-    "Step-by-step tutorials for Rival — add competitors, read the Strategy Map, act on Three Moves, and set up the Monday Digest.",
+    "Step-by-step tutorials for Rival - add competitors, read the Strategy Map, turn on Autopilot, and set up the Monday Digest.",
   alternates: { canonical: "/resources/tutorials" },
   openGraph: { url: "/resources/tutorials" },
 };
@@ -23,7 +23,7 @@ export default async function TutorialsPage() {
       locale={locale}
       breadcrumbLabel="Tutorials"
       pageTitle="tutorials"
-      pageSummary="Learn Rival in minutes — from your first competitor scrape to weekly Three Moves."
+      pageSummary="Learn Rival in minutes - from your first competitor domain to Autopilot alerts 24/7."
       items={TUTORIAL_ITEMS.map((item) => ({ type: "tutorial" as const, ...item }))}
     />
   );

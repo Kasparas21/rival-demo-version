@@ -29,6 +29,7 @@ const StrategyOverviewSidebar = dynamic(
 import {
   DEMO_ACTIVITY_SCORE,
   DEMO_COMPETITOR,
+  DEMO_STRATEGY_CHANNEL_SIGNALS,
   DEMO_STRATEGY_MAP,
 } from "@/lib/landing/hero-variant-b-demo-data";
 
@@ -76,7 +77,7 @@ function DemoActivityScoreCard() {
   );
 }
 
-/** Strategy Map tab — reuses production map flow + sidebar with static demo data. */
+/** Strategy Map tab - reuses production map flow + sidebar with static demo data. */
 export function DemoStrategyMapView() {
   const [edgeTip, setEdgeTip] = useState<{ reasoning: string; confidence: number } | null>(null);
 
@@ -106,7 +107,7 @@ export function DemoStrategyMapView() {
 
       {edgeTip ? (
         <div className="pointer-events-none fixed bottom-24 left-1/2 z-40 max-w-md -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-lg">
-          <span className="font-semibold"> {(edgeTip.confidence * 100).toFixed(0)}% — </span>
+          <span className="font-semibold"> {(edgeTip.confidence * 100).toFixed(0)}% - </span>
           {edgeTip.reasoning}
         </div>
       ) : null}
@@ -116,6 +117,7 @@ export function DemoStrategyMapView() {
           <StrategyMapFlow
             mapKey={mapKey}
             map={DEMO_STRATEGY_MAP}
+            channelSignals={DEMO_STRATEGY_CHANNEL_SIGNALS}
             onEdgeHover={setEdgeTip}
             mapHeightClass="h-[min(520px,58vh)]"
           />

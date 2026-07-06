@@ -1,6 +1,9 @@
+import { LandingHowItWorks } from "@/components/landing/landing-how-it-works";
+import { LandingAutopilot } from "@/components/landing/landing-autopilot";
 import { LandingComparison } from "@/components/landing/landing-comparison";
+import { LandingCoverage } from "@/components/landing/landing-coverage";
 import { LandingFAQ } from "@/components/landing/landing-faq";
-import { LandingFeatures } from "@/components/landing/landing-features";
+import { LandingMcp } from "@/components/landing/landing-mcp";
 import { LandingFinalCTA } from "@/components/landing/landing-final-cta";
 import { LandingFooter } from "@/components/landing/landing-footer";
 import {
@@ -14,21 +17,22 @@ import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 type Props = {
   copy: LandingCopy;
-  showFeatures: boolean;
 };
 
-export function LandingBelowFoldSections({ copy, showFeatures }: Props) {
+export function LandingBelowFoldSections({ copy }: Props) {
   return (
     <div className="relative isolate">
       <LandingPageBackground />
 
       <div className="relative z-10">
-        {showFeatures ? (
-          <>
-            <LandingFeatures copy={copy.features} />
-            <LandingSectionDivider />
-          </>
-        ) : null}
+        <LandingHowItWorks copy={copy.howItWorks} />
+        <LandingSectionDivider />
+        <LandingAutopilot copy={copy.autopilot} />
+        <LandingSectionDivider />
+        <LandingCoverage copy={copy.coverage} />
+        <LandingSectionDivider />
+        <LandingMcp copy={copy.mcp} />
+        <LandingSectionDivider />
         <LandingStackReplacement copy={copy.stackReplacement} />
         <LandingSectionDivider />
         <LandingReviews copy={copy.reviews} />
