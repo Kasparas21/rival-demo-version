@@ -1,9 +1,12 @@
 "use client";
 
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import LogoLoop, { type LogoImgItem, type LogoItem } from "@/components/ui/logo-loop";
+import type { LogoImgItem } from "@/components/ui/logo-loop";
 
 type MarqueeLogo = LogoImgItem & { brandName: string };
+
+/** Copies of the logo list forming the track. Even count → clean -50% loop. */
+const MARQUEE_COPIES = 6;
 
 const MARQUEE_LOGO_DIR = "/landing/brands/marquee/svg";
 
@@ -59,8 +62,6 @@ const MARQUEE_LOGOS_LIST: MarqueeLogo[] = [
   },
 ];
 
-const MARQUEE_LOGOS = MARQUEE_LOGOS_LIST satisfies LogoItem[];
-
 function stripImgClass() {
   return "!h-[var(--landing-marquee-slide-h)] w-auto max-w-[min(72vw,420px)] object-contain opacity-80 grayscale [image-rendering:auto]";
 }
@@ -77,8 +78,8 @@ export function LandingBrandMarquee({
   ariaLabel = "Brands and sectors Rival understands",
 }: MarqueeProps) {
   const track = (
-    <div className="relative z-[1] min-h-[var(--landing-marquee-slide-h)] opacity-50 [&_img]:pointer-events-none">
-      <div className="motion-reduce:block hidden py-1 sm:py-1.5">
+    <div className="relative z-[1] min-h-[var(--landing-marquee-slide-h)] [&_img]:pointer-events-none">
+      <div className="motion-reduce:block hidden py-1 opacity-50 sm:py-1.5">
         <ul className="flex flex-col items-center gap-6 px-4 sm:gap-7" role="list">
           {MARQUEE_LOGOS_LIST.map((entry) => (
             <li key={entry.src} className="flex w-full justify-center">
@@ -98,38 +99,33 @@ export function LandingBrandMarquee({
         </ul>
       </div>
 
-      <div className="motion-reduce:hidden min-h-[var(--landing-marquee-slide-h)] w-full">
-        <LogoLoop
-          logos={MARQUEE_LOGOS}
-          speed={96}
-          direction="left"
-          logoHeight={32}
-          gap={44}
-          hoverSpeed={12}
-          fadeOut
-          fadeOutColor="#ffffff"
-          ariaLabel={ariaLabel}
-          className="w-full"
-          renderItem={(item) =>
-            "node" in item ? (
-              <span className="inline-flex shrink-0 items-center text-black/70">{item.node}</span>
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element -- LogoLoop measures intrinsic img layout
-              <img
-                src={item.src}
-                alt={item.alt ?? ""}
-                width={item.width}
-                height={item.height}
-                srcSet={item.srcSet}
-                sizes={item.sizes}
-                loading="lazy"
-                decoding="async"
-                draggable={false}
-                className={stripImgClass()}
-              />
-            )
-          }
-        />
+      {/* Compositor-thread CSS marquee - smooth at any FPS, no main-thread jank. */}
+      <div
+        className="brand-marquee motion-reduce:hidden min-h-[var(--landing-marquee-slide-h)] w-full"
+        role="region"
+        aria-label={ariaLabel}
+      >
+        <div className="brand-marquee__track">
+          {Array.from({ length: MARQUEE_COPIES }, (_, copyIndex) => (
+            <ul className="brand-marquee__set" key={`copy-${copyIndex}`} role="list" aria-hidden={copyIndex > 0}>
+              {MARQUEE_LOGOS_LIST.map((entry) => (
+                <li key={`${copyIndex}-${entry.src}`} className="flex shrink-0 items-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- intrinsic-size logo strip */}
+                  <img
+                    src={entry.src}
+                    alt={copyIndex === 0 ? entry.alt : ""}
+                    width={entry.width}
+                    height={entry.height}
+                    className="!h-[var(--landing-marquee-slide-h)] w-auto object-contain grayscale [image-rendering:auto]"
+                    loading="lazy"
+                    decoding="async"
+                    draggable={false}
+                  />
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -138,7 +134,7 @@ export function LandingBrandMarquee({
     <section
       className={
         embedded
-          ? "relative z-10 w-full overflow-hidden py-2 [--landing-marquee-slide-h:22px] sm:py-3 sm:[--landing-marquee-slide-h:28px] md:[--landing-marquee-slide-h:32px]"
+          ? "relative z-10 w-full overflow-visible py-2 [--landing-marquee-slide-h:22px] sm:py-3 sm:[--landing-marquee-slide-h:28px] md:[--landing-marquee-slide-h:32px]"
           : "relative isolate z-10 -mt-8 overflow-hidden pb-8 pt-10 [--landing-marquee-slide-h:24px] sm:-mt-10 sm:pb-10 sm:pt-12 sm:[--landing-marquee-slide-h:28px] md:[--landing-marquee-slide-h:32px]"
       }
       aria-label={ariaLabel}

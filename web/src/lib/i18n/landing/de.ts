@@ -55,7 +55,7 @@ export const landingCopyDe: LandingCopy = {
   howItWorks: {
     titleLine1: "von der domain zum",
     titleHighlight: "autopilot",
-    timeBadge: "live in unter 5 minuten",
+    titleSuffix: "in 5 minuten",
     steps: [
       {
         title: "Wettbewerber-Domain eintragen",
@@ -157,7 +157,7 @@ export const landingCopyDe: LandingCopy = {
         ],
       },
       {
-        label: "Plus die Analyse-Schicht",
+        label: "Alle Daten mit Rival-Features verbinden - z. B.",
         cards: [
           {
             key: "strategy-map",
@@ -283,13 +283,13 @@ export const landingCopyDe: LandingCopy = {
     socialProof: {
       count: "400+",
       label: "Marketer lieben Rival",
-      viewMore: "Mehr anzeigen",
+      trustpilotAria: "5 von 5 Sternen auf Trustpilot",
     },
     items: landingCopyEn.reviews.items.map((item, i) => {
       const deTexts = [
-        "Vier Tools durch eines ersetzt. Autopilot-Alerts liefern Kunden Belege statt vager Tipps.",
-        "Stealable Angles zeigt Lücken, die wir nicht testen. Win-Rate bei neuem Creative ist höher.",
-        "15 Wettbewerber, sechs Kunden, ein Login. Strategy Map direkt ins Deck.",
+        "Autopilot einmal aktiviert - Slack und E-Mail in unter fünf Minuten verbunden. Automatische Überwachung läuft, während ich schlafe; Kunden bekommen Belege statt vager Tipps. Stunden zurück jede Woche.",
+        "Adidas in der Ad Library - 73 Live-Ads über sechs Plattformen in einer Ansicht. Stealable Angles zeigte Hooks, die wir nicht testen.",
+        "15 Wettbewerber, sechs Kunden, ein Login. Die volle Strategy Map ins Kunden-Deck - jeder Kanal und Funnel-Schritt auf einer Folie. Das Playbook ist endlich verständlich.",
         "Nach dem Test am selben Tag abonniert. Moves gefunden, die ich wochenlang übersehen hatte.",
       ];
       return { ...item, text: deTexts[i] ?? item.text };

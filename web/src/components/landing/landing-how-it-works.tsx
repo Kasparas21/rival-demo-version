@@ -1,4 +1,4 @@
-import { Bot, Clock3 } from "lucide-react";
+import { Bot } from "lucide-react";
 
 import { HowItWorksDomainMock } from "@/components/landing/how-it-works-domain-mock";
 import {
@@ -168,11 +168,18 @@ export function LandingHowItWorks({ copy }: Props) {
   return (
     <section
       id="solution"
-      className="relative overflow-hidden px-4 py-16 sm:px-6 sm:py-20 md:py-24"
+      className="relative overflow-hidden px-4 pb-16 pt-20 sm:px-6 sm:pb-20 sm:pt-24 md:pt-28"
     >
+      {/* Section tint - masked to fade in from the top so it never creates a hard edge
+          against the white carousel area above it. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_55%_at_50%_0%,rgba(74,127,165,0.12),transparent_65%),radial-gradient(ellipse_60%_40%_at_90%_80%,rgba(149,193,75,0.08),transparent_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_50%_18%,rgba(74,127,165,0.09),transparent_68%),radial-gradient(ellipse_60%_40%_at_90%_80%,rgba(149,193,75,0.07),transparent_55%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0,black_320px)] [mask-image:linear-gradient(to_bottom,transparent_0,black_320px)]"
+      />
+      {/* Soft white bridge - blurs the carousel → section 2 hand-off to a smooth gradient. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white via-white/70 to-transparent sm:h-52"
       />
 
       <LandingScrollReveal className="relative mx-auto max-w-5xl">
@@ -181,11 +188,13 @@ export function LandingHowItWorks({ copy }: Props) {
             {copy.titleLine1}
             <br />
             <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
+            {copy.titleSuffix ? (
+              <>
+                {" "}
+                <span className="text-[#1a1a1a]">{copy.titleSuffix}</span>
+              </>
+            ) : null}
           </h2>
-          <p className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[#4a7fa5]/25 bg-[#4a7fa5]/10 px-3.5 py-1.5 text-sm font-bold text-[#1d4ed8] shadow-sm">
-            <Clock3 className="size-4" strokeWidth={2.25} aria-hidden />
-            {copy.timeBadge}
-          </p>
         </div>
 
         <ol className="mt-12 space-y-10 sm:mt-16 sm:space-y-14 md:space-y-16">

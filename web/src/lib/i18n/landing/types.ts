@@ -21,8 +21,10 @@ export type LandingReview = {
   text: string;
   /** In-card photo — gradient placeholder when omitted */
   featureImage?: string;
-  /** Side-column cards with a taller image area. */
-  tall?: boolean;
+  /** Overrides the section-level feature image alt template. */
+  featureImageAlt?: string;
+  /** Screenshot height tier for the crush-style staggered grid. */
+  cardSize?: "default" | "tall" | "tallest";
   /** Faint peek card at the bottom of the grid (center column). */
   peek?: boolean;
 };
@@ -150,7 +152,8 @@ export type LandingCopy = {
   howItWorks: {
     titleLine1: string;
     titleHighlight: string;
-    timeBadge: string;
+    /** Trailing phrase on the headline line, e.g. "in 5 minutes". */
+    titleSuffix?: string;
     steps: [LandingHowItWorksStep, LandingHowItWorksStep, LandingHowItWorksStep];
     cta: string;
   };
@@ -258,7 +261,7 @@ export type LandingCopy = {
     socialProof: {
       count: string;
       label: string;
-      viewMore: string;
+      trustpilotAria: string;
     };
     items: LandingReview[];
   };

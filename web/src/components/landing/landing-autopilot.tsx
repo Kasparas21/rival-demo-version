@@ -89,7 +89,7 @@ type Props = {
 /** Autopilot feature - a faithful Slack channel where Rival posts overnight, above a stat band. */
 export function LandingAutopilot({ copy }: Props) {
   return (
-    <section className="relative overflow-hidden px-4 pb-16 pt-8 text-center sm:px-6 sm:pb-24 sm:pt-10">
+    <section className="relative overflow-hidden px-4 pb-12 pt-6 text-center sm:px-6 sm:pb-24 sm:pt-10">
       <LandingScrollReveal className="mx-auto w-full max-w-6xl">
         <h2
           className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
@@ -98,12 +98,12 @@ export function LandingAutopilot({ copy }: Props) {
           <br />
           <LandingHeadlineHighlight>{copy.titleHighlight}</LandingHeadlineHighlight>
         </h2>
-        <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
+        <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-500 sm:mt-4 sm:text-base">
           {copy.subtitle}
         </p>
 
         {/* Slack channel - the centered hero visual */}
-        <div className="relative mx-auto mt-8 w-full max-w-2xl sm:mt-10 md:mt-14">
+        <div className="relative mx-auto mt-6 w-full max-w-2xl sm:mt-10 md:mt-14">
           <div
             aria-hidden
             className="pointer-events-none absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-[#611f69]/8 via-transparent to-[#2563eb]/8 blur-2xl"
@@ -284,21 +284,21 @@ export function LandingAutopilot({ copy }: Props) {
         </div>
 
         {/* Stat band - clean 3-up with dividers */}
-        <div className="mx-auto mt-12 grid max-w-3xl grid-cols-1 divide-y divide-[#1a1a1a]/[0.08] sm:mt-14 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="mx-auto mt-8 grid max-w-3xl grid-cols-1 divide-y divide-[#1a1a1a]/[0.08] sm:mt-14 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
           {copy.stats.map((stat) => (
-            <div key={stat.label} className="px-4 py-5 sm:py-2">
-              <p className="text-[2.5rem] font-black leading-none tracking-tight text-[#1d4ed8] tabular-nums sm:text-5xl">
+            <div key={stat.label} className="px-3 py-3.5 sm:px-4 sm:py-2">
+              <p className="text-[1.75rem] font-black leading-none tracking-tight text-[#1d4ed8] tabular-nums sm:text-5xl">
                 {stat.value}
               </p>
-              <p className="mt-2.5 text-[15px] font-bold text-[#1a1a1a]">{stat.label}</p>
-              <p className="mx-auto mt-1 max-w-[15rem] text-[13px] leading-snug text-gray-500">
+              <p className="mt-1.5 text-[14px] font-bold text-[#1a1a1a] sm:mt-2.5 sm:text-[15px]">{stat.label}</p>
+              <p className="mx-auto mt-0.5 max-w-[15rem] text-[12px] leading-snug text-gray-500 sm:mt-1 sm:text-[13px]">
                 {stat.sub}
               </p>
             </div>
           ))}
         </div>
 
-        <div className="mt-12 flex justify-center">
+        <div className="mt-8 flex justify-center sm:mt-12">
           <LandingTrialCta href="/onboarding" size="md">
             {copy.cta}
           </LandingTrialCta>

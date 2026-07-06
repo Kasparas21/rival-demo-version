@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 import { LandingBelowFold } from "@/components/marketing/landing-below-fold";
 import { LandingBrandMarqueeDeferred } from "@/components/landing/landing-brand-marquee-deferred";
 import { LandingHeader } from "@/components/landing/landing-header";
+import { LandingPostHeroBackdrop } from "@/components/landing/landing-page-background";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 import type { Locale } from "@/lib/i18n/locale";
 
@@ -24,25 +25,31 @@ export default function LandingHome({ copy, locale }: Props) {
       <div className="w-full overflow-x-clip">
         <LandingHeroVariantB hero={copy.hero} />
 
-        <div className="relative z-20 -mt-6 sm:-mt-10">
-          <div
-            aria-hidden
-            className="pointer-events-none h-16 w-full bg-gradient-to-b from-transparent via-white/85 to-white sm:h-24"
-          />
-          <div className="bg-white">
-            <LandingBrandMarqueeDeferred
-              embedded
-              ariaLabel={copy.hero.brandMarqueeAria}
-              label={copy.hero.brandMarqueeLabel}
+        <div className="relative">
+          <LandingPostHeroBackdrop />
+
+          <div className="relative z-10 -mt-8 sm:-mt-12">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-40 bg-gradient-to-b from-transparent via-white/70 to-transparent sm:h-52"
+            />
+            <div className="relative pb-16 pt-20 sm:pb-24 sm:pt-28">
+              <LandingBrandMarqueeDeferred
+                embedded
+                ariaLabel={copy.hero.brandMarqueeAria}
+                label={copy.hero.brandMarqueeLabel}
+              />
+            </div>
+            {/* Carousel → section 2 hand-off: fade the carousel base to pure white so it
+                meets section 2's white top-fade with zero step (no hard line). */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-[2] h-28 bg-gradient-to-b from-transparent to-white sm:h-36"
             />
           </div>
-          <div
-            aria-hidden
-            className="pointer-events-none h-12 w-full bg-gradient-to-b from-white via-white to-[#f7fbff] sm:h-14"
-          />
-        </div>
 
-        <LandingBelowFold copy={copy} />
+          <LandingBelowFold copy={copy} sharedBackdrop />
+        </div>
       </div>
     </div>
   );

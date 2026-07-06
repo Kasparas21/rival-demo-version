@@ -373,8 +373,8 @@ html:has([data-dashboard-app]) body {
 .hero-headline-accent {
   font: inherit;
   letter-spacing: inherit;
-  color: #1a1a1a;
-  animation: hero-headline-accent-color 4.5s linear infinite;
+  color: #15286b;
+  animation: none;
 }
 
 /** Below-hero section h2s — hero scale; dark base + flat royal blue on highlight spans. */
@@ -384,7 +384,7 @@ html:has([data-dashboard-app]) body {
 
 .landing-section-headline .hero-headline-accent {
   animation: none;
-  color: #1d4ed8;
+  color: #15286b;
 }
 
 @keyframes hero-headline-accent-color {
@@ -393,17 +393,17 @@ html:has([data-dashboard-app]) body {
     color: #1a1a1a;
   }
   45% {
-    color: #1d4ed8;
+    color: #15286b;
   }
   55% {
-    color: #1e3a8a;
+    color: #15286b;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .hero-headline-accent {
     animation: none;
-    color: #1d4ed8;
+    color: #15286b;
   }
 
   .landing-hero-variant-b .hero-headline-accent {
@@ -661,10 +661,10 @@ html:has([data-dashboard-app]) body {
   text-shadow: 0 1px 18px rgba(8, 28, 48, 0.22);
 }
 
-/* Variant B accent — flat royal blue so the highlight word pops off the sky. */
+/* Variant B accent — flat brand navy so the highlight word pops off the sky. */
 .landing-hero-variant-b .hero-headline-accent {
   animation: none;
-  color: #1d4ed8;
+  color: #15286b;
   text-shadow: none;
 }
 
@@ -798,10 +798,10 @@ html:has([data-dashboard-app]) body {
     color: #1a1a1a;
   }
   45% {
-    color: #1d4ed8;
+    color: #15286b;
   }
   55% {
-    color: #1e3a8a;
+    color: #15286b;
   }
 }
 
@@ -888,7 +888,7 @@ html:has([data-dashboard-app]) body {
 @media (prefers-reduced-motion: reduce) {
   .hero-variant-b-headline-accent {
     animation: none;
-    color: #1d4ed8;
+    color: #15286b;
   }
 
   .hero-variant-b-demo-enter {
@@ -1141,5 +1141,83 @@ html:has([data-dashboard-app]) body {
     opacity: 1;
     transform: none;
     animation: none !important;
+  }
+}
+
+/* ==========================================================================
+   Brand logo marquee — compositor-thread CSS animation.
+   Pure transform keyframe (runs off the main thread) so it never skips frames,
+   unlike a JS requestAnimationFrame loop that stutters when the main thread is busy.
+   ========================================================================== */
+.brand-marquee {
+  --brand-marquee-gap: 44px;
+  --brand-marquee-duration: 36s;
+  position: relative;
+  overflow: hidden;
+  /* Isolate + contain so scrolling the page never repaints the strip, and the
+     strip's animation never invalidates anything around it. */
+  isolation: isolate;
+  contain: layout paint;
+}
+
+/* Edge fades as cheap gradient overlays (a mask-image forces re-rasterization on
+   every scroll frame — plain gradients stay on the fast compositor path). */
+.brand-marquee::before,
+.brand-marquee::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: clamp(40px, 9%, 150px);
+  pointer-events: none;
+}
+.brand-marquee::before {
+  left: 0;
+  background: linear-gradient(to right, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+}
+.brand-marquee::after {
+  right: 0;
+  background: linear-gradient(to left, #ffffff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.brand-marquee__track {
+  display: flex;
+  width: max-content;
+  /* transform + opacity live on the SAME element so the whole strip rasterizes to
+     one cached GPU texture that is only translated — 60fps, no per-frame repaint. */
+  transform: translate3d(0, 0, 0);
+  opacity: 0.55;
+  will-change: transform;
+  backface-visibility: hidden;
+  animation: brand-marquee-scroll var(--brand-marquee-duration) linear infinite;
+}
+
+.brand-marquee__set {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--brand-marquee-gap);
+  padding-right: var(--brand-marquee-gap);
+}
+
+/* Two identical halves of the track — translating exactly -50% loops seamlessly. */
+@keyframes brand-marquee-scroll {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.brand-marquee:hover .brand-marquee__track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-marquee__track {
+    animation: none;
+    transform: none;
   }
 }

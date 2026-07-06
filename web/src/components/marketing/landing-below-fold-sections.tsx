@@ -17,12 +17,13 @@ import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 type Props = {
   copy: LandingCopy;
+  sharedBackdrop?: boolean;
 };
 
-export function LandingBelowFoldSections({ copy }: Props) {
+export function LandingBelowFoldSections({ copy, sharedBackdrop = false }: Props) {
   return (
-    <div className="relative isolate">
-      <LandingPageBackground />
+    <div className="relative">
+      {sharedBackdrop ? null : <LandingPageBackground />}
 
       <div className="relative z-10">
         <LandingHowItWorks copy={copy.howItWorks} />

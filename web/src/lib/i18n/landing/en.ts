@@ -221,7 +221,7 @@ export const landingCopyEn: LandingCopy = {
   howItWorks: {
     titleLine1: "from domain to",
     titleHighlight: "autopilot",
-    timeBadge: "live in under 5 minutes",
+    titleSuffix: "in 5 minutes",
     steps: [
       {
         title: "Drop a competitor domain",
@@ -323,7 +323,7 @@ export const landingCopyEn: LandingCopy = {
         ],
       },
       {
-        label: "Plus the analysis layer",
+        label: "Connect all that data with Rival features like",
         cards: [
           {
             key: "strategy-map",
@@ -451,7 +451,7 @@ export const landingCopyEn: LandingCopy = {
     socialProof: {
       count: "400+",
       label: "marketers love Rival",
-      viewMore: "View more",
+      trustpilotAria: "Rated 5 out of 5 on Trustpilot",
     },
     items: [
       {
@@ -459,22 +459,28 @@ export const landingCopyEn: LandingCopy = {
         photo: "/landing/reviews/steven-guajardo.webp",
         meta: "US · Jan 2026",
         verified: true,
-        tall: true,
-        text: "Replaced four tools with one. Autopilot alerts give clients proof, not vague advice - hours back every month.",
+        cardSize: "tall",
+        featureImage: "/landing/reviews/usage/usage-1.webp",
+        featureImageAlt: "Autopilot settings with Slack and email delivery turned on",
+        text: "Flipped Autopilot on once - Slack and email wired up in under five minutes. Automatic watch stays armed while I sleep; clients get proof when competitors move, not vague advice. Hours back every week.",
       },
       {
         name: "James O'Brien",
         photo: "/landing/reviews/louis-byrd.webp",
         meta: "IE · Dec 2025",
         verified: true,
-        text: "Stealable Angles shows gaps we're not testing. Win rate on new creative is up.",
+        featureImage: "/landing/reviews/usage/usage-2.webp",
+        featureImageAlt: "Ad Library dashboard with live ads across Meta, Google, and Snapchat",
+        text: "Pulled Adidas into the Ad Library - 73 live ads across six platforms in one view. Stealable Angles showed hooks we're not testing.",
       },
       {
         name: "Sofia Ricci",
         photo: "/landing/reviews/lane-morris.webp",
         meta: "IT · Jan 2026",
-        tall: true,
-        text: "Fifteen competitors, six clients, one login. Strategy Map slides straight into decks.",
+        cardSize: "tallest",
+        featureImage: "/landing/reviews/usage/usage-3.webp",
+        featureImageAlt: "Full-funnel Strategy Map with paid, organic, and email channels",
+        text: "Fifteen competitors, six clients, one login. Exported the full Strategy Map into a client deck - every channel and funnel stage on one slide. The playbook finally makes sense to non-marketers.",
       },
       {
         name: "Sarah Mitchell",

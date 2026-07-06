@@ -55,7 +55,7 @@ export const landingCopyNl: LandingCopy = {
   howItWorks: {
     titleLine1: "van domein naar",
     titleHighlight: "autopilot",
-    timeBadge: "live in minder dan 5 minuten",
+    titleSuffix: "in 5 minuten",
     steps: [
       {
         title: "Plak een concurrent-domein",
@@ -157,7 +157,7 @@ export const landingCopyNl: LandingCopy = {
         ],
       },
       {
-        label: "Plus de analyselaag",
+        label: "Koppel al die data aan Rival-features zoals",
         cards: [
           {
             key: "strategy-map",
@@ -283,13 +283,13 @@ export const landingCopyNl: LandingCopy = {
     socialProof: {
       count: "400+",
       label: "marketeers houden van Rival",
-      viewMore: "Meer bekijken",
+      trustpilotAria: "5 van 5 sterren op Trustpilot",
     },
     items: landingCopyEn.reviews.items.map((item, i) => {
       const nlTexts = [
-        "Vier tools vervangen door één. Autopilot-alerts geven klanten bewijs, geen vage tips.",
-        "Stealable Angles toont gaten die we niet testen. Win-rate op nieuwe creative is omhoog.",
-        "15 concurrenten, zes klanten, één login. Strategy Map direct in decks.",
+        "Autopilot één keer aangezet - Slack en e-mail binnen vijf minuten gekoppeld. Automatische watch draait terwijl ik slaap; klanten krijgen bewijs in plaats van vage tips. Uren terug per week.",
+        "Adidas in de Ad Library - 73 live ads over zes platformen in één view. Stealable Angles toonde hooks die we niet testen.",
+        "15 concurrenten, zes klanten, één login. De volledige Strategy Map in een klantdeck - elk kanaal en funnel-stap op één slide. Het playbook is eindelijk duidelijk.",
         "Na proef met één concurrent dezelfde dag geabonneerd. Moves gevonden die ik weken miste.",
       ];
       return { ...item, text: nlTexts[i] ?? item.text };

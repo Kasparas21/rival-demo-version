@@ -319,9 +319,113 @@ function CoverageCard({
   );
 }
 
+/** Desktop-only hub connecting channel cards → Rival → feature cards. */
+function CoverageFlowConnector({ label }: { label: string }) {
+  const columns = [16.67, 50, 83.33];
+
+  return (
+    <div className="relative col-span-3 py-3">
+      <div className="relative mx-auto h-[7.5rem] max-w-5xl lg:h-[8.5rem]">
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          aria-hidden
+        >
+          <defs>
+            <linearGradient id="coverage-flow-stroke" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#4a7fa5" stopOpacity="0.42" />
+              <stop offset="55%" stopColor="#4a7fa5" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#4a7fa5" stopOpacity="0.38" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M 16.67 4 C 16.67 28, 28 38, 50 46 C 72 38, 83.33 28, 83.33 4"
+            fill="none"
+            stroke="url(#coverage-flow-stroke)"
+            strokeWidth="1.4"
+            vectorEffect="non-scaling-stroke"
+          />
+          <path
+            d="M 16.67 96 C 16.67 72, 28 62, 50 54 C 72 62, 83.33 72, 83.33 96"
+            fill="none"
+            stroke="url(#coverage-flow-stroke)"
+            strokeWidth="1.4"
+            vectorEffect="non-scaling-stroke"
+          />
+          {columns.map((x) => (
+            <line
+              key={`col-${x}`}
+              x1={x}
+              y1="4"
+              x2={x}
+              y2="96"
+              stroke="url(#coverage-flow-stroke)"
+              strokeWidth="1.1"
+              strokeDasharray={x === 50 ? undefined : "5 5"}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {columns.map((x) => (
+            <g key={`node-${x}`}>
+              <circle cx={x} cy="4" r="2.8" fill="#4a7fa5" fillOpacity="0.22" />
+              <circle cx={x} cy="4" r="1.4" fill="#4a7fa5" fillOpacity="0.55" />
+              <circle cx={x} cy="96" r="2.8" fill="#4a7fa5" fillOpacity="0.22" />
+              <circle cx={x} cy="96" r="1.4" fill="#4a7fa5" fillOpacity="0.55" />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="5.5" fill="#4a7fa5" fillOpacity="0.08" />
+        </svg>
+
+        <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2.5">
+          <div className="flex size-10 items-center justify-center rounded-full border border-[#4a7fa5]/20 bg-white shadow-[0_4px_20px_-6px_rgba(74,127,165,0.35)] ring-4 ring-[#4a7fa5]/[0.06] lg:size-11">
+            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#4a7fa5] lg:text-[11px]">
+              Rival
+            </span>
+          </div>
+          <p className="max-w-md px-4 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] lg:text-[11px] lg:tracking-[0.14em]">
+            {label}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Channels + intelligence features - visual mockups, minimal copy. */
 export function LandingCoverage({ copy }: Props) {
-  let cardIndex = 0;
+  const [channelsGroup, featuresGroup] = copy.groups;
+  let mobileCardIndex = 0;
+
+  const renderMobileGroups = () =>
+    copy.groups.map((group, groupIndex) => (
+      <div key={group.label}>
+        {groupIndex > 0 ? (
+          <div
+            aria-hidden
+            className="mx-auto mb-10 h-px max-w-md bg-gradient-to-r from-transparent via-[#e7e5e0] to-transparent sm:mb-12"
+          />
+        ) : null}
+        <p className="mx-auto mb-5 max-w-2xl text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:mb-6 sm:text-[11px] sm:tracking-[0.14em]">
+          {group.label}
+        </p>
+        <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-3 md:items-stretch">
+          {group.cards.map((card) => {
+            const index = mobileCardIndex++;
+            const isLastSolo =
+              group.cards.length % 3 === 1 && card === group.cards[group.cards.length - 1];
+            return (
+              <div key={card.key} className={`h-full ${isLastSolo ? "md:col-start-2" : ""}`}>
+                <CoverageCard card={card} index={index} />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ));
+
+  const channelsStart = 0;
+  const featuresStart = channelsGroup.cards.length;
 
   return (
     <section className="relative overflow-hidden px-4 pb-16 pt-8 text-center sm:px-6 sm:pb-24 sm:pt-10">
@@ -335,30 +439,21 @@ export function LandingCoverage({ copy }: Props) {
           {copy.subtitle}
         </p>
 
-        <div className="mt-12 space-y-12 text-left sm:mt-14 md:space-y-14">
-          {copy.groups.map((group, groupIndex) => (
-            <div key={group.label}>
-              {groupIndex > 0 ? (
-                <div
-                  aria-hidden
-                  className="mx-auto mb-10 h-px max-w-md bg-gradient-to-r from-transparent via-[#e7e5e0] to-transparent sm:mb-12"
-                />
-              ) : null}
-              <p className="mb-5 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-[#4a7fa5] sm:mb-6 sm:text-[11px]">
-                {group.label}
-              </p>
-              <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-3 md:items-stretch">
-                {group.cards.map((card) => {
-                  const index = cardIndex++;
-                  const isLastSolo =
-                    group.cards.length % 3 === 1 && card === group.cards[group.cards.length - 1];
-                  return (
-                    <div key={card.key} className={`h-full ${isLastSolo ? "md:col-start-2" : ""}`}>
-                      <CoverageCard card={card} index={index} />
-                    </div>
-                  );
-                })}
-              </div>
+        <div className="mt-12 space-y-12 text-left sm:mt-14 md:hidden">{renderMobileGroups()}</div>
+
+        <div className="mt-12 hidden text-left md:mt-14 md:grid md:grid-cols-3 md:gap-x-6 md:gap-y-0">
+          <p className="col-span-3 mb-6 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#4a7fa5]">
+            {channelsGroup.label}
+          </p>
+          {channelsGroup.cards.map((card, i) => (
+            <div key={card.key} className="h-full">
+              <CoverageCard card={card} index={channelsStart + i} />
+            </div>
+          ))}
+          <CoverageFlowConnector label={featuresGroup.label} />
+          {featuresGroup.cards.map((card, i) => (
+            <div key={card.key} className="h-full">
+              <CoverageCard card={card} index={featuresStart + i} />
             </div>
           ))}
         </div>

@@ -1,13 +1,21 @@
 import Image from "next/image";
-import { BadgeCheck, Plus } from "lucide-react";
+import { BadgeCheck } from "lucide-react";
 
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
+import { TrustpilotRating } from "@/components/landing/trustpilot-rating";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { LandingCopy, LandingReview } from "@/lib/i18n/landing/types";
 
 type Props = {
   copy: LandingCopy["reviews"];
+};
+
+const CARD_IMAGE_CLASS: Record<NonNullable<LandingReview["cardSize"]> | "peek", string> = {
+  default: "aspect-[5/3.4] sm:aspect-[5/3.5]",
+  tall: "aspect-[4/4.9] sm:aspect-[4/5.2]",
+  tallest: "aspect-[4/6.2] sm:aspect-[4/6.8]",
+  peek: "aspect-[5/3.5]",
 };
 
 function ReviewAvatar({
@@ -59,23 +67,19 @@ function ReviewCard({
   featureImageAltTemplate: string;
   mobileHero?: boolean;
 }) {
-  const tall = review.tall && !mobileHero;
   const peek = review.peek && !mobileHero;
-  const imageAspect = mobileHero
-    ? "aspect-[4/3.2] sm:aspect-[4/3]"
-    : tall
-      ? "aspect-[4/4.6] sm:aspect-[4/4.8]"
-      : peek
-        ? "aspect-[4/3.2]"
-        : "aspect-[4/3]";
+  const sizeKey = peek ? "peek" : (review.cardSize ?? "default");
+  const imageAspect = mobileHero ? "aspect-[4/3.2] sm:aspect-[4/3]" : CARD_IMAGE_CLASS[sizeKey];
+  const imageAlt =
+    review.featureImageAlt ?? fillCopyTemplate(featureImageAltTemplate, { name: review.name });
 
   return (
     <article
-      className={`relative break-inside-avoid overflow-hidden rounded-[1.25rem] border border-black/[0.06] bg-white p-6 shadow-[0_2px_24px_-8px_rgba(26,26,26,0.12)] sm:p-7 ${
+      className={`relative break-inside-avoid overflow-hidden rounded-2xl border border-black/[0.06] bg-white p-6 shadow-[0_2px_20px_-6px_rgba(26,26,26,0.1)] sm:p-7 ${
         peek ? "border-black/[0.03] shadow-none" : ""
       }`}
     >
-      <div className={peek ? "opacity-[0.38]" : undefined}>
+      <div className={peek ? "opacity-[0.34]" : undefined}>
         <div className="flex items-center gap-3">
           <ReviewAvatar review={review} photoAltTemplate={photoAltTemplate} muted={peek} />
           <div className="flex min-w-0 items-center gap-1.5">
@@ -101,22 +105,19 @@ function ReviewCard({
         </p>
 
         <div className="relative mt-5 overflow-hidden rounded-xl ring-1 ring-black/[0.05]">
-          {review.featureImage ? (
-            <div className={`relative w-full ${imageAspect}`}>
+          <div className={`relative w-full bg-gradient-to-br from-[#f4f4f5] via-[#ececef] to-[#e4e4e7] ${imageAspect}`}>
+            {review.featureImage ? (
               <Image
                 src={review.featureImage}
-                alt={fillCopyTemplate(featureImageAltTemplate, { name: review.name })}
+                alt={imageAlt}
                 fill
-                className="object-cover"
-                sizes="(max-width: 640px) 100vw, 33vw"
+                className={`object-cover ${sizeKey === "default" ? "object-center" : "object-top"}`}
+                sizes={mobileHero ? "(max-width: 640px) 100vw, 33vw" : "(max-width: 1024px) 100vw, 320px"}
+                loading="lazy"
+                decoding="async"
               />
-            </div>
-          ) : (
-            <div
-              className={`w-full bg-gradient-to-br from-[#f4f4f5] via-[#ececef] to-[#e4e4e7] ${imageAspect}`}
-              aria-hidden
-            />
-          )}
+            ) : null}
+          </div>
           {mobileHero ? (
             <div
               aria-hidden
@@ -133,7 +134,7 @@ function ReviewCard({
       {peek ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[1.25rem] bg-gradient-to-b from-white/10 via-[#f7f7f8]/55 to-[#f7f7f8]"
+          className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-b from-white/5 via-[#f7f7f8]/50 to-[#f7f7f8]"
         />
       ) : null}
     </article>
@@ -170,26 +171,16 @@ function SocialProofBar({
     </p>
   );
 
-  const viewMore = (
-    <button
-      type="button"
-      className="inline-flex items-center gap-2 text-sm font-medium text-[#1a1a1a] transition-opacity hover:opacity-70"
-    >
-      {copy.socialProof.viewMore}
-      <span className="flex size-7 items-center justify-center rounded-full bg-[#1a1a1a] text-white">
-        <Plus className="size-3.5" strokeWidth={2.5} aria-hidden />
-      </span>
-    </button>
-  );
+  const trustpilot = <TrustpilotRating ariaLabel={copy.socialProof.trustpilotAria} />;
 
   if (layout === "mobile") {
     return (
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-3">
         <div className="inline-flex items-center gap-3 rounded-full border border-black/[0.08] bg-white px-3 py-2 shadow-[0_2px_16px_-6px_rgba(26,26,26,0.1)]">
           {avatars}
           {count}
         </div>
-        {viewMore}
+        {trustpilot}
       </div>
     );
   }
@@ -199,7 +190,7 @@ function SocialProofBar({
       {avatars}
       {count}
       <span aria-hidden className="h-5 w-px bg-[#e4e4e7]" />
-      {viewMore}
+      {trustpilot}
     </div>
   );
 }
@@ -208,10 +199,9 @@ export function LandingReviews({ copy }: Props) {
   const facePile = copy.items.filter((r) => r.photo && !r.peek).slice(0, 4);
   const mobileFeatured = copy.items.find((r) => r.verified) ?? copy.items[0];
 
-  const tallReviews = copy.items.filter((r) => r.tall);
-  const leftReview = tallReviews[0];
-  const rightReview = tallReviews[1];
-  const centerReview = copy.items.find((r) => !r.tall && !r.peek);
+  const leftReview = copy.items.find((r) => r.cardSize === "tall");
+  const rightReview = copy.items.find((r) => r.cardSize === "tallest");
+  const centerReview = copy.items.find((r) => !r.cardSize && !r.peek);
   const peekReviews = copy.items.filter((r) => r.peek);
 
   const cardProps = {
@@ -248,24 +238,27 @@ export function LandingReviews({ copy }: Props) {
           />
         </div>
 
-        <div className="relative mt-12 hidden sm:mt-12 sm:block">
-          <div className="grid grid-cols-3 gap-6 pb-10 text-left lg:gap-7">
-            <div>{leftReview ? <ReviewCard review={leftReview} {...cardProps} /> : null}</div>
-            <div className="flex flex-col gap-6">
-              {centerReview ? <ReviewCard review={centerReview} {...cardProps} /> : null}
-              {peekReviews.map((review) => (
-                <ReviewCard key={review.name} review={review} {...cardProps} />
-              ))}
+        <div className="relative mt-12 hidden sm:block">
+          <div className="relative max-h-[min(700px,74vh)] overflow-hidden">
+            <div className="grid grid-cols-3 items-start gap-5 text-left lg:gap-6">
+              <div>{leftReview ? <ReviewCard review={leftReview} {...cardProps} /> : null}</div>
+              <div className="flex flex-col gap-5 lg:gap-6">
+                {centerReview ? <ReviewCard review={centerReview} {...cardProps} /> : null}
+                {peekReviews.map((review) => (
+                  <ReviewCard key={review.name} review={review} {...cardProps} />
+                ))}
+              </div>
+              <div>{rightReview ? <ReviewCard review={rightReview} {...cardProps} /> : null}</div>
             </div>
-            <div>{rightReview ? <ReviewCard review={rightReview} {...cardProps} /> : null}</div>
+
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[58%] max-h-[26rem] bg-[linear-gradient(to_top,#f7f7f8_0%,#f7f7f8_38%,rgba(247,247,248,0.92)_52%,rgba(247,247,248,0.55)_68%,transparent_100%)]"
+            />
           </div>
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-48 bg-gradient-to-t from-[#f7f7f8] from-[35%] via-[#f7f7f8]/92 to-transparent sm:h-56"
-          />
         </div>
 
-        <div className="relative z-20 mt-8 flex justify-center sm:-mt-4">
+        <div className="relative z-20 mt-8 flex justify-center sm:-mt-2">
           <div className="sm:hidden">
             <SocialProofBar copy={copy} facePile={facePile} layout="mobile" />
           </div>
