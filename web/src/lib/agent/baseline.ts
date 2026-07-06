@@ -44,7 +44,7 @@ export async function getCompetitorBaseline(
 }
 
 export function shouldSkipDetection(cycles: AgentScrapeCycles, source: AgentSignalSource): boolean {
-  if (source === "cross_competitor" || source === "strategy_map") return false;
+  if (source === "cross_competitor" || source === "strategy_map" || source === "landing_pages") return false;
   const key = source as keyof AgentScrapeCycles;
   return (cycles[key] ?? 0) < AGENT_COLD_START_CYCLES;
 }
@@ -54,7 +54,7 @@ export async function incrementScrapeCycle(
   competitorId: string,
   source: AgentSignalSource,
 ): Promise<AgentScrapeCycles> {
-  if (source === "cross_competitor" || source === "strategy_map") {
+  if (source === "cross_competitor" || source === "strategy_map" || source === "landing_pages") {
     const { cycles } = await getCompetitorBaseline(admin, competitorId);
     return cycles;
   }

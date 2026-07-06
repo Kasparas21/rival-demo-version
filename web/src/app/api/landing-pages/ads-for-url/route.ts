@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
-import { normalizeLandingPageUrl } from "@/lib/landing-pages/normalize-url";
+import { landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 
@@ -27,8 +27,9 @@ type ScrapedAdRow = {
 
 function landingKeyForAd(platform: string, rawPayload: Json): string | null {
   const lp = extractLandingPageUrl(platform, rawPayload);
-  if (lp) return lp;
-  return extractGoogleHostnameLandingKey(platform, rawPayload);
+  if (lp) return landingPageGroupKey(lp);
+  const googleHost = extractGoogleHostnameLandingKey(platform, rawPayload);
+  return googleHost ? landingPageGroupKey(googleHost) : null;
 }
 
 export async function GET(request: Request) {
@@ -46,6 +47,7 @@ export async function GET(request: Request) {
   const competitorId = searchParams.get("competitorId");
   const urlRaw = searchParams.get("url");
   const limit = parseLimit(searchParams.get("limit"), 30, 100);
+  const platformFilter = searchParams.get("platform")?.trim().toLowerCase() || null;
 
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
@@ -61,7 +63,7 @@ export async function GET(request: Request) {
     decoded = urlRaw.trim();
   }
 
-  const targetKey = normalizeLandingPageUrl(decoded) ?? decoded;
+  const targetKey = landingPageGroupKey(decoded);
   if (!targetKey) {
     return NextResponse.json({ ok: false, error: "invalid url" }, { status: 400 });
   }
@@ -101,7 +103,11 @@ export async function GET(request: Request) {
 
   matched.sort((a, b) => new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime());
 
-  const sliced = matched.slice(0, limit);
+  const filtered = platformFilter
+    ? matched.filter((a) => a.platform.toLowerCase() === platformFilter)
+    : matched;
+
+  const sliced = filtered.slice(0, limit);
 
   return NextResponse.json({
     ok: true,
@@ -114,6 +120,6 @@ export async function GET(request: Request) {
       first_seen_at: a.first_seen_at,
       ai_extracted_angle: a.ai_extracted_angle,
     })),
-    total: matched.length,
+    total: filtered.length,
   });
 }

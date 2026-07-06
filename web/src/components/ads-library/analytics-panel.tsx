@@ -244,6 +244,7 @@ export function AdLibraryAnalyticsPanel({
               totalAllAds={totalAllAds}
               platformsCount={platformsWithAds}
               activeCounts={platformActiveCounts}
+              totalCounts={platformTotalCounts}
             />
             </div>
           </div>
@@ -276,6 +277,7 @@ export function AdLibraryAnalyticsPanel({
                       onFreshnessRefresh={onFreshnessRescrape}
                       onInitialLoadingChange={onActivityScoreLoadingChange}
                       suppressInitialLoadingUi
+                      activeAdsCount={totalActiveAds}
                     />
                   </div>
                 </div>
@@ -332,40 +334,52 @@ function PlatformDistributionGauge({
   totalAllAds,
   platformsCount,
   activeCounts,
+  totalCounts: _totalCounts,
 }: {
   total: number;
   totalAllAds: number;
   platformsCount: number;
   activeCounts: Props["platformActiveCounts"];
+  totalCounts: Props["platformTotalCounts"];
 }) {
   const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
 
-  if (total === 0) {
+  if (totalAllAds === 0) {
     return (
       <div className="flex flex-col items-center">
-        <div className="py-4 text-[11px] italic text-[#94a3b8]">No active ads found across platforms.</div>
-        {totalAllAds > 0 ? (
-          <p className="w-full border-t border-slate-100 pt-2.5 text-center text-[10px] leading-snug text-[#64748b]">
-            <span className="font-semibold text-[#475569]">{totalAllAds.toLocaleString()}</span> total ads scraped
-            <span> · 0 active · {totalAllAds.toLocaleString()} inactive</span>
-          </p>
-        ) : null}
+        <div className="py-4 text-center text-[11px] leading-snug text-[#94a3b8]">
+          <p className="italic">No ads in library yet.</p>
+          <p className="mt-1 not-italic text-[#64748b]">Run a scrape to pull creatives from ad libraries.</p>
+        </div>
       </div>
     );
   }
 
-  const centerSublabel = `across ${platformsCount} ${platformsCount === 1 ? "platform" : "platforms"}`;
+  const centerSublabel =
+    total > 0
+      ? `across ${platformsCount} ${platformsCount === 1 ? "platform" : "platforms"}`
+      : totalAllAds > 0
+        ? "none running now"
+        : "";
 
   return (
     <div className="flex flex-col items-center">
+      {total === 0 && totalAllAds > 0 ? (
+        <p className="mb-2 text-center text-[11px] leading-snug text-[#64748b]">
+          <span className="font-medium text-[#475569]">No ads running right now</span>
+          <span className="text-[#94a3b8]"> · {totalAllAds.toLocaleString()} in library (ended)</span>
+        </p>
+      ) : null}
       <div className="relative flex w-full justify-center" style={{ height: 190 }}>
         <GaugeArc
           counts={activeCounts}
-          total={total}
+          total={Math.max(total, 1)}
           hoveredPlatform={hoveredPlatform}
           onHover={setHoveredPlatform}
           centerLabel={String(total)}
           centerSublabel={centerSublabel}
+          centerHeadline="ADS RUNNING"
+          muted={total === 0}
         />
       </div>
 
@@ -416,12 +430,13 @@ function PlatformDistributionGauge({
         })}
       </div>
 
-      {totalAllAds > 0 ? (
+      {totalAllAds > 0 && totalAllAds !== total ? (
         <p className="mt-3 w-full border-t border-slate-100 pt-2.5 text-center text-[10px] leading-snug text-[#64748b]">
           <span className="font-semibold text-[#475569]">{totalAllAds.toLocaleString()}</span> total ads scraped
-          {totalAllAds !== total ? (
-            <span> · {total.toLocaleString()} active · {(totalAllAds - total).toLocaleString()} inactive</span>
-          ) : null}
+          <span>
+            {" "}
+            · {total.toLocaleString()} active · {(totalAllAds - total).toLocaleString()} inactive
+          </span>
         </p>
       ) : null}
     </div>
@@ -435,6 +450,8 @@ type GaugeArcProps = {
   onHover: (p: string | null) => void;
   centerLabel: string;
   centerSublabel: string;
+  centerHeadline?: string;
+  muted?: boolean;
 };
 
 function GaugeArc({
@@ -444,6 +461,8 @@ function GaugeArc({
   onHover,
   centerLabel,
   centerSublabel,
+  centerHeadline = "ADS RUNNING",
+  muted = false,
 }: GaugeArcProps) {
   const size = 220;
   const strokeWidth = 16;
@@ -460,7 +479,7 @@ function GaugeArc({
   const activeSegments = PLATFORM_ORDER.filter((p) => counts[p] > 0).map((platform) => ({
     platform,
     count: counts[platform],
-    color: PLATFORM_COLORS[platform],
+    color: muted ? "#cbd5e1" : PLATFORM_COLORS[platform],
   }));
 
   const numGaps = Math.max(0, activeSegments.length - 1);
@@ -508,7 +527,7 @@ function GaugeArc({
           const isOther = hoveredPlatform !== null && hoveredPlatform !== seg.platform;
           const d = describeArcClockwise(cx, cy, radius, seg.startDeg, seg.endDeg);
           const opacity = isOther ? 0.25 : 1;
-          const activeStroke = isHovered ? PLATFORM_COLORS_HOVER[seg.platform] : seg.color;
+          const activeStroke = isHovered && !muted ? PLATFORM_COLORS_HOVER[seg.platform] : seg.color;
           const sw = isHovered ? strokeWidth + 2 : strokeWidth;
 
           return (
@@ -542,7 +561,7 @@ function GaugeArc({
           ) : (
             <>
               <p className="text-[36px] font-bold leading-none tracking-tight text-[#343434]">{centerLabel}</p>
-              <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#808080]">ADS RUNNING</p>
+              <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#808080]">{centerHeadline}</p>
               <p className="mt-0.5 text-[10px] font-normal text-[#808080]">
                 {centerSublabel.replace(/^ads /i, "")}
               </p>

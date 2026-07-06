@@ -1675,6 +1675,93 @@ export type Database = {
         };
         Relationships: [];
       };
+      landing_pages: {
+        Row: {
+          id: string;
+          competitor_id: string;
+          user_id: string;
+          url: string;
+          label: string;
+          page_type: string;
+          is_active: boolean;
+          auto_detected_from: string | null;
+          added_at: string;
+          last_screenshotted_at: string | null;
+          next_screenshot_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          competitor_id: string;
+          user_id: string;
+          url: string;
+          label: string;
+          page_type?: string;
+          is_active?: boolean;
+          auto_detected_from?: string | null;
+          added_at?: string;
+          last_screenshotted_at?: string | null;
+          next_screenshot_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          competitor_id?: string;
+          user_id?: string;
+          url?: string;
+          label?: string;
+          page_type?: string;
+          is_active?: boolean;
+          auto_detected_from?: string | null;
+          added_at?: string;
+          last_screenshotted_at?: string | null;
+          next_screenshot_at?: string | null;
+        };
+        Relationships: [];
+      };
+      landing_page_snapshots: {
+        Row: {
+          id: string;
+          landing_page_id: string;
+          competitor_id: string;
+          user_id: string;
+          screenshot_url: string;
+          hero_screenshot_url: string | null;
+          page_text: Json;
+          pixel_diff_pct: number | null;
+          has_meaningful_change: boolean;
+          change_analysis: Json;
+          taken_at: string;
+          status: string;
+        };
+        Insert: {
+          id?: string;
+          landing_page_id: string;
+          competitor_id: string;
+          user_id: string;
+          screenshot_url: string;
+          hero_screenshot_url?: string | null;
+          page_text?: Json;
+          pixel_diff_pct?: number | null;
+          has_meaningful_change?: boolean;
+          change_analysis?: Json;
+          taken_at?: string;
+          status?: string;
+        };
+        Update: {
+          id?: string;
+          landing_page_id?: string;
+          competitor_id?: string;
+          user_id?: string;
+          screenshot_url?: string;
+          hero_screenshot_url?: string | null;
+          page_text?: Json;
+          pixel_diff_pct?: number | null;
+          has_meaningful_change?: boolean;
+          change_analysis?: Json;
+          taken_at?: string;
+          status?: string;
+        };
+        Relationships: [];
+      };
       alert_rules: {
         Row: {
           id: string;

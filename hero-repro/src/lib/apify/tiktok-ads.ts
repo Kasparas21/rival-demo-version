@@ -4,7 +4,7 @@ import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-li
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { tiktokApifyItemToCard } from "@/lib/ad-library/normalize";
 
-const DEFAULT_TIKTOK_ACTOR = "data_xplorer/tiktok-ads-library-pay-per-event";
+const TIKTOK_ADS_ACTOR = "data_xplorer/tiktok-ads-scraper";
 const MAX_TIMEOUT_SECS = 600;
 
 function formatIsoDate(d: Date): string {
@@ -38,7 +38,6 @@ export async function scrapeTikTokAdsLibrary(params: {
   startDate?: string;
   endDate?: string;
 }): Promise<TikTokAdCard[]> {
-  const actorId = process.env.APIFY_TIKTOK_ADS_ACTOR?.trim() || DEFAULT_TIKTOK_ACTOR;
   const maxAds = Math.max(1, Math.min(params.maxAds, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
   const { startDate, endDate } = pickStartEndDates(params.startDate, params.endDate);
 
@@ -49,8 +48,9 @@ export async function scrapeTikTokAdsLibrary(params: {
   const region = normalizeTikTokAdsRegion(params.region) || DEFAULT_TIKTOK_ADS_REGION;
 
   const { items } = await runApifyActor<Record<string, unknown>>(
-    actorId,
+    TIKTOK_ADS_ACTOR,
     {
+      mode: "library",
       region,
       startDate,
       endDate,

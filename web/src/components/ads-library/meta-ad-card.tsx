@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ExternalLink, Globe, Play } from "lucide-react";
+import { memo, useEffect, useState, type ReactNode } from "react";
+import { Globe, Play } from "lucide-react";
 import { AdSaveRow } from "@/components/ads-library/ad-save-row";
+import { AdCardTopRightLinkStack } from "@/components/ads-library/creative-test-winner-trophy";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import {
@@ -15,15 +16,32 @@ import { safeHttpsUrl } from "@/lib/ad-library/normalize";
 import { resolveMetaLibraryCardPreview } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
+/** Centers creative inside the fixed grid frame (horizontal + vertical). */
+function fillFrameCenter(children: ReactNode, fillFrame: boolean, extraClass = "") {
+  if (!fillFrame) return children;
+  return (
+    <div
+      className={`flex h-full w-full min-h-0 items-center justify-center overflow-hidden ${extraClass}`.trim()}
+    >
+      {children}
+    </div>
+  );
+}
+
+const fillFrameMediaClass = "max-h-full max-w-full object-contain object-center rounded-xl";
+
 function MetaCreativeMedia({
   ad,
   compact,
   archivedUrl,
+  fillFrame,
 }: {
   ad: MetaAdCardModel;
   compact: boolean;
   /** Supabase Storage copy — survives Meta CDN link expiry. */
   archivedUrl?: string;
+  /** Fit creative inside a fixed-height card frame (grid view). */
+  fillFrame?: boolean;
 }) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -48,37 +66,51 @@ function MetaCreativeMedia({
   };
   /** Poster-first preview so video tiles match image size; mount `<video>` only after play. */
   const wantsVideo = Boolean(stream && ad.isVideo && displayStill);
-  const maxH = compact ? "max-h-[300px]" : "max-h-[420px]";
-  const previewFrameH = compact ? "h-[200px]" : "h-[280px]";
+  const maxH = compact ? "max-h-[300px]" : fillFrame ? "max-h-full" : "max-h-[420px]";
+  const previewFrameH = compact ? "h-[200px]" : fillFrame ? "h-full min-h-0" : "h-[280px]";
   /** Image ads: natural aspect, width-first. Video posters: fixed frame fills like hero creative. */
-  const imageMediaClass = `block w-full ${maxH} object-contain rounded-xl`;
-  const videoPreviewMediaClass = "block h-full w-full object-cover rounded-xl";
+  const imageMediaClass = fillFrame
+    ? fillFrameMediaClass
+    : `block w-full ${maxH} object-contain rounded-xl`;
+  const videoPreviewMediaClass = fillFrame
+    ? fillFrameMediaClass
+    : "block h-full w-full object-cover rounded-xl";
+  const videoFrameBg = fillFrame ? "bg-[#f3f4f6]" : "bg-black";
 
   if (wantsVideo && playing && !videoFailed) {
+    const video = (
+      <video
+        controls
+        autoPlay
+        playsInline
+        preload="metadata"
+        poster={displayStill || undefined}
+        className={`${videoPreviewMediaClass} ${fillFrame ? "bg-[#f3f4f6]" : "bg-black"}`}
+        src={stream}
+        onClick={(e) => e.stopPropagation()}
+        onError={() => setVideoFailed(true)}
+        {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
+      />
+    );
+    if (fillFrame) {
+      return fillFrameCenter(video, true, `rounded-xl ${videoFrameBg}`);
+    }
     return (
-      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
-        <video
-          controls
-          autoPlay
-          playsInline
-          preload="metadata"
-          poster={displayStill || undefined}
-          className={`${videoPreviewMediaClass} bg-black object-contain`}
-          src={stream}
-          onClick={(e) => e.stopPropagation()}
-          onError={() => setVideoFailed(true)}
-          // DOM: HTMLVideoElement.referrerPolicy — @types/react VideoHTMLAttributes omit it in this project
-          {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
-        />
+      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}>
+        {video}
       </div>
     );
   }
 
   if (wantsVideo && displayStill && !videoFailed) {
-    return (
+    const poster = (
       <button
         type="button"
-        className={`relative block w-full overflow-hidden rounded-xl border-0 bg-[#f3f4f6] p-0 ${previewFrameH}`}
+        className={
+          fillFrame
+            ? "relative inline-flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-xl border-0 bg-transparent p-0"
+            : `relative block w-full overflow-hidden rounded-xl border-0 bg-[#f3f4f6] p-0 ${previewFrameH}`
+        }
         onClick={(e) => {
           e.stopPropagation();
           setPlaying(true);
@@ -100,28 +132,35 @@ function MetaCreativeMedia({
         </span>
       </button>
     );
+    return fillFrame ? fillFrameCenter(poster, true, "rounded-xl bg-[#f3f4f6]") : poster;
   }
 
   if (wantsVideo && !displayStill && !videoFailed) {
+    const video = (
+      <video
+        controls
+        playsInline
+        preload="metadata"
+        className={`${videoPreviewMediaClass} ${fillFrame ? "bg-[#f3f4f6]" : "bg-black"}`}
+        src={stream}
+        onClick={(e) => e.stopPropagation()}
+        onError={() => setVideoFailed(true)}
+        {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
+      />
+    );
+    if (fillFrame) {
+      return fillFrameCenter(video, true, `rounded-xl ${videoFrameBg}`);
+    }
     return (
-      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
-        <video
-          controls
-          playsInline
-          preload="metadata"
-          className={`${videoPreviewMediaClass} bg-black object-contain`}
-          src={stream}
-          onClick={(e) => e.stopPropagation()}
-          onError={() => setVideoFailed(true)}
-          {...{ referrerPolicy: "no-referrer" as React.HTMLAttributeReferrerPolicy }}
-        />
+      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}>
+        {video}
       </div>
     );
   }
 
   if (wantsVideo && videoFailed && displayStill) {
-    return (
-      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH}`}>
+    const fallback = (
+      <div className={fillFrame ? "relative inline-flex max-h-full max-w-full" : `relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}>
         <img
           src={displayStill}
           alt=""
@@ -140,6 +179,7 @@ function MetaCreativeMedia({
         </a>
       </div>
     );
+    return fillFrame ? fillFrameCenter(fallback, true, `rounded-xl ${videoFrameBg}`) : fallback;
   }
 
   if (wantsVideo && videoFailed && !displayStill) {
@@ -162,7 +202,7 @@ function MetaCreativeMedia({
   }
 
   if (displayStill) {
-    return (
+    return fillFrameCenter(
       <img
         src={displayStill}
         alt=""
@@ -170,7 +210,9 @@ function MetaCreativeMedia({
         className={imageMediaClass}
         onClick={(e) => e.stopPropagation()}
         onError={onStillError}
-      />
+      />,
+      Boolean(fillFrame),
+      fillFrame ? "rounded-xl bg-[#f3f4f6]" : "",
     );
   }
 
@@ -226,7 +268,7 @@ function metaSiteLabel(ad: MetaAdCardModel, brandDomain: string): { destHttps: s
   return { destHttps, siteLabel };
 }
 
-export function MetaAdCard({
+function MetaAdCardImpl({
   ad,
   viewMode,
   brand,
@@ -237,6 +279,7 @@ export function MetaAdCard({
   saveDisabled,
   runStatus,
   metaScrapeAtMs,
+  isCreativeTestWinner,
 }: {
   ad: MetaAdCardModel;
   viewMode: "grid" | "list";
@@ -250,6 +293,7 @@ export function MetaAdCard({
   runStatus?: LibraryRunStatus;
   /** UTC ms of last Meta scrape — used for end_date vs scrape-day active rule. */
   metaScrapeAtMs?: number;
+  isCreativeTestWinner?: boolean;
 }) {
   const killed = isLibraryAdKilled("meta", ad, runStatus, metaScrapeAtMs);
   const runDays = computeLibraryAdRunDays("meta", ad, runStatus, metaScrapeAtMs);
@@ -260,14 +304,16 @@ export function MetaAdCard({
   const metaPrimary = ad.desc?.trim() || "";
   const metaLinkDesc = ad.linkDescription?.trim() || "";
 
+  const isGrid = viewMode === "grid";
+
   return (
     <article
       onClick={onClick}
-      className={`min-w-0 ${viewMode === "list" ? "h-full" : ""} bg-white rounded-2xl border border-[#e5e7eb] overflow-hidden transition-all duration-200 flex flex-col ${
+      className={`min-w-0 ${viewMode === "list" || isGrid ? "h-full" : ""} bg-white rounded-2xl border border-[#e5e7eb] overflow-hidden transition-all duration-200 flex flex-col ${
         onClick ? "cursor-pointer hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-2 hover:ring-slate-200" : "hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
       }`}
     >
-      <div className={`flex min-h-0 ${viewMode === "list" ? "flex-1 flex-row" : "flex-col"}`}>
+      <div className={`flex min-h-0 ${viewMode === "list" ? "flex-1 flex-row" : isGrid ? "flex-1 flex-col" : "flex-col"}`}>
         {viewMode === "list" ? (
           <div className="relative w-56 shrink-0 min-h-[220px] border-r border-[#e5e7eb] bg-[#f3f4f6] p-2">
             <div className="relative flex h-full min-h-[204px] w-full items-center justify-center overflow-hidden rounded-xl bg-white">
@@ -275,7 +321,7 @@ export function MetaAdCard({
             </div>
           </div>
         ) : null}
-        <div className={`min-w-0 flex flex-col ${viewMode === "list" ? "flex-1 min-h-0" : ""}`}>
+        <div className={`min-w-0 flex flex-col ${viewMode === "list" || isGrid ? "flex-1 min-h-0" : ""}`}>
           <div className="p-4 flex items-start gap-3 border-b border-[#f1f5f9]" data-pa-section="brand">
             <CompetitorLogo
               sources={{
@@ -311,27 +357,20 @@ export function MetaAdCard({
                   </span>
                 </div>
               ) : null}
-              {ad.adLibraryUrl?.trim() ? (
-                <a
-                  href={ad.adLibraryUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-1 rounded-md hover:bg-[#f3f4f6] text-[#9ca3af] hover:text-[#343434] transition-colors"
-                  title="Open original ad on Meta"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              ) : null}
+              <AdCardTopRightLinkStack
+                href={ad.adLibraryUrl}
+                hrefTitle="Open original ad on Meta"
+                isCreativeTestWinner={isCreativeTestWinner}
+                onLinkClick={(e) => e.stopPropagation()}
+              />
             </div>
           </div>
           {metaTitle || metaPrimary ? (
             <div className="px-4 py-3 shrink-0" data-pa-section="copy">
               {metaTitle ? (
-                <ExpandableAdText
-                  text={metaTitle}
-                  className="font-semibold text-[15px] text-[#1c1e21] leading-snug break-words [overflow-wrap:anywhere]"
-                />
+                <p className="font-semibold text-[15px] text-[#1c1e21] leading-snug break-words [overflow-wrap:anywhere] whitespace-pre-wrap">
+                  {metaTitle}
+                </p>
               ) : null}
               {metaTitle && metaPrimary ? (
                 <div className="h-[1lh] min-h-[1.125rem] shrink-0" aria-hidden />
@@ -344,21 +383,27 @@ export function MetaAdCard({
               ) : null}
             </div>
           ) : null}
-          {viewMode === "grid" && (
-            <div className="relative w-full shrink-0 border-y border-[#e5e7eb] bg-[#f3f4f6] p-3">
-              <div className="relative flex w-full items-center justify-center overflow-hidden rounded-xl bg-white">
-                <MetaCreativeMedia ad={ad} compact={false} archivedUrl={archivedUrl} />
+          {isGrid ? (
+            <div className="flex min-h-0 flex-1 flex-col border-y border-[#e5e7eb] bg-[#f3f4f6]">
+              <div className="min-h-0 flex-1" aria-hidden />
+              <div className="relative z-0 w-full shrink-0 px-3">
+                <div className="h-[280px] w-full overflow-hidden rounded-xl bg-[#f3f4f6]">
+                  <MetaCreativeMedia ad={ad} compact={false} fillFrame archivedUrl={archivedUrl} />
+                </div>
               </div>
+              <div className="min-h-0 flex-1" aria-hidden />
             </div>
-          )}
-          <div className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]" data-pa-section="cta">
+          ) : null}
+          <div
+            className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]"
+            data-pa-section="cta"
+          >
             <div className="min-w-0 flex flex-col rounded-lg border border-[#e5e7eb] bg-white p-3 shadow-sm">
               <p className="text-[12px] font-medium text-[#65676b] uppercase tracking-wide truncate">{siteLabel}</p>
               {metaLinkDesc ? (
-                <ExpandableAdText
-                  text={metaLinkDesc}
-                  className="mt-1.5 text-[13px] text-[#65676b] leading-snug whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
-                />
+                <p className="mt-1.5 break-words whitespace-pre-wrap text-[13px] leading-snug text-[#65676b] [overflow-wrap:anywhere]">
+                  {metaLinkDesc}
+                </p>
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -397,3 +442,6 @@ export function MetaAdCard({
     </article>
   );
 }
+
+/** Memoized — grids render many cards; parent loading-flag flips shouldn't re-render them all. */
+export const MetaAdCard = memo(MetaAdCardImpl);

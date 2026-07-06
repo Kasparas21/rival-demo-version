@@ -26,6 +26,24 @@ const bodySchema = z.object({
     .optional(),
 });
 
+function winnerLibraryKeysFromScrapedRow(
+  platform: string,
+  row: { raw_payload: unknown; stable_ad_key: string | null },
+): string[] {
+  const keys = new Set<string>();
+  const pl = platform.trim().toLowerCase();
+  const cardId = libraryItemIdFromRawPayload(row.raw_payload);
+  if (cardId) keys.add(libraryItemKey(pl, cardId));
+  const stableKey = typeof row.stable_ad_key === "string" ? row.stable_ad_key.trim() : "";
+  if (stableKey) keys.add(libraryItemKey(pl, stableKey));
+  if (pl === "meta" && row.raw_payload && typeof row.raw_payload === "object" && !Array.isArray(row.raw_payload)) {
+    for (const alias of metaLibraryItemLookupKeys(row.raw_payload as MetaAdCard)) {
+      keys.add(libraryItemKey(pl, alias));
+    }
+  }
+  return [...keys];
+}
+
 export async function POST(request: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
   const {
@@ -222,5 +240,55 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ ok: true, savedMap, resolvedToScraped, libraryLifecycle, libraryPreviewUrls });
+  const winnerScrapedAdIds: string[] = [];
+  const winnerLibraryKeysSet = new Set<string>();
+
+  const { data: winnerTests, error: winnerTestsErr } = await supabase
+    .from("creative_tests")
+    .select("winner_ad_id")
+    .eq("user_id", user.id)
+    .eq("competitor_id", competitorId)
+    .not("winner_ad_id", "is", null);
+
+  if (winnerTestsErr) {
+    return NextResponse.json({ ok: false, error: winnerTestsErr.message }, { status: 500 });
+  }
+
+  const winnerIds = [
+    ...new Set(
+      (winnerTests ?? [])
+        .map((t) => t.winner_ad_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+
+  if (winnerIds.length > 0) {
+    const { data: winnerRows, error: winnerRowsErr } = await supabase
+      .from("scraped_ads")
+      .select("id, platform, raw_payload, stable_ad_key")
+      .eq("user_id", user.id)
+      .eq("competitor_id", competitorId)
+      .in("id", winnerIds);
+
+    if (winnerRowsErr) {
+      return NextResponse.json({ ok: false, error: winnerRowsErr.message }, { status: 500 });
+    }
+
+    for (const row of winnerRows ?? []) {
+      winnerScrapedAdIds.push(row.id);
+      for (const key of winnerLibraryKeysFromScrapedRow(String(row.platform), row)) {
+        winnerLibraryKeysSet.add(key);
+      }
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    savedMap,
+    resolvedToScraped,
+    libraryLifecycle,
+    libraryPreviewUrls,
+    winnerScrapedAdIds,
+    winnerLibraryKeys: [...winnerLibraryKeysSet],
+  });
 }

@@ -45,7 +45,7 @@ export function extractActivityLandingKey(platform: string, rawPayload: Json): s
     return extra ? normalizeLandingPageUrl(extra) : null;
   }
 
-  if (pl === "tiktok" || pl === "youtube") {
+  if (pl === "youtube") {
     const u =
       firstNonemptyString(p, [
         "productUrl",

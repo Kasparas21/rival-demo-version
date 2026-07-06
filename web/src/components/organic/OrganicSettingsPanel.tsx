@@ -16,6 +16,7 @@ type OrganicSettingsPanelProps = {
   initialSocials: OrganicSocials;
   onSaved?: (socials: OrganicSocials) => void;
   onScrapeComplete?: () => void;
+  isOwnWorkspace?: boolean;
 };
 
 export function OrganicSettingsPanel({
@@ -23,6 +24,7 @@ export function OrganicSettingsPanel({
   initialSocials,
   onSaved,
   onScrapeComplete,
+  isOwnWorkspace = false,
 }: OrganicSettingsPanelProps) {
   const [socials, setSocials] = useState<OrganicSocials>(initialSocials);
   const [savedSocials, setSavedSocials] = useState<OrganicSocials>(initialSocials);
@@ -187,7 +189,9 @@ export function OrganicSettingsPanel({
       <div className="rounded-2xl border border-[#ececef] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <h3 className="text-[15px] font-semibold text-slate-900">Social Accounts</h3>
         <p className="mt-1 text-[13px] text-slate-600">
-          Add your competitor&apos;s social handles to track organic posts. Scrapes run every 3 days.
+          {isOwnWorkspace
+            ? "Add your brand's social handles to track organic posts. Scrapes run every 3 days."
+            : "Add your competitor's social handles to track organic posts. Scrapes run every 3 days."}
         </p>
 
         <div className="mt-5 space-y-4">

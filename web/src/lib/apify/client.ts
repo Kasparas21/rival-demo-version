@@ -236,8 +236,13 @@ export async function runApifyActor<T = Record<string, unknown>>(
     );
   }
 
-  const runPayload = await parseJson<ApifyRunResponse>(runResponse);
+  const runPayload = await parseJson<ApifyRunResponse & { error?: { type?: string; message?: string } }>(runResponse);
   if (!runResponse.ok) {
+    if (runPayload?.error?.type === "record-not-found") {
+      throw new ApifyRunnerError(
+        `Apify actor not found: "${actorId}". It may have been removed or renamed on Apify Store — check APIFY_*_ACTOR env overrides.`
+      );
+    }
     throw new ApifyRunnerError(
       `Apify actor failed: ${runPayload ? JSON.stringify(runPayload) : `${runResponse.status} ${runResponse.statusText}`}`
     );

@@ -1,0 +1,20 @@
+{
+  "name": "newsletter-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone tool to subscribe to newsletters via Playwright browser automation",
+  "main": "server.js",
+  "scripts": {
+    "postinstall": "playwright install-deps",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "playwright": "^1.51.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

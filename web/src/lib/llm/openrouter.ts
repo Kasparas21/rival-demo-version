@@ -252,3 +252,85 @@ export async function openRouterChatText(params: {
     return { ok: false, error: msg };
   }
 }
+
+export type OpenRouterVisionImage = {
+  label: string;
+  base64Png: string;
+};
+
+type OpenRouterMultimodalContent =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+/**
+ * Vision chat completion with base64 PNG images (OpenRouter multimodal format).
+ */
+export async function openRouterChatVision(params: {
+  model?: string;
+  maxTokens?: number;
+  images: OpenRouterVisionImage[];
+  prompt: string;
+  systemPrompt?: string;
+}): Promise<OpenRouterChatTextResult> {
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, error: "OPENROUTER_API_KEY not configured" };
+  }
+
+  const model = params.model ?? "anthropic/claude-sonnet-4-6";
+  const maxTokens = params.maxTokens ?? 1000;
+  const content: OpenRouterMultimodalContent[] = [];
+
+  for (const image of params.images) {
+    content.push({ type: "text", text: image.label });
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:image/png;base64,${image.base64Png}` },
+    });
+  }
+  content.push({ type: "text", text: params.prompt });
+
+  const messages: Array<{ role: string; content: OpenRouterMultimodalContent[] | string }> = [];
+  if (params.systemPrompt?.trim()) {
+    messages.push({ role: "system", content: params.systemPrompt.trim() });
+  }
+  messages.push({ role: "user", content });
+
+  const httpReferer = process.env.OPENROUTER_HTTP_REFERER?.trim();
+  const appTitle = process.env.OPENROUTER_APP_TITLE?.trim() ?? "Rival";
+
+  const controller = new AbortController();
+  const timeoutMs = resolveChatTimeoutMs();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        ...(httpReferer ? { "HTTP-Referer": httpReferer } : {}),
+        "X-Title": appTitle,
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      return { ok: false, error: `OpenRouter vision failed (${response.status}): ${body.slice(0, 200)}` };
+    }
+
+    const result = (await response.json()) as unknown;
+    return parseChatResult(result, model);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "OpenRouter vision request failed";
+    return { ok: false, error: msg };
+  } finally {
+    clearTimeout(timeout);
+  }
+}

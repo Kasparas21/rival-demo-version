@@ -8,6 +8,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
 import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
+import { createDefaultLandingPages } from "@/lib/landing-page-tracker/create-defaults";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -21,11 +23,23 @@ function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryCon
     ? raw.channels.filter((c): c is string => typeof c === "string" && c.trim() !== "")
     : undefined;
   const confirmed = typeof raw.confirmed === "boolean" ? raw.confirmed : undefined;
+  const regionsRaw = raw.regions;
+  const regions =
+    regionsRaw && typeof regionsRaw === "object" && !Array.isArray(regionsRaw)
+      ? Object.fromEntries(
+          Object.entries(regionsRaw).filter(
+            ([, v]) => typeof v === "string" && v.trim() !== "",
+          ),
+        )
+      : undefined;
   const out: AdsLibraryContextPayload = {};
   if (ids && Object.keys(ids).length > 0) out.ids = ids;
   if (channels && channels.length > 0) out.channels = channels;
   if (confirmed !== undefined) out.confirmed = confirmed;
-  if (!out.ids && !out.channels?.length && out.confirmed === undefined) return null;
+  if (regions && Object.keys(regions).length > 0) {
+    out.regions = regions as AdsLibraryContextPayload["regions"];
+  }
+  if (!out.ids && !out.channels?.length && out.confirmed === undefined && !out.regions) return null;
   return out;
 }
 
@@ -35,6 +49,7 @@ function rowToLibraryContext(raw: unknown): SidebarCompetitor["libraryContext"] 
   const idsRaw = o.ids;
   const channelsRaw = o.channels;
   const confirmedRaw = o.confirmed;
+  const regionsRaw = o.regions;
   const out: NonNullable<SidebarCompetitor["libraryContext"]> = {};
   if (idsRaw && typeof idsRaw === "object" && !Array.isArray(idsRaw)) {
     const entries = Object.entries(idsRaw).filter(([, v]) => typeof v === "string");
@@ -45,7 +60,11 @@ function rowToLibraryContext(raw: unknown): SidebarCompetitor["libraryContext"] 
     if (ch.length > 0) out.channels = ch;
   }
   if (typeof confirmedRaw === "boolean") out.confirmed = confirmedRaw;
-  if (out.ids || out.channels?.length || out.confirmed !== undefined) return out;
+  if (regionsRaw && typeof regionsRaw === "object" && !Array.isArray(regionsRaw)) {
+    const entries = Object.entries(regionsRaw).filter(([, v]) => typeof v === "string");
+    if (entries.length > 0) out.regions = Object.fromEntries(entries);
+  }
+  if (out.ids || out.channels?.length || out.confirmed !== undefined || out.regions) return out;
   return undefined;
 }
 
@@ -712,6 +731,22 @@ export async function POST(request: Request) {
       .filter((c) => !workspaceItems.some((w) => normalizeCompetitorSlug(w.slug) === c.slug))
       .map((c) => c.savedCompetitorDbId),
   );
+
+  if (competitorItemsRaw.length > 0 && competitors.length > 0) {
+    try {
+      const admin = createSupabaseAdminClient();
+      for (const saved of competitors) {
+        const item = competitorItemsRaw.find(
+          (c) => normalizeCompetitorSlug(c.slug) === saved.slug,
+        );
+        const website = item?.brand?.domain?.trim() || item?.slug?.trim();
+        if (!website || !saved.savedCompetitorDbId) continue;
+        await createDefaultLandingPages(admin, saved.savedCompetitorDbId, user.id, website);
+      }
+    } catch (landingErr) {
+      console.error("[saved-competitors] createDefaultLandingPages failed", landingErr);
+    }
+  }
 
   return NextResponse.json({ ok: true, competitors, mappingUnavailable: brandMappingsUnavailable });
 }

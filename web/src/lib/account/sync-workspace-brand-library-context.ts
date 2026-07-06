@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ensureWorkspaceBrandSavedCompetitor } from "@/lib/account/ensure-workspace-brand-competitor";
+import { bootstrapWorkspaceBrandChannels } from "@/lib/account/sync-workspace-brand-channel-bootstrap";
 import type { AdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { scrapeHintsToPlatformIds } from "@/lib/onboarding/workspace-ads-setup";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
@@ -48,5 +49,18 @@ export async function syncWorkspaceBrandLibraryContextFromSetup(
   if (error && !isMissingDbColumnError(error.message, "ads_library_context")) {
     throw error;
   }
+
+  try {
+    await bootstrapWorkspaceBrandChannels({
+      admin: supabase,
+      userId,
+      competitorId: ensured.id,
+      scrape: setup.scrape,
+      website: domainHint,
+    });
+  } catch (bootstrapErr) {
+    console.error("[syncWorkspaceBrandLibraryContext] channel bootstrap", bootstrapErr);
+  }
+
   return ensured.id;
 }

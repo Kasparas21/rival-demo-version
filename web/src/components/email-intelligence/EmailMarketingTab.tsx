@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
+import type { CompetitorSubTabId } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { alertGlassPanelClass } from "@/components/competitor/alerts/alert-ui-styles";
 import { EMAIL_INSIGHTS_MIN_COUNT } from "@/lib/email-intelligence/constants";
@@ -12,11 +13,9 @@ import { cn } from "@/lib/utils";
 
 import { EmailMarketingInbox } from "./EmailMarketingInbox";
 import { EmailMarketingInsights } from "./EmailMarketingInsights";
-import { EmailInboxSkeleton, EmailSubTabsSkeleton } from "./EmailMarketingSkeleton";
+import { EmailInboxSkeleton } from "./EmailMarketingSkeleton";
 import { SavedEmailsPanel } from "./SavedEmailsPanel";
 import { EmailTrackerBar } from "./EmailTrackerBar";
-
-type SubTab = "inbox" | "saved" | "insights";
 
 function isTabVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
@@ -25,25 +24,35 @@ function isTabVisible(): boolean {
 export function EmailMarketingTab({
   competitorId,
   competitorName,
+  activeSubTab,
+  onSubTabChange,
+  isOwnWorkspace = false,
+  fetchEnabled = true,
 }: {
   competitorId?: string;
   competitorName: string;
+  activeSubTab: CompetitorSubTabId | null;
+  onSubTabChange: (sub: CompetitorSubTabId) => void;
+  isOwnWorkspace?: boolean;
+  /** When false (tab hidden), the 60s email-count polling is paused. */
+  fetchEnabled?: boolean;
 }) {
   const searchParams = useSearchParams();
   const initialEmailId = searchParams.get("email_id")?.trim() || null;
+  const subTab =
+    activeSubTab === "saved" || activeSubTab === "insights" ? activeSubTab : "inbox";
 
   const [trackerReady, setTrackerReady] = useState(false);
   const [trackerChecking, setTrackerChecking] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>(initialEmailId ? "inbox" : "inbox");
   const [emailCount, setEmailCount] = useState(0);
   const [insightsUnlocked, setInsightsUnlocked] = useState(false);
   const [allowCsvExport, setAllowCsvExport] = useState(false);
 
   useEffect(() => {
     if (initialEmailId) {
-      setActiveSubTab("inbox");
+      onSubTabChange("inbox");
     }
-  }, [initialEmailId]);
+  }, [initialEmailId, onSubTabChange]);
 
   const refreshEmailCount = useCallback(async () => {
     if (!competitorId) return;
@@ -72,21 +81,23 @@ export function EmailMarketingTab({
   }, [competitorId]);
 
   useEffect(() => {
-    if (!trackerReady || !competitorId) return;
+    if (!trackerReady || !competitorId || !fetchEnabled) return;
     void refreshEmailCount();
     const interval = window.setInterval(() => {
       if (!isTabVisible()) return;
       void refreshEmailCount();
     }, 60_000);
     return () => window.clearInterval(interval);
-  }, [trackerReady, competitorId, refreshEmailCount]);
+  }, [trackerReady, competitorId, refreshEmailCount, fetchEnabled]);
 
   if (!competitorId) {
     return (
       <div className={`flex flex-col items-center justify-center ${COMPETITOR_PAGE_X} py-24 text-center`}>
         <Mail className="mb-4 h-12 w-12 text-slate-300" />
         <p className="max-w-md text-[14px] leading-relaxed text-slate-600">
-          Save this competitor first to track their email marketing.
+          {isOwnWorkspace
+            ? "Link your workspace brand first to track your email marketing."
+            : "Save this competitor first to track their email marketing."}
         </p>
       </div>
     );
@@ -97,7 +108,11 @@ export function EmailMarketingTab({
       <FeatureSectionHeader
         overline="Email Marketing"
         title={`Email · ${competitorName}`}
-        description="Captured newsletters and promos with AI summaries, offers, and marketing angles."
+        description={
+          isOwnWorkspace
+            ? "Track emails you send by subscribing your newsletter to the address below — plus AI summaries and competitor comparison."
+            : "Captured newsletters and promos with AI summaries, offers, and marketing angles."
+        }
       />
 
       <div className="mt-5 space-y-4">
@@ -106,48 +121,26 @@ export function EmailMarketingTab({
           competitorName={competitorName}
           onTrackerReady={setTrackerReady}
           onCheckingChange={setTrackerChecking}
+          isOwnWorkspace={isOwnWorkspace}
         />
 
         {trackerChecking ? (
-          <div className="space-y-4">
-            <EmailSubTabsSkeleton />
-            <EmailInboxSkeleton />
-          </div>
+          <EmailInboxSkeleton />
         ) : trackerReady ? (
           <>
-            <nav className="-mb-px flex gap-0 border-b border-slate-200/80">
-              {(["inbox", "saved", "insights"] as const).map((tab) => {
-                const isActive = activeSubTab === tab;
-                return (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setActiveSubTab(tab)}
-                    className={cn(
-                      "px-4 py-2.5 text-[13px] font-medium capitalize transition-colors border-b-2 -mb-px",
-                      isActive
-                        ? "border-slate-900 text-slate-900"
-                        : "border-transparent text-slate-500 hover:text-slate-800",
-                    )}
-                  >
-                    {tab}
-                  </button>
-                );
-              })}
-            </nav>
-
-            {activeSubTab === "inbox" ? (
+            {subTab === "inbox" ? (
               <EmailMarketingInbox
                 competitorId={competitorId}
                 initialEmailId={initialEmailId}
                 allowCsvExport={allowCsvExport}
               />
-            ) : activeSubTab === "saved" ? (
+            ) : subTab === "saved" ? (
               <SavedEmailsPanel competitorId={competitorId} competitorName={competitorName} />
             ) : insightsUnlocked ? (
               <EmailMarketingInsights
                 competitorId={competitorId}
                 competitorName={competitorName}
+                isOwnWorkspace={isOwnWorkspace}
               />
             ) : (
               <div

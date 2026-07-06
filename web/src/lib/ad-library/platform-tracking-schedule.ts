@@ -5,9 +5,9 @@ import {
 } from "./scheduled-scrape-date-window";
 import {
   refreshIntervalDaysForClassification,
-  scrapeLimitForClassification,
   type PlatformClassification,
 } from "./platform-prioritization";
+import { scheduledAdsPerRefreshForPlatform } from "./scheduled-ads-per-refresh";
 
 export type PlatformScheduleDebug = {
   platform: InitialScrapePlatform;
@@ -46,7 +46,7 @@ export function buildPlatformScheduleDebug(params: {
     classification,
     activeAdCount: params.activeAdCount,
     refreshIntervalDays: refreshIntervalDaysForClassification(params.platform, classification),
-    adsPerRefresh: scrapeLimitForClassification(classification, {
+    adsPerRefresh: scheduledAdsPerRefreshForPlatform(params.platform, classification, {
       isInactiveProbe: isInactiveProbe,
     }),
     lastScrapeAt,

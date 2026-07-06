@@ -19,6 +19,8 @@ type SavedAdsCheckResult = {
   resolvedToScraped: Record<string, string>;
   libraryLifecycle: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>;
   libraryPreviewUrls: Record<string, string>;
+  winnerScrapedAdIds: string[];
+  winnerLibraryKeys: string[];
 };
 
 /** In-memory cache keyed by {@link buildSavedAdsCheckQueryKey} — survives re-renders within the session. */
@@ -115,6 +117,8 @@ export function useSavedAdsStatus(
     Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>
   >({});
   const [libraryPreviewUrls, setLibraryPreviewUrls] = useState<Record<string, string>>({});
+  const [winnerScrapedAdIds, setWinnerScrapedAdIds] = useState<string[]>([]);
+  const [winnerLibraryKeys, setWinnerLibraryKeys] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
 
@@ -131,6 +135,8 @@ export function useSavedAdsStatus(
     setResolvedToScraped(res.resolvedToScraped);
     setLibraryLifecycle(res.libraryLifecycle);
     setLibraryPreviewUrls(res.libraryPreviewUrls);
+    setWinnerScrapedAdIds(res.winnerScrapedAdIds);
+    setWinnerLibraryKeys(res.winnerLibraryKeys);
   }, []);
 
   useEffect(() => {
@@ -140,6 +146,8 @@ export function useSavedAdsStatus(
     setResolvedToScraped({});
     setLibraryLifecycle({});
     setLibraryPreviewUrls({});
+    setWinnerScrapedAdIds([]);
+    setWinnerLibraryKeys([]);
   }, [competitorId]);
 
   useLayoutEffect(() => {
@@ -159,6 +167,8 @@ export function useSavedAdsStatus(
       setResolvedToScraped((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setLibraryLifecycle((prev) => (Object.keys(prev).length === 0 ? prev : {}));
       setLibraryPreviewUrls((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+      setWinnerScrapedAdIds((prev) => (prev.length === 0 ? prev : []));
+      setWinnerLibraryKeys((prev) => (prev.length === 0 ? prev : []));
       lastFetchedKeyRef.current = "";
       inFlightKeyRef.current = null;
       return;
@@ -197,6 +207,8 @@ export function useSavedAdsStatus(
           resolvedToScraped?: Record<string, string>;
           libraryLifecycle?: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>;
           libraryPreviewUrls?: Record<string, string>;
+          winnerScrapedAdIds?: string[];
+          winnerLibraryKeys?: string[];
         }) => {
           if (cancelled) return;
           if (res.ok) {
@@ -205,6 +217,8 @@ export function useSavedAdsStatus(
               resolvedToScraped: res.resolvedToScraped ?? {},
               libraryLifecycle: res.libraryLifecycle ?? {},
               libraryPreviewUrls: res.libraryPreviewUrls ?? {},
+              winnerScrapedAdIds: res.winnerScrapedAdIds ?? [],
+              winnerLibraryKeys: res.winnerLibraryKeys ?? [],
             };
             savedAdsCheckSessionCache.set(checkQueryKey, payload);
             applyCheckResult(payload);
@@ -263,6 +277,31 @@ export function useSavedAdsStatus(
       return undefined;
     },
     [resolvedToScraped],
+  );
+
+  const winnerScrapedIdSet = useMemo(() => new Set(winnerScrapedAdIds), [winnerScrapedAdIds]);
+  const winnerLibraryKeySet = useMemo(() => new Set(winnerLibraryKeys), [winnerLibraryKeys]);
+
+  const isCreativeTestWinnerForCard = useCallback(
+    (platform: string, libraryItemId: string, alternateIds: string[] = []) => {
+      const pl = platform.trim().toLowerCase();
+      for (const rawId of [libraryItemId, ...alternateIds]) {
+        const id = rawId.trim();
+        if (!id) continue;
+        if (winnerLibraryKeySet.has(`${pl}:${id}`)) return true;
+      }
+      const sid = (() => {
+        for (const rawId of [libraryItemId, ...alternateIds]) {
+          const id = rawId.trim();
+          if (!id) continue;
+          const hit = resolvedToScraped[`${pl}:${id}`];
+          if (hit) return hit;
+        }
+        return undefined;
+      })();
+      return Boolean(sid && winnerScrapedIdSet.has(sid));
+    },
+    [winnerLibraryKeySet, winnerScrapedIdSet, resolvedToScraped],
   );
 
   const libraryRunStatusForCard = useCallback(
@@ -464,6 +503,7 @@ export function useSavedAdsStatus(
     scrapedIdForCard,
     previewUrlForCard,
     libraryRunStatusForCard,
+    isCreativeTestWinnerForCard,
     saveAd,
     unsaveAd,
     toggleSave,

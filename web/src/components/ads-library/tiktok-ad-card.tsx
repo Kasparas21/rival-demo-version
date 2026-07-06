@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { ExternalLink, Play } from "lucide-react";
 import { AdSaveRow } from "@/components/ads-library/ad-save-row";
+import { AdCardTopRightLinkStack } from "@/components/ads-library/creative-test-winner-trophy";
 import {
   computeLibraryAdRunDays,
   isLibraryAdKilled,
@@ -22,8 +23,6 @@ function MetaRow({ label, value }: { label: string; value: string }) {
 
 /** Always-visible creative area when CDN URLs fail or are missing (never an empty “no preview” box). */
 function TikTokCreativePlaceholder({ ad }: { ad: TikTokAdCardModel }) {
-  const title =
-    ad.headline?.trim() && ad.headline.trim() !== ad.advertiser.trim() ? ad.headline.trim() : ad.advertiser;
   return (
     <a
       href={ad.adUrl}
@@ -35,15 +34,12 @@ function TikTokCreativePlaceholder({ ad }: { ad: TikTokAdCardModel }) {
       <span className="mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/10 text-white shadow-lg backdrop-blur-sm ring-1 ring-white/20">
         <Play className="ml-1 h-8 w-8" fill="currentColor" aria-hidden />
       </span>
-      <p className="max-w-[240px] text-[13px] font-semibold leading-snug text-white line-clamp-4 [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)]">
-        {title}
-      </p>
-      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-teal-300/95">Open in TikTok Ads Library</p>
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-300/95">Open in TikTok Ads Library</p>
     </a>
   );
 }
 
-export function TikTokAdCard({
+function TikTokAdCardImpl({
   ad,
   onClick,
   scrapedAdId,
@@ -51,6 +47,7 @@ export function TikTokAdCard({
   onToggleSave,
   saveDisabled,
   runStatus,
+  isCreativeTestWinner,
 }: {
   ad: TikTokAdCardModel;
   onClick?: () => void;
@@ -59,6 +56,7 @@ export function TikTokAdCard({
   onToggleSave?: () => void;
   saveDisabled?: boolean;
   runStatus?: LibraryRunStatus;
+  isCreativeTestWinner?: boolean;
 }) {
   const killed = isLibraryAdKilled("tiktok", ad, runStatus);
   const runDays = computeLibraryAdRunDays("tiktok", ad, runStatus);
@@ -73,18 +71,21 @@ export function TikTokAdCard({
   const first = ad.firstShown?.trim() || "—";
   const last = ad.lastShown?.trim() || "—";
   const reach = ad.uniqueUsersSeen?.trim() || "—";
-  const overlayCopy = (() => {
-    const h = ad.headline?.trim() ?? "";
-    if (h && h !== ad.advertiser.trim()) return h;
-    const d = ad.desc?.trim() ?? "";
-    if (d && d !== "—") return d.split("\n")[0]!.slice(0, 280);
-    return "";
-  })();
 
   const poster = ad.img?.trim();
   const hasVideo = Boolean(ad.videoUrl?.trim());
   const tryVideo = hasVideo && !videoFailed;
   const tryImg = Boolean(poster) && !imgFailed && (!tryVideo || videoFailed);
+
+  const topRightLinkStack = (
+    <AdCardTopRightLinkStack
+      href={ad.adUrl}
+      hrefTitle="Open original ad on TikTok"
+      isCreativeTestWinner={isCreativeTestWinner}
+      onLinkClick={(e) => e.stopPropagation()}
+      linkClassName="p-1 rounded-md hover:bg-[#f1f5f9] text-[#94a3b8] hover:text-[#343434] transition-colors"
+    />
+  );
 
   return (
     <article
@@ -119,32 +120,10 @@ export function TikTokAdCard({
                   {killed ? "Ended" : "Active"} {runDays}D
                 </span>
               </div>
-              {ad.adUrl?.trim() ? (
-                <a
-                  href={ad.adUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="p-1 rounded-md hover:bg-[#f1f5f9] text-[#94a3b8] hover:text-[#343434] transition-colors"
-                  title="Open original ad on TikTok"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              ) : null}
+              {topRightLinkStack}
             </div>
           ) : (
-            ad.adUrl?.trim() ? (
-              <a
-                href={ad.adUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className="p-1 rounded-md hover:bg-[#f1f5f9] text-[#94a3b8] hover:text-[#343434] transition-colors shrink-0"
-                title="Open original ad on TikTok"
-              >
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            ) : null
+            topRightLinkStack
           )}
         </div>
         <div className="space-y-1.5">
@@ -161,20 +140,14 @@ export function TikTokAdCard({
               <video
                 controls
                 playsInline
-                preload="metadata"
+                /* With a poster we can defer all buffering until the user hits play. */
+                preload={poster ? "none" : "metadata"}
                 poster={poster || undefined}
                 className="h-full w-full rounded-xl object-contain object-center"
                 src={ad.videoUrl}
                 onClick={(e) => e.stopPropagation()}
                 onError={() => setVideoFailed(true)}
               />
-              {overlayCopy ? (
-                <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/65 via-black/25 to-transparent px-3 pb-10 pt-3">
-                  <p className="line-clamp-4 text-[13px] font-semibold leading-snug text-white [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)]">
-                    {overlayCopy}
-                  </p>
-                </div>
-              ) : null}
             </div>
           ) : tryImg ? (
             <a
@@ -195,13 +168,6 @@ export function TikTokAdCard({
                   <Play className="ml-1 h-8 w-8" fill="currentColor" aria-hidden />
                 </span>
               </div>
-              {overlayCopy ? (
-                <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/65 via-black/25 to-transparent px-3 pb-10 pt-3">
-                  <p className="line-clamp-4 text-[13px] font-semibold leading-snug text-white [text-shadow:_0_1px_3px_rgb(0_0_0_/_90%)]">
-                    {overlayCopy}
-                  </p>
-                </div>
-              ) : null}
             </a>
           ) : (
             <TikTokCreativePlaceholder ad={ad} />
@@ -230,3 +196,6 @@ export function TikTokAdCard({
     </article>
   );
 }
+
+/** Memoized — grids render many cards; parent loading-flag flips shouldn't re-render them all. */
+export const TikTokAdCard = memo(TikTokAdCardImpl);

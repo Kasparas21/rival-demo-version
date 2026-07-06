@@ -275,7 +275,7 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
         {!hasAny ? (
           <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white px-6 py-14 text-center">
             <p className="text-[14px] font-medium text-[#475569]">No saved ads yet</p>
-            <p className="mt-1 text-[12px] text-[#64748b]">Save creatives from All Ads to collect them here.</p>
+            <p className="mt-1 text-[12px] text-[#64748b]">Save creatives from Ad Library to collect them here.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

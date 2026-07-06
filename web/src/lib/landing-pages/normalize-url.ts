@@ -92,9 +92,36 @@ export function normalizeLandingPageUrl(rawUrl: string): string | null {
     url.pathname = url.pathname.slice(0, -1);
   }
 
+  if (url.pathname === "/") {
+    url.pathname = "";
+  }
+
   url.hash = "";
 
   return url.toString();
+}
+
+/**
+ * Canonical key for grouping ads that land on the same page across platforms.
+ * Apex URLs (root path only) collapse to `https://{hostname}` so Google hostname
+ * rows and Meta destination URLs dedupe correctly.
+ */
+export function landingPageGroupKey(rawUrl: string): string | null {
+  const normalized = normalizeLandingPageUrl(rawUrl);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    if (url.pathname === "" || url.pathname === "/") {
+      url.pathname = "";
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
 }
 
 /** Hostname for favicon / display; uses same unwrap as extraction for tracker URLs. */

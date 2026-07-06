@@ -6,7 +6,6 @@ import {
   Globe,
   RefreshCw,
   Clock,
-  SatelliteDish,
   ExternalLink,
   Play,
   Video,
@@ -46,6 +45,7 @@ import type { AdDetailOpenSeed } from "@/lib/ad-detail/ad-detail-cache";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
 import { AdSaveRow, AdSaveVisibilityProvider } from "@/components/ads-library/ad-save-row";
 import { AdLibraryRunStatusBadge } from "@/components/ads-library/ad-library-run-status-badge";
+import { AdCardTopRightLinkStack } from "@/components/ads-library/creative-test-winner-trophy";
 import { TikTokAdCard } from "@/components/ads-library/tiktok-ad-card";
 import { SavedAdsPanel } from "@/components/ads-library/saved-ads-panel";
 import { PinterestAdCard } from "@/components/ads-library/pinterest-ad-card";
@@ -71,8 +71,10 @@ import {
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import {
   channelsQueryToAdsPlatforms,
+  resolveCompetitorTrackedAdsPlatforms,
   unionAdsPlatformsFromSources,
 } from "@/lib/ad-library/channels-to-platforms";
+import { PLATFORM_CONNECTION_FIELD_SPECS } from "@/lib/ad-library/platform-connection-fields";
 import {
   coerceAdsLibraryResponse,
   mergeAdsLibraryState,
@@ -194,21 +196,21 @@ import {
   ONBOARDING_AD_MARKETS,
 } from "@/lib/onboarding/ad-markets";
 import {
-  OWN_BRAND_DEBUG_ONLY_TAB_IDS,
   competitorPageTabsForView,
   competitorSubTabsForView,
-  competitorTabNewBadgeClass,
   findCompetitorTab,
   isGlobalDebugOnlyTab,
+  isLegacyOwnBrandTabId,
   isOwnBrandDebugOnlySubTab,
   isOwnBrandDebugOnlyTab,
+  ownBrandInsightsDefaultSubTab,
+  resolveSubTabFromParams,
   type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
 import { COMPETITOR_PAGE_X, scrollDashboardMainToTop } from "@/components/dashboard/competitor/competitor-page-layout";
 import {
-  CompetitorCompactStickyNav,
+  CompetitorCompactStickyNavAttached,
   CompetitorHeaderScrollSentinel,
-  useCompactNavScroll,
 } from "@/components/dashboard/competitor/competitor-compact-sticky-nav";
 import { KeepMountedTab } from "@/components/competitor/keep-mounted-tab";
 import {
@@ -217,12 +219,13 @@ import {
 } from "@/components/competitor/recompute-poll-context";
 import { ActivityFeedTab } from "@/components/competitor/insights/activity-feed-tab";
 import { CreativeTestsTab } from "@/components/competitor/tests-timeline/creative-tests-tab";
+import { CompetitorPaidMediaSettingsPanel } from "@/components/competitor/paid-media-settings-panel";
 import { TimelineTab } from "@/components/competitor/tests-timeline/timeline-tab";
 import {
-  LandingPagesTab,
   type LandingPagesApiResponse,
   type SharedLandingPagesListCache,
 } from "@/components/competitor/landing-pages-tab";
+import { WebsiteTab } from "@/components/website-tracker/WebsiteTab";
 import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-overview-app";
 import { AudienceTab } from "@/components/competitor/audience-copy/audience-tab";
 import { CopyVaultTab } from "@/components/competitor/audience-copy/copy-vault-tab";
@@ -230,6 +233,7 @@ import { AlertsTab } from "@/components/competitor/alerts/alerts-tab";
 import { EmailMarketingTab } from "@/components/email-intelligence/EmailMarketingTab";
 import { OrganicTab } from "@/components/organic/OrganicTab";
 import { BenchmarkTab } from "@/components/benchmark/benchmark-tab";
+import { WorkspaceSetupChecklist } from "@/components/workspace/workspace-setup-checklist";
 import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-styles";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
@@ -260,17 +264,14 @@ function normalizeDomainHostForAdsEvent(input: string): string {
   );
 }
 
-function formatSpySubtitle(fireUtcYmd: string): string {
-  const [yStr, moStr, dStr] = fireUtcYmd.split("-");
-  const y = Number(yStr);
-  const mo = Number(moStr);
-  const da = Number(dStr);
-  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(da)) return "";
-  const dt = new Date(Date.UTC(y, mo - 1, da));
-  const wd = dt.toLocaleDateString(undefined, { weekday: "short" });
-  const mon = dt.toLocaleDateString(undefined, { month: "short" });
-  const dom = dt.getUTCDate();
-  return `Last spy run: ${wd} ${mon} ${dom} (UTC)`;
+function formatLastScrapedLine(iso: string | null | undefined): string {
+  if (!iso) return "No scrape yet";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "No scrape yet";
+  const wd = d.toLocaleDateString(undefined, { weekday: "short" });
+  const mon = d.toLocaleDateString(undefined, { month: "short" });
+  const dom = d.getDate();
+  return `Last scraped ${wd} ${mon} ${dom} (${formatTimeAgo(d)})`;
 }
 
 /**
@@ -280,8 +281,8 @@ function formatSpySubtitle(fireUtcYmd: string): string {
  */
 const ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 md:grid-cols-3";
 
-/** Meta cards vary in copy length — align to top so shorter cards don't stretch with empty footer space. */
-const META_ADS_GRID_CLASS = "grid grid-cols-1 items-start gap-4 sm:grid-cols-2 md:grid-cols-3";
+/** Meta cards stretch to equal row height; footer pins to bottom via flex in MetaAdCard. */
+const META_ADS_GRID_CLASS = "grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 md:grid-cols-3";
 
 /** Matches Google Transparency + YouTube cards so mixed-format rows align in {@link ADS_GRID_CLASS}. */
 const GOOGLE_MEDIA_FRAME_CLASS =
@@ -305,13 +306,6 @@ function formatTimeAgo(date: Date): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function formatLastScrapedLine(iso: string | null | undefined): string {
-  if (!iso) return "No scrape yet";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "No scrape yet";
-  return `Last scraped ${formatTimeAgo(d)}`;
 }
 
 function formatNextScrapeChipLabel(nextScrapeAt: string | null | undefined, nowMs = Date.now()): string {
@@ -669,7 +663,9 @@ function GoogleYoutubeAdCard({
             src={videoSrcNorm}
             muted
             playsInline
-            preload="auto"
+            /* Skip buffering when a poster covers the frame; without one we still
+               need data to paint the first frame via the onLoadedData seek. */
+            preload={activePoster ? "none" : "auto"}
             onClick={(e) => e.stopPropagation()}
             className="max-h-full max-w-full rounded-xl object-contain object-center bg-black"
             onError={() => {
@@ -950,6 +946,7 @@ function LinkedInFeedAdCard({
   isSaved,
   onToggleSave,
   saveDisabled,
+  isCreativeTestWinner,
 }: {
   ad: LinkedInAdCard;
   brand: { name: string; domain: string; logoUrl?: string };
@@ -958,6 +955,7 @@ function LinkedInFeedAdCard({
   isSaved?: boolean;
   onToggleSave?: () => void;
   saveDisabled?: boolean;
+  isCreativeTestWinner?: boolean;
 }) {
   const libraryDetailHref = linkedInAdLibraryDetailHref(ad);
   const sponsoredHref = linkedInSponsoredSiteHref(ad);
@@ -1005,18 +1003,13 @@ function LinkedInFeedAdCard({
               </div>
             ) : null}
           </div>
-          <div className="flex items-center gap-0.5 shrink-0 text-[#6b7280]">
-            <a
-              href={ad.adUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="rounded-md p-1.5 transition-colors hover:bg-[#f3f4f6] hover:text-[#0a66c2]"
-              title="Open original ad on LinkedIn"
-            >
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </div>
+          <AdCardTopRightLinkStack
+            href={ad.adUrl}
+            hrefTitle="Open original ad on LinkedIn"
+            isCreativeTestWinner={isCreativeTestWinner}
+            onLinkClick={(e) => e.stopPropagation()}
+            linkClassName="rounded-md p-1.5 transition-colors hover:bg-[#f3f4f6] hover:text-[#0a66c2] text-[#6b7280]"
+          />
         </div>
         {displayDesc ? (
           <div className="mt-3">
@@ -1538,55 +1531,48 @@ function WorkspaceAdSourcesPanel({
   };
 
   const fieldByChannel = (id: ChannelId): PlatformFieldSpec | null => {
+    const spec = PLATFORM_CONNECTION_FIELD_SPECS[id];
+    if (!spec) return null;
     switch (id) {
       case "meta":
         return {
           id: "rival-ws-meta",
-          label: "Meta Ads Library URL",
-          hint: "Use an Ad Library search URL—not a Facebook Page link.",
-          placeholder: "https://www.facebook.com/ads/library/...",
+          ...spec,
           value: scrape.metaAdsLibraryUrl,
           onChange: (v) => patchScrape({ metaAdsLibraryUrl: v }),
         };
       case "google":
         return {
           id: "rival-ws-google",
-          label: "URL with Advertiser ID",
-          hint:
-            "URL from Google Ads Transparency Center that includes …/advertiser/AR… in the path.",
-          placeholder: "https://adstransparency.google.com/advertiser/AR…",
+          ...spec,
           value: scrape.googleAdsTransparencyUrl,
           onChange: (v) => patchScrape({ googleAdsTransparencyUrl: v }),
         };
       case "linkedin":
         return {
           id: "rival-ws-li",
-          label: "LinkedIn Ad Library URL",
-          hint: "Ad Library search or company/advertiser link.",
+          ...spec,
           value: scrape.linkedInUrl,
           onChange: (v) => patchScrape({ linkedInUrl: v }),
         };
       case "tiktok":
         return {
           id: "rival-ws-tt",
-          label: "TikTok keyword",
-          hint: "What we pass to TikTok Ads Library search.",
+          ...spec,
           value: scrape.tiktokKeyword,
           onChange: (v) => patchScrape({ tiktokKeyword: v }),
         };
       case "pinterest":
         return {
           id: "rival-ws-pin",
-          label: "Pinterest search keyword",
-          hint: "Keyword-style match in Pinterest transparency.",
+          ...spec,
           value: scrape.pinterestKeyword,
           onChange: (v) => patchScrape({ pinterestKeyword: v }),
         };
       case "snapchat":
         return {
           id: "rival-ws-snap",
-          label: "Snapchat keyword",
-          hint: "Gallery search term for your brand.",
+          ...spec,
           value: scrape.snapchatKeyword,
           onChange: (v) => patchScrape({ snapchatKeyword: v }),
         };
@@ -2110,53 +2096,87 @@ function CompetitorDashboardBody({
     let fix = false;
     if (lower === "ai insight") {
       params.set("tab", "insights");
-      params.set("sub", "activity-feed");
+      params.set(
+        "sub",
+        isOwnWorkspace
+          ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+          : "activity-feed",
+      );
       params.delete("view");
       fix = true;
     } else if (lower === "strategy overview") {
       params.set("tab", "insights");
-      params.set("sub", "strategy-map");
+      params.set(
+        "sub",
+        isOwnWorkspace && !showBrandDebugTabs
+          ? "benchmark"
+          : "strategy-map",
+      );
       params.delete("view");
       fix = true;
-    } else if (lower === "workspace ads") {
-      params.set("tab", "workspace-ads");
+    } else if (lower === "workspace ads" || lower === "workspace-ads") {
+      params.set("tab", "ads library");
+      params.set("sub", "paid-media-settings");
       fix = true;
-    } else if (lower === "marketing improvements") {
-      params.set("tab", "workspace-marketing-improvements");
+    } else if (lower === "marketing improvements" || lower === "workspace-marketing-improvements") {
+      params.set("tab", "insights");
+      if (process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true") {
+        params.set("sub", "improve-marketing");
+      } else {
+        params.set(
+          "sub",
+          isOwnWorkspace ? "benchmark" : "strategy-map",
+        );
+      }
       fix = true;
-    } else if (lower === "benchmark" && raw !== "benchmark") {
-      params.set("tab", "benchmark");
+    } else if (lower === "benchmark" || raw === "benchmark") {
+      params.set("tab", "insights");
+      params.set("sub", "benchmark");
+      fix = true;
+    } else if (lower === "tests" || lower === "audience-copy") {
+      params.set("tab", "ads library");
       fix = true;
     }
     if (fix) {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-  }, [searchParams, pathname, router]);
+  }, [searchParams, pathname, router, isOwnWorkspace, showBrandDebugTabs]);
 
   useEffect(() => {
     const sub = (searchParams.get("sub") ?? "").trim();
     if (sub !== "strategy-insight" && sub !== "moves") return;
     const params = new URLSearchParams(searchParams.toString());
-    params.set("sub", "activity-feed");
+    params.set(
+      "sub",
+      isOwnWorkspace
+        ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+        : "activity-feed",
+    );
     params.delete("view");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams]);
+  }, [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs]);
 
   const deriveTabFromParams = useCallback(
     (params: URLSearchParams) => {
       const tabParamRaw = (params.get("tab") ?? "").trim();
-      return pageTabs.some((t) => t.id === tabParamRaw) ? tabParamRaw : "ads library";
+      const legacyPaidMediaTabs: Record<string, string> = {
+        tests: "ads library",
+        "audience-copy": "ads library",
+      };
+      const tabId = legacyPaidMediaTabs[tabParamRaw] ?? tabParamRaw;
+      return pageTabs.some((t) => t.id === tabId) ? tabId : "ads library";
     },
     [pageTabs],
   );
 
-  const deriveSubFromParams = useCallback((params: URLSearchParams, tab: string) => {
-    const def = findCompetitorTab(tab);
-    if (!def?.subTabs?.length) return null;
-    const sub = (params.get("sub") ?? "").trim();
-    if (sub && def.subTabs.some((s) => s.id === sub)) return sub;
-    return def.defaultSubTab ?? null;
-  }, []);
+  const deriveSubFromParams = useCallback(
+    (params: URLSearchParams, tab: string) =>
+      resolveSubTabFromParams(params, tab, {
+        isOwnWorkspace,
+        showDebugTabs: showBrandDebugTabs,
+      }),
+    [isOwnWorkspace, showBrandDebugTabs],
+  );
 
   const [navTab, setNavTab] = useState(() => deriveTabFromParams(searchParams));
   const [navSub, setNavSub] = useState(() =>
@@ -2202,32 +2222,56 @@ function CompetitorDashboardBody({
     [pathname, router, searchParams],
   );
 
+  const handlePaidMediaSettingsSaved = useCallback(
+    ({ ids, channels }: { ids: Record<string, string>; channels: string[] }) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("channels", channels.join(","));
+      params.set("ids", JSON.stringify(ids));
+      params.set("confirmed", "1");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
+
   const navigateFromBenchmark = useCallback(
     (tab: string, sub?: string | null) => {
-      userNavIntentRef.current = { tab, sub: sub ?? null };
+      const subId = (sub ?? null) as CompetitorSubTabId | null;
+      userNavIntentRef.current = { tab, sub: subId };
       setNavTab(tab);
-      setNavSub(sub ?? null);
-      syncNavToUrl(tab, sub ?? null);
+      setNavSub(subId);
+      syncNavToUrl(tab, subId);
     },
     [syncNavToUrl],
   );
 
   useEffect(() => {
-    if (navTab !== "audience-copy") return;
-    if (navSub !== "hooks" && navSub !== "briefs") return;
+    if (navTab !== "ads library") return;
+    const legacySub = navSub as string | null;
+    if (legacySub !== "hooks" && legacySub !== "briefs") return;
     setNavSub("audience");
     syncNavToUrl(navTab, "audience");
   }, [navTab, navSub, syncNavToUrl]);
 
   useEffect(() => {
     const def = findCompetitorTab(navTab);
-    if (!def?.subTabs?.length || !def.defaultSubTab) return;
-    if (navSub && def.subTabs.some((s) => s.id === navSub)) return;
-    setNavSub(def.defaultSubTab);
-  }, [navTab, navSub]);
+    if (!def) return;
+    const subs = competitorSubTabsForView({
+      parentTab: def,
+      isOwnWorkspace,
+      showDebugTabs: showBrandDebugTabs,
+    });
+    if (subs.length === 0) return;
+    const fallback =
+      navTab === "insights" && isOwnWorkspace
+        ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+        : (def.defaultSubTab ?? subs[0]?.id ?? null);
+    if (!fallback) return;
+    if (navSub && subs.some((s) => s.id === navSub)) return;
+    setNavSub(fallback);
+  }, [navTab, navSub, isOwnWorkspace, showBrandDebugTabs]);
 
   useEffect(() => {
-    if (!isOwnWorkspace || navTab !== "comparison") return;
+    if (!isOwnWorkspace || (navTab !== "comparison" && navTab !== "alerts")) return;
     const sub = deriveSubFromParams(searchParams, "ads library");
     setNavTab("ads library");
     setNavSub(sub);
@@ -2236,47 +2280,69 @@ function CompetitorDashboardBody({
 
   useEffect(() => {
     if (!isOwnWorkspace || showBrandDebugTabs) return;
-    if (!OWN_BRAND_DEBUG_ONLY_TAB_IDS.includes(navTab as (typeof OWN_BRAND_DEBUG_ONLY_TAB_IDS)[number])) {
-      return;
-    }
-    const sub = deriveSubFromParams(searchParams, "ads library");
-    setNavTab("ads library");
-    setNavSub(sub);
-    syncNavToUrl("ads library", sub);
-  }, [isOwnWorkspace, showBrandDebugTabs, navTab, searchParams, deriveSubFromParams, syncNavToUrl]);
-
-  useEffect(() => {
-    if (!isOwnWorkspace || showBrandDebugTabs) return;
-    if (navTab !== "ads library" || navSub !== "saved") return;
+    if (navTab !== "ads library" || !navSub) return;
+    if (!isOwnBrandDebugOnlySubTab(navTab, navSub)) return;
     setNavSub("all");
     syncNavToUrl(navTab, "all");
   }, [isOwnWorkspace, showBrandDebugTabs, navTab, navSub, syncNavToUrl]);
 
   useEffect(() => {
-    if (
-      !isOwnWorkspace &&
-      (navTab === "workspace-ads" || navTab === "workspace-marketing-improvements" || navTab === "benchmark")
-    ) {
-      const sub = deriveSubFromParams(searchParams, "ads library");
-      setNavTab("ads library");
-      setNavSub(sub);
-      syncNavToUrl("ads library", sub);
+    if (!isOwnWorkspace) {
+      if (isLegacyOwnBrandTabId(navTab)) {
+        const sub = deriveSubFromParams(searchParams, "ads library");
+        setNavTab("ads library");
+        setNavSub(sub);
+        syncNavToUrl("ads library", sub);
+      }
+      return;
     }
-  }, [isOwnWorkspace, navTab, searchParams, deriveSubFromParams, syncNavToUrl]);
+    if (navTab === "workspace-ads") {
+      setNavTab("ads library");
+      setNavSub("paid-media-settings");
+      syncNavToUrl("ads library", "paid-media-settings");
+    } else if (navTab === "benchmark") {
+      setNavTab("insights");
+      setNavSub("benchmark");
+      syncNavToUrl("insights", "benchmark");
+    } else if (navTab === "workspace-marketing-improvements") {
+      setNavTab("insights");
+      if (showBrandDebugTabs) {
+        setNavSub("improve-marketing");
+        syncNavToUrl("insights", "improve-marketing");
+      } else {
+        const sub = ownBrandInsightsDefaultSubTab(showBrandDebugTabs);
+        setNavSub(sub);
+        syncNavToUrl("insights", sub);
+      }
+    } else if (navTab === "insights" && navSub === "activity-feed") {
+      const sub = ownBrandInsightsDefaultSubTab(showBrandDebugTabs);
+      setNavSub(sub);
+      syncNavToUrl("insights", sub);
+    } else if (navTab === "insights" && navSub === "improve-marketing" && !showBrandDebugTabs) {
+      setNavSub("benchmark");
+      syncNavToUrl("insights", "benchmark");
+    } else if (navTab === "insights" && navSub === "strategy-map" && !showBrandDebugTabs) {
+      setNavSub("benchmark");
+      syncNavToUrl("insights", "benchmark");
+    }
+  }, [isOwnWorkspace, navTab, navSub, showBrandDebugTabs, searchParams, deriveSubFromParams, syncNavToUrl]);
 
   const handleTabChange = useCallback(
     (tabId: string) => {
       scrollDashboardMainToTop();
       const tab = findCompetitorTab(tabId);
-      const sub = tab?.defaultSubTab ?? null;
+      const sub =
+        tabId === "insights" && isOwnWorkspace
+          ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+          : (tab?.defaultSubTab ?? null);
       userNavIntentRef.current = { tab: tabId, sub };
       setNavTab(tabId);
       setNavSub(sub);
       startTransition(() => {
         const params = new URLSearchParams(searchParams.toString());
         params.set("tab", tabId);
-        if (tab?.defaultSubTab) {
-          params.set("sub", tab.defaultSubTab);
+        if (sub) {
+          params.set("sub", sub);
           if (tabId === "insights") {
             params.delete("view");
           }
@@ -2289,14 +2355,15 @@ function CompetitorDashboardBody({
         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
       });
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs],
   );
 
   const handleSubTabChange = useCallback(
     (subTabId: string) => {
       scrollDashboardMainToTop();
-      userNavIntentRef.current = { tab: navTab, sub: subTabId };
-      setNavSub(subTabId);
+      const subId = subTabId as CompetitorSubTabId;
+      userNavIntentRef.current = { tab: navTab, sub: subId };
+      setNavSub(subId);
       startTransition(() => {
         const params = new URLSearchParams(searchParams.toString());
         params.set("tab", navTab);
@@ -2312,13 +2379,13 @@ function CompetitorDashboardBody({
 
   const navigateToLandingPagesExplorer = useCallback(() => {
     scrollDashboardMainToTop();
-    userNavIntentRef.current = { tab: "tests", sub: "landing-pages" };
-    setNavTab("tests");
-    setNavSub("landing-pages");
+    userNavIntentRef.current = { tab: "website", sub: "from-ads" };
+    setNavTab("website");
+    setNavSub("from-ads");
     startTransition(() => {
       const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", "tests");
-      params.set("sub", "landing-pages");
+      params.set("tab", "website");
+      params.set("sub", "from-ads");
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     });
   }, [pathname, router, searchParams]);
@@ -2402,6 +2469,11 @@ function CompetitorDashboardBody({
     return platformIds;
   }, [platformIds, isOwnWorkspace, workspaceLibraryContext]);
 
+  const paidMediaSettingsFallbackChannels = useMemo(
+    () => effectiveChannelsFromResolver.split(",").filter(Boolean),
+    [effectiveChannelsFromResolver],
+  );
+
   useEffect(() => {
     evictBulkyLocalStorageCaches();
     return setupGlobalCacheInvalidator();
@@ -2419,10 +2491,16 @@ function CompetitorDashboardBody({
 
   /** Platforms to hydrate from `ads_cache` — union saved channels, onboarding setup, and identifiers. */
   const adsPlatforms: AdsLibraryPlatform[] = useMemo(() => {
+    if (!isOwnWorkspace) {
+      return resolveCompetitorTrackedAdsPlatforms(
+        effectiveChannelsFromResolver,
+        effectivePlatformIds,
+      );
+    }
     const sources: { channelsCsv?: string; ids?: Record<string, string> | null }[] = [
       { channelsCsv: effectiveChannelsFromResolver, ids: effectivePlatformIds },
     ];
-    if (isOwnWorkspace && myBrand.adsSetup?.channels?.length) {
+    if (myBrand.adsSetup?.channels?.length) {
       sources.push({
         channelsCsv: myBrand.adsSetup.channels.join(","),
         ids: workspaceAdsSetupPlatformIds,
@@ -2651,9 +2729,59 @@ function CompetitorDashboardBody({
   const [marketingCoachError, setMarketingCoachError] = useState<string | null>(null);
   const [marketingCoachRefresh, setMarketingCoachRefresh] = useState(0);
 
+  const [workspaceSetupFlags, setWorkspaceSetupFlags] = useState({
+    organic: false,
+    website: false,
+    email: false,
+  });
+
   useEffect(() => {
-    if (navTab !== "workspace-marketing-improvements") return;
     if (!isOwnWorkspace) return;
+    const cid = workspaceBrandCompetitorId.trim();
+    if (!cid) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [socialsRes, pagesRes, emailRes] = await Promise.all([
+          fetch(`/api/competitor/${cid}/organic/socials`),
+          fetch(`/api/competitor/${cid}/landing-pages`),
+          fetch(`/api/email-trackers/${cid}`),
+        ]);
+        if (cancelled) return;
+
+        let organic = false;
+        if (socialsRes.ok) {
+          const data = (await socialsRes.json()) as { socials?: Record<string, string> };
+          organic = Object.values(data.socials ?? {}).some((v) => typeof v === "string" && v.trim());
+        }
+
+        let website = false;
+        if (pagesRes.ok) {
+          const data = (await pagesRes.json()) as { pages?: unknown[] };
+          website = (data.pages?.length ?? 0) > 0;
+        }
+
+        let email = false;
+        if (emailRes.ok) {
+          const data = (await emailRes.json()) as { tracker?: { tracking_address?: string } | null };
+          email = Boolean(data.tracker?.tracking_address?.trim());
+        }
+
+        setWorkspaceSetupFlags({ organic, website, email });
+      } catch {
+        /* optional */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOwnWorkspace, workspaceBrandCompetitorId]);
+
+  useEffect(() => {
+    if (navTab !== "insights" || navSub !== "improve-marketing") return;
+    if (!isOwnWorkspace || !showBrandDebugTabs) return;
 
     let cancelled = false;
     setMarketingCoachLoading(true);
@@ -2704,7 +2832,9 @@ function CompetitorDashboardBody({
     };
   }, [
     navTab,
+    navSub,
     isOwnWorkspace,
+    showBrandDebugTabs,
     myBrand.name,
     myBrand.domain,
     myBrand.brandContext,
@@ -3337,7 +3467,13 @@ function CompetitorDashboardBody({
 
   useEffect(() => {
     if (!cacheDomainNorm.trim() || !brand.domain.trim()) return;
-    if (navTab !== "insights" && navTab !== "comparison" && navTab !== "audience-copy") return;
+    if (
+      navTab !== "insights" &&
+      navTab !== "comparison" &&
+      !(navTab === "ads library" && (navSub === "audience" || navSub === "copy-vault"))
+    ) {
+      return;
+    }
 
     let cancelled = false;
     let intervalId: number | null = null;
@@ -3423,6 +3559,7 @@ function CompetitorDashboardBody({
     };
   }, [
     navTab,
+    navSub,
     brand.domain,
     cacheDomainNorm,
     comparisonPayload?.competitor?.recomputing,
@@ -3569,7 +3706,17 @@ function CompetitorDashboardBody({
       seen.add(key);
       items.push({ platform, libraryItemId });
     };
-    for (const ad of filteredMetaAds) {
+    // Only register the Meta ads that can appear in the inline preview grid
+    // (inline-preview candidates plus a small buffer from the top of the sorted
+    // list) instead of the whole library — matches the other platforms and keeps
+    // the /api/saved-ads/check payload small. Preview URLs for the rest still
+    // come back because the endpoint scans all Meta rows once the platform is
+    // included, and toggleSave resolves unregistered ads on demand.
+    const inlineMetaCandidates = [
+      ...displayMetaAds.filter(metaAdHasDashboardInlinePreview).slice(0, META_ADS_INLINE_PREVIEW),
+      ...displayMetaAds.slice(0, META_ADS_INLINE_PREVIEW * 4),
+    ];
+    for (const ad of inlineMetaCandidates) {
       for (const key of metaLibraryItemLookupKeys(ad)) {
         pushItem("meta", key);
       }
@@ -3595,7 +3742,7 @@ function CompetitorDashboardBody({
     return items;
   }, [
     navTab,
-    filteredMetaAds,
+    displayMetaAds,
     filteredTikTokAds,
     filteredLinkedInAds,
     filteredPinterestAds,
@@ -3603,7 +3750,7 @@ function CompetitorDashboardBody({
     filteredGoogleRows,
   ]);
 
-  const { savedMap, resolvedToScraped, scrapedIdForCard, libraryRunStatusForCard, toggleSave, refreshLibraryMappings, previewUrlForCard } =
+  const { savedMap, resolvedToScraped, scrapedIdForCard, libraryRunStatusForCard, isCreativeTestWinnerForCard, toggleSave, refreshLibraryMappings, previewUrlForCard } =
     useSavedAdsStatus(
     competitorDbIdForSaved,
     savedAdsLibraryItems,
@@ -3774,7 +3921,18 @@ function CompetitorDashboardBody({
   useEffect(() => {
     const id = competitorDbIdForSaved;
     if (!id || isOwnWorkspace) return;
-    if (navTab !== "insights" && navTab !== "audience-copy" && navTab !== "tests") return;
+    if (
+      navTab !== "insights" &&
+      !(
+        navTab === "ads library" &&
+        (navSub === "creative-tests" ||
+          navSub === "timeline" ||
+          navSub === "audience" ||
+          navSub === "copy-vault")
+      )
+    ) {
+      return;
+    }
 
     prefetchCompetitorFeatureCaches({
       cacheDomainNorm,
@@ -3782,19 +3940,19 @@ function CompetitorDashboardBody({
       competitorId: id,
       scrapeStamp: accountLastScrapedAt ?? "none",
     });
-  }, [navTab, competitorDbIdForSaved, cacheDomainNorm, brand.domain, accountLastScrapedAt, isOwnWorkspace]);
+  }, [navTab, navSub, competitorDbIdForSaved, cacheDomainNorm, brand.domain, accountLastScrapedAt, isOwnWorkspace]);
 
   /** Insights tabs read from `scraped_ads` — ensure ads_cache was copied before strategy/creative-tests load. */
   useEffect(() => {
     const needsPersistedAds =
       (navTab === "insights" &&
         (navSub === "strategy-map" || navSub === "activity-feed")) ||
-      (navTab === "tests" &&
+      (navTab === "ads library" &&
         (navSub === "creative-tests" ||
           navSub === "timeline" ||
-          navSub === "landing-pages")) ||
-      (navTab === "audience-copy" &&
-        (navSub === "audience" || navSub === "copy-vault"));
+          navSub === "audience" ||
+          navSub === "copy-vault")) ||
+      (navTab === "website" && navSub === "from-ads");
     if (!needsPersistedAds || !cacheDomainNorm.trim()) return;
     if (
       competitorDbIdForSaved &&
@@ -3892,6 +4050,7 @@ function CompetitorDashboardBody({
       return {
         scrapedAdId: sid,
         isSaved: isLibraryItemSaved(savedMap, resolvedToScraped, platform, libraryItemId, alternateIds),
+        isCreativeTestWinner: isCreativeTestWinnerForCard(platform, libraryItemId, alternateIds),
         onToggleSave:
           competitorDbIdForSaved && ownBrandSavedAdsEnabled
             ? () => void toggleSave(platform, libraryItemId)
@@ -3901,7 +4060,7 @@ function CompetitorDashboardBody({
         ...(platform.trim().toLowerCase() === "meta" ? { metaScrapeAtMs } : {}),
       };
     },
-    [competitorDbIdForSaved, ownBrandSavedAdsEnabled, scrapedIdForCard, runStatusForLibraryCard, savedMap, resolvedToScraped, toggleSave, metaScrapeAtMs],
+    [competitorDbIdForSaved, ownBrandSavedAdsEnabled, scrapedIdForCard, isCreativeTestWinnerForCard, runStatusForLibraryCard, savedMap, resolvedToScraped, toggleSave, metaScrapeAtMs],
   );
 
   const displayTikTokAds = useMemo(() => {
@@ -4005,18 +4164,8 @@ function CompetitorDashboardBody({
     setVisibleAdPlatforms(null);
   }, [adsPlatformsKey, cacheDomainNorm]);
 
-  const platformsWithScrapedData = useMemo(
-    () =>
-      adsPlatforms.filter((platform) =>
-        platformHasScrapedLibraryData(platform, adLibLoading ? null : adLib, {
-          activeAdCount: platformTrackingByPlatform[platform]?.activeAdCount,
-        }),
-      ),
-    [adsPlatforms, adLib, adLibLoading, platformTrackingByPlatform],
-  );
-
-  /** Hide failed or never-scraped platforms until the user turns them on manually. */
-  const defaultVisibleAdPlatforms = platformsWithScrapedData;
+  /** Show every platform enabled in Settings; users can hide sections manually. */
+  const defaultVisibleAdPlatforms = adsPlatforms;
 
   const effectiveVisibleAdPlatforms = visibleAdPlatforms ?? defaultVisibleAdPlatforms;
 
@@ -4036,7 +4185,6 @@ function CompetitorDashboardBody({
   );
 
   const headerScrollSentinelRef = useRef<HTMLDivElement>(null);
-  const { progress: compactNavProgress } = useCompactNavScroll(headerScrollSentinelRef);
 
   return (
     <RecomputePollProvider value={recomputePollState}>
@@ -4064,7 +4212,7 @@ function CompetitorDashboardBody({
           className={`pt-6 sm:pt-7 pb-0 pr-4 sm:pr-5 ${isOwnWorkspace ? "pl-5 sm:pl-6" : COMPETITOR_PAGE_X}`}
         >
           <div className="flex items-center justify-between gap-4 mb-5">
-            <div className="flex min-w-0 flex-1 items-center gap-4">
+            <div className="flex min-w-0 flex-1 items-start gap-4">
               <CompetitorLogo
                 sources={{
                   primary: brand.logoUrl,
@@ -4076,13 +4224,13 @@ function CompetitorDashboardBody({
                 shape="rounded"
                 className={
                   isOwnWorkspace
-                    ? "border-2 border-sky-200/90 ring-2 ring-sky-100/80 shadow-sm"
-                    : "border-[#e0e3e8] shadow-sm"
+                    ? "shrink-0 border-2 border-sky-200/90 ring-2 ring-sky-100/80 shadow-sm"
+                    : "shrink-0 border-[#e0e3e8] shadow-sm"
                 }
               />
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2 gap-y-1">
-                  <h1 className="text-[22px] sm:text-[26px] font-bold text-[#343434] tracking-[-0.02em] truncate">
+              <div className="flex h-12 min-w-0 flex-col justify-between pt-px">
+                <div className="flex min-w-0 flex-wrap items-center gap-2 gap-y-0 leading-none">
+                  <h1 className="text-[20px] sm:text-[24px] font-bold leading-none text-[#343434] tracking-[-0.02em] truncate">
                     {competitorDisplayLabel}
                   </h1>
                   {isOwnWorkspace ? (
@@ -4091,8 +4239,7 @@ function CompetitorDashboardBody({
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-1 flex flex-col gap-0.5">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 leading-none">
                     <Clock
                       className={`w-3.5 h-3.5 shrink-0 ${isOwnWorkspace ? "text-sky-700/70" : "text-[#a1a1aa]"}`}
                     />
@@ -4110,45 +4257,19 @@ function CompetitorDashboardBody({
                       {void lastScrapeRelativeTick}
                       {isOwnWorkspace
                         ? accountLastScrapedAt
-                          ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
+                          ? formatLastScrapedLine(accountLastScrapedAt)
                           : "Scrape your ads from the Ads Library tab"
                         : accountLastScrapedAt
-                          ? `Last scraped ${getTimeAgo(new Date(accountLastScrapedAt))}`
+                          ? formatLastScrapedLine(accountLastScrapedAt)
                           : adsLibraryShowsCreativesOnScreen
                             ? "First sync in progress · creatives loading"
                             : "Not yet scraped"}
                     </span>
                   </div>
-                  {!isOwnWorkspace && competitorSidebarMatch?.lastWeeklyWeekStart ? (
-                    <p
-                      className="pl-[22px] text-[12px] leading-snug text-[#94a3b8]"
-                      title={`Last automated spy run (UTC): ${competitorSidebarMatch.lastWeeklyWeekStart}`}
-                    >
-                      {formatSpySubtitle(competitorSidebarMatch.lastWeeklyWeekStart)}
-                    </p>
-                  ) : null}
                 </div>
               </div>
             </div>
-            {!isOwnWorkspace ? (
-              <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
-                {competitorSidebarMatch?.savedCompetitorDbId ? (
-                  <div
-                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-[13px] font-semibold text-sky-900"
-                    title="Competitors are automatically included in staggered library spy runs (Meta/Google/TikTok every 3 days; LinkedIn/Pinterest/Snapchat every 7 days)."
-                  >
-                    <SatelliteDish className="h-4 w-4 shrink-0 text-sky-700" aria-hidden />
-                    <span className="relative flex h-2 w-2">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                    </span>
-                    <span>Spy monitoring on</span>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
           </div>
-        </div>
 
           {/* Tab navigation — full bleed below brand row */}
           <nav className={`-mb-px flex w-full gap-0 overflow-x-auto ${COMPETITOR_PAGE_X}`}>
@@ -4205,11 +4326,6 @@ function CompetitorDashboardBody({
                     }`}
                   />
                   {tab.label}
-                  {tab.isNew ? (
-                    <span className={competitorTabNewBadgeClass} aria-label="New feature">
-                      New
-                    </span>
-                  ) : null}
                   {tab.id === "alerts" && alertsUnreadCount > 0 ? (
                     <AlertUnreadCountBadge count={alertsUnreadCount} className="ml-0.5" />
                   ) : null}
@@ -4257,15 +4373,6 @@ function CompetitorDashboardBody({
                           />
                         ) : null}
                         {st.label}
-                        {st.isNew ? (
-                          <span
-                            className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
-                              isSubActive ? "bg-white/20 text-white" : "bg-indigo-100 text-indigo-700"
-                            }`}
-                          >
-                            NEW
-                          </span>
-                        ) : null}
                       </button>
                     );
                   })}
@@ -4276,8 +4383,8 @@ function CompetitorDashboardBody({
       </div>
 
       <CompetitorHeaderScrollSentinel sentinelRef={headerScrollSentinelRef} />
-      <CompetitorCompactStickyNav
-        progress={compactNavProgress}
+      <CompetitorCompactStickyNavAttached
+        sentinelRef={headerScrollSentinelRef}
         competitorDisplayLabel={competitorDisplayLabel}
         brand={{ logoUrl: brand.logoUrl, domain: brand.domain }}
         isOwnWorkspace={isOwnWorkspace}
@@ -4290,174 +4397,121 @@ function CompetitorDashboardBody({
         onSubTabChange={handleSubTabChange}
       />
 
-      {/* Tab Content Areas */}
-      <KeepMountedTab active={navTab === "workspace-ads" && isOwnWorkspace} className="!flex-none flex-col">
-        <div className="bg-transparent">
-          <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
-            <WorkspaceAdSourcesPanel
-              brandId={myBrand.id}
-              brandName={myBrand.name}
-              domain={myBrand.domain ?? ""}
-              initialSetup={myBrand.adsSetup ?? null}
-              noBottomMargin
-            />
-          </div>
-        </div>
-      </KeepMountedTab>
-
-      <KeepMountedTab active={navTab === "benchmark" && isOwnWorkspace} className="!flex-none flex-col">
-        <div className="bg-transparent">
-          <BenchmarkTab
-            fetchEnabled={navTab === "benchmark" && isOwnWorkspace}
-            brandId={myBrand.id}
-            cacheDomainNorm={cacheDomainNorm}
-            lastScrapedAt={accountLastScrapedAt}
+      {isOwnWorkspace ? (
+        <div className={`${COMPETITOR_PAGE_X} pt-4`}>
+          <WorkspaceSetupChecklist
+            hasAdsSetup={Boolean(myBrand.adsSetup?.channels?.length)}
+            hasOrganicSocials={workspaceSetupFlags.organic}
+            hasTrackedPages={workspaceSetupFlags.website}
+            hasEmailTracker={workspaceSetupFlags.email}
             onNavigate={navigateFromBenchmark}
           />
         </div>
-      </KeepMountedTab>
+      ) : null}
 
-      <KeepMountedTab active={navTab === "workspace-marketing-improvements" && isOwnWorkspace} className="!flex-none flex-col">
-        <div className="bg-transparent">
-          <div className={`${COMPETITOR_PAGE_X} py-8 w-full animate-in fade-in duration-200`}>
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-[18px] font-semibold text-sky-950">How your marketing can improve</h2>
-                <p className="mt-0.5 max-w-[40rem] text-[14px] text-sky-900/75">
-                  We scan cached ad creative from every competitor you follow, compare patterns to your workspace, and
-                  suggest what to push on vs what to leave alone.
-                </p>
-                <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-sky-800/80">
-                  AI-generated · uses your Ads Library cache (refresh rivals so evidence stays fresh)
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={marketingCoachLoading}
-                onClick={() => {
-                  setMarketingCoach(null);
-                  setMarketingCoachRefresh((n) => n + 1);
-                }}
-                className="inline-flex items-center gap-2 rounded-full border border-sky-200/90 bg-white px-3 py-1.5 text-[12px] font-medium text-sky-950 shadow-sm hover:bg-sky-50 disabled:opacity-50"
-              >
-                {marketingCoachLoading ? (
-                  <RivalLogoVideo size="inline" className="shrink-0" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Refresh coaching
-              </button>
-            </div>
-
-            {marketingCoachLoading ? (
-              <RivalLoadingBlock size="2xl" className="py-12 sm:py-16" />
-            ) : marketingCoachError ? (
-              <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
-                {marketingCoachError}
-                <button
-                  type="button"
-                  className="mt-2 block text-[13px] font-medium text-amber-900 underline"
-                  onClick={() => setMarketingCoachRefresh((n) => n + 1)}
-                >
-                  Try again
-                </button>
-              </div>
-            ) : marketingCoach ? (
-              <div className="space-y-5">
-                {marketingCoach.competitorsConsidered.length > 0 ? (
-                  <div className="rounded-2xl border border-sky-200/70 bg-white/80 px-4 py-3 shadow-sm">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900/70">Included rivals</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {marketingCoach.competitorsConsidered.map((c) => (
-                        <span
-                          key={`${c.domain}-${c.name}`}
-                          className="rounded-full border border-sky-200/80 bg-sky-50/80 px-2.5 py-1 text-[12px] font-medium text-sky-950"
-                        >
-                          {c.name}
-                          {c.domain ? ` · ${c.domain}` : ""}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="rounded-2xl border border-sky-300/50 bg-gradient-to-br from-white via-sky-50/40 to-amber-50/30 p-5 shadow-[0_8px_30px_rgba(14,116,144,0.08)]">
-                  <p className="text-[15px] font-semibold leading-snug text-sky-950">Summary</p>
-                  <p className="mt-2 text-[14px] leading-relaxed text-sky-950/85 whitespace-pre-wrap">
-                    {marketingCoach.coaching.executiveSummary}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-emerald-800/90">
-                    Lean into (improve)
-                  </p>
-                  <div className="space-y-3">
-                    {marketingCoach.coaching.improve.map((item, i) => (
-                      <div
-                        key={`imp-${i}`}
-                        className="rounded-2xl border border-emerald-200/70 bg-emerald-50/40 px-4 py-3.5 shadow-sm"
-                      >
-                        <h3 className="text-[14px] font-semibold text-emerald-950">{item.title}</h3>
-                        {item.groundedIn ? (
-                          <p className="mt-1 text-[12px] font-medium text-emerald-900/70">{item.groundedIn}</p>
-                        ) : null}
-                        <p className="mt-2 text-[14px] leading-relaxed text-emerald-950/90 whitespace-pre-wrap">
-                          {item.detail}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-sky-800/90">
-                    Keep doing (do not overhaul)
-                  </p>
-                  <div className="space-y-3">
-                    {marketingCoach.coaching.keepDoing.map((item, i) => (
-                      <div
-                        key={`kd-${i}`}
-                        className="rounded-2xl border border-sky-200/80 bg-white/90 px-4 py-3.5 shadow-sm"
-                      >
-                        <h3 className="text-[14px] font-semibold text-sky-950">{item.title}</h3>
-                        <p className="mt-2 text-[14px] leading-relaxed text-sky-900/85 whitespace-pre-wrap">
-                          {item.detail}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-amber-900/90">
-                    Avoid chasing
-                  </p>
-                  <div className="space-y-3">
-                    {marketingCoach.coaching.doNotChase.map((item, i) => (
-                      <div
-                        key={`dnc-${i}`}
-                        className="rounded-2xl border border-amber-200/80 bg-amber-50/50 px-4 py-3.5 shadow-sm"
-                      >
-                        <h3 className="text-[14px] font-semibold text-amber-950">{item.title}</h3>
-                        <p className="mt-2 text-[14px] leading-relaxed text-amber-950/90 whitespace-pre-wrap">
-                          {item.detail}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {marketingCoach.model ? (
-                  <p className="text-center text-[11px] text-sky-900/50">Model: {marketingCoach.model}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </KeepMountedTab>
-
+      {/* Tab Content Areas */}
       <KeepMountedTab active={navTab === "ads library"} className="!flex-none flex-col">
+        <KeepMountedTab
+          active={navSub === "paid-media-settings" && !isOwnWorkspace}
+          className="!flex-none flex-col"
+        >
+          <div className="bg-transparent">
+            <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
+              <CompetitorPaidMediaSettingsPanel
+                competitor={{
+                  name: competitorDisplayLabel,
+                  domain: brand.domain,
+                  logoUrl: brand.logoUrl,
+                }}
+                competitorDbId={competitorDbIdForSaved}
+                brandId={myBrand.id}
+                initialContext={competitorSidebarMatch?.libraryContext}
+                fallbackIds={effectivePlatformIds}
+                fallbackChannels={paidMediaSettingsFallbackChannels}
+                enabled={navSub === "paid-media-settings" && !isOwnWorkspace}
+                onSaved={handlePaidMediaSettingsSaved}
+              />
+            </div>
+          </div>
+        </KeepMountedTab>
+        <KeepMountedTab
+          active={navSub === "paid-media-settings" && isOwnWorkspace}
+          className="!flex-none flex-col"
+        >
+          <div className="bg-transparent">
+            <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
+              <WorkspaceAdSourcesPanel
+                brandId={myBrand.id}
+                brandName={myBrand.name}
+                domain={myBrand.domain ?? ""}
+                initialSetup={myBrand.adsSetup ?? null}
+                noBottomMargin
+              />
+            </div>
+          </div>
+        </KeepMountedTab>
+        {navSub === "creative-tests" || navSub === "timeline" ? (
+          <div className="bg-slate-50">
+            {shouldRenderAiAnalysisNotice ? (
+              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
+            ) : null}
+            <KeepMountedTab active={navSub === "creative-tests"} className="!flex-none flex-col">
+              <CreativeTestsTab
+                competitorId={competitorDbIdForSaved}
+                competitorLabel={competitorDisplayLabel}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
+                onFreshnessRescrape={undefined}
+                onOpenAd={openAd}
+                fetchEnabled={navSub === "creative-tests"}
+              />
+            </KeepMountedTab>
+            <KeepMountedTab active={navSub === "timeline"} className="!flex-none flex-col">
+              <TimelineTab
+                competitorId={competitorDbIdForSaved}
+                competitorLabel={competitorDisplayLabel}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
+                onFreshnessRescrape={undefined}
+                onOpenAd={openAd}
+                fetchEnabled={navSub === "timeline"}
+              />
+            </KeepMountedTab>
+          </div>
+        ) : navSub === "audience" || navSub === "copy-vault" ? (
+          <div className="bg-slate-50">
+            {shouldRenderAiAnalysisNotice ? (
+              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
+            ) : null}
+            <KeepMountedTab active={navSub === "audience"} className="!flex-none flex-col">
+              <AudienceTab
+                brandId={myBrand.id}
+                competitorDomain={brand.domain}
+                workspaceName={myBrand.name}
+                workspaceLogoUrl={myBrand.logoUrl ?? null}
+                workspaceDomain={myBrand.domain ?? null}
+                workspaceColor={myBrand.color ?? undefined}
+                workspaceBadge={myBrand.badge ?? undefined}
+                competitorLabel={competitorDisplayLabel}
+                competitorLogoUrl={brand.logoUrl}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
+                fetchEnabled={navSub === "audience"}
+                externalRecomputeRunning={recomputePollState.recomputeRunning}
+              />
+            </KeepMountedTab>
+            <KeepMountedTab active={navSub === "copy-vault"} className="!flex-none flex-col">
+              <CopyVaultTab
+                competitorId={competitorDbIdForSaved}
+                competitorLabel={competitorDisplayLabel}
+                onOpenAd={openAd}
+                cacheDomainNorm={cacheDomainNorm}
+                lastScrapedAt={accountLastScrapedAt}
+                fetchEnabled={navSub === "copy-vault"}
+              />
+            </KeepMountedTab>
+          </div>
+        ) : navSub === "paid-media-settings" ? null : (
         <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
             {navSub === "saved" && ownBrandSavedAdsEnabled ? (
@@ -4475,7 +4529,7 @@ function CompetitorDashboardBody({
             {showAdLibraryAnalyticsPanel ? (
               <FeatureSectionHeader
                 className="mb-6"
-                overline="Ad library"
+                overline="Paid media"
                 title={<>Scraped creatives for {competitorDisplayLabel}</>}
                 description={
                   <>
@@ -4772,14 +4826,15 @@ function CompetitorDashboardBody({
                   ) : (
                     <div className={META_ADS_GRID_CLASS}>
                       {inlinePreviewMetaAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
-                        <MetaAdCard
-                          key={ad.id}
-                          ad={ad}
-                          viewMode="grid"
-                          brand={brand}
-                          onClick={() => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad), ad)}
-                          {...adSaveProps("meta", ad.id, metaLibraryItemLookupKeys(ad))}
-                        />
+                        <div key={ad.id} className="flex h-full min-h-0 flex-col">
+                          <MetaAdCard
+                            ad={ad}
+                            viewMode="grid"
+                            brand={brand}
+                            onClick={() => openAdLibraryCard("meta", ad.id, metaLibraryItemLookupKeys(ad), ad)}
+                            {...adSaveProps("meta", ad.id, metaLibraryItemLookupKeys(ad))}
+                          />
+                        </div>
                       ))}
                     </div>
                   )}
@@ -5377,6 +5432,7 @@ function CompetitorDashboardBody({
             )}
           </div>
         </div>
+        )}
       </KeepMountedTab>
 
       <KeepMountedTab active={navTab === "insights"} className="!flex-none flex-col">
@@ -5389,7 +5445,10 @@ function CompetitorDashboardBody({
               <RivalLoadingBlock padded className="py-14" />
             }
           >
-            <KeepMountedTab active={navSub === "strategy-map"} className="!flex-none flex-col">
+            <KeepMountedTab
+              active={navSub === "strategy-map" && (!isOwnWorkspace || showBrandDebugTabs)}
+              className="!flex-none flex-col"
+            >
               <StrategyOverviewApp
                 brand={brand}
                 onOpenAdsLibrary={() => handleTabChange("ads library")}
@@ -5399,9 +5458,12 @@ function CompetitorDashboardBody({
                 fetchEnabled={navTab === "insights" && navSub === "strategy-map"}
                 externalRecomputeRunning={recomputePollState.recomputeRunning}
                 externalRecomputeError={recomputePollState.recomputeError}
+                isOwnWorkspace={isOwnWorkspace}
+                brandId={myBrand.id}
+                onNavigateGaps={navigateFromBenchmark}
               />
             </KeepMountedTab>
-            <KeepMountedTab active={navSub === "activity-feed"} className="!flex-none flex-col">
+            <KeepMountedTab active={navSub === "activity-feed" && !isOwnWorkspace} className="!flex-none flex-col">
               <ActivityFeedTab
                 competitorDomain={brand.domain}
                 competitorLabel={competitorDisplayLabel}
@@ -5411,84 +5473,178 @@ function CompetitorDashboardBody({
                 fetchEnabled={navSub === "activity-feed"}
               />
             </KeepMountedTab>
+            {isOwnWorkspace ? (
+              <>
+                <KeepMountedTab active={navSub === "benchmark"} className="!flex-none flex-col">
+                  <BenchmarkTab
+                    fetchEnabled={navTab === "insights" && navSub === "benchmark"}
+                    brandId={myBrand.id}
+                    cacheDomainNorm={cacheDomainNorm}
+                    lastScrapedAt={accountLastScrapedAt}
+                    onNavigate={navigateFromBenchmark}
+                  />
+                </KeepMountedTab>
+                <KeepMountedTab active={navSub === "improve-marketing" && showBrandDebugTabs} className="!flex-none flex-col">
+                  <div className={`${COMPETITOR_PAGE_X} py-8 w-full animate-in fade-in duration-200`}>
+                    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h2 className="text-[18px] font-semibold text-sky-950">How your marketing can improve</h2>
+                        <p className="mt-0.5 max-w-[40rem] text-[14px] text-sky-900/75">
+                          We compare your paid ads, organic, website, and email against every competitor you follow —
+                          and suggest what to push on vs what to leave alone.
+                        </p>
+                        <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-sky-800/80">
+                          AI-generated · refresh rivals and your channels so evidence stays fresh
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={marketingCoachLoading}
+                        onClick={() => {
+                          setMarketingCoach(null);
+                          setMarketingCoachRefresh((n) => n + 1);
+                        }}
+                        className="inline-flex items-center gap-2 rounded-full border border-sky-200/90 bg-white px-3 py-1.5 text-[12px] font-medium text-sky-950 shadow-sm hover:bg-sky-50 disabled:opacity-50"
+                      >
+                        {marketingCoachLoading ? (
+                          <RivalLogoVideo size="inline" className="shrink-0" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        Refresh coaching
+                      </button>
+                    </div>
+
+                    {marketingCoachLoading ? (
+                      <RivalLoadingBlock size="2xl" className="py-12 sm:py-16" />
+                    ) : marketingCoachError ? (
+                      <div className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-[14px] text-amber-950">
+                        {marketingCoachError}
+                        <button
+                          type="button"
+                          className="mt-2 block text-[13px] font-medium text-amber-900 underline"
+                          onClick={() => setMarketingCoachRefresh((n) => n + 1)}
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    ) : marketingCoach ? (
+                      <div className="space-y-5">
+                        {marketingCoach.competitorsConsidered.length > 0 ? (
+                          <div className="rounded-2xl border border-sky-200/70 bg-white/80 px-4 py-3 shadow-sm">
+                            <p className="text-[11px] font-bold uppercase tracking-wide text-sky-900/70">Included rivals</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {marketingCoach.competitorsConsidered.map((c) => (
+                                <span
+                                  key={`${c.domain}-${c.name}`}
+                                  className="rounded-full border border-sky-200/80 bg-sky-50/80 px-2.5 py-1 text-[12px] font-medium text-sky-950"
+                                >
+                                  {c.name}
+                                  {c.domain ? ` · ${c.domain}` : ""}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="rounded-2xl border border-sky-300/50 bg-gradient-to-br from-white via-sky-50/40 to-amber-50/30 p-5 shadow-[0_8px_30px_rgba(14,116,144,0.08)]">
+                          <p className="text-[15px] font-semibold leading-snug text-sky-950">Summary</p>
+                          <p className="mt-2 text-[14px] leading-relaxed text-sky-950/85 whitespace-pre-wrap">
+                            {marketingCoach.coaching.executiveSummary}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-emerald-800/90">
+                            Lean into (improve)
+                          </p>
+                          <div className="space-y-3">
+                            {marketingCoach.coaching.improve.map((item, i) => (
+                              <div
+                                key={`imp-${i}`}
+                                className="rounded-2xl border border-emerald-200/70 bg-emerald-50/40 px-4 py-3.5 shadow-sm"
+                              >
+                                <h3 className="text-[14px] font-semibold text-emerald-950">{item.title}</h3>
+                                {item.channel ? (
+                                  <span className="mt-1 inline-block rounded-full bg-emerald-200/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-900">
+                                    {item.channel}
+                                  </span>
+                                ) : null}
+                                {item.groundedIn ? (
+                                  <p className="mt-1 text-[12px] font-medium text-emerald-900/70">{item.groundedIn}</p>
+                                ) : null}
+                                <p className="mt-2 text-[14px] leading-relaxed text-emerald-950/90 whitespace-pre-wrap">
+                                  {item.detail}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-sky-800/90">
+                            Keep doing (do not overhaul)
+                          </p>
+                          <div className="space-y-3">
+                            {marketingCoach.coaching.keepDoing.map((item, i) => (
+                              <div
+                                key={`kd-${i}`}
+                                className="rounded-2xl border border-sky-200/80 bg-white/90 px-4 py-3.5 shadow-sm"
+                              >
+                                <h3 className="text-[14px] font-semibold text-sky-950">{item.title}</h3>
+                                <p className="mt-2 text-[14px] leading-relaxed text-sky-900/85 whitespace-pre-wrap">
+                                  {item.detail}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <p className="mb-2 text-[12px] font-bold uppercase tracking-wide text-amber-900/90">
+                            Avoid chasing
+                          </p>
+                          <div className="space-y-3">
+                            {marketingCoach.coaching.doNotChase.map((item, i) => (
+                              <div
+                                key={`dnc-${i}`}
+                                className="rounded-2xl border border-amber-200/80 bg-amber-50/50 px-4 py-3.5 shadow-sm"
+                              >
+                                <h3 className="text-[14px] font-semibold text-amber-950">{item.title}</h3>
+                                <p className="mt-2 text-[14px] leading-relaxed text-amber-950/90 whitespace-pre-wrap">
+                                  {item.detail}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {marketingCoach.model ? (
+                          <p className="text-center text-[11px] text-sky-900/50">Model: {marketingCoach.model}</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </KeepMountedTab>
+              </>
+            ) : null}
           </Suspense>
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "tests"} className="!flex-none flex-col">
+      <KeepMountedTab active={navTab === "website"} className="!flex-none flex-col">
         <div className="bg-slate-50">
-          {shouldRenderAiAnalysisNotice ? (
-            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-          ) : null}
-          <KeepMountedTab active={navSub === "creative-tests"} className="!flex-none flex-col">
-            <CreativeTestsTab
-              competitorId={competitorDbIdForSaved}
-              competitorLabel={competitorDisplayLabel}
-              cacheDomainNorm={cacheDomainNorm}
-              lastScrapedAt={accountLastScrapedAt}
-              onFreshnessRescrape={undefined}
-              onOpenAd={openAd}
-              fetchEnabled={navSub === "creative-tests"}
-            />
-          </KeepMountedTab>
-          <KeepMountedTab active={navSub === "timeline"} className="!flex-none flex-col">
-            <TimelineTab
-              competitorId={competitorDbIdForSaved}
-              competitorLabel={competitorDisplayLabel}
-              cacheDomainNorm={cacheDomainNorm}
-              lastScrapedAt={accountLastScrapedAt}
-              onFreshnessRescrape={undefined}
-              onOpenAd={openAd}
-              fetchEnabled={navSub === "timeline"}
-            />
-          </KeepMountedTab>
-          <KeepMountedTab active={navSub === "landing-pages"} className="!flex-none flex-col">
-            <LandingPagesTab
-              competitorId={competitorDbIdForSaved}
-              competitorLabel={competitorDisplayLabel}
-              cacheDomainNorm={cacheDomainNorm}
-              lastScrapedAt={accountLastScrapedAt}
-              onFreshnessRescrape={undefined}
-              onOpenAd={openAd}
-              landingPagesListCache={landingPagesListCacheForChildren}
-              fetchEnabled={navSub === "landing-pages"}
-            />
-          </KeepMountedTab>
-        </div>
-      </KeepMountedTab>
-
-      <KeepMountedTab active={navTab === "audience-copy"} className="!flex-none flex-col">
-        <div className="bg-slate-50">
-          {shouldRenderAiAnalysisNotice ? (
-            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-          ) : null}
-          <KeepMountedTab active={navSub === "audience"} className="!flex-none flex-col">
-            <AudienceTab
-              brandId={myBrand.id}
-              competitorDomain={brand.domain}
-              workspaceName={myBrand.name}
-              workspaceLogoUrl={myBrand.logoUrl ?? null}
-              workspaceDomain={myBrand.domain ?? null}
-              workspaceColor={myBrand.color ?? undefined}
-              workspaceBadge={myBrand.badge ?? undefined}
-              competitorLabel={competitorDisplayLabel}
-              competitorLogoUrl={brand.logoUrl}
-              cacheDomainNorm={cacheDomainNorm}
-              lastScrapedAt={accountLastScrapedAt}
-              fetchEnabled={navSub === "audience"}
-              externalRecomputeRunning={recomputePollState.recomputeRunning}
-            />
-          </KeepMountedTab>
-          <KeepMountedTab active={navSub === "copy-vault"} className="!flex-none flex-col">
-            <CopyVaultTab
-              competitorId={competitorDbIdForSaved}
-              competitorLabel={competitorDisplayLabel}
-              onOpenAd={openAd}
-              cacheDomainNorm={cacheDomainNorm}
-              lastScrapedAt={accountLastScrapedAt}
-              fetchEnabled={navSub === "copy-vault"}
-            />
-          </KeepMountedTab>
+          <WebsiteTab
+            competitorId={competitorDbIdForSaved || undefined}
+            competitorLabel={competitorDisplayLabel}
+            cacheDomainNorm={cacheDomainNorm}
+            lastScrapedAt={accountLastScrapedAt}
+            activeSubTab={(navSub as CompetitorSubTabId | null) ?? "tracked"}
+            onOpenAd={openAd}
+            onFreshnessRescrape={undefined}
+            sharedLandingPagesListCache={landingPagesListCacheForChildren}
+            fetchEnabled={navTab === "website"}
+          />
         </div>
       </KeepMountedTab>
 
@@ -5521,7 +5677,7 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "alerts"} className="!flex-none flex-col">
+      <KeepMountedTab active={navTab === "alerts" && !isOwnWorkspace} className="!flex-none flex-col">
         <div className="bg-slate-50">
           <AlertsTab
             competitorId={competitorDbIdForSaved || undefined}
@@ -5537,17 +5693,21 @@ function CompetitorDashboardBody({
         </div>
       </KeepMountedTab>
 
-      <KeepMountedTab active={navTab === "email-marketing" && !isOwnWorkspace} className="!flex-none flex-col">
+      <KeepMountedTab active={navTab === "email-marketing"} className="!flex-none flex-col">
         <div className="bg-slate-50">
           <EmailMarketingTab
             competitorId={competitorDbIdForSaved || undefined}
             competitorName={competitorDisplayLabel}
+            activeSubTab={(navSub as CompetitorSubTabId | null) ?? "inbox"}
+            onSubTabChange={handleSubTabChange}
+            isOwnWorkspace={isOwnWorkspace}
+            fetchEnabled={navTab === "email-marketing"}
           />
         </div>
       </KeepMountedTab>
 
       <KeepMountedTab
-        active={navTab === "organic" && !isOwnWorkspace}
+        active={navTab === "organic"}
         className="!flex-none flex-col"
       >
         <div className="bg-slate-50">
@@ -5556,6 +5716,7 @@ function CompetitorDashboardBody({
             competitorName={competitorDisplayLabel}
             activeSubTab={(navSub as CompetitorSubTabId | null) ?? "feed"}
             onSubTabChange={handleSubTabChange}
+            isOwnWorkspace={isOwnWorkspace}
           />
         </div>
       </KeepMountedTab>

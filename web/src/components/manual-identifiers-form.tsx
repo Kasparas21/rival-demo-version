@@ -712,7 +712,7 @@ export function ManualIdentifiersForm({
         TIKTOK_ADS_LIBRARY_REGION_OPTIONS.map((o) => ({
           value: o.value,
           label: o.label,
-          shortTag: o.value,
+          shortTag: o.value === "all" ? "ALL" : o.value,
           flagIso2: o.value.length === 2 ? o.value.toUpperCase() : null,
         }))
       ),

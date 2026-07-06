@@ -65,6 +65,7 @@ import {
   type AdLibraryRegionPrefs,
 } from "@/lib/ad-library/ad-library-region-prefs";
 import { inferAdLibraryRegionDefaults } from "@/lib/ad-library/infer-ad-library-regions-from-domain";
+import { regionsToPersistedPayload } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import {
   applyInitialScrapeLimits,
   mergeScrapeFieldsWithWorkspaceMarkets,
@@ -561,6 +562,7 @@ function SearchingContent() {
             ids: mergedIds as Record<string, string>,
             channels: channelsForScan,
             confirmed: true,
+            regions: regionsToPersistedPayload(adLibraryRegions),
           },
         },
         activeBrand.id,

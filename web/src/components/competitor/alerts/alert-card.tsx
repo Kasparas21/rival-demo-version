@@ -90,7 +90,7 @@ export function alertDeepLinkPath(alert: AlertFeedRow): { tab: string; sub?: str
       return { tab: "ads library", sub: "all", extra: typeof meta.platform === "string" ? { platform: meta.platform } : undefined };
     case "proven_winner":
       return {
-        tab: "audience-copy",
+        tab: "ads library",
         sub: "copy-vault",
         extra:
           typeof meta.scrapedAdId === "string"
@@ -101,7 +101,7 @@ export function alertDeepLinkPath(alert: AlertFeedRow): { tab: string; sub?: str
       };
     case "new_angle":
       return {
-        tab: "audience-copy",
+        tab: "ads library",
         sub: "copy-vault",
         extra: typeof meta.angle === "string" ? { angle: meta.angle } : undefined,
       };
@@ -111,6 +111,7 @@ export function alertDeepLinkPath(alert: AlertFeedRow): { tab: string; sub?: str
     case "competitor_email":
       return {
         tab: "email-marketing",
+        sub: "inbox",
         extra: typeof meta.emailId === "string" ? { email_id: meta.emailId } : undefined,
       };
     default:

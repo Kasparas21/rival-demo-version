@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+
+/** Hidden tabs are unmounted after this long to free DOM, timers, and media. */
+const IDLE_UNMOUNT_MS = 5 * 60 * 1000;
 
 export function KeepMountedTab({
   active,
@@ -13,10 +16,24 @@ export function KeepMountedTab({
   className?: string;
 }) {
   const [hasMounted, setHasMounted] = useState(active);
+  const idleTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (active) setHasMounted(true);
-  }, [active]);
+    if (active) {
+      setHasMounted(true);
+      return;
+    }
+    if (!hasMounted) return;
+    idleTimerRef.current = window.setTimeout(() => {
+      setHasMounted(false);
+    }, IDLE_UNMOUNT_MS);
+    return () => {
+      if (idleTimerRef.current !== null) {
+        window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = null;
+      }
+    };
+  }, [active, hasMounted]);
 
   return (
     <div

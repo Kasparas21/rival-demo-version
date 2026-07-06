@@ -109,7 +109,7 @@ export function inferLandingPageContext(
 }
 
 /**
- * Shown when a landing URL can’t be embedded (CSP / X-Frame-Options / Chrome error page).
+ * Shown when a landing page blocks automated screenshot capture.
  */
 export function LandingPagePreviewFallbackCard({
   url,
@@ -128,7 +128,7 @@ export function LandingPagePreviewFallbackCard({
   return (
     <div className="mx-auto w-full max-w-[420px] rounded-2xl border border-slate-200/95 bg-gradient-to-b from-white to-slate-50/80 px-6 py-8 text-center shadow-[0_12px_40px_rgba(15,23,42,0.08)] ring-1 ring-slate-900/[0.03]">
       <p className="mb-4 inline-flex items-center justify-center rounded-full border border-slate-200/90 bg-slate-100/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
-        Live preview unavailable
+        Preview unavailable
       </p>
 
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">

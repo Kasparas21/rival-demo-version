@@ -25,7 +25,9 @@ function loadCompetitorContent() {
       if (isChunkLoadError(error) && typeof window !== "undefined") {
         if (!sessionStorage.getItem(CHUNK_RETRY_KEY)) {
           sessionStorage.setItem(CHUNK_RETRY_KEY, "1");
-          window.location.reload();
+          const url = new URL(window.location.href);
+          url.searchParams.set("_chunk_retry", String(Date.now()));
+          window.location.replace(url.toString());
           return new Promise<never>(() => {});
         }
         sessionStorage.removeItem(CHUNK_RETRY_KEY);

@@ -95,6 +95,14 @@ export type SidebarCompetitor = {
     ids?: Record<string, string>;
     channels?: string[];
     confirmed?: boolean;
+    regions?: {
+      metaCountry?: string;
+      googleRegion?: string;
+      tiktokRegion?: string;
+      pinterestCountry?: string;
+      linkedinCountryCode?: string;
+      snapchatCountry?: string;
+    };
   };
   /** ISO timestamp from `saved_competitors.last_scraped_at` when synced from account */
   lastScrapedAt?: string;

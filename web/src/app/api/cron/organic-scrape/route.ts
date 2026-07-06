@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
+import { chainCronInvocation } from "@/lib/cron/chain-cron";
 import { fetchOrganicScrapeCandidates, scrapeOrganicCompetitor } from "@/lib/organic-content/scrape-competitor";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+
+/** Stop starting new competitors before the serverless hard kill. */
+const ORGANIC_CRON_TIME_BUDGET_MS = 285 * 1000;
+const ORGANIC_CRON_BATCH_SIZE = 20;
 
 async function runOrganicScrape(req: Request) {
   if (!authorizeCron(req)) {
@@ -13,7 +18,8 @@ async function runOrganicScrape(req: Request) {
   }
 
   const admin = createSupabaseAdminClient();
-  const candidates = await fetchOrganicScrapeCandidates(admin, 10);
+  const cronStartedAt = Date.now();
+  const candidates = await fetchOrganicScrapeCandidates(admin, ORGANIC_CRON_BATCH_SIZE);
 
   const results: Array<{
     competitorId: string;
@@ -23,7 +29,14 @@ async function runOrganicScrape(req: Request) {
     platformErrors: Record<string, string>;
   }> = [];
 
+  let timeBoxed = 0;
+
   for (const competitor of candidates) {
+    if (Date.now() - cronStartedAt >= ORGANIC_CRON_TIME_BUDGET_MS) {
+      timeBoxed += 1;
+      break;
+    }
+
     try {
       const result = await scrapeOrganicCompetitor(admin, competitor);
       results.push({
@@ -56,11 +69,26 @@ async function runOrganicScrape(req: Request) {
     console.error("[cron/organic-scrape] cross-competitor check failed", err);
   }
 
-  return NextResponse.json({
+  const remainingCandidates = Math.max(0, candidates.length - results.length);
+  const summary = {
     ok: true,
     processed: results.length,
+    remainingCandidates,
+    timeBoxed,
+    batchSize: ORGANIC_CRON_BATCH_SIZE,
     results,
+  };
+  console.info("[cron/organic-scrape]", {
+    processed: summary.processed,
+    remainingCandidates,
+    timeBoxed,
   });
+
+  if (remainingCandidates > 0 || timeBoxed > 0) {
+    chainCronInvocation(req, "/api/cron/organic-scrape");
+  }
+
+  return NextResponse.json(summary);
 }
 
 export async function GET(req: Request) {

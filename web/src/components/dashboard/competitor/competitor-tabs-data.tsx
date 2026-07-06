@@ -1,15 +1,11 @@
 import {
   BarChart3,
-  Beaker,
   Bell,
-  Gauge,
+  Globe,
   GitCompareArrows,
   Library,
   Mail,
   Share2,
-  SlidersHorizontal,
-  TrendingUp,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -25,17 +21,22 @@ export type CompetitorSubTabId =
   | "copy-vault"
   | "feed"
   | "insights"
-  | "organic-settings";
+  | "organic-settings"
+  | "paid-media-settings"
+  | "tracked"
+  | "from-ads"
+  | "inbox"
+  | "benchmark"
+  | "improve-marketing";
 
 export type CompetitorPageTabId =
   | "ads library"
   | "insights"
-  | "tests"
-  | "audience-copy"
   | "comparison"
   | "alerts"
   | "email-marketing"
   | "organic"
+  | "website"
   | "workspace-ads"
   | "workspace-marketing-improvements"
   | "benchmark";
@@ -43,7 +44,6 @@ export type CompetitorPageTabId =
 export type CompetitorSubTab = {
   id: CompetitorSubTabId;
   label: string;
-  isNew?: boolean;
   isStub?: boolean;
 };
 
@@ -52,31 +52,30 @@ export type CompetitorPageTab = {
   label: string;
   icon: LucideIcon;
   disabled?: boolean;
-  isNew?: boolean;
   subTabs?: CompetitorSubTab[];
   defaultSubTab?: CompetitorSubTabId;
 };
 
-/** Rival-accent pill for newly launched main tabs (Organic, Email Marketing, …). */
-export const competitorTabNewBadgeClass =
-  "inline-flex shrink-0 items-center rounded-full bg-[color:var(--rival-accent-blue)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.04em] text-[#1e6fa8] ring-1 ring-[#bfdbfe]/55";
-
 export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
   {
     id: "ads library",
-    label: "Ad Library",
+    label: "Paid Media",
     icon: Library,
     defaultSubTab: "all",
     subTabs: [
-      { id: "all", label: "All Ads" },
+      { id: "all", label: "Ad Library" },
       { id: "saved", label: "Saved" },
+      { id: "creative-tests", label: "Creative Tests" },
+      { id: "timeline", label: "Timeline" },
+      { id: "audience", label: "Audience" },
+      { id: "copy-vault", label: "Copy Vault" },
+      { id: "paid-media-settings", label: "Settings" },
     ],
   },
   {
     id: "organic",
     label: "Organic",
     icon: Share2,
-    isNew: true,
     defaultSubTab: "feed",
     subTabs: [
       { id: "feed", label: "Feed" },
@@ -85,10 +84,25 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     ],
   },
   {
+    id: "website",
+    label: "Website",
+    icon: Globe,
+    defaultSubTab: "tracked",
+    subTabs: [
+      { id: "tracked", label: "Tracked pages" },
+      { id: "from-ads", label: "From ads" },
+    ],
+  },
+  {
     id: "email-marketing",
     label: "Email Marketing",
     icon: Mail,
-    isNew: true,
+    defaultSubTab: "inbox",
+    subTabs: [
+      { id: "inbox", label: "Inbox" },
+      { id: "saved", label: "Saved" },
+      { id: "insights", label: "Insights" },
+    ],
   },
   {
     id: "insights",
@@ -97,28 +111,7 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     defaultSubTab: "strategy-map",
     subTabs: [
       { id: "strategy-map", label: "Strategy Map" },
-      { id: "activity-feed", label: "Activity Feed", isNew: true },
-    ],
-  },
-  {
-    id: "tests",
-    label: "Tests & Timeline",
-    icon: Beaker,
-    defaultSubTab: "creative-tests",
-    subTabs: [
-      { id: "creative-tests", label: "Creative Tests", isNew: true },
-      { id: "timeline", label: "Timeline", isNew: true },
-      { id: "landing-pages", label: "Landing Pages", isNew: true },
-    ],
-  },
-  {
-    id: "audience-copy",
-    label: "Audience & Copy",
-    icon: Users,
-    defaultSubTab: "audience",
-    subTabs: [
-      { id: "audience", label: "Audience" },
-      { id: "copy-vault", label: "Copy Vault" },
+      { id: "activity-feed", label: "Activity Feed" },
     ],
   },
   {
@@ -133,35 +126,39 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
   },
 ];
 
+/** Insights sub-tabs hidden on the signed-in user's own brand hub. */
+export const OWN_BRAND_HIDDEN_INSIGHTS_SUB_TABS: readonly CompetitorSubTabId[] = ["activity-feed"];
+
+/** Extra Insights sub-tabs shown only on the signed-in user's own brand hub. */
+export const OWN_BRAND_INSIGHTS_EXTRA_SUB_TABS: readonly CompetitorSubTab[] = [
+  { id: "benchmark", label: "Benchmark" },
+];
+
+/** Own-brand Insights sub-tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
+export const OWN_BRAND_DEBUG_ONLY_INSIGHTS_EXTRA_SUB_TABS: readonly CompetitorSubTab[] = [
+  { id: "improve-marketing", label: "Improve Marketing" },
+];
+
+export function ownBrandInsightsDefaultSubTab(showDebugTabs: boolean): CompetitorSubTabId {
+  return showDebugTabs ? "strategy-map" : "benchmark";
+}
+
 export function findCompetitorTab(id: string): CompetitorPageTab | undefined {
   return COMPETITOR_PAGE_TABS.find((t) => t.id === id);
 }
 
 export function findCompetitorSubTab(parentId: string, subId: string): CompetitorSubTab | undefined {
   const parent = findCompetitorTab(parentId);
-  return parent?.subTabs?.find((st) => st.id === subId);
+  const base = parent?.subTabs?.find((st) => st.id === subId);
+  if (base) return base;
+  if (parentId === "insights") {
+    return (
+      OWN_BRAND_INSIGHTS_EXTRA_SUB_TABS.find((st) => st.id === subId) ??
+      OWN_BRAND_DEBUG_ONLY_INSIGHTS_EXTRA_SUB_TABS.find((st) => st.id === subId)
+    );
+  }
+  return undefined;
 }
-
-/** Shown only on the signed-in user’s own brand hub — ad source URLs / handles (not competitor spy). */
-export const WORKSPACE_ADS_TAB: CompetitorPageTab = {
-  id: "workspace-ads",
-  label: "Workspace ads",
-  icon: SlidersHorizontal,
-};
-
-/** Cross-competitor coaching for the workspace brand (uses cached Ads Library creative from rivals you follow). */
-export const WORKSPACE_MARKETING_IMPROVEMENTS_TAB: CompetitorPageTab = {
-  id: "workspace-marketing-improvements",
-  label: "Improve marketing",
-  icon: TrendingUp,
-};
-
-/** Own brand vs all tracked competitors — rank-based benchmark view. */
-export const WORKSPACE_BENCHMARK_TAB: CompetitorPageTab = {
-  id: "benchmark",
-  label: "Benchmark",
-  icon: Gauge,
-};
 
 /** Competitor hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
 export const DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [];
@@ -171,28 +168,41 @@ export function isGlobalDebugOnlyTab(tabId: string): tabId is (typeof DEBUG_ONLY
 }
 
 /** Own-brand hub tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
-export const OWN_BRAND_DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [
-  "insights",
-  "tests",
-  "audience-copy",
-  "alerts",
-  "workspace-marketing-improvements",
-];
+export const OWN_BRAND_DEBUG_ONLY_TAB_IDS: readonly CompetitorPageTabId[] = [];
 
 export function isOwnBrandDebugOnlyTab(tabId: string): tabId is (typeof OWN_BRAND_DEBUG_ONLY_TAB_IDS)[number] {
   return OWN_BRAND_DEBUG_ONLY_TAB_IDS.includes(tabId as (typeof OWN_BRAND_DEBUG_ONLY_TAB_IDS)[number]);
 }
 
-/** Own-brand Ad Library sub-tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
+/** Own-brand sub-tabs hidden until `NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION=true`. */
 export const OWN_BRAND_DEBUG_ONLY_SUB_TABS: readonly {
   parentTabId: CompetitorPageTabId;
   subTabId: CompetitorSubTabId;
-}[] = [{ parentTabId: "ads library", subTabId: "saved" }];
+}[] = [
+  { parentTabId: "ads library", subTabId: "saved" },
+  { parentTabId: "ads library", subTabId: "creative-tests" },
+  { parentTabId: "ads library", subTabId: "timeline" },
+  { parentTabId: "ads library", subTabId: "audience" },
+  { parentTabId: "ads library", subTabId: "copy-vault" },
+  { parentTabId: "insights", subTabId: "strategy-map" },
+  { parentTabId: "insights", subTabId: "improve-marketing" },
+];
 
 export function isOwnBrandDebugOnlySubTab(parentTabId: string, subTabId: string): boolean {
   return OWN_BRAND_DEBUG_ONLY_SUB_TABS.some(
     (entry) => entry.parentTabId === parentTabId && entry.subTabId === subTabId,
   );
+}
+
+/** @deprecated Legacy top-level tab ids — redirected to new locations on own-brand hub. */
+export const LEGACY_OWN_BRAND_TAB_IDS: readonly CompetitorPageTabId[] = [
+  "workspace-ads",
+  "workspace-marketing-improvements",
+  "benchmark",
+];
+
+export function isLegacyOwnBrandTabId(tabId: string): tabId is (typeof LEGACY_OWN_BRAND_TAB_IDS)[number] {
+  return LEGACY_OWN_BRAND_TAB_IDS.includes(tabId as (typeof LEGACY_OWN_BRAND_TAB_IDS)[number]);
 }
 
 export function competitorSubTabsForView(opts: {
@@ -201,15 +211,30 @@ export function competitorSubTabsForView(opts: {
   showDebugTabs?: boolean;
 }): CompetitorSubTab[] {
   const { parentTab, isOwnWorkspace, showDebugTabs = false } = opts;
-  const subTabs = parentTab.subTabs ?? [];
-  if (!isOwnWorkspace || showDebugTabs) return subTabs;
+  let visible = [...(parentTab.subTabs ?? [])];
 
-  const hidden = new Set(
-    OWN_BRAND_DEBUG_ONLY_SUB_TABS.filter((entry) => entry.parentTabId === parentTab.id).map(
-      (entry) => entry.subTabId,
-    ),
-  );
-  return subTabs.filter((st) => !hidden.has(st.id));
+  if (isOwnWorkspace && parentTab.id === "insights") {
+    visible = [...visible, ...OWN_BRAND_INSIGHTS_EXTRA_SUB_TABS];
+    if (showDebugTabs) {
+      visible = [...visible, ...OWN_BRAND_DEBUG_ONLY_INSIGHTS_EXTRA_SUB_TABS];
+    }
+    const hiddenInsights = new Set<string>(OWN_BRAND_HIDDEN_INSIGHTS_SUB_TABS);
+    if (!showDebugTabs) {
+      hiddenInsights.add("strategy-map");
+    }
+    visible = visible.filter((st) => !hiddenInsights.has(st.id));
+  }
+
+  if (isOwnWorkspace && !showDebugTabs) {
+    const hidden = new Set(
+      OWN_BRAND_DEBUG_ONLY_SUB_TABS.filter((entry) => entry.parentTabId === parentTab.id).map(
+        (entry) => entry.subTabId,
+      ),
+    );
+    visible = visible.filter((st) => !hidden.has(st.id));
+  }
+
+  return visible;
 }
 
 export function competitorPageTabsForView(opts: {
@@ -219,7 +244,7 @@ export function competitorPageTabsForView(opts: {
   const { isOwnWorkspace, showDebugTabs = false } = opts;
 
   let base = isOwnWorkspace
-    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison" && t.id !== "email-marketing" && t.id !== "organic")
+    ? COMPETITOR_PAGE_TABS.filter((t) => t.id !== "comparison" && t.id !== "alerts")
     : [...COMPETITOR_PAGE_TABS];
 
   if (!showDebugTabs) {
@@ -230,13 +255,24 @@ export function competitorPageTabsForView(opts: {
     base = base.filter((t) => !hidden.has(t.id));
   }
 
-  if (!isOwnWorkspace) return base;
+  return base;
+}
 
-  const adsIdx = base.findIndex((t) => t.id === "ads library");
-  const inserts: CompetitorPageTab[] = [WORKSPACE_ADS_TAB, WORKSPACE_BENCHMARK_TAB];
-  if (showDebugTabs) inserts.push(WORKSPACE_MARKETING_IMPROVEMENTS_TAB);
+export function resolveSubTabFromParams(
+  params: { get: (key: string) => string | null },
+  tab: string,
+  viewOpts: { isOwnWorkspace: boolean; showDebugTabs?: boolean },
+): CompetitorSubTabId | null {
+  const def = findCompetitorTab(tab);
+  if (!def) return null;
+  const subTabs = competitorSubTabsForView({ parentTab: def, ...viewOpts });
+  if (subTabs.length === 0) return null;
 
-  const next = [...base];
-  next.splice(adsIdx >= 0 ? adsIdx + 1 : 0, 0, ...inserts);
-  return next;
+  let sub = (params.get("sub") ?? "").trim();
+  if (tab === "ads library" && sub === "settings") sub = "paid-media-settings";
+  if (sub && subTabs.some((s) => s.id === sub)) return sub as CompetitorSubTabId;
+  if (tab === "insights" && viewOpts.isOwnWorkspace) {
+    return ownBrandInsightsDefaultSubTab(viewOpts.showDebugTabs ?? false);
+  }
+  return (def.defaultSubTab ?? subTabs[0]?.id ?? null) as CompetitorSubTabId | null;
 }

@@ -16,6 +16,7 @@ import {
 import { normalizePinterestAdsCountry } from "@/lib/ad-library/pinterest-regions";
 import { readGoogleAdDetailsPublicFlag } from "@/lib/ad-library/public-env-flags";
 import type { AdsLibraryIds } from "@/lib/ad-library/run-ads-library-parallel-scrape";
+import { resolveScheduledScrapeRegions } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import {
   billingRequiredResponseBody,
@@ -54,8 +55,9 @@ function buildAdsLibraryForceBody(params: {
   ids: AdsLibraryIds;
   platforms: AdsLibraryPlatform[];
   adsPerPlatform: number;
+  scrapeRegions: ReturnType<typeof resolveScheduledScrapeRegions>;
 }) {
-  const { brandName, domainClean, ids, platforms, adsPerPlatform } = params;
+  const { brandName, domainClean, ids, platforms, adsPerPlatform, scrapeRegions } = params;
   const cap = Math.max(1, Math.min(adsPerPlatform, MAX_ADS));
   const dateParams = buildManualRefreshScrapeParams(computeManualRefreshTodayWindow());
   const hasMetaPageId = Boolean(
@@ -73,10 +75,10 @@ function buildAdsLibraryForceBody(params: {
     skipCache: true,
     intent: "manual" as const,
     platforms,
-    metaCountry: "US",
-    tiktokRegion: normalizeTikTokAdsRegion(undefined),
-    googleRegion: normalizeGoogleAdsRegion(undefined),
-    pinterestCountry: normalizePinterestAdsCountry(undefined),
+    metaCountry: scrapeRegions.metaCountry,
+    tiktokRegion: normalizeTikTokAdsRegion(scrapeRegions.tiktokRegion),
+    googleRegion: normalizeGoogleAdsRegion(scrapeRegions.googleRegion),
+    pinterestCountry: normalizePinterestAdsCountry(scrapeRegions.pinterestCountry),
     googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
     ...platformFields,
   };
@@ -98,7 +100,7 @@ function buildAdsLibraryForceBody(params: {
     metaSortBy: "impressions_desc",
     linkedinMaxAds: cap,
     linkedinDateRange: dateParams.linkedinDateRange,
-    linkedinCountryCode: "",
+    linkedinCountryCode: scrapeRegions.linkedinCountryCode,
     tiktokMaxAds: cap,
     tiktokStartDate: dateParams.tiktokStartDate,
     tiktokEndDate: dateParams.tiktokEndDate,
@@ -112,11 +114,11 @@ function buildAdsLibraryForceBody(params: {
     snapchatMaxItems: Math.max(10, Math.min(cap, 10000)),
     snapchatStartDate: dateParams.snapchatStartDate,
     snapchatEndDate: dateParams.snapchatEndDate,
-    snapchatCountry: "",
-    tiktokRegion: normalizeTikTokAdsRegion(undefined),
-    googleRegion: normalizeGoogleAdsRegion(undefined),
+    snapchatCountry: scrapeRegions.snapchatCountry,
+    tiktokRegion: normalizeTikTokAdsRegion(scrapeRegions.tiktokRegion),
+    googleRegion: normalizeGoogleAdsRegion(scrapeRegions.googleRegion),
     googleResultsLimit: normalizeGoogleAdsResultsLimit(cap),
-    pinterestCountry: normalizePinterestAdsCountry(undefined),
+    pinterestCountry: normalizePinterestAdsCountry(scrapeRegions.pinterestCountry),
     googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
     filterGoogleActiveToday: true,
   };
@@ -188,6 +190,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const displayName = row.brand_name?.trim() || row.name?.trim() || domainClean;
   const ids = idsFromAdsLibraryContext(row.ads_library_context);
+  const scrapeRegions = resolveScheduledScrapeRegions(domainClean, row.ads_library_context);
   const adsPerPlatform = Math.max(
     1,
     Math.min(billing.limits.manualRefreshAdsPerPlatform || 300, MAX_ADS),
@@ -220,6 +223,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       ids,
       platforms,
       adsPerPlatform,
+      scrapeRegions,
     }),
     filterGoogleActiveToday: platforms.includes("google"),
   };

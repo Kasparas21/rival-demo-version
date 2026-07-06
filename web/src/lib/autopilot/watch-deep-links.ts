@@ -6,12 +6,12 @@ export type AutopilotUtmMedium = "email" | "slack" | "discord";
 
 /** Alert type → competitor dashboard tab/sub (tunable). */
 export const WATCH_ALERT_DESTINATION: Partial<Record<AlertType, { tab: string; sub?: string }>> = {
-  new_platform: { tab: "tests", sub: "timeline" },
-  platform_exit: { tab: "tests", sub: "timeline" },
-  proven_winner: { tab: "audience-copy", sub: "copy-vault" },
-  creative_push: { tab: "audience-copy", sub: "copy-vault" },
+  new_platform: { tab: "ads library", sub: "timeline" },
+  platform_exit: { tab: "ads library", sub: "timeline" },
+  proven_winner: { tab: "ads library", sub: "copy-vault" },
+  creative_push: { tab: "ads library", sub: "copy-vault" },
   activity_spike: { tab: "insights", sub: "activity-feed" },
-  competitor_email: { tab: "email-marketing" },
+  competitor_email: { tab: "email-marketing", sub: "inbox" },
 };
 
 export function buildAutopilotCompetitorUrl(params: {

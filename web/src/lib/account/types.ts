@@ -5,6 +5,15 @@ export type AdsLibraryContextPayload = {
   ids?: Record<string, string>;
   channels?: string[];
   confirmed?: boolean;
+  /** Ad market / region prefs from discovery — reused by scheduled cron scrapes. */
+  regions?: {
+    metaCountry?: string;
+    googleRegion?: string;
+    tiktokRegion?: string;
+    pinterestCountry?: string;
+    linkedinCountryCode?: string;
+    snapchatCountry?: string;
+  };
 };
 
 export type SavedCompetitorPayload = {

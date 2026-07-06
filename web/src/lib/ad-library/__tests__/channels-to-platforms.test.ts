@@ -3,6 +3,7 @@ import {
   ALL_ADS_API_PLATFORMS,
   channelsQueryToAdsPlatforms,
   resolveAdsPlatformsForCompetitorView,
+  resolveCompetitorTrackedAdsPlatforms,
   unionAdsPlatformsFromSources,
 } from "../channels-to-platforms";
 
@@ -20,6 +21,23 @@ describe("resolveAdsPlatformsForCompetitorView", () => {
   it("falls back to all platforms for cache hydration when selection unknown", () => {
     expect(resolveAdsPlatformsForCompetitorView("", null)).toEqual(ALL_ADS_API_PLATFORMS);
     expect(resolveAdsPlatformsForCompetitorView("", {})).toEqual(ALL_ADS_API_PLATFORMS);
+  });
+});
+
+describe("resolveCompetitorTrackedAdsPlatforms", () => {
+  it("uses explicit settings channels when present", () => {
+    expect(resolveCompetitorTrackedAdsPlatforms("meta,google", null)).toEqual(["meta", "google"]);
+  });
+
+  it("defaults to Meta + Google when selection is unknown", () => {
+    expect(resolveCompetitorTrackedAdsPlatforms("", null)).toEqual(["meta", "google"]);
+    expect(resolveCompetitorTrackedAdsPlatforms("", {})).toEqual(["meta", "google"]);
+  });
+
+  it("infers a partial platform set from filled identifiers", () => {
+    expect(
+      resolveCompetitorTrackedAdsPlatforms("", { tiktok: "@brand" }),
+    ).toEqual(["tiktok"]);
   });
 });
 

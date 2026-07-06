@@ -1,4 +1,4 @@
-import type { ChannelId } from "@/components/channel-picker-modal";
+import { DEFAULT_SELECTED_CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
 import type { AdsLibraryPlatform } from "./api-types";
 
 /** Platforms callable via Apify in `/api/ads/library` (aligned with the channel picker where applicable). */
@@ -78,6 +78,26 @@ export function resolveAdsPlatformsForCompetitorView(
     if (fromIds.length > 0) return fromIds;
   }
   return ALL_ADS_API_PLATFORMS;
+}
+
+/**
+ * Platforms enabled in Paid Media → Settings for a competitor dashboard.
+ * Explicit `channels` win; otherwise infer a partial set from filled ids; otherwise match the
+ * Settings panel default (Meta + Google) instead of showing every network.
+ */
+export function resolveCompetitorTrackedAdsPlatforms(
+  channelsCsv: string,
+  ids: Record<string, string> | null | undefined,
+): AdsLibraryPlatform[] {
+  const trimmed = channelsCsv.trim();
+  if (trimmed) {
+    return channelsQueryToAdsPlatforms(trimmed.split(","));
+  }
+  const fromIds = resolveAdsPlatformsForCompetitorView("", ids);
+  if (fromIds.length > 0 && fromIds.length < ALL_ADS_API_PLATFORMS.length) {
+    return fromIds;
+  }
+  return channelsQueryToAdsPlatforms([...DEFAULT_SELECTED_CHANNELS]);
 }
 
 /** Merge multiple channel/id sources without dropping platforms from an earlier scrape or onboarding setup. */

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { analyzePendingCompetitorEmails } from "@/lib/email-intelligence/analyze-pending";
 import {
@@ -92,8 +92,9 @@ export async function GET(
         return NextResponse.json({ error: "Email not found" }, { status: 404 });
       }
       if (emailNeedsDeepAnalysis(email)) {
-        await analyzeCompetitorEmail(emailId);
-        email = (await fetchCompetitorEmailById(supabase, user.id, competitorId, emailId)) ?? email;
+        after(async () => {
+          await analyzeCompetitorEmail(emailId);
+        });
       }
       return NextResponse.json({ tracker: tracker ?? null, email });
     } catch (err) {

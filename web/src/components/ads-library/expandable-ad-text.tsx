@@ -18,6 +18,8 @@ type ExpandableAdTextProps = {
   collapseOverflow?: boolean;
   /** Tailwind classes when `collapseOverflow` is false. Defaults to scroll cap; pass "" for uncapped height. */
   unclampedMaxHeightClass?: string;
+  /** Lines shown before “Show more” when collapsed. @default 3 */
+  collapsedLineClamp?: 2 | 3 | 4;
 };
 
 /**
@@ -30,6 +32,7 @@ export function ExpandableAdText({
   scrollWhenExpanded = true,
   collapseOverflow = true,
   unclampedMaxHeightClass,
+  collapsedLineClamp = 3,
 }: ExpandableAdTextProps) {
   const ref = useRef<HTMLParagraphElement>(null);
   const [expanded, setExpanded] = useState(false);
@@ -66,13 +69,16 @@ export function ExpandableAdText({
     );
   }
 
+  const collapsedClampClass =
+    collapsedLineClamp === 2 ? "line-clamp-2" : collapsedLineClamp === 4 ? "line-clamp-4" : "line-clamp-3";
+
   return (
     <div className="min-w-0 min-h-0">
       <p
         ref={ref}
         className={cn(
           className,
-          !expanded && "line-clamp-3",
+          !expanded && collapsedClampClass,
           expanded &&
             scrollWhenExpanded &&
             "max-h-[min(13rem,38vh)] overflow-y-auto overscroll-contain pr-0.5 [scrollbar-width:thin]"

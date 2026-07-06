@@ -295,5 +295,36 @@ export async function finalizeAdsLibraryAfterFreshScrape(
     } catch (agentErr) {
       console.error("[finalizeAdsLibrary] rival-agent", agentErr);
     }
+
+    try {
+      const { data: competitor } = await supabase
+        .from("saved_competitors")
+        .select("brand_domain, slug")
+        .eq("id", resolvedCompetitorId)
+        .maybeSingle();
+      const website = competitor?.brand_domain?.trim() || competitor?.slug?.trim();
+      if (website) {
+        const { data: newAds } = await supabase
+          .from("scraped_ads")
+          .select("platform, raw_payload")
+          .eq("competitor_id", resolvedCompetitorId)
+          .eq("scrape_batch_id", scrapeBatchId)
+          .limit(200);
+        if (newAds?.length) {
+          const { autoDetectAdLandingPagesFromAds } = await import(
+            "@/lib/landing-page-tracker/auto-detect-from-ad"
+          );
+          await autoDetectAdLandingPagesFromAds(
+            supabase,
+            resolvedCompetitorId,
+            userId,
+            website,
+            newAds,
+          );
+        }
+      }
+    } catch (landingErr) {
+      console.error("[finalizeAdsLibrary] auto-detect landing pages", landingErr);
+    }
   }
 }

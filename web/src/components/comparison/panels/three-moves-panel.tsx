@@ -86,7 +86,7 @@ export function ThreeMovesPanel({
 
   const goCopyVault = (angleRef?: string) => {
     const p = new URLSearchParams(searchParams.toString());
-    p.set("tab", "audience-copy");
+    p.set("tab", "ads library");
     p.set("sub", "copy-vault");
     p.delete("angle");
     p.delete("anglePick");

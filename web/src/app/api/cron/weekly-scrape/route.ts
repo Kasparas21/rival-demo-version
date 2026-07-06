@@ -28,19 +28,21 @@ import { hostToBrandLabel } from "@/lib/onboarding/host";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
-import { filterWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidates";
+import { loadOrderedWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidate-order";
+import { resolveScheduledScrapeRegions } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
+import { chainCronInvocation } from "@/lib/cron/chain-cron";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 export const runtime = "nodejs";
-/** Vercel Hobby caps at 300s; time-box still stops new work at ~230s. */
+/** Vercel Hobby caps at 300s; time-box still stops new work before the hard kill. */
 export const maxDuration = 300;
 
 /** Mark `running` jobs older than this as failed before starting new work. */
 const STALE_RUNNING_JOB_MS = 2 * 60 * 60 * 1000;
 /** Stop enqueueing new competitor scrapes before the serverless hard kill. */
-const CRON_TIME_BUDGET_MS = 230 * 1000;
+const CRON_TIME_BUDGET_MS = 285 * 1000;
 
 function cleanDomain(d: string): string {
   return d.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0] || d;
@@ -124,54 +126,7 @@ async function loadOrderedCandidateRows(
   runDayYmd: string,
   opts?: { skipDoneTodayForCompetitorId?: string | null },
 ): Promise<ScheduledScrapeRow[]> {
-  const candidates = filterWeeklyScrapeCandidates(savedRows);
-
-  const { data: doneToday } = await admin
-    .from("weekly_scrape_jobs")
-    .select("competitor_id")
-    .eq("week_start", runDayYmd)
-    .eq("status", "done");
-
-  const skipDoneId = opts?.skipDoneTodayForCompetitorId?.trim() || null;
-  const doneTodayIds = new Set(
-    (doneToday ?? [])
-      .map((r) => r.competitor_id)
-      .filter((id) => !skipDoneId || id !== skipDoneId),
-  );
-
-  const { data: runningRecent } = await admin
-    .from("weekly_scrape_jobs")
-    .select("competitor_id")
-    .eq("status", "running")
-    .gte("updated_at", new Date(Date.now() - STALE_RUNNING_JOB_MS).toISOString());
-
-  const runningIds = new Set((runningRecent ?? []).map((r) => r.competitor_id));
-
-  const eligible = candidates.filter((r) => !doneTodayIds.has(r.id) && !runningIds.has(r.id));
-  if (eligible.length === 0) return [];
-
-  const competitorIds = eligible.map((r) => r.id);
-  const { data: trackingRows } = await admin
-    .from("competitor_platform_tracking")
-    .select("competitor_id, next_scrape_at")
-    .in("competitor_id", competitorIds);
-
-  const earliestDueByCompetitor = new Map<string, number>();
-  for (const row of trackingRows ?? []) {
-    const cid = row.competitor_id;
-    const dueMs = row.next_scrape_at ? Date.parse(row.next_scrape_at) : 0;
-    const prev = earliestDueByCompetitor.get(cid);
-    if (prev === undefined || dueMs < prev) {
-      earliestDueByCompetitor.set(cid, Number.isNaN(dueMs) ? 0 : dueMs);
-    }
-  }
-
-  return [...eligible].sort((a, b) => {
-    const aDue = earliestDueByCompetitor.get(a.id) ?? 0;
-    const bDue = earliestDueByCompetitor.get(b.id) ?? 0;
-    if (aDue !== bDue) return aDue - bDue;
-    return a.id.localeCompare(b.id);
-  });
+  return loadOrderedWeeklyScrapeCandidates(admin, savedRows, runDayYmd, opts);
 }
 
 async function runWeeklyJobForRow(
@@ -348,14 +303,18 @@ async function runWeeklyJobForRow(
     };
 
     const metaStatus = "ACTIVE";
-    const metaCountry = "US";
+    const scrapeRegions = resolveScheduledScrapeRegions(
+      row.brand_domain || row.slug,
+      row.ads_library_context,
+    );
+    const metaCountry = scrapeRegions.metaCountry;
     const metaSortBy = "impressions_desc";
-    const linkedinCountryCode = "";
+    const linkedinCountryCode = scrapeRegions.linkedinCountryCode;
     const microsoftCountryCodes = microsoftMarketCodeToArray("66");
-    const snapchatCountryIso = "";
-    const tiktokRegion = normalizeTikTokAdsRegion(undefined);
-    const googleRegion = normalizeGoogleAdsRegion(undefined);
-    const pinterestCountry = normalizePinterestAdsCountry(undefined);
+    const snapchatCountryIso = scrapeRegions.snapchatCountry;
+    const tiktokRegion = normalizeTikTokAdsRegion(scrapeRegions.tiktokRegion);
+    const googleRegion = normalizeGoogleAdsRegion(scrapeRegions.googleRegion);
+    const pinterestCountry = normalizePinterestAdsCountry(scrapeRegions.pinterestCountry);
 
     const scrapeScalars = buildParallelScrapeScalars(
       platformsToScrape,
@@ -579,6 +538,11 @@ async function runWeeklyScrape(req: Request) {
     competitorFilter: onlyCompetitorId,
   };
   console.info("[cron/weekly-scrape]", summary);
+
+  if (!onlyCompetitorId && remaining > 0 && isWithinRefreshWindowUtc()) {
+    chainCronInvocation(req, "/api/cron/weekly-scrape");
+  }
+
   return Response.json(summary);
 }
 

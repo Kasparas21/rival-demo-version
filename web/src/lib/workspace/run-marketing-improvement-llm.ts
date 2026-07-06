@@ -16,8 +16,8 @@ export const marketingImprovementResponseSchema = z.object({
     z.object({
       title: z.string(),
       detail: z.string(),
-      /** Optional note on which competitor patterns or platforms this relates to */
       groundedIn: z.string().optional(),
+      channel: z.enum(["paid", "organic", "website", "email"]).optional(),
     }),
   ),
   keepDoing: z.array(
@@ -61,28 +61,30 @@ export async function runMarketingImprovementLlm(params: {
 
   const evidenceSection =
     evidenceText.trim().length > 0
-      ? `PUBLIC ADS LIBRARY DIGESTS (scraped creatives for brands they follow + their own workspace when available).\nOnly use this text — do not invent campaigns, budgets, or platforms not shown.\nIf evidence is thin, say so and stay cautious.\n\n${evidenceText.trim()}`
-      : "(No ad samples were available.)";
+      ? `CROSS-CHANNEL MARKETING EVIDENCE (paid ads, organic posts, website tracking, email captures for rivals + workspace brand when available).\nOnly use this text — do not invent campaigns, budgets, or platforms not shown.\nIf evidence is thin for a channel, say so and stay cautious.\n\n${evidenceText.trim()}`
+      : "(No marketing evidence was available.)";
 
   const res = await llmSmart({
     task: "marketing_improvement",
     maxTokens: 4_096,
     systemPrompt: `You are a strategic marketing advisor. The user runs "${userBrandName}" and follows several competitors in one workspace.
 
-Analyze patterns ACROSS ALL competitor digests (not one hero rival). Compare them to the user's own ad digest when present.
+Analyze patterns ACROSS ALL competitor evidence (paid, organic, website, email — not one hero rival). Compare them to the user's own channel evidence when present.
 
 Return ONLY valid JSON (no markdown fences, no commentary) with this exact shape and key casing:
 {
   "executiveSummary": string,
-  "improve": [ { "title": string, "detail": string, "groundedIn"?: string } ],
+  "improve": [ { "title": string, "detail": string, "groundedIn"?: string, "channel"?: "paid" | "organic" | "website" | "email" } ],
   "keepDoing": [ { "title": string, "detail": string } ],
   "doNotChase": [ { "title": string, "detail": string } ]
 }
 
 Rules:
-- "improve" = concrete opportunities for the workspace brand (messaging, channels, offers, creative angles) informed by what competitors are doing that they are not, or where they look behind.
-- "keepDoing" = strengths or differentiated choices implied by THEIR ads vs the pack — things worth protecting; do not suggest changing these without strong evidence.
-- "doNotChase" = crowded angles, weak patterns in competitor ads, or moves that would not fit the user's brand — explain briefly.
+- Cover all channels present in the evidence — not only paid ads.
+- "improve" = concrete opportunities (messaging, channels, offers, creative, email cadence, site updates) where competitors are ahead or the user is behind.
+- Add "channel" on each improve item when the recommendation is mainly about paid, organic, website, or email.
+- "keepDoing" = strengths across channels worth protecting.
+- "doNotChase" = crowded angles or weak patterns — explain briefly.
 - Short titles; details in plain language, 2–5 sentences max per item.
 - 3–6 items in "improve", 2–5 in "keepDoing", 1–4 in "doNotChase" when evidence supports it; fewer if evidence is thin.
 - Never fabricate metrics. JSON only.`,

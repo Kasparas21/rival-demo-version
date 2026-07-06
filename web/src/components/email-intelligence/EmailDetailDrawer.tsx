@@ -7,6 +7,7 @@ import { X } from "lucide-react";
 import { EmailPreviewLoading } from "@/lib/email-intelligence/email-preview-iframe";
 import type { CompetitorEmailRow } from "@/lib/email-intelligence/types";
 
+import { mergeEmailRowUpdate } from "./email-intelligence-ui";
 import { EmailDetailPane } from "./EmailDetailPane";
 import { EmailSaveButton } from "./EmailSaveButton";
 
@@ -54,6 +55,7 @@ export function EmailDetailDrawer({
   const wasOpenRef = useRef(false);
   const dismissedRef = useRef(false);
   const onEmailUpdatedRef = useRef(onEmailUpdated);
+  const previewLoadedForRef = useRef<string | null>(null);
   const isOpen = Boolean(emailId);
   const showDrawer = isOpen || closing;
 
@@ -134,8 +136,10 @@ export function EmailDetailDrawer({
 
   useEffect(() => {
     if (!emailId || dismissedRef.current) return;
+    if (previewLoadedForRef.current === emailId) return;
+
     const seed = listEmail?.id === emailId ? listEmail : null;
-    setEmail(seed);
+    setEmail((prev) => (prev?.id === emailId ? prev : seed));
     setLoading(true);
     setError(null);
     let cancelled = false;
@@ -150,6 +154,9 @@ export function EmailDetailDrawer({
 
         if (res.ok && data.email) {
           setEmail(data.email);
+          if (data.email.html_body?.trim()) {
+            previewLoadedForRef.current = emailId;
+          }
           onEmailUpdatedRef.current(data.email);
           setError(null);
           return;
@@ -160,6 +167,9 @@ export function EmailDetailDrawer({
           if (cancelled || dismissedRef.current) return;
           if (snapshot) {
             setEmail(snapshot);
+            if (snapshot.html_body?.trim()) {
+              previewLoadedForRef.current = emailId;
+            }
             setError(null);
             return;
           }
@@ -172,6 +182,9 @@ export function EmailDetailDrawer({
           const snapshot = await loadSavedSnapshot(savedEmailId);
           if (!cancelled && snapshot) {
             setEmail(snapshot);
+            if (snapshot.html_body?.trim()) {
+              previewLoadedForRef.current = emailId;
+            }
             setError(null);
             return;
           }
@@ -187,7 +200,19 @@ export function EmailDetailDrawer({
     return () => {
       cancelled = true;
     };
-  }, [competitorId, emailId, savedEmailId, listEmail, loadSavedSnapshot]);
+  }, [competitorId, emailId, savedEmailId, loadSavedSnapshot]);
+
+  useEffect(() => {
+    if (!emailId) {
+      previewLoadedForRef.current = null;
+      return;
+    }
+    if (!listEmail || listEmail.id !== emailId) return;
+    setEmail((prev) => {
+      if (!prev || prev.id !== emailId) return prev;
+      return mergeEmailRowUpdate(prev, listEmail);
+    });
+  }, [emailId, listEmail]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -271,7 +296,7 @@ export function EmailDetailDrawer({
               <EmailDetailPane
                 email={email ?? listEmail!}
                 competitorId={competitorId}
-                previewLoading={loading}
+                previewLoading={loading && !email?.html_body?.trim()}
                 onEmailUpdated={(updated) => {
                   setEmail((prev) =>
                     prev

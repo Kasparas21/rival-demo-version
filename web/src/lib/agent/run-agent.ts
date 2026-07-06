@@ -11,6 +11,7 @@ import { isAutopilotDeliveryActive } from "@/lib/autopilot/is-autopilot-delivery
 import { detectAdsSignals } from "@/lib/agent/detectors/ads";
 import { detectCrossCompetitorTrends } from "@/lib/agent/detectors/cross-competitor";
 import { detectEmailSignals } from "@/lib/agent/detectors/email";
+import { detectLandingPageSignals } from "@/lib/agent/detectors/landing-pages";
 import { detectOrganicSignals } from "@/lib/agent/detectors/organic";
 import type { AgentScrapeResults, AgentSignalSource, DetectedAgentSignal } from "@/lib/agent/types";
 import type { Database, Json } from "@/lib/supabase/types";
@@ -141,6 +142,10 @@ export async function runAgentForUserCompetitor(
       } else {
         console.log("[rival-agent] cold start skip organic", competitorId);
       }
+    }
+
+    if (scrapeResults.landingPageChange) {
+      allSignals.push(...detectLandingPageSignals(scrapeResults.landingPageChange));
     }
 
     if (!skipColdStart) {

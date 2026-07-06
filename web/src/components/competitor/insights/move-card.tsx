@@ -137,7 +137,7 @@ export function MoveCard({
 
   const copyVaultHref = useMemo(() => {
     const params = new URLSearchParams(searchParamsString);
-    params.set("tab", "audience-copy");
+    params.set("tab", "ads library");
     params.set("sub", "copy-vault");
     const ang =
       move.event_type === "new_angle" || move.event_type === "angle_migration"
@@ -150,7 +150,7 @@ export function MoveCard({
 
   const copyVaultBaseHref = useMemo(() => {
     const params = new URLSearchParams(searchParamsString);
-    params.set("tab", "audience-copy");
+    params.set("tab", "ads library");
     params.set("sub", "copy-vault");
     params.delete("angle");
     return `${pathname}?${params.toString()}`;

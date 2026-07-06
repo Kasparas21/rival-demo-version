@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Foreplay-style Landing Pages explorer (v1).
- * - List from /api/landing-pages; preview via iframe with CSP/X-Frame timeout fallback.
- * - "Ads using this page" uses /api/landing-pages/ads-for-url (fails silently per product spec).
+ * Foreplay-style Landing Pages explorer.
+ * - List from /api/landing-pages; preview via stored screenshots (blocked-only fallback).
+ * - "Ads using this page" uses /api/landing-pages/ads-for-url.
  */
 
 import {
@@ -14,20 +14,18 @@ import {
   Loader2,
   Play,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import {
-  classifyLandingPreviewEmbed,
-  LandingPagePreviewFallbackCard,
-} from "@/components/competitor/landing-page-preview-fallback";
+import { LandingPagePreviewFallbackCard } from "@/components/competitor/landing-page-preview-fallback";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
+import { cn } from "@/lib/utils";
 
 /** Brand colors for platform breakdown bars (same family as Analytics gauge). */
 const PLATFORM_BAR_COLORS: Record<string, string> = {
@@ -52,9 +50,6 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 const PLATFORM_SORT_ORDER = ["meta", "google", "tiktok", "linkedin", "pinterest", "snapchat", "youtube", "microsoft"];
 
-const PREVIEW_MOBILE = { outerW: 383, outerH: 708, iframeW: 375, iframeH: 700 } as const;
-const PREVIEW_DESKTOP = { iframeW: 1200, iframeH: 720, border: 4 } as const;
-
 /** Sidebar list: show this many URLs before "Show more". */
 const LANDING_PAGES_LIST_INITIAL = 8;
 /** Max characters for URL text in the sidebar list row. */
@@ -62,13 +57,12 @@ const LANDING_PAGES_URL_DISPLAY_MAX = 36;
 /** Ads grid: one row on desktop (4 cols) before "Show more". */
 const LANDING_PAGE_ADS_INITIAL = 4;
 
-/** Viewport + iframe resize when switching mobile ↔ desktop */
-const PREVIEW_VIEWPORT_TRANSITION =
-  "transition-[width,height,border-radius] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none motion-reduce:duration-0 will-change-[width,height]";
-const PREVIEW_IFRAME_TRANSITION =
-  "transition-[width,height,opacity] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none motion-reduce:duration-0 will-change-[width,height]";
-const PREVIEW_DESKTOP_SCALE_TRANSITION =
-  "transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] motion-reduce:transition-none motion-reduce:duration-0";
+type LandingPageSnapshotRef = {
+  hero_screenshot_url: string | null;
+  screenshot_url: string;
+  status: "ok" | "blocked";
+  taken_at: string;
+};
 
 type LandingPageRow = {
   groupId: string;
@@ -79,6 +73,7 @@ type LandingPageRow = {
   faviconUrl: string;
   totalAds: number;
   platformBreakdown: Record<string, number>;
+  snapshot: LandingPageSnapshotRef | null;
 };
 
 export type LandingPagesApiResponse = {
@@ -122,10 +117,9 @@ export type LandingPagesTabProps = {
   fetchEnabled?: boolean;
 };
 
-function previewIframeSrc(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed) return trimmed;
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+function snapshotPreviewUrl(snapshot: LandingPageSnapshotRef | null | undefined): string | null {
+  if (!snapshot) return null;
+  return snapshot.hero_screenshot_url ?? snapshot.screenshot_url ?? null;
 }
 
 function formatDataSinceLabel(iso: string | null | undefined): string | null {
@@ -154,7 +148,12 @@ function sortedPlatformShares(breakdown: Record<string, number>): { key: string;
 function captionTopPlatforms(breakdown: Record<string, number>, maxParts = 2): string {
   const shares = sortedPlatformShares(breakdown);
   const top = shares.slice(0, maxParts);
-  return top.map(({ key }) => PLATFORM_LABELS[key] ?? key).join(" · ");
+  return top
+    .map(({ key, n }) => {
+      const label = PLATFORM_LABELS[key] ?? key;
+      return `${label} ${n} ${n === 1 ? "ad" : "ads"}`;
+    })
+    .join(" · ");
 }
 
 export function LandingPagesTab({
@@ -201,40 +200,33 @@ export function LandingPagesTab({
   const [listExpanded, setListExpanded] = useState(false);
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
 
-  const [previewState, setPreviewState] = useState<"loading" | "ok" | "blocked">("loading");
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const loadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [pageAds, setPageAds] = useState<NonNullable<AdsForUrlResponse["ads"]>>([]);
   const [pageAdsTotal, setPageAdsTotal] = useState(0);
   const [pageAdsLimit, setPageAdsLimit] = useState(30);
   const [adsExpanded, setAdsExpanded] = useState(false);
-  const [previewDevice, setPreviewDevice] = useState<"mobile" | "desktop">("desktop");
+  const [adsPlatformFilter, setAdsPlatformFilter] = useState("all");
 
-  const adsCacheKey = `${domainKey}:landing-pages-ads:${competitorId}:${encodeURIComponent(selectedUrl || "__none__")}:${stamp}:${pageAdsLimit}`;
+  const adsCacheKey = `${domainKey}:landing-pages-ads:${competitorId}:${encodeURIComponent(selectedUrl || "__none__")}:${stamp}:${pageAdsLimit}:${adsPlatformFilter}`;
 
   const { data: adsPayload, isValidating: adsValidating } = useScrapeKeyedCache<AdsForUrlResponse>({
     cacheKey: adsCacheKey,
     enabled: Boolean(competitorId && domainKey && selectedUrl),
     validateCached: (c) => c.ok === true && Array.isArray(c.ads),
     fetcher: async () => {
-      const res = await fetch(
-        `/api/landing-pages/ads-for-url?competitorId=${encodeURIComponent(competitorId)}&url=${encodeURIComponent(
-          selectedUrl!
-        )}&limit=${pageAdsLimit}`,
-        { credentials: "include" }
-      );
+      const params = new URLSearchParams({
+        competitorId,
+        url: selectedUrl!,
+        limit: String(pageAdsLimit),
+      });
+      if (adsPlatformFilter !== "all") {
+        params.set("platform", adsPlatformFilter);
+      }
+      const res = await fetch(`/api/landing-pages/ads-for-url?${params.toString()}`, {
+        credentials: "include",
+      });
       return (await res.json()) as AdsForUrlResponse;
     },
   });
-
-  const clearLoadTimer = useCallback(() => {
-    if (loadTimerRef.current) {
-      clearTimeout(loadTimerRef.current);
-      loadTimerRef.current = null;
-    }
-  }, []);
-
 
   useEffect(() => {
     if (rows.length === 0) {
@@ -274,51 +266,6 @@ export function LandingPagesTab({
   );
 
   useEffect(() => {
-    if (!selectedUrl) {
-      clearLoadTimer();
-      setPreviewState("loading");
-      return;
-    }
-    setPreviewState("loading");
-    clearLoadTimer();
-    loadTimerRef.current = setTimeout(() => {
-      setPreviewState("blocked");
-    }, 3200);
-    return () => clearLoadTimer();
-  }, [selectedUrl, previewDevice, clearLoadTimer]);
-
-  const onIframeLoad = useCallback(() => {
-    clearLoadTimer();
-
-    const applyClassify = () => {
-      setPreviewState((prev) => {
-        if (prev === "blocked") return "blocked";
-        return classifyLandingPreviewEmbed(iframeRef.current);
-      });
-    };
-
-    applyClassify();
-    window.setTimeout(applyClassify, 180);
-    window.setTimeout(applyClassify, 650);
-    window.setTimeout(applyClassify, 1400);
-  }, [clearLoadTimer]);
-
-  /** Cross-origin frames can flip to Chrome/CSP error UI slightly after first paint — keep checking while “ok”. */
-  useEffect(() => {
-    if (previewState !== "ok" || !selectedUrl) return;
-    const delays = [1200, 2400, 4000, 6200];
-    const ids = delays.map((ms) =>
-      window.setTimeout(() => {
-        setPreviewState((prev) => {
-          if (prev !== "ok") return prev;
-          return classifyLandingPreviewEmbed(iframeRef.current);
-        });
-      }, ms),
-    );
-    return () => ids.forEach((id) => window.clearTimeout(id));
-  }, [previewState, selectedUrl]);
-
-  useEffect(() => {
     setPageAds([]);
     setPageAdsTotal(0);
   }, [selectedUrl]);
@@ -336,7 +283,13 @@ export function LandingPagesTab({
   useEffect(() => {
     setPageAdsLimit(30);
     setAdsExpanded(false);
+    setAdsPlatformFilter("all");
   }, [selectedUrl]);
+
+  useEffect(() => {
+    setPageAdsLimit(30);
+    setAdsExpanded(false);
+  }, [adsPlatformFilter]);
 
   const copyUrl = useCallback(async (url: string) => {
     try {
@@ -468,11 +421,6 @@ export function LandingPagesTab({
                 row={selectedRow}
                 competitorLabel={competitorLabel}
                 competitorDomainNorm={domainKey}
-                previewState={previewState}
-                previewDevice={previewDevice}
-                onPreviewDeviceChange={setPreviewDevice}
-                iframeRef={iframeRef}
-                onIframeLoad={onIframeLoad}
                 onCopy={() => copyUrl(selectedUrl)}
               />
 
@@ -480,6 +428,9 @@ export function LandingPagesTab({
                 <AdsForPageSection
                   ads={pageAds}
                   total={pageAdsTotal}
+                  platformBreakdown={selectedRow.platformBreakdown}
+                  platformFilter={adsPlatformFilter}
+                  onPlatformFilterChange={setAdsPlatformFilter}
                   expanded={adsExpanded}
                   onExpand={() => {
                     setAdsExpanded(true);
@@ -540,6 +491,7 @@ function LandingPageListRow({
   const shares = sortedPlatformShares(row.platformBreakdown);
   const cap = captionTopPlatforms(row.platformBreakdown, 2);
   const display = displayUrlShort(row.url, LANDING_PAGES_URL_DISPLAY_MAX);
+  const thumbUrl = snapshotPreviewUrl(row.snapshot);
 
   return (
     <button
@@ -553,8 +505,11 @@ function LandingPageListRow({
       ].join(" ")}
     >
       <div className="flex items-center gap-2">
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-sm">
-          {faviconFailed ? (
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
+          {thumbUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL
+            <img src={thumbUrl} alt="" className="h-full w-full object-cover object-top" />
+          ) : faviconFailed ? (
             <Globe className="h-4 w-4 text-slate-400" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element -- remote favicons; sizes unknown
@@ -573,7 +528,7 @@ function LandingPageListRow({
         </span>
         <span className="shrink-0 text-[13px] font-bold text-[color:var(--rival-primary)]">{row.count}</span>
       </div>
-      <div className="mt-1.5 flex items-center gap-2 pl-7">
+      <div className="mt-1.5 flex items-center gap-2 pl-9">
         <div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
           {shares.map(({ key, n }) => (
             <div
@@ -589,7 +544,7 @@ function LandingPageListRow({
           ))}
         </div>
       </div>
-      <p className="mt-0.5 pl-7 text-[10px] text-slate-500">{cap}</p>
+      <p className="mt-0.5 pl-9 text-[10px] text-slate-500">{cap}</p>
     </button>
   );
 }
@@ -599,115 +554,41 @@ function PreviewPane({
   row,
   competitorLabel,
   competitorDomainNorm,
-  previewState,
-  previewDevice,
-  onPreviewDeviceChange,
-  iframeRef,
-  onIframeLoad,
   onCopy,
 }: {
   url: string;
   row: LandingPageRow | null;
   competitorLabel: string;
   competitorDomainNorm: string;
-  previewState: "loading" | "ok" | "blocked";
-  previewDevice: "mobile" | "desktop";
-  onPreviewDeviceChange: (mode: "mobile" | "desktop") => void;
-  iframeRef: RefObject<HTMLIFrameElement | null>;
-  onIframeLoad: () => void;
   onCopy: () => void;
 }) {
   const displayPath = url.replace(/^https?:\/\//, "");
-  const displayUrlShort = displayPath.length > 42 ? `${displayPath.slice(0, 41)}…` : displayPath;
+  const displayUrlShortText = displayPath.length > 42 ? `${displayPath.slice(0, 41)}…` : displayPath;
+  const snapshot = row?.snapshot ?? null;
+  const previewUrl = snapshotPreviewUrl(snapshot);
+  const isBlocked = snapshot?.status === "blocked";
 
-  const isMobile = previewDevice === "mobile";
-  const desktopFitRef = useRef<HTMLDivElement | null>(null);
-  const [desktopScale, setDesktopScale] = useState(1);
-
-  useLayoutEffect(() => {
-    if (isMobile || previewState === "blocked") return;
-
-    const el = desktopFitRef.current;
-    if (!el) return;
-
-    const desktopChromeW = PREVIEW_DESKTOP.iframeW + PREVIEW_DESKTOP.border * 2;
-
-    const update = () => {
-      const w = el.getBoundingClientRect().width;
-      if (!Number.isFinite(w) || w <= 0) {
-        requestAnimationFrame(() => {
-          const w2 = el.getBoundingClientRect().width;
-          if (Number.isFinite(w2) && w2 > 0) {
-            setDesktopScale(Math.min(1, w2 / desktopChromeW));
-          }
-        });
-        return;
-      }
-      setDesktopScale(Math.min(1, w / desktopChromeW));
-    };
-
-    update();
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [isMobile, previewState, previewDevice, url]);
-
-  if (previewState === "blocked") {
+  if (isBlocked) {
     return (
-      <LandingPagePreviewFallbackCard
-        url={url}
-        displayPath={displayPath}
-        faviconUrl={row?.faviconUrl ?? null}
-        competitorLabel={competitorLabel}
-        competitorDomainNorm={competitorDomainNorm}
-      />
+      <div className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 px-6 py-10">
+        <LandingPagePreviewFallbackCard
+          url={url}
+          displayPath={displayPath}
+          faviconUrl={row?.faviconUrl ?? null}
+          competitorLabel={competitorLabel}
+          competitorDomainNorm={competitorDomainNorm}
+        />
+      </div>
     );
   }
-
-  const iframeStyle = isMobile
-    ? { width: PREVIEW_MOBILE.iframeW, height: PREVIEW_MOBILE.iframeH, maxWidth: "100%" as const }
-    : { width: PREVIEW_DESKTOP.iframeW, height: PREVIEW_DESKTOP.iframeH };
-
-  const desktopChromeW = PREVIEW_DESKTOP.iframeW + PREVIEW_DESKTOP.border * 2;
-  const desktopChromeH = PREVIEW_DESKTOP.iframeH + PREVIEW_DESKTOP.border * 2;
-
-  const viewportW = isMobile ? PREVIEW_MOBILE.outerW : desktopChromeW * desktopScale;
-  const viewportH = isMobile ? PREVIEW_MOBILE.outerH : desktopChromeH * desktopScale;
 
   return (
     <div className="flex w-full flex-col items-stretch">
       <div className="mb-4 flex w-full flex-wrap items-center gap-2">
-        <div
-          className="inline-flex shrink-0 rounded-[10px] border border-slate-200/90 bg-slate-100/95 p-0.5"
-          role="group"
-          aria-label="Preview device"
-        >
-          <button
-            type="button"
-            onClick={() => onPreviewDeviceChange("mobile")}
-            className={[
-              "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all",
-              isMobile ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900",
-            ].join(" ")}
-          >
-            Mobile
-          </button>
-          <button
-            type="button"
-            onClick={() => onPreviewDeviceChange("desktop")}
-            className={[
-              "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-all",
-              !isMobile ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900",
-            ].join(" ")}
-          >
-            Desktop
-          </button>
-        </div>
-
         <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
           <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
           <span className="truncate font-mono text-[11px] text-slate-700" title={url}>
-            {displayUrlShort}
+            {displayUrlShortText}
           </span>
         </div>
 
@@ -730,71 +611,29 @@ function PreviewPane({
         </a>
       </div>
 
-      <div ref={desktopFitRef} className="flex w-full min-w-0 justify-center">
+      <div className="flex w-full min-w-0 justify-center">
         <div
-          className={`relative overflow-hidden shadow-[0_8px_30px_rgba(15,23,42,0.1)] ${PREVIEW_VIEWPORT_TRANSITION}`}
-          style={{
-            width: viewportW,
-            height: viewportH,
-            borderRadius: isMobile ? 24 : 16,
-          }}
+          className="relative w-full max-w-[960px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.1)]"
+          style={{ aspectRatio: "16 / 10" }}
         >
-          {previewState === "loading" ? (
-            <div
-              className={`absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#f8fafc] text-center ${PREVIEW_VIEWPORT_TRANSITION}`}
-              style={{ borderRadius: isMobile ? 24 : 16 }}
-            >
-              <Loader2 className="h-8 w-8 animate-spin text-slate-400" aria-hidden />
-              <p className="mt-3 text-[13px] text-slate-600">Loading preview…</p>
-            </div>
-          ) : null}
-
-          <div
-            className={
-              previewState === "loading"
-                ? "pointer-events-none absolute inset-0 -z-10 opacity-0"
-                : isMobile
-                  ? "relative flex h-full w-full items-center justify-center"
-                  : `absolute left-0 top-0 ${PREVIEW_DESKTOP_SCALE_TRANSITION}`
-            }
-            style={
-              previewState === "loading"
-                ? undefined
-                : isMobile
-                  ? undefined
-                  : {
-                      width: desktopChromeW,
-                      height: desktopChromeH,
-                      transform: `scale(${desktopScale})`,
-                      transformOrigin: "top left",
-                    }
-            }
-            aria-hidden={previewState === "loading"}
-          >
-            <div
-              className={`flex flex-col items-center justify-center overflow-hidden border-[4px] border-[#1f2937] bg-[#e5e7eb] shadow-lg ${PREVIEW_VIEWPORT_TRANSITION}`}
-              style={{
-                width: isMobile ? PREVIEW_MOBILE.outerW : desktopChromeW,
-                height: isMobile ? PREVIEW_MOBILE.outerH : desktopChromeH,
-                borderRadius: isMobile ? 24 : 16,
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                key={url}
-                title="Landing page preview"
-                src={previewIframeSrc(url)}
-                className={`block border-0 bg-white ${PREVIEW_IFRAME_TRANSITION} ${
-                  isMobile ? "rounded-[20px]" : "rounded-xl"
-                }`}
-                style={iframeStyle}
-                sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                referrerPolicy="no-referrer"
-                loading="lazy"
-                onLoad={onIframeLoad}
+          {previewUrl ? (
+            <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
+              {/* eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL */}
+              <img
+                src={previewUrl}
+                alt={`Screenshot of ${displayPath}`}
+                className="h-full w-full object-contain object-top bg-white"
               />
+            </a>
+          ) : (
+            <div className="flex h-full min-h-[320px] flex-col items-center justify-center bg-[#f8fafc] px-6 text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-slate-400" aria-hidden />
+              <p className="mt-3 text-[13px] font-medium text-slate-700">Screenshot pending</p>
+              <p className="mt-1 max-w-xs text-[12px] text-slate-500">
+                This page will be captured automatically. Check back after the next scrape.
+              </p>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
@@ -811,6 +650,9 @@ function isVideoAd(format: string, creativeUrl: string | null): boolean {
 function AdsForPageSection({
   ads,
   total,
+  platformBreakdown,
+  platformFilter,
+  onPlatformFilterChange,
   expanded,
   onExpand,
   onCollapse,
@@ -818,17 +660,35 @@ function AdsForPageSection({
 }: {
   ads: NonNullable<AdsForUrlResponse["ads"]>;
   total: number;
+  platformBreakdown: Record<string, number>;
+  platformFilter: string;
+  onPlatformFilterChange: (platform: string) => void;
   expanded: boolean;
   onExpand: () => void;
   onCollapse: () => void;
   onOpenAd: (id: string) => void;
 }) {
-  if (ads.length === 0) return null;
+  const platformOptions = useMemo(() => {
+    const shares = sortedPlatformShares(platformBreakdown);
+    return shares.map(({ key, n }) => ({
+      id: key,
+      label: PLATFORM_LABELS[key] ?? key,
+      count: n,
+    }));
+  }, [platformBreakdown]);
+
+  const showPlatformFilter = platformOptions.length > 1;
+  const allCount = useMemo(
+    () => Object.values(platformBreakdown).reduce((sum, n) => sum + n, 0),
+    [platformBreakdown],
+  );
+
+  if (ads.length === 0 && !showPlatformFilter) return null;
 
   const showCount = expanded ? ads.length : Math.min(LANDING_PAGE_ADS_INITIAL, ads.length);
   const visible = ads.slice(0, showCount);
   const hiddenCount = Math.max(0, total - LANDING_PAGE_ADS_INITIAL);
-  const showMoreControl = !expanded && hiddenCount > 0;
+  const showMoreControl = !expanded && hiddenCount > 0 && ads.length > 0;
   const showLessControl = expanded && hiddenCount > 0;
 
   return (
@@ -839,29 +699,88 @@ function AdsForPageSection({
           {total}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {visible.map((ad) => (
-          <LandingPageAdCard key={ad.id} ad={ad} onOpen={() => onOpenAd(ad.id)} />
-        ))}
-      </div>
-      {showMoreControl ? (
-        <button
-          type="button"
-          onClick={onExpand}
-          className="mt-4 text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
-        >
-          Show more ({hiddenCount})
-        </button>
+
+      {showPlatformFilter ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onPlatformFilterChange("all")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition",
+              platformFilter === "all"
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+            )}
+          >
+            All
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums",
+                platformFilter === "all" ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700",
+              )}
+            >
+              {allCount}
+            </span>
+          </button>
+          {platformOptions.map((platform) => {
+            const active = platformFilter === platform.id;
+            return (
+              <button
+                key={platform.id}
+                type="button"
+                onClick={() => onPlatformFilterChange(platform.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs font-semibold transition",
+                  active
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                )}
+              >
+                <ComparisonPlatformIcon platform={platform.id as StrategyPlatform} className="h-3.5 w-3.5" />
+                {platform.label}
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums",
+                    active ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700",
+                  )}
+                >
+                  {platform.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       ) : null}
-      {showLessControl ? (
-        <button
-          type="button"
-          onClick={onCollapse}
-          className="mt-4 text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
-        >
-          Show less
-        </button>
-      ) : null}
+
+      {ads.length === 0 ? (
+        <p className="py-6 text-center text-[13px] text-slate-500">No ads for this platform.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {visible.map((ad) => (
+              <LandingPageAdCard key={ad.id} ad={ad} onOpen={() => onOpenAd(ad.id)} />
+            ))}
+          </div>
+          {showMoreControl ? (
+            <button
+              type="button"
+              onClick={onExpand}
+              className="mt-4 text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
+            >
+              Show more ({hiddenCount})
+            </button>
+          ) : null}
+          {showLessControl ? (
+            <button
+              type="button"
+              onClick={onCollapse}
+              className="mt-4 text-[12px] font-semibold text-sky-700 transition-colors hover:text-sky-800 hover:underline"
+            >
+              Show less
+            </button>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

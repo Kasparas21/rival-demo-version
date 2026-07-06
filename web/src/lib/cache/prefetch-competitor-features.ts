@@ -77,6 +77,17 @@ export function prefetchCompetitorFeatureCaches(params: PrefetchParams): void {
         },
         validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
       });
+
+      void prefetchScrapeKeyedCache({
+        cacheKey: `${dom}:tracked-pages:${id}:${stamp}`,
+        fetcher: async () => {
+          const res = await fetch(`/api/competitor/${encodeURIComponent(id)}/landing-pages`, {
+            credentials: "include",
+          });
+          return (await res.json()) as { ok?: boolean; pages?: unknown[] };
+        },
+        validateCached: (c) => c.ok === true && Array.isArray(c.pages),
+      });
     }
   });
 }

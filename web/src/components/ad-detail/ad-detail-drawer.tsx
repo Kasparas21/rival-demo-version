@@ -26,6 +26,7 @@ import { ThreadsMark } from "@/components/icons/threads-mark";
 import { WhatsAppMark } from "@/components/icons/whatsapp-mark";
 import { AdDetailDrawerSkeleton } from "@/components/ui/feature-skeleton";
 import { AD_SAVE_DEBUG_TITLE } from "@/components/ads-library/ad-save-row";
+import { AdCardTopRightLinkStack } from "@/components/ads-library/creative-test-winner-trophy";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { AdPreviewAnalysis } from "@/lib/ad-detail/ad-ai-analysis-types";
 import type { AdDetailOpenSeed } from "@/lib/ad-detail/ad-detail-cache";
@@ -40,6 +41,7 @@ import {
   adLibraryLinkLabel,
   resolveAdLibrarySourceUrl,
 } from "@/lib/ad-detail/resolve-ad-library-url";
+import { extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import {
   isMostlyVerticalCreativePlatform,
   resolveAdDetailCreativeMedia,
@@ -810,6 +812,7 @@ function AdCreativePreview({
     is_killed: ad.is_killed,
   });
   const lifespanLabel = `${previewLifespanDays}D`;
+  const adLibrarySourceUrl = resolveAdLibrarySourceUrl(ad.platform, ad.raw_payload);
 
   const googleMinimalEligible =
     normalizeAdDetailPlatformKey(ad.platform) === "google" &&
@@ -835,6 +838,7 @@ function AdCreativePreview({
     : null;
 
   const metaPl = normalizeAdDetailPlatformKey(ad.platform) === "meta";
+  const tiktokPl = normalizeAdDetailPlatformKey(ad.platform) === "tiktok";
   const linkedinPl = ad.platform.toLowerCase() === "linkedin";
   const pinterestPl = ad.platform.toLowerCase() === "pinterest";
   const snapchatPl = ad.platform.toLowerCase() === "snapchat";
@@ -974,6 +978,10 @@ function AdCreativePreview({
     }
     storyTitle = snapHead && !/^snapchat ad$/i.test(snapHead) ? snapHead : null;
     storyBody = null;
+  } else if (tiktokPl) {
+    /** TikTok library scrape rarely includes real primary copy — show creative only. */
+    storyTitle = null;
+    storyBody = null;
   } else if (transparencyYoutubePl) {
     /** Google Ads Transparency YouTube row — omit assembled title/channel/views `ad_text`; headline/description chip only when payload has strings. */
     storyTitle = null;
@@ -986,7 +994,7 @@ function AdCreativePreview({
     storyBody = ad.ad_text?.trim() || null;
   }
 
-  const structuredPl = metaPl || linkedinPl || pinterestPl || snapchatPl;
+  const structuredPl = metaPl || linkedinPl || pinterestPl || snapchatPl || tiktokPl;
   const structuredTitleTrimmed = structuredPl ? (storyTitle?.trim() ?? "") : "";
   const structuredBodyTrimmed = structuredPl ? (storyBody?.trim() ?? "") : "";
   const plainBodyTrimmed =
@@ -1016,9 +1024,17 @@ function AdCreativePreview({
               <p className="text-[11px] text-slate-500">Sponsored</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
-            <span className={`h-1.5 w-1.5 rounded-full ${ad.is_killed ? "bg-slate-400" : "bg-green-500"}`} />
-            {lifespanLabel}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
+              <span className={`h-1.5 w-1.5 rounded-full ${ad.is_killed ? "bg-slate-400" : "bg-green-500"}`} />
+              {lifespanLabel}
+            </div>
+            <AdCardTopRightLinkStack
+              href={adLibrarySourceUrl}
+              hrefTitle={adLibraryLinkLabel(ad.platform)}
+              isCreativeTestWinner={context.is_creative_test_winner}
+              linkClassName="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            />
           </div>
         </div>
 
@@ -1056,20 +1072,24 @@ function AdCreativePreview({
 
         {!googleMinimalEligible &&
         (landingHost || metaFooterHeadline || linkDescription || ad.cta) ? (
-          <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3">
+          <div className="flex items-start justify-between gap-3 border-t border-slate-100 bg-slate-50 px-4 py-3">
             <div className="min-w-0 flex-1">
               {landingHost ? (
                 <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">{landingHost}</p>
               ) : null}
               {metaFooterHeadline ? (
-                <p className="truncate text-[13px] font-semibold text-slate-900">{metaFooterHeadline}</p>
+                <p className="break-words text-[13px] font-semibold leading-snug text-slate-900 [overflow-wrap:anywhere]">
+                  {metaFooterHeadline}
+                </p>
               ) : null}
               {linkDescription ? (
-                <p className="mt-0.5 truncate text-[11px] text-slate-600">{linkDescription}</p>
+                <p className="mt-0.5 break-words whitespace-pre-wrap text-[11px] leading-snug text-slate-600 [overflow-wrap:anywhere]">
+                  {linkDescription}
+                </p>
               ) : null}
             </div>
             {ad.cta ? (
-              <span className="whitespace-nowrap rounded-md border border-slate-200 bg-slate-100 px-4 py-1.5 text-[12px] font-semibold text-slate-900">
+              <span className="mt-0.5 shrink-0 whitespace-nowrap rounded-md border border-slate-200 bg-slate-100 px-4 py-1.5 text-[12px] font-semibold text-slate-900">
                 {ad.cta}
               </span>
             ) : null}
@@ -1357,8 +1377,11 @@ function DetailsTab({ data }: { data: AdDetailData }) {
       : null;
   const linkedInLandingRaw =
     linkedInRaw && typeof linkedInRaw.url === "string" ? linkedInRaw.url.trim() : "";
+  const payloadLandingRaw = extractLandingPageUrl(ad.platform, ad.raw_payload) ?? "";
   const detailLandingPageHref =
-    context.landing_page_url?.trim() || safeExternalHref(linkedInLandingRaw);
+    context.landing_page_url?.trim() ||
+    safeExternalHref(payloadLandingRaw) ||
+    safeExternalHref(linkedInLandingRaw);
 
   const landingPageButtonLabel = detailLandingPageHref
     ? landingDetailHostTrailingSlash(detailLandingPageHref)

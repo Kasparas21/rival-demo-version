@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { displayUrlShort, normalizeLandingPageUrl, unwrapOutboundRedirectUrl } from "../normalize-url";
+import {
+  displayUrlShort,
+  landingPageGroupKey,
+  normalizeLandingPageUrl,
+  unwrapOutboundRedirectUrl,
+} from "../normalize-url";
 
 describe("normalizeLandingPageUrl", () => {
   it("strips utm tracking params", () => {
@@ -42,6 +47,28 @@ describe("normalizeLandingPageUrl", () => {
       "https://l.facebook.com/l.php?u=https%3A%2F%2Fhexclad.com%2Fknives%3Futm_source%3Dfb&h=abc";
     const result = normalizeLandingPageUrl(unwrapOutboundRedirectUrl(wrapped));
     expect(result).toBe("https://hexclad.com/knives");
+  });
+
+  it("collapses apex trailing slash to hostname-only URL", () => {
+    expect(normalizeLandingPageUrl("https://adidas.com/")).toBe("https://adidas.com/");
+    expect(landingPageGroupKey("https://adidas.com/")).toBe("https://adidas.com/");
+    expect(landingPageGroupKey("https://adidas.com")).toBe("https://adidas.com/");
+  });
+});
+
+describe("landingPageGroupKey", () => {
+  it("dedupes apex URLs with and without trailing slash", () => {
+    const keyA = landingPageGroupKey("https://adidas.com/");
+    const keyB = landingPageGroupKey("https://adidas.com");
+    expect(keyA).toBe(keyB);
+    expect(keyA).toBe("https://adidas.com/");
+  });
+
+  it("keeps deep paths distinct from apex", () => {
+    expect(landingPageGroupKey("https://adidas.com/us/sale/")).toBe("https://adidas.com/us/sale");
+    expect(landingPageGroupKey("https://adidas.com/")).not.toBe(
+      landingPageGroupKey("https://adidas.com/us/sale")
+    );
   });
 });
 

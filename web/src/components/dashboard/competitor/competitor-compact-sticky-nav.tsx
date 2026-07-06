@@ -7,7 +7,6 @@ import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-s
 import { COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import {
   competitorSubTabsForView,
-  competitorTabNewBadgeClass,
   findCompetitorTab,
   isGlobalDebugOnlyTab,
   isOwnBrandDebugOnlyTab,
@@ -52,7 +51,7 @@ export function useCompactNavScroll(
         next = 1 - relativeTop / COMPACT_NAV_REVEAL_PX;
       }
 
-      setProgress(next);
+      setProgress((prev) => (Math.abs(prev - next) < 0.002 ? prev : next));
     };
 
     const onScroll = () => {
@@ -220,11 +219,6 @@ export function CompetitorCompactStickyNav({
                   ) : null}
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="hidden sm:inline">{tab.label}</span>
-                  {tab.isNew ? (
-                    <span className={cn(competitorTabNewBadgeClass, "scale-90")} aria-label="New feature">
-                      New
-                    </span>
-                  ) : null}
                   {tab.id === "alerts" && alertsUnreadCount > 0 ? (
                     <AlertUnreadCountBadge count={alertsUnreadCount} className="ml-0.5 scale-90" />
                   ) : null}
@@ -271,16 +265,6 @@ export function CompetitorCompactStickyNav({
                       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden />
                     ) : null}
                     {st.label}
-                    {st.isNew ? (
-                      <span
-                        className={cn(
-                          "rounded-full px-1 py-0.5 text-[8px] font-bold",
-                          isSubActive ? "bg-white/20 text-white" : "bg-indigo-100 text-indigo-700",
-                        )}
-                      >
-                        NEW
-                      </span>
-                    ) : null}
                   </button>
                 );
               })}
@@ -298,4 +282,15 @@ export function CompetitorHeaderScrollSentinel({
   sentinelRef: RefObject<HTMLDivElement | null>;
 }) {
   return <div ref={sentinelRef} className="pointer-events-none h-px w-full shrink-0" aria-hidden />;
+}
+
+/** Owns scroll measurement so the competitor page body does not re-render on every scroll tick. */
+export function CompetitorCompactStickyNavAttached({
+  sentinelRef,
+  ...navProps
+}: Omit<CompetitorCompactStickyNavProps, "progress"> & {
+  sentinelRef: RefObject<HTMLElement | null>;
+}) {
+  const { progress } = useCompactNavScroll(sentinelRef);
+  return <CompetitorCompactStickyNav progress={progress} {...navProps} />;
 }

@@ -39,11 +39,18 @@ export function sidebarCompetitorToAccountPayload(h: SidebarCompetitor): SavedCo
     lastScrapedAt: h.lastScrapedAt,
   };
   const lc = h.libraryContext;
-  if (lc && (lc.ids || lc.channels?.length || lc.confirmed !== undefined)) {
+  if (
+    lc &&
+    (lc.ids ||
+      lc.channels?.length ||
+      lc.confirmed !== undefined ||
+      (lc.regions && Object.keys(lc.regions).length > 0))
+  ) {
     payload.adsLibraryContext = {
       ...(lc.ids && Object.keys(lc.ids).length > 0 ? { ids: { ...lc.ids } } : {}),
       ...(lc.channels?.length ? { channels: [...lc.channels] } : {}),
       ...(lc.confirmed !== undefined ? { confirmed: lc.confirmed } : {}),
+      ...(lc.regions && Object.keys(lc.regions).length > 0 ? { regions: { ...lc.regions } } : {}),
     };
   }
   return payload;

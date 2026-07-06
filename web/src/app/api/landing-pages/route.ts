@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
-import { displayUrlShort, hostFromLandingPageUrl } from "@/lib/landing-pages/normalize-url";
+import { displayUrlShort, hostFromLandingPageUrl, landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
+import { ensureDefaultLandingPagesForCompetitor } from "@/lib/landing-page-tracker/create-defaults";
+import { syncLandingPagesFromCompetitorAds } from "@/lib/landing-page-tracker/sync-landing-pages-from-ads";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 
@@ -20,6 +23,13 @@ type AdReference = {
   is_active: boolean;
 };
 
+type LandingPageSnapshotRef = {
+  hero_screenshot_url: string | null;
+  screenshot_url: string;
+  status: "ok" | "blocked";
+  taken_at: string;
+};
+
 type LandingPageGroup = {
   groupId: string;
   url: string;
@@ -35,6 +45,7 @@ type LandingPageGroup = {
   lastSeenAt: string;
   platformBreakdown: Record<string, number>;
   topAds: AdReference[];
+  snapshot: LandingPageSnapshotRef | null;
 };
 
 type LandingPageRow = {
@@ -76,13 +87,20 @@ export async function GET(request: Request) {
 
   const { data: competitor, error: compErr } = await supabase
     .from("saved_competitors")
-    .select("id, brand_name, name, last_scraped_at")
+    .select("id, brand_name, name, last_scraped_at, brand_domain, slug")
     .eq("id", competitorId)
     .eq("user_id", user.id)
     .single();
 
   if (compErr || !competitor) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  await ensureDefaultLandingPagesForCompetitor(admin, competitorId, user.id);
+  const website = competitor.brand_domain?.trim() || competitor.slug?.trim();
+  if (website) {
+    await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
   }
 
   const { data: ads, error: adsErr } = await supabase
@@ -121,18 +139,23 @@ export async function GET(request: Request) {
     const isActive = new Date(row.last_seen_at).getTime() >= killedThreshold;
 
     if (lpUrl) {
-      const groupId = lpUrl;
+      const groupKey = landingPageGroupKey(lpUrl);
+      if (!groupKey) {
+        adsWithoutLp++;
+        continue;
+      }
+      const groupId = groupKey;
       let group = groups.get(groupId);
       if (!group) {
-        const host = hostFromLandingPageUrl(lpUrl);
+        const host = hostFromLandingPageUrl(groupKey);
         if (!host) {
           adsWithoutLp++;
           continue;
         }
         group = {
           groupId,
-          url: lpUrl,
-          displayUrl: displayUrlShort(lpUrl),
+          url: groupKey,
+          displayUrl: displayUrlShort(groupKey),
           count: 0,
           host,
           faviconUrl: googleFaviconUrlForDomain(host, 64),
@@ -143,6 +166,7 @@ export async function GET(request: Request) {
           lastSeenAt: row.last_seen_at,
           platformBreakdown: {},
           topAds: [],
+          snapshot: null,
         };
         groups.set(groupId, group);
       }
@@ -151,10 +175,14 @@ export async function GET(request: Request) {
     }
 
     if (googleHostNorm) {
-      const groupId = `google-host:${googleHostNorm}`;
+      const groupKey = landingPageGroupKey(googleHostNorm);
+      if (!groupKey) {
+        adsWithoutLp++;
+        continue;
+      }
+      const groupId = groupKey;
       let group = groups.get(groupId);
-      const hostShort = displayUrlShort(googleHostNorm);
-      const host = hostFromLandingPageUrl(googleHostNorm);
+      const host = hostFromLandingPageUrl(groupKey);
       if (!host) {
         adsWithoutLp++;
         continue;
@@ -162,8 +190,8 @@ export async function GET(request: Request) {
       if (!group) {
         group = {
           groupId,
-          url: googleHostNorm,
-          displayUrl: `Multiple search ads · ${hostShort}`,
+          url: groupKey,
+          displayUrl: displayUrlShort(groupKey),
           count: 0,
           host,
           faviconUrl: googleFaviconUrlForDomain(host, 64),
@@ -174,6 +202,7 @@ export async function GET(request: Request) {
           lastSeenAt: row.last_seen_at,
           platformBreakdown: {},
           topAds: [],
+          snapshot: null,
         };
         groups.set(groupId, group);
       }
@@ -187,7 +216,14 @@ export async function GET(request: Request) {
   }
 
   const landingPagesAll = Array.from(groups.values()).sort((a, b) => b.totalAds - a.totalAds);
-  const landingPages = landingPagesAll.slice(0, limit);
+  const landingPagesSlice = landingPagesAll.slice(0, limit);
+
+  const snapshotByGroupKey = await loadSnapshotsByGroupKey(supabase, competitorId, user.id);
+  for (const group of landingPagesSlice) {
+    group.snapshot = snapshotByGroupKey.get(group.groupId) ?? null;
+  }
+
+  const landingPages = landingPagesSlice;
 
   const platformCounts: Record<string, number> = {};
   for (const group of groups.values()) {
@@ -213,6 +249,59 @@ export async function GET(request: Request) {
       platformCounts,
     },
   });
+}
+
+type SnapshotLoaderClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+
+async function loadSnapshotsByGroupKey(
+  supabase: SnapshotLoaderClient,
+  competitorId: string,
+  userId: string,
+): Promise<Map<string, LandingPageSnapshotRef>> {
+  const result = new Map<string, LandingPageSnapshotRef>();
+
+  const { data: pages } = await supabase
+    .from("landing_pages")
+    .select("id, url")
+    .eq("competitor_id", competitorId)
+    .eq("user_id", userId)
+    .eq("is_active", true);
+
+  if (!pages?.length) return result;
+
+  const pageIdToKey = new Map<string, string>();
+  for (const page of pages) {
+    const key = landingPageGroupKey(page.url);
+    if (key) pageIdToKey.set(page.id, key);
+  }
+
+  const pageIds = pages.map((p) => p.id);
+  const { data: snapshots } = await supabase
+    .from("landing_page_snapshots")
+    .select("landing_page_id, screenshot_url, hero_screenshot_url, status, taken_at")
+    .in("landing_page_id", pageIds)
+    .order("taken_at", { ascending: false });
+
+  const latestByPageId = new Map<string, (typeof snapshots extends (infer T)[] | null ? T : never)>();
+  for (const snap of snapshots ?? []) {
+    if (!latestByPageId.has(snap.landing_page_id)) {
+      latestByPageId.set(snap.landing_page_id, snap);
+    }
+  }
+
+  for (const [pageId, snap] of latestByPageId) {
+    const groupKey = pageIdToKey.get(pageId);
+    if (!groupKey || result.has(groupKey)) continue;
+    const status = snap.status === "blocked" ? "blocked" : "ok";
+    result.set(groupKey, {
+      hero_screenshot_url: snap.hero_screenshot_url,
+      screenshot_url: snap.screenshot_url,
+      status,
+      taken_at: snap.taken_at,
+    });
+  }
+
+  return result;
 }
 
 function accumulateAd(group: LandingPageGroup, ad: LandingPageRow, isActive: boolean) {

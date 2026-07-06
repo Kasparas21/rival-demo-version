@@ -37,11 +37,12 @@ const SIGNAL_LABEL: Record<ActivitySignalName, string> = {
   activity_duration: "Sustained activity duration",
 };
 
-function formatSpendBand(min: number, max: number | null): string {
+function formatSpendBand(min: number, max: number | null, opts?: { suffix?: string }): string {
+  const suffix = opts?.suffix ?? " in this market";
   const fmt = (n: number) =>
     n >= 1000 ? `€${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K` : `€${Math.round(n).toLocaleString()}`;
-  if (max == null) return `${fmt(min)}+/mo in this market`;
-  return `${fmt(min)}–${fmt(max)}/mo in this market`;
+  if (max == null) return `${fmt(min)}+/mo${suffix}`;
+  return `${fmt(min)}–${fmt(max)}/mo${suffix}`;
 }
 
 function tierBadgeClass(tier: number): string {
@@ -75,6 +76,8 @@ type Props = {
   onInitialLoadingChange?: (loading: boolean) => void;
   /** When true (e.g. ad library analytics fox overlay), skip spinner for the initial load. */
   suppressInitialLoadingUi?: boolean;
+  /** Live ad count from the library; when 0, spend copy clarifies historical footprint vs current spend. */
+  activeAdsCount?: number;
 };
 
 export function ActivityScorePanel({
@@ -86,6 +89,7 @@ export function ActivityScorePanel({
   onFreshnessRefresh,
   onInitialLoadingChange,
   suppressInitialLoadingUi = false,
+  activeAdsCount,
 }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -279,11 +283,26 @@ export function ActivityScorePanel({
       </div>
 
       <p className={`font-semibold ${headline} ${isAnalytics ? "text-[13px]" : "text-[14px]"}`}>
-        {d.tierLabel} — {formatSpendBand(d.spendRange.min, d.spendRange.max)}
+        {d.tierLabel}
+        {activeAdsCount === 0 ? (
+          <> — typical tier spend {formatSpendBand(d.spendRange.min, d.spendRange.max, { suffix: "" })} when active</>
+        ) : (
+          <> — {formatSpendBand(d.spendRange.min, d.spendRange.max)}</>
+        )}
       </p>
 
       <p className={`text-[11px] ${subtext} mt-2 leading-snug`}>
-        Based on operational footprint visible in scraped ads. Actual spend is not publicly disclosed by ad libraries.
+        {activeAdsCount === 0 ? (
+          <>
+            No ads running now. Score and spend band reflect the historical footprint from{" "}
+            {d.adsCount.toLocaleString()} scraped ads — not current monthly spend. Ad libraries do not disclose actual
+            budgets.
+          </>
+        ) : (
+          <>
+            Based on operational footprint visible in scraped ads. Actual spend is not publicly disclosed by ad libraries.
+          </>
+        )}
       </p>
 
       {d.confidence === "insufficient" ? (

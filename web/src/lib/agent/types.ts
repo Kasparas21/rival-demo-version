@@ -9,6 +9,7 @@ export const AGENT_SIGNAL_TYPES = [
   "cross_competitor_trend",
   "strategy_map_shift",
   "influencer_push",
+  "landing_page_change",
 ] as const;
 
 export type AgentSignalType = (typeof AGENT_SIGNAL_TYPES)[number];
@@ -19,6 +20,7 @@ export const AGENT_SIGNAL_SOURCES = [
   "organic",
   "strategy_map",
   "cross_competitor",
+  "landing_pages",
 ] as const;
 
 export type AgentSignalSource = (typeof AGENT_SIGNAL_SOURCES)[number];
@@ -73,6 +75,32 @@ export type AgentScrapeResults = {
   newEmails?: AgentEmailInput[];
   newOrganicPosts?: AgentOrganicPostInput[];
   strategyMapChanged?: boolean;
+  landingPageChange?: AgentLandingPageChangeInput;
+};
+
+export type AgentLandingPageChangeInput = {
+  page: {
+    id: string;
+    url: string;
+    label: string;
+    page_type: string;
+  };
+  snapshot: {
+    id: string;
+    hero_screenshot_url: string | null;
+    screenshot_url: string;
+    taken_at: string;
+  };
+  changeAnalysis: {
+    what_changed?: string;
+    strategic_interpretation?: string;
+    what_to_do?: string;
+    urgency?: string;
+    threat_score?: number;
+    sections_changed?: string[];
+  };
+  prevScreenshotUrl: string | null;
+  newScreenshotUrl: string;
 };
 
 export type AgentAdInput = {

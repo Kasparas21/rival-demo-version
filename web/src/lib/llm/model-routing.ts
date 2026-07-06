@@ -20,7 +20,9 @@ export type LlmTask =
   | "brand_comparison"
   | "strategy_overview"
   | "activity_score"
-  | "copy_structure";
+  | "copy_structure"
+  | "landing_page_text_extract"
+  | "landing_page_change_analysis";
 
 export type LlmRoute = {
   provider: LlmProvider;
@@ -70,6 +72,11 @@ export const MODEL_ROUTING: Record<LlmTask, LlmRoute> = {
   strategy_overview: openRouterRoute("LLM_MODEL_STRATEGY_OVERVIEW"),
   activity_score: openRouterRoute("LLM_MODEL_ACTIVITY_SCORE"),
   copy_structure: openRouterRoute("LLM_MODEL_COPY_STRUCTURE"),
+  landing_page_text_extract: openRouterRoute("LLM_MODEL_LANDING_PAGE_TEXT_EXTRACT"),
+  landing_page_change_analysis: openRouterRoute(
+    "LLM_MODEL_LANDING_PAGE_CHANGE_ANALYSIS",
+    "anthropic/claude-sonnet-4-6",
+  ),
 };
 
 export function resolveModelForTask(task: LlmTask): LlmRoute {
@@ -84,7 +91,8 @@ export function resolveModelForTask(task: LlmTask): LlmRoute {
       task === "marketing_improvement" ||
       task === "move_detector" ||
       task === "audience_inference" ||
-      task === "brand_comparison";
+      task === "brand_comparison" ||
+      task === "landing_page_change_analysis";
     return {
       provider: "anthropic",
       model: envModel(anthropicEnv, isSmartTier ? DEFAULT_ANTHROPIC_SMART : DEFAULT_ANTHROPIC_FAST),

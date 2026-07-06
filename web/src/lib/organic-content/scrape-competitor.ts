@@ -67,12 +67,14 @@ export async function scrapeOrganicCompetitor(
     platformFilter!.has(opts.newPlatforms[0]!);
 
   const platformScrapeMeta: ScrapeOrganicCompetitorResult["platformScrapeMeta"] = {};
+  const attemptedPlatforms: OrganicPlatform[] = [];
 
   for (const platform of ORGANIC_PLATFORMS) {
     if (platformFilter && !platformFilter.has(platform)) continue;
 
     const handle = socials[platform];
     if (!handle?.trim()) continue;
+    attemptedPlatforms.push(platform);
 
     const isNewPlatform = newPlatformSet.has(platform);
     const scrapeOpts =
@@ -151,22 +153,38 @@ export async function scrapeOrganicCompetitor(
 
   const now = new Date();
   const nextScrape = new Date(now.getTime() + ORGANIC_SCRAPE_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+  const failedAttempts = attemptedPlatforms.filter((p) => platformErrors[p]);
+  const allAttemptsFailed =
+    attemptedPlatforms.length > 0 && failedAttempts.length === attemptedPlatforms.length;
 
-  const { error: updateErr } = await admin
-    .from("saved_competitors")
-    .update({
-      organic_baseline_date: baselineDate,
-      organic_last_scraped_at: now.toISOString(),
-      organic_next_scrape_at: nextScrape.toISOString(),
-    })
-    .eq("id", competitor.id);
+  if (!allAttemptsFailed) {
+    const { error: updateErr } = await admin
+      .from("saved_competitors")
+      .update({
+        organic_baseline_date: baselineDate,
+        organic_last_scraped_at: now.toISOString(),
+        organic_next_scrape_at: nextScrape.toISOString(),
+      })
+      .eq("id", competitor.id);
 
-  if (updateErr) {
+    if (updateErr) {
+      return {
+        ok: false,
+        postsUpserted,
+        platformErrors,
+        insightsErrors: [...insightsErrors, updateErr.message],
+        platformScrapeMeta,
+        scrapedPosts: allPosts,
+      };
+    }
+  }
+
+  if (allAttemptsFailed) {
     return {
       ok: false,
       postsUpserted,
       platformErrors,
-      insightsErrors: [...insightsErrors, updateErr.message],
+      insightsErrors,
       platformScrapeMeta,
       scrapedPosts: allPosts,
     };

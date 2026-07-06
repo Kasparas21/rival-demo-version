@@ -14,6 +14,7 @@ import { StrategyMapSkeleton } from "@/components/strategy-overview/strategy-map
 import { StrategyOverviewSidebar } from "@/components/strategy-overview/strategy-sidebar";
 import { FunnelCellSheet } from "@/components/strategy-overview/funnel-cell-sheet";
 import { NodeDetailSheet } from "@/components/strategy-overview/node-detail-sheet";
+import { OwnBrandStrategyGapsPanel } from "@/components/workspace/own-brand-strategy-gaps-panel";
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
@@ -42,6 +43,9 @@ type Props = {
   /** Lifted from competitor page — replaces local recompute-status polling. */
   externalRecomputeRunning?: boolean;
   externalRecomputeError?: string | null;
+  isOwnWorkspace?: boolean;
+  brandId?: string;
+  onNavigateGaps?: (tab: string, sub?: string | null) => void;
 };
 
 export function StrategyOverviewApp({
@@ -53,6 +57,9 @@ export function StrategyOverviewApp({
   fetchEnabled = true,
   externalRecomputeRunning = false,
   externalRecomputeError = null,
+  isOwnWorkspace = false,
+  brandId,
+  onNavigateGaps,
 }: Props) {
   const domain = brand.domain.trim();
   const domainNorm = useMemo(() => domain.trim().toLowerCase(), [domain]);
@@ -323,7 +330,7 @@ export function StrategyOverviewApp({
                 onEdgeHover={setEdgeTip}
               />
             </div>
-            <aside className="w-full shrink-0 xl:w-[min(520px,36vw)] xl:max-w-[520px]">
+            <aside className="w-full shrink-0 xl:w-[min(520px,36vw)] xl:max-w-[520px] space-y-4">
               <StrategyOverviewSidebar
                 map={payload!.map}
                 competitorId={competitorId}
@@ -332,6 +339,13 @@ export function StrategyOverviewApp({
                 onFreshnessRescrape={onFreshnessRescrape}
                 activityScoreEnabled={fetchEnabled}
               />
+              {isOwnWorkspace && onNavigateGaps ? (
+                <OwnBrandStrategyGapsPanel
+                  brandId={brandId}
+                  fetchEnabled={fetchEnabled}
+                  onNavigate={onNavigateGaps}
+                />
+              ) : null}
             </aside>
           </div>
 

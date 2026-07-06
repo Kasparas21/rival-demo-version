@@ -1,7 +1,7 @@
 "use client";
 
 import type { KeyboardEvent, MouseEvent } from "react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Play } from "lucide-react";
 
 type Props = {
@@ -37,7 +37,7 @@ type Props = {
  * Renders a video creative with controls when `videoUrl` is set; otherwise image.
  * Avoids nesting `<video>` inside `<a>` (invalid / broken controls).
  */
-export function AdCreativeVideoOrImage({
+function AdCreativeVideoOrImageImpl({
   img = "",
   videoUrl,
   openHref,
@@ -103,7 +103,8 @@ export function AdCreativeVideoOrImage({
         <video
           controls
           playsInline
-          preload="metadata"
+          /* With a usable poster, defer all buffering until the user hits play. */
+          preload={poster && !isLikelyVideoFileUrl(poster) ? "none" : "metadata"}
           poster={poster && !isLikelyVideoFileUrl(poster) ? poster : undefined}
             className={`${mediaMax} h-auto w-auto object-contain object-center rounded-xl ${videoBackdrop}`}
           src={v}
@@ -214,6 +215,9 @@ export function AdCreativeVideoOrImage({
     </div>
   );
 }
+
+/** Memoized — rendered per-card in large grids; avoids re-render storms from parent state flips. */
+export const AdCreativeVideoOrImage = memo(AdCreativeVideoOrImageImpl);
 
 function isLikelyVideoFileUrl(url: string): boolean {
   return /\.(mp4|m3u8|webm)(\?|$)/i.test(url);

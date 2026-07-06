@@ -20,6 +20,15 @@ export function extractVisualUrlsFromSignal(signal: DetectedAgentSignal): string
     else if (typeof email?.html_body === "string" && email.html_body.startsWith("http")) urls.push(email.html_body);
   }
 
+  if (signal.signal_type === "landing_page_change") {
+    const prev = payload.prev_screenshot_url as string | undefined;
+    const hero = payload.hero_screenshot_url as string | undefined;
+    const next = payload.new_screenshot_url as string | undefined;
+    if (typeof prev === "string" && prev.startsWith("http")) urls.push(prev);
+    if (typeof hero === "string" && hero.startsWith("http")) urls.push(hero);
+    else if (typeof next === "string" && next.startsWith("http")) urls.push(next);
+  }
+
   if (signal.signal_type === "organic_spike") {
     const media = payload.media_urls as string[] | undefined;
     if (Array.isArray(media)) {

@@ -99,6 +99,24 @@ export function HeroVariantBProductDemo() {
 
     switch (mainTab) {
       case "ads library":
+        if (subTab === "creative-tests" || subTab === "timeline" || subTab === "landing-pages") {
+          return (
+            <DemoTestsTimelineView
+              subTab={
+                subTab === "timeline"
+                  ? "timeline"
+                  : subTab === "landing-pages"
+                    ? "landing-pages"
+                    : "creative-tests"
+              }
+            />
+          );
+        }
+        if (subTab === "audience" || subTab === "copy-vault") {
+          return (
+            <DemoAudienceCopyView subTab={subTab === "copy-vault" ? "copy-vault" : "audience"} />
+          );
+        }
         return (
           <DemoAdLibraryView
             subTab={subTab === "saved" ? "saved" : "all"}
@@ -111,22 +129,6 @@ export function HeroVariantBProductDemo() {
           <DemoInsightsView
             subTab={subTab === "activity-feed" ? "activity-feed" : "strategy-map"}
           />
-        );
-      case "tests":
-        return (
-          <DemoTestsTimelineView
-            subTab={
-              subTab === "timeline"
-                ? "timeline"
-                : subTab === "landing-pages"
-                  ? "landing-pages"
-                  : "creative-tests"
-            }
-          />
-        );
-      case "audience-copy":
-        return (
-          <DemoAudienceCopyView subTab={subTab === "copy-vault" ? "copy-vault" : "audience"} />
         );
       case "comparison":
         return <DemoComparisonView />;

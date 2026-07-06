@@ -23,11 +23,13 @@ export function EmailTrackerBar({
   competitorName,
   onTrackerReady,
   onCheckingChange,
+  isOwnWorkspace = false,
 }: {
   competitorId: string;
   competitorName: string;
   onTrackerReady?: (ready: boolean) => void;
   onCheckingChange?: (checking: boolean) => void;
+  isOwnWorkspace?: boolean;
 }) {
   const [setupState, setSetupState] = useState<SetupState>("checking");
   const [tracker, setTracker] = useState<TrackerState | null>(null);
@@ -190,8 +192,9 @@ export function EmailTrackerBar({
             <div>
               <h3 className="text-[14px] font-semibold text-slate-900">Start tracking emails</h3>
               <p className="mt-0.5 max-w-xl text-[13px] leading-relaxed text-slate-600">
-                Generate a unique inbox for {competitorName}, then subscribe on their site to capture
-                every newsletter and promo.
+                {isOwnWorkspace
+                  ? `Generate a unique inbox for ${competitorName}, then subscribe your own newsletter to capture every send and compare against competitors.`
+                  : `Generate a unique inbox for ${competitorName}, then subscribe on their site to capture every newsletter and promo.`}
               </p>
             </div>
           </div>
@@ -260,7 +263,9 @@ export function EmailTrackerBar({
             Tracking active
           </span>
           <p className="text-[12px] text-slate-600">
-            Subscribe on {competitorName}&apos;s site with this address
+            {isOwnWorkspace
+              ? "Subscribe your newsletter with this address"
+              : `Subscribe on ${competitorName}'s site with this address`}
           </p>
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2 lg:max-w-xl lg:justify-end">

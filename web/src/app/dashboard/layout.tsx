@@ -428,7 +428,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       setIsBrandMenuOpen(false);
       const domain = brand.domain?.trim();
       if (!domain) {
-        const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=workspace-ads`;
+        const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=ads%20library&sub=paid-media-settings`;
         router.push(href, { scroll: false });
         return;
       }
@@ -436,7 +436,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       const channels = brand.adsSetup?.channels;
       const q = new URLSearchParams();
       if (!channels?.length) {
-        q.set("tab", "workspace-ads");
+        q.set("tab", "ads library");
+        q.set("sub", "paid-media-settings");
       }
       if (channels?.length) {
         q.set("channels", channels.join(","));
@@ -528,7 +529,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       saveSidebarCompetitors([]);
       refreshSavedCompetitors();
       refreshBillingUsage();
-      const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=workspace-ads`;
+      const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=ads%20library&sub=paid-media-settings`;
       router.push(href, { scroll: false });
     } catch {
       // Keep current workspace if creation fails.

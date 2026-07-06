@@ -189,9 +189,9 @@ export function buildPlatformActorInput(
       return input;
     }
     case "tiktok":
-      return { profiles: [normalized.replace(/^@/, "")], resultsPerPage: 20 };
+      return { profiles: [normalized.replace(/^@/, "")], resultsPerPage: ORGANIC_SCRAPE_MAX_ITEMS };
     case "facebook":
-      return { startUrls: [{ url: normalized }], maxPosts: 20 };
+      return { startUrls: [{ url: normalized }], maxPosts: ORGANIC_SCRAPE_MAX_ITEMS };
     case "youtube":
       return buildCalmBuilderYouTubeShortsInput(normalized);
     default:

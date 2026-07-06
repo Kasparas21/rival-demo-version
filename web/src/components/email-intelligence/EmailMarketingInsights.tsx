@@ -8,7 +8,8 @@ import {
   alertGlassChipBaseClass,
   alertGlassPanelClass,
 } from "@/components/competitor/alerts/alert-ui-styles";
-import type { EmailMarketingInsights } from "@/lib/email-intelligence/types";
+import type { EmailMarketingInsights as EmailInsightsPayload } from "@/lib/email-intelligence/types";
+import type { StrategyGapItem } from "@/lib/workspace/build-strategy-gaps";
 import { cn } from "@/lib/utils";
 
 import {
@@ -60,7 +61,7 @@ function SectionShell({
   );
 }
 
-function DayOfWeekChart({ subjectLines }: { subjectLines: EmailMarketingInsights["subject_lines"] }) {
+function DayOfWeekChart({ subjectLines }: { subjectLines: EmailInsightsPayload["subject_lines"] }) {
   const counts = useMemo(() => {
     const buckets = new Array(7).fill(0) as number[];
     for (const line of subjectLines) {
@@ -166,18 +167,21 @@ function AngleMixBar({ breakdown }: { breakdown: Record<string, number> }) {
 
 export function EmailMarketingInsights({
   competitorId,
+  isOwnWorkspace = false,
 }: {
   competitorId: string;
   competitorName: string;
+  isOwnWorkspace?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [insights, setInsights] = useState<EmailMarketingInsights | null>(null);
+  const [insights, setInsights] = useState<EmailInsightsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [subjectSearch, setSubjectSearch] = useState("");
   const [showAllOffers, setShowAllOffers] = useState(false);
+  const [emailGaps, setEmailGaps] = useState<StrategyGapItem[]>([]);
 
   const loadInsights = useCallback(async () => {
     setLoading(true);
@@ -185,7 +189,7 @@ export function EmailMarketingInsights({
     try {
       const res = await fetch(`/api/email-trackers/${competitorId}?view=insights`);
       const data = (await res.json()) as {
-        insights?: EmailMarketingInsights | null;
+        insights?: EmailInsightsPayload | null;
         insightsLocked?: boolean;
         emailCount?: number;
         unlockAt?: number;
@@ -211,6 +215,19 @@ export function EmailMarketingInsights({
     void loadInsights();
   }, [loadInsights]);
 
+  useEffect(() => {
+    if (!isOwnWorkspace) return;
+    void (async () => {
+      try {
+        const res = await fetch("/api/workspace/email-gaps", { credentials: "include" });
+        const json = (await res.json()) as { ok?: boolean; gaps?: StrategyGapItem[] };
+        if (res.ok && json.ok) setEmailGaps(json.gaps ?? []);
+      } catch {
+        /* optional */
+      }
+    })();
+  }, [isOwnWorkspace]);
+
   const filteredSubjects = useMemo(() => {
     if (!insights) return [];
     const q = subjectSearch.trim().toLowerCase();
@@ -227,6 +244,7 @@ export function EmailMarketingInsights({
     (emailId: string) => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "email-marketing");
+      params.set("sub", "inbox");
       params.set("email_id", emailId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
@@ -260,6 +278,22 @@ export function EmailMarketingInsights({
 
   return (
     <div className="space-y-8">
+      {isOwnWorkspace && emailGaps.length > 0 ? (
+        <SectionShell title="Vs competitors">
+          <ul className="space-y-2">
+            {emailGaps.map((gap, i) => (
+              <li
+                key={`email-gap-${i}`}
+                className={cn(alertGlassPanelClass, "px-4 py-3 text-[13px] text-slate-700")}
+              >
+                <p className="font-semibold text-slate-900">{gap.title}</p>
+                <p className="mt-1 leading-relaxed text-slate-600">{gap.detail}</p>
+              </li>
+            ))}
+          </ul>
+        </SectionShell>
+      ) : null}
+
       <SectionShell title="Send Cadence">
         <div className="grid gap-3 sm:grid-cols-3">
           <StatCard label="Emails / week" value={String(insights.emails_per_week)} />

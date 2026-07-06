@@ -82,10 +82,10 @@ const FEATURE_DEMO_CONFIG: Record<MarketingFeatureDemoId, FeatureDemoConfig> = {
   "strategy-map": { mainTab: "insights", subTab: "strategy-map", useShell: true },
   "three-moves": { mainTab: "comparison", subTab: "all", useShell: false, customView: "three-moves" },
   "stealable-angles": { mainTab: "comparison", subTab: "all", useShell: false, customView: "stealable-angles" },
-  "copy-vault": { mainTab: "audience-copy", subTab: "copy-vault", useShell: true },
-  timeline: { mainTab: "tests", subTab: "timeline", useShell: true },
+  "copy-vault": { mainTab: "ads library", subTab: "copy-vault", useShell: true },
+  timeline: { mainTab: "ads library", subTab: "timeline", useShell: true },
   "activity-score": { mainTab: "insights", subTab: "activity-feed", useShell: false, customView: "activity-score" },
-  "audience-inference": { mainTab: "audience-copy", subTab: "audience", useShell: true },
+  "audience-inference": { mainTab: "ads library", subTab: "audience", useShell: true },
   "monday-digest": { mainTab: "alerts", subTab: "all", useShell: false, customView: "monday-digest" },
   "platform-prioritization": {
     mainTab: "ads library",
@@ -129,6 +129,18 @@ function renderShellView(
 ) {
   switch (mainTab) {
     case "ads library":
+      if (subTab === "creative-tests" || subTab === "timeline" || subTab === "landing-pages") {
+        return (
+          <DemoTestsTimelineView
+            subTab={
+              subTab === "timeline" ? "timeline" : subTab === "landing-pages" ? "landing-pages" : "creative-tests"
+            }
+          />
+        );
+      }
+      if (subTab === "audience" || subTab === "copy-vault") {
+        return <DemoAudienceCopyView subTab={subTab === "copy-vault" ? "copy-vault" : "audience"} />;
+      }
       return (
         <DemoAdLibraryView
           subTab={subTab === "saved" ? "saved" : "all"}
@@ -139,16 +151,6 @@ function renderShellView(
       );
     case "insights":
       return <DemoInsightsView subTab={subTab === "activity-feed" ? "activity-feed" : "strategy-map"} />;
-    case "tests":
-      return (
-        <DemoTestsTimelineView
-          subTab={
-            subTab === "timeline" ? "timeline" : subTab === "landing-pages" ? "landing-pages" : "creative-tests"
-          }
-        />
-      );
-    case "audience-copy":
-      return <DemoAudienceCopyView subTab={subTab === "copy-vault" ? "copy-vault" : "audience"} />;
     case "comparison":
       return <DemoComparisonView />;
     default:

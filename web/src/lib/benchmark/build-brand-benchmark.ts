@@ -312,7 +312,7 @@ function buildRecommendedMoves(
     moves.push({
       title: "Study competitor angles",
       detail: `Rivals lean on angles you're missing: ${top}.`,
-      tab: "audience-copy",
+      tab: "ads library",
       sub: "copy-vault",
     });
   }

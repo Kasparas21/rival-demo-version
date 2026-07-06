@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { hydrateMetaAdCardForLibrary, isMetaAdActive } from "@/lib/ad-library/count-active-ads";
 import { parseGoogleShownSummaryRange } from "@/lib/ad-library/google-shown-range";
-import type { GoogleAdRow } from "@/lib/ad-library/normalize";
+import { joinTikTokAdText, type GoogleAdRow } from "@/lib/ad-library/normalize";
 import { stableAdKeyForGoogleRow, stableAdKeyForLibraryItem } from "@/lib/ad-library/stable-ad-keys";
 import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-recompute";
 import type { Database } from "@/lib/supabase/types";
@@ -362,7 +362,7 @@ export function buildScrapedAdInsertsForPlatform(params: {
         ...base,
         platform: "tiktok",
         stable_ad_key: stableAdKeyForLibraryItem("tiktok", ad),
-        ad_text: joinedText([ad.headline, ad.desc]),
+        ad_text: joinTikTokAdText(ad.headline, ad.desc),
         ad_creative_url: ad.img?.trim() || null,
         format: "video",
         first_seen_at: looseDateToIso(ad.firstShown ?? ad.lastShown, nowIso),

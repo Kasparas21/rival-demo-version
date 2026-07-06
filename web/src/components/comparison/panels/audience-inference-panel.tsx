@@ -256,7 +256,7 @@ function StandaloneAudienceView({
   const navigateVault = (signals: string[]) => {
     const f = inferCopyVaultFiltersFromSignals(signals);
     const p = new URLSearchParams(searchParams.toString());
-    p.set("tab", "audience-copy");
+    p.set("tab", "ads library");
     p.set("sub", "copy-vault");
     p.delete("angle");
     p.delete("anglePick");

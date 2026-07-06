@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 
 import {
   COMPETITOR_PAGE_TABS,
-  competitorTabNewBadgeClass,
   type CompetitorPageTabId,
   type CompetitorSubTabId,
 } from "@/components/dashboard/competitor/competitor-tabs-data";
@@ -88,11 +87,6 @@ export function HeroVariantBDemoShell({
                 >
                   <Icon className="size-3.5 shrink-0 sm:size-4" aria-hidden />
                   <span className="whitespace-nowrap">{tab.label}</span>
-                  {tab.isNew ? (
-                    <span className={competitorTabNewBadgeClass} aria-label="New feature">
-                      New
-                    </span>
-                  ) : null}
                 </button>
               );
             })}
@@ -117,11 +111,6 @@ export function HeroVariantBDemoShell({
                     }`}
                   >
                     {st.label}
-                    {st.isNew ? (
-                      <span className="rounded bg-[#4f46e5] px-1 py-px text-[8px] font-bold uppercase tracking-wide text-white">
-                        New
-                      </span>
-                    ) : null}
                   </button>
                 );
               })}

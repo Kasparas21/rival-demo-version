@@ -25,6 +25,7 @@ type OrganicTabProps = {
   competitorName: string;
   activeSubTab: CompetitorSubTabId | null;
   onSubTabChange: (sub: CompetitorSubTabId) => void;
+  isOwnWorkspace?: boolean;
 };
 
 export function OrganicTab({
@@ -32,6 +33,7 @@ export function OrganicTab({
   competitorName,
   activeSubTab,
   onSubTabChange,
+  isOwnWorkspace = false,
 }: OrganicTabProps) {
   const [socials, setSocials] = useState<OrganicSocials>({});
   const [loadingSocials, setLoadingSocials] = useState(true);
@@ -87,7 +89,9 @@ export function OrganicTab({
       <div className={`flex flex-col items-center justify-center ${COMPETITOR_PAGE_X} py-24 text-center`}>
         <Sprout className="mb-4 h-12 w-12 text-slate-300" />
         <p className="max-w-md text-[14px] leading-relaxed text-slate-600">
-          Save this competitor first to track their organic social content.
+          {isOwnWorkspace
+            ? "Link your workspace brand first to track your organic social content."
+            : "Save this competitor first to track their organic social content."}
         </p>
       </div>
     );
@@ -98,7 +102,11 @@ export function OrganicTab({
       <FeatureSectionHeader
         overline="Organic"
         title={`Organic · ${competitorName}`}
-        description="Track competitor social posts, engagement, and AI-generated content insights."
+        description={
+          isOwnWorkspace
+            ? "Track your brand's social posts, engagement, and AI-generated content insights."
+            : "Track competitor social posts, engagement, and AI-generated content insights."
+        }
       />
 
       <div className="mt-5">
@@ -126,6 +134,7 @@ export function OrganicTab({
             initialSocials={socials}
             onSaved={(next) => setSocials(next)}
             onScrapeComplete={() => setFeedRefreshTrigger((n) => n + 1)}
+            isOwnWorkspace={isOwnWorkspace}
           />
         )}
       </div>

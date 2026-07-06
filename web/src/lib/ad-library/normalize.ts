@@ -26,6 +26,7 @@ import {
   harvestDeepMetaTransparencyFields,
 } from "@/lib/ad-detail/meta-ad-detail-fields";
 import { resolveMetaAdLibraryUrlFromPayload } from "@/lib/ad-library/meta-ad-library-url";
+import { looksLikeUrl } from "@/lib/discovery";
 
 /** Meta serves most Ad Library MP4s from FB domains; they rarely play in our `<video>` (black player). */
 export function isMetaLibraryVideoStreamUrl(url: string | undefined): boolean {
@@ -3676,15 +3677,24 @@ export function extractTikTokTransparencyFields(raw: Record<string, unknown>): {
 }
 
 function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
-  const direct = firstString(raw, [
+  const bandKeys = [
     "Ad Audience",
     "adAudience",
     "audience",
     "reach",
     "uniqueUsers",
     "Unique users seen",
-  ]);
-  if (direct) return direct;
+    "Ad Target Audience Size",
+    "adTargetAudienceSize",
+  ];
+  for (const k of bandKeys) {
+    const v = raw[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const band = (v as Record<string, unknown>).raw;
+      if (typeof band === "string" && band.trim()) return band.trim();
+    }
+  }
   const details = raw["Ad Details"];
   if (Array.isArray(details)) {
     for (const block of details) {
@@ -3694,7 +3704,7 @@ function pickTikTokAudience(raw: Record<string, unknown>): string | undefined {
       if (est) return est;
     }
   }
-  return firstString(raw, ["Ad Target Audience Size", "adTargetAudienceSize"]);
+  return undefined;
 }
 
 function parseTikTokAudienceScalar(fragment: string): number | null {
@@ -3759,7 +3769,43 @@ export function sortTikTokAdsForResponse(ads: TikTokAdCard[]): TikTokAdCard[] {
   });
 }
 
-/** Map data_xplorer/tiktok-ads-library-pay-per-event dataset row → card. */
+/** TikTok library scrape often omits real copy — reject URLs and advertiser-echo lines for card/preview text. */
+export function isTikTokDisplayableCopy(line: string, opts?: { advertiser?: string }): boolean {
+  const t = line.trim();
+  if (!t || t === "—") return false;
+  if (looksLikeUrl(t)) return false;
+  const adv = opts?.advertiser?.trim();
+  if (adv && t.toLowerCase() === adv.toLowerCase()) return false;
+  return true;
+}
+
+function pickTikTokCopyFromRaw(raw: Record<string, unknown>, keys: string[], advertiser: string): string {
+  const top = firstString(raw, keys);
+  if (top && isTikTokDisplayableCopy(top, { advertiser })) return top;
+
+  const details = raw["Ad Details"];
+  if (Array.isArray(details)) {
+    for (const block of details) {
+      if (!block || typeof block !== "object") continue;
+      const o = block as Record<string, unknown>;
+      for (const k of keys) {
+        const v = o[k];
+        if (typeof v === "string" && isTikTokDisplayableCopy(v, { advertiser })) return v.trim();
+      }
+    }
+  }
+  return "";
+}
+
+/** Join headline + description for persistence when both are real copy lines (never URLs or advertiser echo). */
+export function joinTikTokAdText(headline: string, desc: string): string {
+  const parts = [headline, desc]
+    .map((p) => p.trim())
+    .filter((p) => isTikTokDisplayableCopy(p));
+  return parts.join("\n\n").trim() || "—";
+}
+
+/** Map `data_xplorer/tiktok-ads-scraper` library-mode dataset row → card. */
 export function tiktokApifyItemToCard(
   raw: Record<string, unknown>,
   index: number,
@@ -3774,14 +3820,8 @@ export function tiktokApifyItemToCard(
     const fb = effectiveCompetitorBrandLabel(ctx?.brandName, ctx?.brandDomain);
     if (fb) advertiser = fb;
   }
-  const headline = firstString(raw, ["headline", "Headline"]) ?? advertiser;
-  const desc =
-    firstString(raw, ["description", "body", "copy"]) ??
-    firstString(
-      (raw["Ad Details"] as Record<string, unknown>) || {},
-      ["copy", "text"]
-    ) ??
-    "—";
+  const headline = pickTikTokCopyFromRaw(raw, ["headline", "Headline"], advertiser);
+  const desc = pickTikTokCopyFromRaw(raw, ["description", "body", "copy", "text"], advertiser);
   const adMedia = raw["Ad Media"];
   let mediaImg: string | undefined;
   if (Array.isArray(adMedia) && adMedia[0] && typeof adMedia[0] === "object") {

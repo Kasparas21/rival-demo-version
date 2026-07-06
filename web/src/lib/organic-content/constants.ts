@@ -1,6 +1,6 @@
 import type { OrganicPlatform } from "./types";
 
-export const ORGANIC_SCRAPE_MAX_ITEMS = 20;
+export const ORGANIC_SCRAPE_MAX_ITEMS = 30;
 /** calm_builder/youtube-scraper pay-per-event minimum charge per run */
 export const ORGANIC_YOUTUBE_MIN_CHARGE_USD = 0.5;
 
@@ -16,7 +16,7 @@ export const ORGANIC_TWITTER_MAX_TOTAL_CHARGE_USD = Math.max(
   3,
   Number.parseFloat(process.env.APIFY_ORGANIC_TWITTER_MAX_CHARGE_USD?.trim() ?? "5") || 5,
 );
-export const ORGANIC_FIRST_SCRAPE_POST_LIMIT = 5;
+export const ORGANIC_FIRST_SCRAPE_POST_LIMIT = 10;
 export const ORGANIC_SCRAPE_INTERVAL_DAYS = 3;
 export const ORGANIC_INSIGHTS_MAX_TOKENS = 4096;
 export const ORGANIC_FEED_PAGE_SIZE = 20;

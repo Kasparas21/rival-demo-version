@@ -19,6 +19,7 @@ export interface MetaAdsAllModalProps {
     saveDisabled?: boolean;
     runStatus?: { isRunning: boolean };
     metaScrapeAtMs?: number;
+    isCreativeTestWinner?: boolean;
   };
 }
 
@@ -55,6 +56,7 @@ export function MetaAdsAllModal({
             saveDisabled={extras?.saveDisabled}
             runStatus={extras?.runStatus}
             metaScrapeAtMs={extras?.metaScrapeAtMs ?? ctx.metaScrapeAtMs ?? undefined}
+            isCreativeTestWinner={extras?.isCreativeTestWinner}
           />
         );
       }}

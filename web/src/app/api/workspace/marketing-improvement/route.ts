@@ -1,24 +1,20 @@
 import { NextResponse } from "next/server";
 
-import { buildAdEvidenceText } from "@/lib/brand-comparison/build-ad-evidence";
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
-import { fetchLatestAdsLibraryFromUserCache } from "@/lib/ad-library/load-ads-library-from-user-cache";
+import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import {
-  normalizeCompetitorSlug,
-  MAX_WATCHED_COMPETITORS,
   isSidebarRowLikelyWorkspaceBrand,
+  MAX_WATCHED_COMPETITORS,
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { buildCrossChannelEvidenceText } from "@/lib/workspace/build-cross-channel-evidence";
 import { runMarketingImprovementLlm } from "@/lib/workspace/run-marketing-improvement-llm";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const MAX_COMPETITORS_IN_PROMPT = Math.min(MAX_WATCHED_COMPETITORS, 10);
-const EVIDENCE_PER_COMPETITOR = 3_200;
-const EVIDENCE_WORKSPACE = 3_600;
-const TOTAL_EVIDENCE_CAP = 42_000;
 
 export async function POST(req: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
@@ -27,6 +23,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isDebugPlatformClassificationEnabled()) {
+    return NextResponse.json({ ok: false, error: "Not available" }, { status: 404 });
   }
 
   const billing = await getBillingEntitlement(supabase, user.id);
@@ -57,7 +57,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const { data: savedRows, error: savedErr } = await supabase
     .from("saved_competitors")
-    .select("slug, name, brand_name, brand_domain, is_workspace_brand")
+    .select("id, slug, name, brand_name, brand_domain, is_workspace_brand")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false })
     .limit(MAX_WATCHED_COMPETITORS + 4);
@@ -82,54 +82,38 @@ export async function POST(req: Request): Promise<NextResponse> {
     .slice(0, MAX_COMPETITORS_IN_PROMPT);
 
   if (rivals.length === 0) {
-    return NextResponse.json({
-      ok: false,
-      error: "Add watched competitors first (Spy / sidebar). Coaching compares you to brands you follow.",
-    }, { status: 400 });
-  }
-
-  const blocks: string[] = [];
-  let totalChars = 0;
-  let hasCompetitorCreative = false;
-
-  for (const row of rivals) {
-    const label = row.brand_name?.trim() || row.name?.trim() || row.slug;
-    const hint = row.brand_domain?.trim() || row.slug?.trim();
-    if (!hint) continue;
-
-    const lib = await fetchLatestAdsLibraryFromUserCache(supabase, user.id, hint);
-    const digest = buildAdEvidenceText(lib, EVIDENCE_PER_COMPETITOR).trim();
-    if (digest.length > 120) hasCompetitorCreative = true;
-    const header = `### Competitor: ${label} (${hint})`;
-    const chunk = digest ? `${header}\n${digest}` : `${header}\n(no cached ads yet — open their Ads Library to refresh)`;
-    if (totalChars + chunk.length > TOTAL_EVIDENCE_CAP) break;
-    blocks.push(chunk);
-    totalChars += chunk.length;
-  }
-
-  if (userBrandDomain) {
-    const wsLib = await fetchLatestAdsLibraryFromUserCache(supabase, user.id, userBrandDomain);
-    const digest = buildAdEvidenceText(wsLib, EVIDENCE_WORKSPACE).trim();
-    const chunk = digest
-      ? `### Your workspace brand (${userBrandName} · ${normalizeCompetitorSlug(userBrandDomain)})\n${digest}`
-      : `### Your workspace brand (${userBrandName} · ${normalizeCompetitorSlug(userBrandDomain)})\n(no cached ads yet for your domain)`;
-    if (totalChars + chunk.length <= TOTAL_EVIDENCE_CAP) {
-      blocks.push(chunk);
-    }
-  }
-
-  if (!hasCompetitorCreative) {
     return NextResponse.json(
       {
         ok: false,
-        error:
-          "No cached competitor creatives yet. Open each rival’s Ads Library tab (or refresh pulls) so we can scan what they run.",
+        error: "Add watched competitors first (Spy / sidebar). Coaching compares you to brands you follow.",
       },
       { status: 400 },
     );
   }
 
-  const evidenceText = blocks.join("\n\n---\n\n");
+  const { text: evidenceText, hasCompetitorEvidence } = await buildCrossChannelEvidenceText({
+    supabase,
+    userId: user.id,
+    rivals: rivals.map((r) => ({
+      id: r.id,
+      slug: r.slug,
+      name: r.name,
+      brand_name: r.brand_name,
+      brand_domain: r.brand_domain,
+    })),
+    userBrandDomain: userBrandDomain || undefined,
+  });
+
+  if (!hasCompetitorEvidence) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "No competitor evidence yet. Open rivals' Ads Library, Organic, Website, or Email tabs (or refresh scrapes) so we can compare channels.",
+      },
+      { status: 400 },
+    );
+  }
 
   const out = await runMarketingImprovementLlm({
     userBrandName,

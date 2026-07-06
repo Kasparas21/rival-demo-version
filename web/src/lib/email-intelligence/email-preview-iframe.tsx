@@ -44,6 +44,8 @@ export function resizeEmailPreviewIframe(iframe: HTMLIFrameElement | null): void
   }
 }
 
+const IFRAME_READY_FALLBACK_MS = 3500;
+
 export function EmailPreviewIframe({
   title,
   htmlBody,
@@ -56,6 +58,11 @@ export function EmailPreviewIframe({
 
   useEffect(() => {
     setReady(false);
+    const fallback = window.setTimeout(() => {
+      setReady(true);
+      resizeEmailPreviewIframe(iframeRef.current);
+    }, IFRAME_READY_FALLBACK_MS);
+    return () => window.clearTimeout(fallback);
   }, [htmlBody]);
 
   const handleLoad = useCallback(() => {
