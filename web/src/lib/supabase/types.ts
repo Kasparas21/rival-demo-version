@@ -21,6 +21,8 @@ export type Database = {
           onboarding_completed: boolean;
           weekly_digest_opted_out: boolean;
           last_weekly_digest_sent_at: string | null;
+          last_active_date: string | null;
+          app_streak_days: number;
           created_at: string;
           updated_at: string;
         };
@@ -35,6 +37,8 @@ export type Database = {
           onboarding_completed?: boolean;
           weekly_digest_opted_out?: boolean;
           last_weekly_digest_sent_at?: string | null;
+          last_active_date?: string | null;
+          app_streak_days?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -49,6 +53,8 @@ export type Database = {
           onboarding_completed?: boolean;
           weekly_digest_opted_out?: boolean;
           last_weekly_digest_sent_at?: string | null;
+          last_active_date?: string | null;
+          app_streak_days?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -1688,6 +1694,9 @@ export type Database = {
           added_at: string;
           last_screenshotted_at: string | null;
           next_screenshot_at: string | null;
+          animation_calibration_status: string;
+          animation_mask_json: Json;
+          animation_calibrated_at: string | null;
         };
         Insert: {
           id?: string;
@@ -1701,6 +1710,9 @@ export type Database = {
           added_at?: string;
           last_screenshotted_at?: string | null;
           next_screenshot_at?: string | null;
+          animation_calibration_status?: string;
+          animation_mask_json?: Json;
+          animation_calibrated_at?: string | null;
         };
         Update: {
           id?: string;
@@ -1714,6 +1726,9 @@ export type Database = {
           added_at?: string;
           last_screenshotted_at?: string | null;
           next_screenshot_at?: string | null;
+          animation_calibration_status?: string;
+          animation_mask_json?: Json;
+          animation_calibrated_at?: string | null;
         };
         Relationships: [];
       };
@@ -2231,6 +2246,10 @@ export type Database = {
       };
       record_manual_refresh_usage: {
         Args: { p_competitor_id: string };
+        Returns: undefined;
+      };
+      record_user_daily_activity: {
+        Args: { p_user_id: string };
         Returns: undefined;
       };
       upsert_organic_collaborator: {

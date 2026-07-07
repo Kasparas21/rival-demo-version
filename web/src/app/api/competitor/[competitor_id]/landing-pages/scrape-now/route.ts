@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { isHostBlockedForCompetitor } from "@/lib/landing-pages/blocked-inheritance";
+import { scrapePausedResponseBody } from "@/lib/billing/entitlements";
+import { getUserScrapeEligibility } from "@/lib/billing/scrape-eligibility";
 import { scrapeSingleLandingPage } from "@/lib/landing-page-tracker/scrape-single";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -49,6 +52,14 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
+  const scrapeEligibility = await getUserScrapeEligibility(supabase, user.id);
+  if (!scrapeEligibility.allowed) {
+    return NextResponse.json(
+      scrapePausedResponseBody(scrapeEligibility.reason ?? "inactive_gate"),
+      { status: 402 },
+    );
+  }
+
   let query = supabase
     .from("landing_pages")
     .select("*")
@@ -75,6 +86,15 @@ export async function POST(
   const results: Array<{ pageId: string; url: string; ok: boolean; error?: string }> = [];
 
   for (const page of pages) {
+    if (await isHostBlockedForCompetitor(supabase, competitorId, user.id, page.url)) {
+      results.push({
+        pageId: page.id,
+        url: page.url,
+        ok: false,
+        error: "Site uses anti-bot protection",
+      });
+      continue;
+    }
     const result = await scrapeSingleLandingPage(admin, page);
     results.push({
       pageId: page.id,

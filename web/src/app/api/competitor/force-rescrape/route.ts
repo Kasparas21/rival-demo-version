@@ -22,7 +22,9 @@ import {
   billingRequiredResponseBody,
   featureNotAvailableResponseBody,
   getBillingEntitlement,
+  scrapePausedResponseBody,
 } from "@/lib/billing/entitlements";
+import { getUserScrapeEligibility } from "@/lib/billing/scrape-eligibility";
 import {
   canPerformManualRefresh,
   loadManualRefreshUsageForCompetitor,
@@ -173,6 +175,15 @@ export async function POST(req: Request): Promise<NextResponse> {
       { status: 402 },
     );
   }
+
+  const scrapeEligibility = await getUserScrapeEligibility(supabase, user.id);
+  if (!scrapeEligibility.allowed) {
+    return NextResponse.json(
+      scrapePausedResponseBody(scrapeEligibility.reason ?? "inactive_gate"),
+      { status: 402 },
+    );
+  }
+
   if (!billing.limits.allowManualRefresh && !billing.isUnlimited) {
     return NextResponse.json(featureNotAvailableResponseBody("Manual refresh"), { status: 403 });
   }

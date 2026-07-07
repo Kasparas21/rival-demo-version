@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { userAllowsFreshScrape } from "@/lib/billing/scrape-eligibility";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { chainCronInvocation } from "@/lib/cron/chain-cron";
 import { fetchOrganicScrapeCandidates, scrapeOrganicCompetitor } from "@/lib/organic-content/scrape-competitor";
@@ -35,6 +36,10 @@ async function runOrganicScrape(req: Request) {
     if (Date.now() - cronStartedAt >= ORGANIC_CRON_TIME_BUDGET_MS) {
       timeBoxed += 1;
       break;
+    }
+
+    if (!(await userAllowsFreshScrape(admin, competitor.user_id))) {
+      continue;
     }
 
     try {

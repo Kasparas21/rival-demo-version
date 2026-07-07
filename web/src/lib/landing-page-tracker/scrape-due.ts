@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { userAllowsFreshScrape } from "@/lib/billing/scrape-eligibility";
 import type { Database } from "@/lib/supabase/types";
 
 import { LANDING_PAGE_SCRAPE_BATCH_SIZE } from "./constants";
@@ -50,6 +51,18 @@ export async function scrapeDueLandingPages(
   }> = [];
 
   for (const page of pages) {
+    if (!(await userAllowsFreshScrape(admin, page.user_id))) {
+      results.push({
+        landingPageId: page.id,
+        competitorId: page.competitor_id,
+        userId: page.user_id,
+        url: page.url,
+        ok: false,
+        error: "Scraping paused — open the app or upgrade to resume tracking",
+      });
+      continue;
+    }
+
     const result = await scrapeSingleLandingPage(admin, page);
     results.push({
       landingPageId: page.id,

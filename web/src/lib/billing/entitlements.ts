@@ -140,6 +140,18 @@ export function hasActivePaidSubscription(
   );
 }
 
+/** Had Polar billing but subscription is no longer active (canceled, ended, past due, etc.). */
+export function isLapsedPaidSubscription(
+  billing: Pick<
+    BillingEntitlement,
+    "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
+  >,
+): boolean {
+  if (billing.isUnlimited) return false;
+  if (!billing.hasPolarBillingRecord) return false;
+  return !hasActivePaidSubscription(billing);
+}
+
 export type SubscriptionStatusBadgeTone = "green" | "sky" | "amber" | "red" | "gray";
 
 export type SubscriptionStatusBadge = {
@@ -424,6 +436,39 @@ export function freeTrialScrapeUsedResponseBody() {
       "Your free trial includes one competitor discovery scrape. Upgrade to Starter or Pro for ongoing refreshes.",
     checkoutUrl: "/checkout?plan=starter",
   };
+}
+
+export function inactiveUserScrapePausedResponseBody() {
+  return {
+    ok: false,
+    code: "inactive_scrape_paused",
+    error:
+      "Automatic competitor tracking is paused because you have not opened Rival in the last week. Open the app or upgrade to Starter or Pro to resume.",
+    checkoutUrl: "/checkout?plan=starter",
+  };
+}
+
+export function subscriptionEndedScrapePausedResponseBody() {
+  return {
+    ok: false,
+    code: "subscription_ended_scrape_paused",
+    error:
+      "Your subscription has ended. Renew Starter or Pro to resume automatic competitor tracking and fresh scrapes.",
+    checkoutUrl: "/checkout?plan=starter",
+  };
+}
+
+export function scrapePausedResponseBody(
+  reason: "inactive_gate" | "billing",
+) {
+  return reason === "billing"
+    ? subscriptionEndedScrapePausedResponseBody()
+    : inactiveUserScrapePausedResponseBody();
+}
+
+/** @deprecated Use inactiveUserScrapePausedResponseBody */
+export function streakGateScrapePausedResponseBody() {
+  return inactiveUserScrapePausedResponseBody();
 }
 
 export function featureNotAvailableResponseBody(feature: string, requiredTier: PlanTier = "pro") {

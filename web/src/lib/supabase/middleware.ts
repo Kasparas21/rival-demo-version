@@ -10,6 +10,7 @@ import {
   hasActivePaidSubscription,
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
+import { recordUserDailyActivity } from "@/lib/billing/user-activity";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { hasPrePaymentSetup, POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
@@ -179,6 +180,10 @@ export async function updateSession(request: NextRequest) {
     if (!hasValidTesterQuery && !hasValidTesterCookie) {
       clearTesterInviteCookie(response);
     }
+  }
+
+  if (user && pathname.startsWith("/dashboard")) {
+    await recordUserDailyActivity(supabase, user.id);
   }
 
   return response;

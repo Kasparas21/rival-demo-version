@@ -14,7 +14,9 @@ import {
   freeTrialScrapeUsedResponseBody,
   getBillingEntitlement,
   quotaExceededResponseBody,
+  scrapePausedResponseBody,
 } from "@/lib/billing/entitlements";
+import { getUserScrapeEligibility } from "@/lib/billing/scrape-eligibility";
 import { checkFreeTrialScrapeAllowedForUser } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -332,6 +334,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     if (!billing.hasAccess) {
       return NextResponse.json(
         billingRequiredResponseBody("Upgrade to Starter or Pro to run fresh ad-library searches."),
+        { status: 402 },
+      );
+    }
+
+    const scrapeEligibility = await getUserScrapeEligibility(supabase, userId);
+    if (!scrapeEligibility.allowed) {
+      return NextResponse.json(
+        scrapePausedResponseBody(scrapeEligibility.reason ?? "inactive_gate"),
         { status: 402 },
       );
     }

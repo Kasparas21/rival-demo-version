@@ -16,7 +16,7 @@ import {
   platformsEligibleForScheduledScrape,
   type PlatformClassification,
 } from "@/lib/ad-library/platform-prioritization";
-import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { userAllowsScheduledAdsScrape } from "@/lib/billing/scrape-eligibility";
 import { refreshPlatformTrackingAfterScrape } from "@/lib/ad-library/persist-platform-tracking";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import {
@@ -89,9 +89,7 @@ async function userAllowsAutoRefresh(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   userId: string,
 ): Promise<boolean> {
-  const billing = await getBillingEntitlement(admin, userId);
-  if (billing.planTier === "free_trial") return false;
-  return billing.limits.allowAutoRefresh || billing.isUnlimited;
+  return userAllowsScheduledAdsScrape(admin, userId);
 }
 
 async function cleanupStaleRunningJobs(

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { resolveCompetitorForUser } from "@/lib/ad-library/classify-competitor-platforms";
+import { scrapePausedResponseBody } from "@/lib/billing/entitlements";
+import { getUserScrapeEligibility } from "@/lib/billing/scrape-eligibility";
 import { scrapeOrganicCompetitor } from "@/lib/organic-content/scrape-competitor";
 import { parseOrganicSocials, hasAnyOrganicSocial } from "@/lib/organic-content/socials";
 import { ORGANIC_PLATFORMS, type OrganicPlatform } from "@/lib/organic-content/types";
@@ -74,6 +76,14 @@ export async function POST(
   const socials = parseOrganicSocials(row.socials);
   if (!hasAnyOrganicSocial(socials)) {
     return NextResponse.json({ ok: false, error: "No social accounts configured" }, { status: 400 });
+  }
+
+  const scrapeEligibility = await getUserScrapeEligibility(supabase, user.id);
+  if (!scrapeEligibility.allowed) {
+    return NextResponse.json(
+      scrapePausedResponseBody(scrapeEligibility.reason ?? "inactive_gate"),
+      { status: 402 },
+    );
   }
 
   const admin = createSupabaseAdminClient();
