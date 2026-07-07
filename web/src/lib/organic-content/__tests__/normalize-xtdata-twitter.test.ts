@@ -141,7 +141,7 @@ describe("buildPlatformActorInput twitter", () => {
   it("uses twitterHandles with Latest sort", () => {
     const input = buildPlatformActorInput("twitter", "@adidas");
     expect(input.twitterHandles).toEqual(["adidas"]);
-    expect(input.maxItems).toBe(20);
+    expect(input.maxItems).toBe(60);
     expect(input.sort).toBe("Latest");
     expect(input).not.toHaveProperty("searchTerms");
   });

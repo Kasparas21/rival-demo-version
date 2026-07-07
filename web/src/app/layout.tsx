@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Serif } from "next/font/google";
 import { Suspense } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { DeferredMarketingTags } from "@/components/analytics/deferred-marketing-tags";
 import { MetaPixelPageView } from "@/components/analytics/meta-pixel-page-view";
 import { SitePostHogProvider } from "@/components/analytics/posthog-provider";
@@ -92,6 +93,7 @@ export default async function RootLayout({
           </Suspense>
           {children}
         </SitePostHogProvider>
+        {process.env.NODE_ENV === "production" ? <SpeedInsights /> : null}
       </body>
     </html>
   );

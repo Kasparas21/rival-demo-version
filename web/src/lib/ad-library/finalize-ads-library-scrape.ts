@@ -304,24 +304,10 @@ export async function finalizeAdsLibraryAfterFreshScrape(
         .maybeSingle();
       const website = competitor?.brand_domain?.trim() || competitor?.slug?.trim();
       if (website) {
-        const { data: newAds } = await supabase
-          .from("scraped_ads")
-          .select("platform, raw_payload")
-          .eq("competitor_id", resolvedCompetitorId)
-          .eq("scrape_batch_id", scrapeBatchId)
-          .limit(200);
-        if (newAds?.length) {
-          const { autoDetectAdLandingPagesFromAds } = await import(
-            "@/lib/landing-page-tracker/auto-detect-from-ad"
-          );
-          await autoDetectAdLandingPagesFromAds(
-            supabase,
-            resolvedCompetitorId,
-            userId,
-            website,
-            newAds,
-          );
-        }
+        const { syncLandingPagesFromCompetitorAds } = await import(
+          "@/lib/landing-page-tracker/sync-landing-pages-from-ads"
+        );
+        await syncLandingPagesFromCompetitorAds(supabase, resolvedCompetitorId, userId, website);
       }
     } catch (landingErr) {
       console.error("[finalizeAdsLibrary] auto-detect landing pages", landingErr);

@@ -62,7 +62,7 @@ export async function GET(
   for (const snap of snapshots ?? []) {
     const { data: prev } = await supabase
       .from("landing_page_snapshots")
-      .select("screenshot_url, hero_screenshot_url")
+      .select("screenshot_url, hero_screenshot_url, page_text, taken_at")
       .eq("landing_page_id", snap.landing_page_id)
       .eq("user_id", user.id)
       .lt("taken_at", snap.taken_at)
@@ -74,6 +74,8 @@ export async function GET(
       ...snap,
       prev_screenshot_url: prev?.screenshot_url ?? null,
       prev_hero_screenshot_url: prev?.hero_screenshot_url ?? null,
+      prev_page_text: prev?.page_text ?? null,
+      prev_taken_at: prev?.taken_at ?? null,
     });
   }
 

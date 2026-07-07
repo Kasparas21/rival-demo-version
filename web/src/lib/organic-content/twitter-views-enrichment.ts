@@ -1,6 +1,7 @@
 import { flattenApifyDatasetRecord, runApifyActor } from "@/lib/apify/client";
 
-import { ORGANIC_ACTOR_IDS, ORGANIC_TWITTER_MAX_TOTAL_CHARGE_USD } from "./constants";
+import { ORGANIC_ACTOR_IDS } from "./constants";
+import { twitterOrganicSpendCapUsd } from "./apify-spend-caps";
 import { extractTwitterViewsFromRaw } from "./normalize";
 import type { NormalizedOrganicPost } from "./types";
 
@@ -87,7 +88,7 @@ export async function enrichTwitterPostsWithViews(
       waitSecs: MAX_ACTOR_TIMEOUT_SECS,
       timeoutSecs: MAX_ACTOR_TIMEOUT_SECS,
       maxItems: urls.length,
-      maxTotalChargeUsd: ORGANIC_TWITTER_MAX_TOTAL_CHARGE_USD,
+      maxTotalChargeUsd: twitterOrganicSpendCapUsd(),
     },
   );
 

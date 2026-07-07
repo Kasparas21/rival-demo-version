@@ -3,11 +3,11 @@ import { flattenApifyDatasetRecord, runApifyActor } from "@/lib/apify/client";
 import {
   ORGANIC_ACTOR_IDS,
   ORGANIC_SCRAPE_MAX_ITEMS,
-  ORGANIC_TWITTER_MAX_TOTAL_CHARGE_USD,
-  ORGANIC_YOUTUBE_MIN_CHARGE_USD,
+  ORGANIC_TWITTER_ACTOR_MAX_ITEMS,
   ORGANIC_YOUTUBE_SHORTS_ACTOR,
   ORGANIC_YOUTUBE_VIDEOS_ACTOR,
 } from "./constants";
+import { twitterOrganicSpendCapUsd, youtubeShortsSpendCapUsd } from "./apify-spend-caps";
 import { normalizeOrganicItems } from "./normalize";
 import {
   buildApidojoYouTubeVideosInput,
@@ -157,7 +157,7 @@ async function scrapeCalmBuilderYouTubeShorts(
     {
       ...runOpts,
       maxItems: ORGANIC_SCRAPE_MAX_ITEMS,
-      maxTotalChargeUsd: ORGANIC_YOUTUBE_MIN_CHARGE_USD,
+      maxTotalChargeUsd: youtubeShortsSpendCapUsd(),
     },
   );
   return {
@@ -290,8 +290,8 @@ export async function scrapeOrganicPlatform(
   const runOpts = {
     waitSecs: MAX_ACTOR_TIMEOUT_SECS,
     timeoutSecs: MAX_ACTOR_TIMEOUT_SECS,
-    maxItems: ORGANIC_SCRAPE_MAX_ITEMS,
-    ...(platform === "twitter" ? { maxTotalChargeUsd: ORGANIC_TWITTER_MAX_TOTAL_CHARGE_USD } : {}),
+    maxItems: platform === "twitter" ? ORGANIC_TWITTER_ACTOR_MAX_ITEMS : ORGANIC_SCRAPE_MAX_ITEMS,
+    ...(platform === "twitter" ? { maxTotalChargeUsd: twitterOrganicSpendCapUsd() } : {}),
   };
 
   if (platform === "youtube") {
@@ -332,7 +332,15 @@ export async function scrapeOrganicPlatform(
   const normalized = normalizeOrganicItems(platform, items).slice(0, ORGANIC_SCRAPE_MAX_ITEMS);
 
   if (platform === "twitter") {
-    return { posts: await enrichTwitterPostsWithViews(normalized) };
+    try {
+      return { posts: await enrichTwitterPostsWithViews(normalized) };
+    } catch (error) {
+      console.warn(
+        "[organic] twitter view enrichment failed; keeping timeline posts",
+        error instanceof Error ? error.message : error,
+      );
+      return { posts: normalized };
+    }
   }
 
   return { posts: normalized };

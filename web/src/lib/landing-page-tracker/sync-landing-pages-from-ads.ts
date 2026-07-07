@@ -48,6 +48,78 @@ function extractUrlFromAd(ad: AdRow): string | null {
   return extractGoogleHostnameLandingKey(ad.platform, ad.raw_payload);
 }
 
+/** Canonical landing-page keys currently referenced by active scraped ads. */
+export function collectAdLandingPageKeys(
+  ads: AdRow[],
+  competitorWebsite: string,
+): Set<string> {
+  const rootHost = competitorRootHost(competitorWebsite);
+  const homeKey = homepageGroupKey(competitorWebsite);
+  const keys = new Set<string>();
+  if (!rootHost) return keys;
+
+  const seen = new Set<string>();
+  for (const ad of ads) {
+    const rawUrl = extractUrlFromAd(ad);
+    if (!rawUrl) continue;
+
+    const groupKey = landingPageGroupKey(rawUrl);
+    if (!groupKey || seen.has(groupKey)) continue;
+    seen.add(groupKey);
+
+    if (homeKey && groupKey === homeKey) continue;
+
+    const adHost = hostFromLandingPageUrl(groupKey);
+    if (!adHost || adHost !== rootHost) continue;
+
+    keys.add(groupKey);
+  }
+
+  return keys;
+}
+
+/** Stop spying on ad URLs that no longer appear in any active scraped ad. */
+export async function deactivateAdLandingPagesNotInActiveAds(
+  admin: AdminClient,
+  competitorId: string,
+  userId: string,
+  activeAdUrlKeys: Set<string>,
+): Promise<number> {
+  const { data: spiedPages } = await admin
+    .from("landing_pages")
+    .select("id, url")
+    .eq("competitor_id", competitorId)
+    .eq("user_id", userId)
+    .eq("is_active", true)
+    .eq("auto_detected_from", "ads");
+
+  if (!spiedPages?.length) return 0;
+
+  const staleIds = spiedPages
+    .filter((page) => {
+      const key = landingPageGroupKey(page.url);
+      return key && !activeAdUrlKeys.has(key);
+    })
+    .map((page) => page.id);
+
+  if (!staleIds.length) return 0;
+
+  const { error } = await admin
+    .from("landing_pages")
+    .update({
+      is_active: false,
+      next_screenshot_at: null,
+    })
+    .in("id", staleIds);
+
+  if (error) {
+    console.error("[landing-page-sync] deactivate stale ad pages failed", error.message);
+    return 0;
+  }
+
+  return staleIds.length;
+}
+
 export async function syncLandingPagesFromAds(
   admin: AdminClient,
   competitorId: string,
@@ -71,23 +143,11 @@ export async function syncLandingPagesFromAds(
       .filter((k): k is string => Boolean(k)),
   );
 
-  const seen = new Set<string>();
-  const now = new Date().toISOString();
+  const activeAdUrlKeys = collectAdLandingPageKeys(ads, competitorWebsite);
 
-  for (const ad of ads) {
-    const rawUrl = extractUrlFromAd(ad);
-    if (!rawUrl) continue;
+  for (const groupKey of activeAdUrlKeys) {
+    if (existingUrls.has(groupKey)) continue;
 
-    const groupKey = landingPageGroupKey(rawUrl);
-    if (!groupKey || seen.has(groupKey)) continue;
-    seen.add(groupKey);
-
-    if (homeKey && groupKey === homeKey) continue;
-
-    const adHost = hostFromLandingPageUrl(groupKey);
-    if (!adHost || adHost !== rootHost) continue;
-
-    const isNew = !existingUrls.has(groupKey);
     const row: Database["public"]["Tables"]["landing_pages"]["Insert"] = {
       competitor_id: competitorId,
       user_id: userId,
@@ -95,15 +155,16 @@ export async function syncLandingPagesFromAds(
       label: labelFromLandingPageUrl(groupKey),
       page_type: "custom",
       auto_detected_from: "ads",
-      is_active: true,
-      ...(isNew ? { next_screenshot_at: now } : {}),
+      is_active: false,
+      next_screenshot_at: null,
     };
 
-    await admin.from("landing_pages").upsert(row, { onConflict: "competitor_id,url" });
+    await admin.from("landing_pages").insert(row);
+    existingUrls.add(groupKey);
   }
 }
 
-/** Load active ads for a competitor and sync landing pages. */
+/** Load active ads for a competitor, sync landing pages, and stop spying on stale URLs. */
 export async function syncLandingPagesFromCompetitorAds(
   admin: AdminClient,
   competitorId: string,
@@ -118,7 +179,9 @@ export async function syncLandingPagesFromCompetitorAds(
     .eq("is_active", true)
     .limit(2000);
 
-  if (!ads?.length) return;
+  const activeAds = ads ?? [];
+  const activeAdUrlKeys = collectAdLandingPageKeys(activeAds, competitorWebsite);
 
-  await syncLandingPagesFromAds(admin, competitorId, userId, competitorWebsite, ads);
+  await syncLandingPagesFromAds(admin, competitorId, userId, competitorWebsite, activeAds);
+  await deactivateAdLandingPagesNotInActiveAds(admin, competitorId, userId, activeAdUrlKeys);
 }

@@ -21,7 +21,11 @@ import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import { LandingPagePreviewFallbackCard } from "@/components/competitor/landing-page-preview-fallback";
+import {
+  LandingPagePreviewFallbackCard,
+  LandingPagePreviewStartCard,
+} from "@/components/competitor/landing-page-preview-fallback";
+import { FromAdsSkeleton } from "@/components/website-tracker/website-tracker-skeletons";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
@@ -62,6 +66,7 @@ type LandingPageSnapshotRef = {
   screenshot_url: string;
   status: "ok" | "blocked";
   taken_at: string;
+  inheritedBlocked?: boolean;
 };
 
 type LandingPageRow = {
@@ -205,10 +210,11 @@ export function LandingPagesTab({
   const [pageAdsLimit, setPageAdsLimit] = useState(30);
   const [adsExpanded, setAdsExpanded] = useState(false);
   const [adsPlatformFilter, setAdsPlatformFilter] = useState("all");
+  const [captureAction, setCaptureAction] = useState<"trace" | "preview" | null>(null);
 
   const adsCacheKey = `${domainKey}:landing-pages-ads:${competitorId}:${encodeURIComponent(selectedUrl || "__none__")}:${stamp}:${pageAdsLimit}:${adsPlatformFilter}`;
 
-  const { data: adsPayload, isValidating: adsValidating } = useScrapeKeyedCache<AdsForUrlResponse>({
+  const { data: adsPayload, loading: adsLoading, isValidating: adsValidating } = useScrapeKeyedCache<AdsForUrlResponse>({
     cacheKey: adsCacheKey,
     enabled: Boolean(competitorId && domainKey && selectedUrl),
     validateCached: (c) => c.ok === true && Array.isArray(c.ads),
@@ -265,6 +271,48 @@ export function LandingPagesTab({
     [rows, selectedUrl],
   );
 
+  const showAdsLoading = Boolean(
+    selectedUrl && (adsLoading || (adsValidating && pageAds.length === 0)),
+  );
+
+  const runLandingCapture = useCallback(
+    async (startTracking: boolean) => {
+      if (!selectedUrl || !competitorId) return;
+      setCaptureAction(startTracking ? "trace" : "preview");
+      try {
+        const res = await fetch(
+          `/api/competitor/${encodeURIComponent(competitorId)}/landing-pages/capture-preview`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: selectedUrl, startTracking }),
+          },
+        );
+        const json = (await res.json()) as {
+          ok?: boolean;
+          error?: string;
+          inheritedBlocked?: boolean;
+        };
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error ?? `Failed (${res.status})`);
+        }
+        if (json.inheritedBlocked) {
+          toast.message("Can't track this site — anti-bot protection detected");
+        } else {
+          toast.success(
+            startTracking ? "Tracing started — screenshot captured" : "Screenshot captured",
+          );
+        }
+        await refetchList();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Capture failed");
+      } finally {
+        setCaptureAction(null);
+      }
+    },
+    [competitorId, refetchList, selectedUrl],
+  );
+
   useEffect(() => {
     setPageAds([]);
     setPageAdsTotal(0);
@@ -312,20 +360,7 @@ export function LandingPagesTab({
   }
 
   if (listLoading && !listData && !loadError) {
-    return (
-      <div className={COMPETITOR_PAGE_SHELL}>
-        <HeaderBar
-          dataSince={null}
-          title="Landing Pages"
-          subtitle={competitorLabel}
-        />
-        <div className="mt-6 space-y-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-100" />
-          ))}
-        </div>
-      </div>
-    );
+    return <FromAdsSkeleton />;
   }
 
   if (loadError) {
@@ -421,13 +456,17 @@ export function LandingPagesTab({
                 row={selectedRow}
                 competitorLabel={competitorLabel}
                 competitorDomainNorm={domainKey}
+                captureAction={captureAction}
+                onStartTracing={() => void runLandingCapture(true)}
+                onCaptureOnly={() => void runLandingCapture(false)}
                 onCopy={() => copyUrl(selectedUrl)}
               />
 
               {selectedRow ? (
                 <AdsForPageSection
                   ads={pageAds}
-                  total={pageAdsTotal}
+                  total={showAdsLoading ? selectedRow.totalAds : pageAdsTotal}
+                  loading={showAdsLoading}
                   platformBreakdown={selectedRow.platformBreakdown}
                   platformFilter={adsPlatformFilter}
                   onPlatformFilterChange={setAdsPlatformFilter}
@@ -498,53 +537,56 @@ function LandingPageListRow({
       type="button"
       onClick={onSelect}
       className={[
-        "flex h-14 w-full min-w-0 flex-col justify-center rounded-lg border border-transparent px-3 py-2 text-left transition-colors",
+        "flex h-14 w-full min-w-0 items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-left transition-colors",
         selected
           ? "border-l-4 border-[color:var(--rival-primary)] bg-[color:var(--rival-accent-blue)]"
           : "hover:bg-slate-50",
       ].join(" ")}
     >
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
-          {thumbUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL
-            <img src={thumbUrl} alt="" className="h-full w-full object-cover object-top" />
-          ) : faviconFailed ? (
-            <Globe className="h-4 w-4 text-slate-400" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- remote favicons; sizes unknown
-            <img
-              src={row.faviconUrl}
-              alt=""
-              width={20}
-              height={20}
-              className="h-5 w-5 object-contain"
-              onError={() => setFaviconFailed(true)}
-            />
-          )}
-        </span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-900" title={row.url}>
-          {display}
-        </span>
-        <span className="shrink-0 text-[13px] font-bold text-[color:var(--rival-primary)]">{row.count}</span>
-      </div>
-      <div className="mt-1.5 flex items-center gap-2 pl-9">
-        <div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
-          {shares.map(({ key, n }) => (
-            <div
-              key={key}
-              className="h-full min-w-[2px]"
-              style={{
-                width: `${(n / row.count) * 100}%`,
-                backgroundColor: PLATFORM_BAR_COLORS[key] ?? "#94a3b8",
-                boxShadow: key === "snapchat" ? "inset 0 0 0 1px rgba(0,0,0,0.12)" : undefined,
-              }}
-              title={`${PLATFORM_LABELS[key] ?? key}: ${n}`}
-            />
-          ))}
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center self-center overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
+        {thumbUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL
+          <img src={thumbUrl} alt="" className="h-full w-full object-cover object-top" />
+        ) : faviconFailed ? (
+          <Globe className="h-4 w-4 text-slate-400" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- remote favicons; sizes unknown
+          <img
+            src={row.faviconUrl}
+            alt=""
+            width={20}
+            height={20}
+            className="h-5 w-5 object-contain"
+            onError={() => setFaviconFailed(true)}
+          />
+        )}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-900" title={row.url}>
+            {display}
+          </span>
+          <span className="shrink-0 text-[13px] font-bold text-[color:var(--rival-primary)]">{row.count}</span>
         </div>
+        <div className="mt-1 flex items-center gap-2">
+          <div className="flex h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100">
+            {shares.map(({ key, n }) => (
+              <div
+                key={key}
+                className="h-full min-w-[2px]"
+                style={{
+                  width: `${(n / row.count) * 100}%`,
+                  backgroundColor: PLATFORM_BAR_COLORS[key] ?? "#94a3b8",
+                  boxShadow: key === "snapchat" ? "inset 0 0 0 1px rgba(0,0,0,0.12)" : undefined,
+                }}
+                title={`${PLATFORM_LABELS[key] ?? key}: ${n}`}
+              />
+            ))}
+          </div>
+        </div>
+        <p className="mt-0.5 text-[10px] text-slate-500">{cap}</p>
       </div>
-      <p className="mt-0.5 pl-9 text-[10px] text-slate-500">{cap}</p>
     </button>
   );
 }
@@ -554,12 +596,18 @@ function PreviewPane({
   row,
   competitorLabel,
   competitorDomainNorm,
+  captureAction = null,
+  onStartTracing,
+  onCaptureOnly,
   onCopy,
 }: {
   url: string;
   row: LandingPageRow | null;
   competitorLabel: string;
   competitorDomainNorm: string;
+  captureAction?: "trace" | "preview" | null;
+  onStartTracing: () => void;
+  onCaptureOnly: () => void;
   onCopy: () => void;
 }) {
   const displayPath = url.replace(/^https?:\/\//, "");
@@ -570,72 +618,98 @@ function PreviewPane({
 
   if (isBlocked) {
     return (
-      <div className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 px-6 py-10">
-        <LandingPagePreviewFallbackCard
-          url={url}
-          displayPath={displayPath}
-          faviconUrl={row?.faviconUrl ?? null}
-          competitorLabel={competitorLabel}
-          competitorDomainNorm={competitorDomainNorm}
-        />
+      <div className="flex w-full flex-col items-stretch">
+        <PreviewUrlBar url={url} displayUrlShortText={displayUrlShortText} onCopy={onCopy} />
+        <div className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 px-6 py-10">
+          <LandingPagePreviewFallbackCard
+            url={url}
+            displayPath={displayPath}
+            faviconUrl={row?.faviconUrl ?? null}
+            competitorLabel={competitorLabel}
+            competitorDomainNorm={competitorDomainNorm}
+            inheritedBlocked={snapshot?.inheritedBlocked}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (!previewUrl) {
+    return (
+      <div className="flex w-full flex-col items-stretch">
+        <PreviewUrlBar url={url} displayUrlShortText={displayUrlShortText} onCopy={onCopy} />
+        <div className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 px-6 py-10">
+          <LandingPagePreviewStartCard
+            url={url}
+            displayPath={displayPath}
+            faviconUrl={row?.faviconUrl ?? null}
+            competitorLabel={competitorLabel}
+            competitorDomainNorm={competitorDomainNorm}
+            capturingMode={captureAction}
+            onStartTracing={onStartTracing}
+            onCaptureOnly={onCaptureOnly}
+          />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="flex w-full flex-col items-stretch">
-      <div className="mb-4 flex w-full flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-          <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
-          <span className="truncate font-mono text-[11px] text-slate-700" title={url}>
-            {displayUrlShortText}
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={onCopy}
-          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          aria-label="Copy URL"
-        >
-          <Copy className="h-4 w-4" />
-        </button>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-[color:var(--rival-primary)] px-3 py-2 text-[11px] font-semibold text-white hover:opacity-90"
-        >
-          Open
-          <ExternalLink className="h-3.5 w-3.5" />
-        </a>
-      </div>
+      <PreviewUrlBar url={url} displayUrlShortText={displayUrlShortText} onCopy={onCopy} />
 
       <div className="flex w-full min-w-0 justify-center">
         <div
-          className="relative w-full max-w-[960px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.1)]"
-          style={{ aspectRatio: "16 / 10" }}
+          className="relative w-full max-w-[960px] overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_8px_30px_rgba(15,23,42,0.1)]"
+          style={{ maxHeight: "min(72vh, 720px)" }}
         >
-          {previewUrl ? (
-            <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="block h-full w-full">
-              {/* eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL */}
-              <img
-                src={previewUrl}
-                alt={`Screenshot of ${displayPath}`}
-                className="h-full w-full object-contain object-top bg-white"
-              />
-            </a>
-          ) : (
-            <div className="flex h-full min-h-[320px] flex-col items-center justify-center bg-[#f8fafc] px-6 text-center">
-              <Loader2 className="h-8 w-8 animate-spin text-slate-400" aria-hidden />
-              <p className="mt-3 text-[13px] font-medium text-slate-700">Screenshot pending</p>
-              <p className="mt-1 max-w-xs text-[12px] text-slate-500">
-                This page will be captured automatically. Check back after the next scrape.
-              </p>
-            </div>
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL */}
+          <img
+            src={snapshot?.screenshot_url ?? previewUrl}
+            alt={`Screenshot of ${displayPath}`}
+            className="block w-full bg-white"
+          />
         </div>
       </div>
+    </div>
+  );
+}
+
+function PreviewUrlBar({
+  url,
+  displayUrlShortText,
+  onCopy,
+}: {
+  url: string;
+  displayUrlShortText: string;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="mb-4 flex w-full flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+        <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+        <span className="truncate font-mono text-[11px] text-slate-700" title={url}>
+          {displayUrlShortText}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={onCopy}
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        aria-label="Copy URL"
+      >
+        <Copy className="h-4 w-4" />
+      </button>
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-[color:var(--rival-primary)] px-3 py-2 text-[11px] font-semibold text-white hover:opacity-90"
+      >
+        Open
+        <ExternalLink className="h-3.5 w-3.5" />
+      </a>
     </div>
   );
 }
@@ -650,6 +724,7 @@ function isVideoAd(format: string, creativeUrl: string | null): boolean {
 function AdsForPageSection({
   ads,
   total,
+  loading = false,
   platformBreakdown,
   platformFilter,
   onPlatformFilterChange,
@@ -660,6 +735,7 @@ function AdsForPageSection({
 }: {
   ads: NonNullable<AdsForUrlResponse["ads"]>;
   total: number;
+  loading?: boolean;
   platformBreakdown: Record<string, number>;
   platformFilter: string;
   onPlatformFilterChange: (platform: string) => void;
@@ -683,13 +759,13 @@ function AdsForPageSection({
     [platformBreakdown],
   );
 
-  if (ads.length === 0 && !showPlatformFilter) return null;
+  if (!loading && ads.length === 0 && !showPlatformFilter) return null;
 
   const showCount = expanded ? ads.length : Math.min(LANDING_PAGE_ADS_INITIAL, ads.length);
   const visible = ads.slice(0, showCount);
   const hiddenCount = Math.max(0, total - LANDING_PAGE_ADS_INITIAL);
-  const showMoreControl = !expanded && hiddenCount > 0 && ads.length > 0;
-  const showLessControl = expanded && hiddenCount > 0;
+  const showMoreControl = !loading && !expanded && hiddenCount > 0 && ads.length > 0;
+  const showLessControl = !loading && expanded && hiddenCount > 0;
 
   return (
     <div className="mt-8 w-full border-t border-slate-100 pt-6">
@@ -752,8 +828,14 @@ function AdsForPageSection({
         </div>
       ) : null}
 
-      {ads.length === 0 ? (
+      {ads.length === 0 && !loading ? (
         <p className="py-6 text-center text-[13px] text-slate-500">No ads for this platform.</p>
+      ) : loading ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {Array.from({ length: LANDING_PAGE_ADS_INITIAL }).map((_, i) => (
+            <LandingPageAdCardSkeleton key={i} />
+          ))}
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -781,6 +863,21 @@ function AdsForPageSection({
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+function LandingPageAdCardSkeleton() {
+  return (
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white animate-pulse">
+      <div className="relative bg-gradient-to-br from-slate-100 to-slate-200/80">
+        <div className="aspect-[4/5] w-full" />
+        <span className="absolute right-2 top-2 h-6 w-6 rounded-full bg-slate-200/90" />
+      </div>
+      <div className="flex min-h-[52px] flex-col justify-center gap-2 border-t border-slate-100 px-2.5 py-2">
+        <div className="h-3 w-full rounded bg-slate-200" />
+        <div className="h-2.5 w-2/3 rounded bg-slate-100" />
+      </div>
     </div>
   );
 }

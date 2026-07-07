@@ -1,9 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { runAgentForUserCompetitor } from "@/lib/agent/run-agent";
+import { HOST_BLOCKED_MESSAGE, isHostBlockedForCompetitor } from "@/lib/landing-pages/blocked-inheritance";
 import type { Database, Json } from "@/lib/supabase/types";
 
 import { analyzeLandingPageChange } from "./analyze-change";
+import { selectChangedSectionTiles } from "./analyze-page-sections";
+import { scheduleBackgroundCaptureJobs } from "./background-capture";
 import {
   classifyLandingPageChange,
   detectLandingPageTextChanges,
@@ -17,11 +20,18 @@ import {
   type LandingPageText,
 } from "./constants";
 import { extractPageText, isPageTextNearEmpty } from "./extract-page-text";
-import { calculatePixelDiff, cropHeroPng } from "./image-processing";
+import { calculateMaskedPixelDiff, cropHeroPng, parseAnimationMask } from "./image-processing";
+import { normalizePageText } from "./normalize-page-text";
 import { captureScreenshot } from "./screenshot-one";
 import { buildScreenshotPath, uploadScreenshot } from "./upload-screenshot";
+import { buildVisualChangeRegions } from "./visual-change-regions";
 
 export type LandingPageRow = Database["public"]["Tables"]["landing_pages"]["Row"];
+
+export type ScrapeSingleOptions = {
+  /** One-off capture for From ads preview — does not schedule recurring tracking. */
+  previewOnly?: boolean;
+};
 
 const BOT_BLOCK_PHRASES = [
   "403",
@@ -78,20 +88,48 @@ async function downloadImage(url: string): Promise<Buffer> {
 export async function scrapeSingleLandingPage(
   admin: SupabaseClient<Database>,
   page: LandingPageRow,
+  options?: ScrapeSingleOptions,
 ): Promise<{ ok: boolean; error?: string }> {
+  const previewOnly = Boolean(options?.previewOnly);
+  const scheduleTracking = page.is_active && !previewOnly;
   const landingPageId = page.id;
   const competitorId = page.competitor_id;
   const userId = page.user_id;
   const url = page.url;
   const label = page.label;
+  const animationMask = parseAnimationMask(page.animation_mask_json);
 
   const competitorName = await loadCompetitorName(admin, competitorId);
 
   try {
+    if (await isHostBlockedForCompetitor(admin, competitorId, userId, url)) {
+      return { ok: false, error: HOST_BLOCKED_MESSAGE };
+    }
+
+    const { data: prevRows } = await admin
+      .from("landing_page_snapshots")
+      .select("*")
+      .eq("landing_page_id", landingPageId)
+      .order("taken_at", { ascending: false })
+      .limit(1);
+
+    const prevSnapshot = prevRows?.[0] ?? null;
+    let referenceHeight: number | undefined;
+    if (prevSnapshot?.screenshot_url) {
+      try {
+        const prevBytes = await downloadImage(prevSnapshot.screenshot_url);
+        const sharp = (await import("sharp")).default;
+        referenceHeight = (await sharp(prevBytes).metadata()).height ?? undefined;
+      } catch {
+        referenceHeight = undefined;
+      }
+    }
+
+    const firstCapturedAt = Date.now();
     const fullPng = await captureScreenshot(url);
     const heroPng = await cropHeroPng(fullPng);
 
-    const pageText = await extractPageText(url);
+    const pageText = normalizePageText(await extractPageText(url));
 
     if (isBotBlockedPage(pageText)) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
@@ -136,7 +174,7 @@ export async function scrapeSingleLandingPage(
         .from("landing_pages")
         .update({
           last_screenshotted_at: now.toISOString(),
-          next_screenshot_at: null,
+          ...(scheduleTracking ? { next_screenshot_at: null } : {}),
         })
         .eq("id", landingPageId);
 
@@ -172,38 +210,37 @@ export async function scrapeSingleLandingPage(
     const fullUrl = await uploadScreenshot(fullPng, fullPath);
     const heroUrl = await uploadScreenshot(heroPng, heroPath);
 
-    const { data: prevRows } = await admin
-      .from("landing_page_snapshots")
-      .select("*")
-      .eq("landing_page_id", landingPageId)
-      .order("taken_at", { ascending: false })
-      .limit(1);
-
-    const prevSnapshot = prevRows?.[0] ?? null;
     let pixelDiffPct: number | null = null;
+    let maskOverlapPct = 0;
     let hasMeaningfulChange = false;
     let changeAnalysis: LandingPageChangeAnalysis = {};
     let prevFullUrl: string | null = null;
-    let prevHeroBytes: Buffer | null = null;
 
     if (prevSnapshot) {
       prevFullUrl = prevSnapshot.screenshot_url;
       const prevBytes = await downloadImage(prevFullUrl);
-      pixelDiffPct = await calculatePixelDiff(prevBytes, fullPng);
-      const prevText = (prevSnapshot.page_text ?? {}) as Record<string, unknown>;
-      const textChanges = detectLandingPageTextChanges(
-        prevText as Parameters<typeof detectLandingPageTextChanges>[0],
-        normalizedPageText,
-      );
+      const diffResult = await calculateMaskedPixelDiff(prevBytes, fullPng, animationMask);
+      pixelDiffPct = diffResult.pct;
+      maskOverlapPct = diffResult.maskOverlapPct;
+
+      const prevText = normalizePageText((prevSnapshot.page_text ?? {}) as LandingPageText);
+      const textChanges = detectLandingPageTextChanges(prevText, normalizedPageText);
 
       let aiAnalysis: LandingPageChangeAnalysis = {};
 
       if (
         pixelDiffPct >= PIXEL_DIFF_THRESHOLD &&
-        !shouldSkipAiAnalysis(pixelDiffPct, textChanges)
+        !shouldSkipAiAnalysis(pixelDiffPct, textChanges, maskOverlapPct)
       ) {
         const prevHeroUrl = prevSnapshot.hero_screenshot_url ?? prevFullUrl;
-        prevHeroBytes = await downloadImage(prevHeroUrl);
+        const prevHeroBytes = await downloadImage(prevHeroUrl);
+
+        const sectionTiles = await selectChangedSectionTiles({
+          prevFullBytes: prevBytes,
+          newFullBytes: fullPng,
+          mask: animationMask,
+          maxTiles: 2,
+        });
 
         aiAnalysis = await analyzeLandingPageChange({
           url,
@@ -211,16 +248,39 @@ export async function scrapeSingleLandingPage(
           competitorName,
           prevHeroBytes,
           newHeroBytes: heroPng,
-          prevText: prevText as Parameters<typeof analyzeLandingPageChange>[0]["prevText"],
+          prevText,
           newText: normalizedPageText,
           pixelDiffPct,
+          maskOverlapPct,
+          animationMask,
+          sectionTiles,
         });
+
+        try {
+          const visualChanges = await buildVisualChangeRegions({
+            prevFullBytes: prevBytes,
+            newFullBytes: fullPng,
+            mask: animationMask,
+            userId,
+            competitorId,
+            label,
+            timestamp,
+          });
+          if (visualChanges.length > 0) {
+            aiAnalysis.visual_changes = visualChanges;
+          }
+        } catch (visualErr) {
+          console.error("[landing-page-scrape] visual region build failed", visualErr);
+        }
+
+        aiAnalysis.mask_overlap_pct = maskOverlapPct;
       }
 
       const classified = await classifyLandingPageChange({
         admin,
         landingPageId,
         pixelDiffPct,
+        maskOverlapPct,
         textChanges,
         prevSnapshot,
         aiAnalysis,
@@ -250,9 +310,24 @@ export async function scrapeSingleLandingPage(
       throw new Error(insertError?.message ?? "Failed to insert snapshot");
     }
 
+    if (scheduleTracking) {
+      scheduleBackgroundCaptureJobs({
+        admin,
+        page,
+        snapshotId: inserted.id,
+        firstFullPng: fullPng,
+        firstCapturedAt,
+        referenceHeight,
+        fullPath,
+        heroPath,
+        canReplaceSnapshot: !prevSnapshot || !hasMeaningfulChange,
+      });
+    }
+
     const threatScore = changeAnalysis.threat_score ?? 0;
     const confidence = changeAnalysis.change_confidence;
     if (
+      scheduleTracking &&
       hasMeaningfulChange &&
       confidence === "confirmed" &&
       threatScore >= MEANINGFUL_THREAT_THRESHOLD
@@ -278,16 +353,16 @@ export async function scrapeSingleLandingPage(
     }
 
     const now = new Date();
-    const nextScrape = new Date(now);
-    nextScrape.setDate(nextScrape.getDate() + LANDING_PAGE_SCRAPE_INTERVAL_DAYS);
+    const pageUpdate: Database["public"]["Tables"]["landing_pages"]["Update"] = {
+      last_screenshotted_at: now.toISOString(),
+    };
+    if (scheduleTracking) {
+      const nextScrape = new Date(now);
+      nextScrape.setDate(nextScrape.getDate() + LANDING_PAGE_SCRAPE_INTERVAL_DAYS);
+      pageUpdate.next_screenshot_at = nextScrape.toISOString();
+    }
 
-    await admin
-      .from("landing_pages")
-      .update({
-        last_screenshotted_at: now.toISOString(),
-        next_screenshot_at: nextScrape.toISOString(),
-      })
-      .eq("id", landingPageId);
+    await admin.from("landing_pages").update(pageUpdate).eq("id", landingPageId);
 
     return { ok: true };
   } catch (error) {

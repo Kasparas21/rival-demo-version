@@ -1,4 +1,4 @@
-import { ORGANIC_SCRAPE_MAX_ITEMS } from "./constants";
+import { ORGANIC_SCRAPE_MAX_ITEMS, ORGANIC_TWITTER_ACTOR_MAX_ITEMS } from "./constants";
 import { ORGANIC_PLATFORMS, organicSocialsSchema, type NormalizedOrganicPost, type OrganicPlatform, type OrganicSocials } from "./types";
 
 export type PlatformActorInputOpts = {
@@ -177,7 +177,7 @@ export function buildPlatformActorInput(
     case "twitter":
       return {
         twitterHandles: [normalized.replace(/^@/, "")],
-        maxItems: ORGANIC_SCRAPE_MAX_ITEMS,
+        maxItems: ORGANIC_TWITTER_ACTOR_MAX_ITEMS,
         sort: "Latest",
       };
     case "instagram": {

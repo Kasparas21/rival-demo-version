@@ -25,6 +25,7 @@ export type CompetitorSubTabId =
   | "paid-media-settings"
   | "tracked"
   | "from-ads"
+  | "latest-changes"
   | "inbox"
   | "benchmark"
   | "improve-marketing";
@@ -91,6 +92,7 @@ export const COMPETITOR_PAGE_TABS: CompetitorPageTab[] = [
     subTabs: [
       { id: "tracked", label: "Tracked pages" },
       { id: "from-ads", label: "From ads" },
+      { id: "latest-changes", label: "Latest changes" },
     ],
   },
   {

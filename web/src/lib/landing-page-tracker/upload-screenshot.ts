@@ -22,7 +22,7 @@ export function buildScreenshotPath(params: {
   competitorId: string;
   label: string;
   timestamp: string;
-  variant: "full" | "hero";
+  variant: "full" | "hero" | `diff_before_${string}` | `diff_after_${string}`;
 }): string {
   const safeLabel = params.label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "page";
   return `${params.userId}/${params.competitorId}/${safeLabel}/${params.timestamp}_${params.variant}.png`;

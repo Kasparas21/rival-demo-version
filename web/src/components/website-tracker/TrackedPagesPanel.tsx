@@ -1,34 +1,24 @@
 "use client";
 
-import { Camera, Loader2, RefreshCw } from "lucide-react";
+import { Camera, Loader2, Radar, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import { hostKeyFromUrl } from "@/lib/landing-pages/blocked-inheritance";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
-import { ChangeCard } from "./ChangeCard";
 import { DeleteTrackedPageDialog } from "./DeleteTrackedPageDialog";
 import { PageDetailDrawer } from "./PageDetailDrawer";
 import { TrackedPageRowCard } from "./TrackedPageRow";
-import type { LandingPageChangeRow, TrackedPageRow } from "./types";
+import { TrackedPagesSkeleton } from "./website-tracker-skeletons";
+import { isAdLandingCandidate, type TrackedPageRow } from "./types";
 
 type PagesResponse = {
   ok: boolean;
   pages?: TrackedPageRow[];
-  error?: string;
-};
-
-type ChangesResponse = {
-  ok: boolean;
-  changes?: Array<
-    LandingPageChangeRow & {
-      prev_screenshot_url?: string | null;
-      prev_hero_screenshot_url?: string | null;
-    }
-  >;
   error?: string;
 };
 
@@ -51,6 +41,9 @@ export function TrackedPagesPanel({
   const [capturingPageId, setCapturingPageId] = useState<string | null>(null);
   const [removingPageId, setRemovingPageId] = useState<string | null>(null);
   const [capturingAll, setCapturingAll] = useState(false);
+  const [activatingPageId, setActivatingPageId] = useState<string | null>(null);
+  const [activatingAll, setActivatingAll] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [removedPageIds, setRemovedPageIds] = useState<Set<string>>(() => new Set());
   const [pendingDelete, setPendingDelete] = useState<{
@@ -77,35 +70,53 @@ export function TrackedPagesPanel({
     enabled: fetchEnabled && Boolean(competitorId),
   });
 
-  const changesCacheKey = `${cacheDomainNorm}:tracked-changes:${competitorId}:${stamp}`;
-  const fetchChanges = useCallback(async (): Promise<ChangesResponse> => {
-    const res = await fetch(`/api/competitor/${encodeURIComponent(competitorId)}/landing-pages/changes?limit=20`);
-    const json = (await res.json()) as ChangesResponse;
-    if (!res.ok || !json.ok) {
-      throw new Error(json.error ?? `Failed (${res.status})`);
-    }
-    return json;
-  }, [competitorId]);
-
-  const changesCache = useScrapeKeyedCache<ChangesResponse>({
-    cacheKey: changesCacheKey,
-    fetcher: fetchChanges,
-    enabled: fetchEnabled && Boolean(competitorId),
-  });
-
   const pages = (pagesCache.data?.pages ?? []).filter((p) => !removedPageIds.has(p.id));
-  const changes = changesCache.data?.changes ?? [];
+
+  const filteredPages = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return pages;
+    return pages.filter(
+      (page) =>
+        page.url.toLowerCase().includes(q) ||
+        page.label.toLowerCase().includes(q) ||
+        page.url.replace(/^https?:\/\//i, "").toLowerCase().includes(q),
+    );
+  }, [pages, searchQuery]);
 
   const pendingCount = useMemo(
-    () => pages.filter((p) => !p.latestSnapshot).length,
+    () => pages.filter((p) => p.is_active && !p.latestSnapshot).length,
     [pages],
+  );
+
+  const inactiveAdCandidates = useMemo(() => pages.filter(isAdLandingCandidate), [pages]);
+
+  const blockedHosts = useMemo(() => {
+    const hosts = new Set<string>();
+    for (const page of pages) {
+      if (page.latestSnapshot?.status !== "blocked") continue;
+      const host = hostKeyFromUrl(page.url);
+      if (host) hosts.add(host);
+    }
+    return hosts;
+  }, [pages]);
+
+  const isPageHostBlocked = useCallback(
+    (page: TrackedPageRow) => {
+      const host = hostKeyFromUrl(page.url);
+      return host ? blockedHosts.has(host) : false;
+    },
+    [blockedHosts],
+  );
+
+  const activatableCandidates = useMemo(
+    () => inactiveAdCandidates.filter((page) => !isPageHostBlocked(page)),
+    [inactiveAdCandidates, isPageHostBlocked],
   );
 
   const handleRefresh = useCallback(() => {
     setRemovedPageIds(new Set());
     void pagesCache.refetch();
-    void changesCache.refetch();
-  }, [changesCache, pagesCache]);
+  }, [pagesCache]);
 
   useEffect(() => {
     if (!pendingDelete || removingPageId) return;
@@ -135,17 +146,12 @@ export function TrackedPagesPanel({
       }
       setPendingDelete(null);
       toast.success("Page removed");
-      void changesCache.refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete page");
     } finally {
       setRemovingPageId(null);
     }
-  }, [changesCache, competitorId, detailPage?.id, pendingDelete]);
-
-  const requestDeletePage = useCallback((page: TrackedPageRow) => {
-    setPendingDelete({ pageId: page.id, label: page.label, url: page.url });
-  }, []);
+  }, [competitorId, detailPage?.id, pendingDelete]);
 
   const runCapture = useCallback(
     async (pageId?: string): Promise<boolean> => {
@@ -194,7 +200,6 @@ export function TrackedPagesPanel({
           );
         }
         await pagesCache.refetch();
-        await changesCache.refetch();
         return true;
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Capture failed");
@@ -204,18 +209,88 @@ export function TrackedPagesPanel({
         setCapturingAll(false);
       }
     },
-    [changesCache, competitorId, pagesCache],
+    [competitorId, pagesCache],
   );
+
+  const requestDeletePage = useCallback((page: TrackedPageRow) => {
+    setPendingDelete({ pageId: page.id, label: page.label, url: page.url });
+  }, []);
+
+  const activateSpying = useCallback(
+    async (pageId: string) => {
+      setActivatingPageId(pageId);
+      try {
+        const res = await fetch(
+          `/api/competitor/${encodeURIComponent(competitorId)}/landing-pages/${encodeURIComponent(pageId)}/activate`,
+          { method: "POST" },
+        );
+        const data = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error ?? `Failed (${res.status})`);
+        }
+        toast.success("Spying activated — first screenshot queued");
+        await pagesCache.refetch();
+        void runCapture(pageId);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not activate spying");
+      } finally {
+        setActivatingPageId(null);
+      }
+    },
+    [competitorId, pagesCache, runCapture],
+  );
+
+  const activateAllSpying = useCallback(async () => {
+    if (inactiveAdCandidates.length === 0) return;
+    setActivatingAll(true);
+    try {
+      const res = await fetch(
+        `/api/competitor/${encodeURIComponent(competitorId)}/landing-pages/activate-all`,
+        { method: "POST" },
+      );
+      const data = (await res.json()) as { ok?: boolean; error?: string; activated?: number };
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error ?? `Failed (${res.status})`);
+      }
+      const count = data.activated ?? activatableCandidates.length;
+      if (count === 0) {
+        toast.message("All ad URLs are already being tracked");
+        return;
+      }
+      toast.success(`Spying started on ${count} URL${count === 1 ? "" : "s"}`);
+      await pagesCache.refetch();
+      void runCapture();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not track all URLs");
+    } finally {
+      setActivatingAll(false);
+    }
+  }, [activatableCandidates.length, competitorId, inactiveAdCandidates.length, pagesCache, runCapture]);
 
   return (
     <div className={`${COMPETITOR_PAGE_SHELL} ${COMPETITOR_PAGE_X}`}>
       <FeatureSectionHeader
         overline="Website tracking"
         title="Tracked pages"
-        description={`Monitor ${competitorLabel}'s homepage and ad landing pages for visual and copy changes every 3 days.`}
+        description={`Monitor ${competitorLabel}'s homepage automatically. Ad landing pages from scraped ads appear below — activate spying to track changes every 3 days.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <CacheRevalidatingDot show={pagesCache.isValidating || changesCache.isValidating} />
+            <CacheRevalidatingDot show={pagesCache.isValidating} />
+            {activatableCandidates.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => void activateAllSpying()}
+                disabled={activatingAll || capturingAll || Boolean(capturingPageId) || Boolean(activatingPageId)}
+                className="inline-flex items-center gap-1 rounded-lg bg-[color:var(--rival-primary)] px-2.5 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {activatingAll ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Radar className="h-3.5 w-3.5" />
+                )}
+                Start tracking all of the urls
+              </button>
+            ) : null}
             {pendingCount > 0 ? (
               <button
                 type="button"
@@ -243,10 +318,16 @@ export function TrackedPagesPanel({
         }
       />
 
-      {pagesCache.loading && !pagesCache.data ? (
-        <div className="flex items-center justify-center py-16 text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
+      {pagesCache.loading && !pagesCache.data ? <TrackedPagesSkeleton rows={3} /> : null}
+
+      {pages.length > 0 && !(pagesCache.loading && !pagesCache.data) ? (
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search URLs to spy on…"
+          className="mb-4 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[13px] text-slate-900 outline-none ring-[color:var(--rival-accent-blue)]/35 placeholder:text-slate-400 focus:ring-2"
+        />
       ) : null}
 
       {pagesCache.error ? (
@@ -255,43 +336,34 @@ export function TrackedPagesPanel({
         </p>
       ) : null}
 
-      {!pagesCache.loading && pages.length === 0 ? (
+      {!(pagesCache.loading && !pagesCache.data) && !pagesCache.loading && pages.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500">
-          No tracked pages yet. The homepage is added when you save a competitor; ad landing pages appear after ads are scraped.
+          No tracked pages yet. The homepage is added when you save a competitor; ad landing pages appear here after ads are scraped.
         </p>
-      ) : (
+      ) : null}
+
+      {!(pagesCache.loading && !pagesCache.data) && !pagesCache.loading && pages.length > 0 && filteredPages.length === 0 ? (
+        <p className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-8 text-center text-sm text-slate-500">
+          No URLs match your search.
+        </p>
+      ) : null}
+
+      {!(pagesCache.loading && !pagesCache.data) && filteredPages.length > 0 ? (
         <div className="space-y-3">
-          {pages.map((page) => (
+          {filteredPages.map((page) => (
             <TrackedPageRowCard
               key={page.id}
               page={page}
+              hostBlocked={isPageHostBlocked(page)}
               capturing={capturingPageId === page.id || capturingAll}
+              activating={activatingAll || activatingPageId === page.id}
               removing={removingPageId === page.id}
-              onOpenDetail={() => setDetailPage(page)}
-              onCaptureNow={() => void runCapture(page.id)}
+              onOpenDetail={page.is_active ? () => setDetailPage(page) : undefined}
+              onCaptureNow={page.is_active ? () => void runCapture(page.id) : undefined}
+              onActivateSpying={isAdLandingCandidate(page) ? () => void activateSpying(page.id) : undefined}
               onRemove={() => requestDeletePage(page)}
             />
           ))}
-        </div>
-      )}
-
-      {changes.length > 0 ? (
-        <div className="mt-8">
-          <FeatureSectionHeader
-            overline="Website tracking"
-            title="Latest changes"
-            description="Meaningful visual changes detected on tracked pages."
-          />
-          <div className="mt-3 space-y-3">
-            {changes.map((change) => (
-              <ChangeCard
-                key={change.id}
-                change={change}
-                prevScreenshotUrl={change.prev_screenshot_url}
-                prevHeroScreenshotUrl={change.prev_hero_screenshot_url}
-              />
-            ))}
-          </div>
         </div>
       ) : null}
 

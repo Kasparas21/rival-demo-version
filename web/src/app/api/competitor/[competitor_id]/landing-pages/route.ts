@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 
+import {
+  buildBlockedHostsIndex,
+  loadSnapshotMapForCompetitor,
+  resolveSnapshotWithBlockedInheritance,
+} from "@/lib/landing-pages/blocked-inheritance";
+import { landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
 import { ensureDefaultLandingPagesForCompetitor } from "@/lib/landing-page-tracker/create-defaults";
 import { syncLandingPagesFromCompetitorAds } from "@/lib/landing-page-tracker/sync-landing-pages-from-ads";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -70,7 +76,11 @@ export async function GET(
     .maybeSingle();
   const website = competitorRow?.brand_domain?.trim() || competitorRow?.slug?.trim();
   if (website) {
-    await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
+    try {
+      await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
+    } catch (syncErr) {
+      console.error("[landing-pages] sync from ads failed", syncErr);
+    }
   }
 
   const { data: pages, error: pagesError } = await supabase
@@ -78,7 +88,6 @@ export async function GET(
     .select("*")
     .eq("competitor_id", competitorId)
     .eq("user_id", user.id)
-    .eq("is_active", true)
     .order("added_at", { ascending: true });
 
   if (pagesError) {
@@ -104,10 +113,50 @@ export async function GET(
     }
   }
 
-  const trackedPages = (pages ?? []).map((page) => ({
-    ...page,
-    latestSnapshot: latestByPage.get(page.id) ?? null,
-  }));
+  const snapshotByGroupKey = await loadSnapshotMapForCompetitor(supabase, competitorId, user.id);
+  const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
+
+  const trackedPages = (pages ?? [])
+    .filter((page) => {
+      if (page.page_type === "pricing" || page.page_type === "features") return false;
+      if (page.is_active || page.page_type === "homepage") return true;
+      return page.auto_detected_from === "ads";
+    })
+    .map((page) => {
+      const groupKey = landingPageGroupKey(page.url);
+      const raw = latestByPage.get(page.id) ?? null;
+      let latestSnapshot: LatestSnapshot | null = raw;
+
+      if (groupKey) {
+        const resolved = resolveSnapshotWithBlockedInheritance(groupKey, snapshotByGroupKey, blockedHosts);
+        if (resolved?.status === "blocked" && (!raw || raw.status !== "ok")) {
+          latestSnapshot = raw
+            ? { ...raw, status: "blocked" }
+            : {
+                id: "inherited-blocked",
+                screenshot_url: resolved.screenshot_url,
+                hero_screenshot_url: resolved.hero_screenshot_url,
+                page_text: {},
+                pixel_diff_pct: null,
+                has_meaningful_change: false,
+                change_analysis: {},
+                taken_at: resolved.taken_at,
+                status: "blocked",
+              };
+        }
+      }
+
+      return {
+        ...page,
+        latestSnapshot,
+      };
+    })
+    .sort((a, b) => {
+      if (a.page_type === "homepage") return -1;
+      if (b.page_type === "homepage") return 1;
+      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      return new Date(a.added_at).getTime() - new Date(b.added_at).getTime();
+    });
 
   return NextResponse.json({ ok: true, pages: trackedPages });
 }

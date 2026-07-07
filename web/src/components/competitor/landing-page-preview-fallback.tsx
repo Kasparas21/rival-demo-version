@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Globe } from "lucide-react";
+import { Camera, ExternalLink, Globe, Loader2, Radar } from "lucide-react";
 import { useMemo, useState } from "react";
 
 type Props = {
@@ -10,6 +10,8 @@ type Props = {
   faviconUrl: string | null;
   competitorLabel: string;
   competitorDomainNorm: string;
+  /** Site uses anti-bot protection — inherited from another URL on the same host. */
+  inheritedBlocked?: boolean;
 };
 
 function normalizeHost(hostname: string): string {
@@ -117,8 +119,77 @@ export function LandingPagePreviewFallbackCard({
   faviconUrl,
   competitorLabel,
   competitorDomainNorm,
+  inheritedBlocked: _inheritedBlocked = false,
 }: Props) {
   const [faviconFailed, setFaviconFailed] = useState(false);
+
+  const { kindLabel } = useMemo(
+    () => inferLandingPageContext(url, competitorDomainNorm, competitorLabel),
+    [url, competitorDomainNorm, competitorLabel],
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-[420px] rounded-2xl border border-slate-200/95 bg-gradient-to-b from-white to-slate-50/80 px-6 py-8 text-center shadow-[0_12px_40px_rgba(15,23,42,0.08)] ring-1 ring-slate-900/[0.03]">
+      <p className="mb-4 inline-flex items-center justify-center rounded-full border border-amber-200/90 bg-amber-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">
+        Can&apos;t track this site
+      </p>
+
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        {faviconFailed || !faviconUrl ? (
+          <Globe className="h-8 w-8 text-slate-400" aria-hidden />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element -- remote favicons
+          <img
+            src={faviconUrl}
+            alt=""
+            width={56}
+            height={56}
+            className="h-14 w-14 object-contain p-1"
+            onError={() => setFaviconFailed(true)}
+          />
+        )}
+      </div>
+
+      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">{kindLabel}</p>
+      <p className="mb-3 break-all font-mono text-[13px] font-semibold leading-snug text-slate-900">{displayPath}</p>
+
+      <p className="mb-6 text-left text-[13px] leading-relaxed text-slate-600">
+        We&apos;re sorry — this competitor&apos;s website uses anti-bot protection, so we can&apos;t take automated
+        screenshots or track page changes.
+      </p>
+
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--rival-primary)] px-4 py-3 text-[13px] font-semibold text-white hover:opacity-90"
+      >
+        Open in new tab
+        <ExternalLink className="h-4 w-4" aria-hidden />
+      </a>
+    </div>
+  );
+}
+
+type StartCardProps = Props & {
+  capturingMode?: "trace" | "preview" | null;
+  onStartTracing: () => void;
+  onCaptureOnly: () => void;
+};
+
+/** Shown when a landing page has no screenshot yet — user chooses trace vs one-off capture. */
+export function LandingPagePreviewStartCard({
+  url,
+  displayPath,
+  faviconUrl,
+  competitorLabel,
+  competitorDomainNorm,
+  capturingMode = null,
+  onStartTracing,
+  onCaptureOnly,
+}: StartCardProps) {
+  const [faviconFailed, setFaviconFailed] = useState(false);
+  const busy = capturingMode !== null;
 
   const { kindLabel, explanation } = useMemo(
     () => inferLandingPageContext(url, competitorDomainNorm, competitorLabel),
@@ -128,7 +199,7 @@ export function LandingPagePreviewFallbackCard({
   return (
     <div className="mx-auto w-full max-w-[420px] rounded-2xl border border-slate-200/95 bg-gradient-to-b from-white to-slate-50/80 px-6 py-8 text-center shadow-[0_12px_40px_rgba(15,23,42,0.08)] ring-1 ring-slate-900/[0.03]">
       <p className="mb-4 inline-flex items-center justify-center rounded-full border border-slate-200/90 bg-slate-100/90 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600">
-        Preview unavailable
+        No screenshot yet
       </p>
 
       <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
@@ -152,15 +223,34 @@ export function LandingPagePreviewFallbackCard({
 
       <p className="mb-6 text-left text-[13px] leading-relaxed text-slate-600">{explanation}</p>
 
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--rival-primary)] px-4 py-3 text-[13px] font-semibold text-white hover:opacity-90"
-      >
-        Open in new tab
-        <ExternalLink className="h-4 w-4" aria-hidden />
-      </a>
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={onStartTracing}
+          disabled={busy}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[color:var(--rival-primary)] px-4 py-3 text-[13px] font-semibold text-white hover:opacity-90 disabled:opacity-60"
+        >
+          {capturingMode === "trace" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Radar className="h-4 w-4" aria-hidden />
+          )}
+          Start spying on this URL
+        </button>
+        <button
+          type="button"
+          onClick={onCaptureOnly}
+          disabled={busy}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[13px] font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+        >
+          {capturingMode === "preview" ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          ) : (
+            <Camera className="h-4 w-4" aria-hidden />
+          )}
+          Just see the website
+        </button>
+      </div>
     </div>
   );
 }

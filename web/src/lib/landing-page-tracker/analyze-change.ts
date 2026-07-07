@@ -1,7 +1,8 @@
 import { resolveModelForTask } from "@/lib/llm/model-routing";
 import { openRouterChatVision } from "@/lib/llm/openrouter";
 
-import type { LandingPageChangeAnalysis, LandingPageText } from "./constants";
+import type { LandingPageChangeAnalysis, LandingPageText, NormalizedRect } from "./constants";
+import type { SectionTile } from "./analyze-page-sections";
 
 function parseAnalysisJson(text: string): LandingPageChangeAnalysis | null {
   const trimmed = text.trim();
@@ -36,6 +37,9 @@ export async function analyzeLandingPageChange(params: {
   prevText: LandingPageText;
   newText: LandingPageText;
   pixelDiffPct: number;
+  maskOverlapPct?: number;
+  animationMask?: NormalizedRect[];
+  sectionTiles?: SectionTile[];
 }): Promise<LandingPageChangeAnalysis> {
   const textDiff = {
     headline_changed: params.prevText.headline !== params.newText.headline,
@@ -49,16 +53,36 @@ export async function analyzeLandingPageChange(params: {
       JSON.stringify(params.newText.pricing_tiers ?? []),
   };
 
+  const maskNote =
+    (params.animationMask?.length ?? 0) > 0
+      ? `Known animated regions (logo carousels, sliders) are calibrated and should be IGNORED unless copy also changed. Mask overlap on this diff: ${params.maskOverlapPct ?? 0}%.`
+      : "No animation calibration mask yet.";
+
+  const sectionNote =
+    (params.sectionTiles?.length ?? 0) > 0
+      ? `Additional below-fold section crops are included after the hero pair (images 3+). Describe changes in those sections too.`
+      : "";
+
   const prompt = `You are Rival's competitive intelligence analyst. You are comparing two versions of a competitor's landing page.
 
 Competitor: ${params.competitorName}
 Page: ${params.label} (${params.url})
-Pixels changed: ${params.pixelDiffPct}%
+Pixels changed (mask-adjusted): ${params.pixelDiffPct}%
+${maskNote}
+${sectionNote}
 
 Text changes detected:
 ${JSON.stringify(textDiff, null, 2)}
 
-The first image is the PREVIOUS version. The second image is the NEW version.
+Image order:
+1. PREVIOUS hero (above the fold)
+2. NEW hero (above the fold)
+${(params.sectionTiles ?? [])
+  .map(
+    (tile, i) =>
+      `${3 + i * 2}. PREVIOUS section at y=${tile.top}px (${tile.diffPct}% diff)\n${4 + i * 2}. NEW section at y=${tile.top}px`,
+  )
+  .join("\n")}
 
 Analyze what changed and return ONLY a JSON object with this exact structure:
 {
@@ -78,21 +102,35 @@ Urgency guide:
 Threat score guide (1-10):
 - 8-10: headline changed, pricing restructured, free trial added/removed
 - 6-7: new social proof, new section added, CTA changed
-- 4-5: layout change, image swap
-- 1-3: minor copy tweak, footer change, animation/shimmer/rendering variance (use threat_score 1-2)
+- 4-5: layout change, image swap, button/headline color change
+- 1-3: minor copy tweak, footer change, animation/shimmer/carousel timing (use threat_score 1-2)
 
 If the only difference is animation, loading shimmer, carousel timing, or sub-5% pixel noise with identical copy, set threat_score to 1 and describe that nothing meaningful changed.
+Only describe changes you can actually see in the provided images. Do not invent subheadline changes unless visible.
 
 No preamble. No markdown. Pure JSON only.`;
+
+  const images: Array<{ label: string; base64Png: string }> = [
+    { label: "Previous hero:", base64Png: params.prevHeroBytes.toString("base64") },
+    { label: "New hero:", base64Png: params.newHeroBytes.toString("base64") },
+  ];
+
+  for (const tile of params.sectionTiles ?? []) {
+    images.push({
+      label: `Previous section y=${tile.top}:`,
+      base64Png: tile.beforeCrop.toString("base64"),
+    });
+    images.push({
+      label: `New section y=${tile.top}:`,
+      base64Png: tile.afterCrop.toString("base64"),
+    });
+  }
 
   const route = resolveModelForTask("landing_page_change_analysis");
   const result = await openRouterChatVision({
     model: route.model,
-    maxTokens: 1000,
-    images: [
-      { label: "Previous version:", base64Png: params.prevHeroBytes.toString("base64") },
-      { label: "New version:", base64Png: params.newHeroBytes.toString("base64") },
-    ],
+    maxTokens: 1200,
+    images,
     prompt,
   });
 

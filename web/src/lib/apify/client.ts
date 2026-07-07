@@ -28,7 +28,7 @@ export type RunActorOptions = {
   maxItems?: number;
   /**
    * Spending cap for pay-per-event Actors (Apify `maxTotalChargeUsd` query param).
-   * xtdata/twitter-x-scraper requires at least $3.00 or the run is rejected at start.
+   * This is a maximum, not a minimum bill. xtdata/twitter-x-scraper requires cap >= $3.
    */
   maxTotalChargeUsd?: number;
 };

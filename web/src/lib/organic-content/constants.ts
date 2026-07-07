@@ -1,8 +1,14 @@
 import type { OrganicPlatform } from "./types";
 
 export const ORGANIC_SCRAPE_MAX_ITEMS = 30;
-/** calm_builder/youtube-scraper pay-per-event minimum charge per run */
-export const ORGANIC_YOUTUBE_MIN_CHARGE_USD = 0.5;
+/**
+ * Request more tweets than we keep — profile timeline includes retweets and
+ * `normalizeXtdataTwitterPost` drops `RT @…` rows.
+ */
+export const ORGANIC_TWITTER_ACTOR_MAX_ITEMS = Math.max(
+  ORGANIC_SCRAPE_MAX_ITEMS,
+  Number.parseInt(process.env.APIFY_ORGANIC_TWITTER_MAX_ITEMS?.trim() ?? "60", 10) || 60,
+);
 
 /** Shorts: calm_builder (channel /shorts tab). Long-form: apidojo (channel /videos). */
 export const ORGANIC_YOUTUBE_SHORTS_ACTOR =
@@ -11,11 +17,7 @@ export const ORGANIC_YOUTUBE_SHORTS_ACTOR =
   "calm_builder/youtube-scraper";
 export const ORGANIC_YOUTUBE_VIDEOS_ACTOR =
   process.env.APIFY_ORGANIC_YOUTUBE_VIDEOS_ACTOR?.trim() || "apidojo/youtube-scraper";
-/** xtdata/twitter-x-scraper is pay-per-event; Apify rejects runs below $3 max charge. */
-export const ORGANIC_TWITTER_MAX_TOTAL_CHARGE_USD = Math.max(
-  3,
-  Number.parseFloat(process.env.APIFY_ORGANIC_TWITTER_MAX_CHARGE_USD?.trim() ?? "5") || 5,
-);
+
 export const ORGANIC_FIRST_SCRAPE_POST_LIMIT = 10;
 export const ORGANIC_SCRAPE_INTERVAL_DAYS = 3;
 export const ORGANIC_INSIGHTS_MAX_TOKENS = 4096;

@@ -21,6 +21,8 @@ export type TrackedPageRow = {
   auto_detected_from: string | null;
   last_screenshotted_at: string | null;
   next_screenshot_at: string | null;
+  animation_calibration_status?: string | null;
+  animation_calibrated_at?: string | null;
   latestSnapshot: TrackedPageSnapshot | null;
 };
 
@@ -33,6 +35,17 @@ export type LandingPageChangeRow = TrackedPageSnapshot & {
   } | null;
 };
 
+export type VisualChangeRegion = {
+  id: string;
+  label: string;
+  section: string;
+  before_crop_url: string;
+  after_crop_url: string;
+  before_color?: string;
+  after_color?: string;
+  color_changed: boolean;
+};
+
 export type ChangeAnalysis = {
   what_changed?: string;
   strategic_interpretation?: string;
@@ -41,6 +54,9 @@ export type ChangeAnalysis = {
   threat_score?: number;
   sections_changed?: string[];
   change_confidence?: "noise" | "suspected_ab" | "confirmed";
+  visual_changes?: VisualChangeRegion[];
+  mask_overlap_pct?: number;
+  ignored_animation?: boolean;
 };
 
 export function changeConfidence(
@@ -87,6 +103,10 @@ export function pageStatus(page: TrackedPageRow): PageStatus {
   }
   if (page.latestSnapshot.has_meaningful_change) return "changed";
   return "unchanged";
+}
+
+export function isAdLandingCandidate(page: TrackedPageRow): boolean {
+  return !page.is_active && page.auto_detected_from === "ads";
 }
 
 export function snapshotPreviewUrl(

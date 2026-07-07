@@ -6,6 +6,7 @@ import {
   type SharedLandingPagesListCache,
 } from "@/components/competitor/landing-pages-tab";
 
+import { LatestChangesPanel } from "./LatestChangesPanel";
 import { TrackedPagesPanel } from "./TrackedPagesPanel";
 
 type WebsiteTabProps = {
@@ -31,7 +32,12 @@ export function WebsiteTab({
   sharedLandingPagesListCache,
   fetchEnabled = true,
 }: WebsiteTabProps) {
-  const subTab = activeSubTab === "from-ads" ? "from-ads" : "tracked";
+  const subTab: "tracked" | "from-ads" | "latest-changes" =
+    activeSubTab === "from-ads"
+      ? "from-ads"
+      : activeSubTab === "latest-changes"
+        ? "latest-changes"
+        : "tracked";
 
   if (!competitorId) {
     return (
@@ -52,6 +58,18 @@ export function WebsiteTab({
         onFreshnessRescrape={onFreshnessRescrape}
         landingPagesListCache={sharedLandingPagesListCache}
         fetchEnabled={fetchEnabled && subTab === "from-ads"}
+      />
+    );
+  }
+
+  if (subTab === "latest-changes") {
+    return (
+      <LatestChangesPanel
+        competitorId={competitorId}
+        competitorLabel={competitorLabel}
+        cacheDomainNorm={cacheDomainNorm}
+        lastScrapedAt={lastScrapedAt}
+        fetchEnabled={fetchEnabled && subTab === "latest-changes"}
       />
     );
   }

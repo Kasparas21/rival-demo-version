@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { buildBlockedHostsIndex, resolveSnapshotWithBlockedInheritance } from "@/lib/landing-pages/blocked-inheritance";
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { displayUrlShort, hostFromLandingPageUrl, landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
@@ -28,6 +29,7 @@ type LandingPageSnapshotRef = {
   screenshot_url: string;
   status: "ok" | "blocked";
   taken_at: string;
+  inheritedBlocked?: boolean;
 };
 
 type LandingPageGroup = {
@@ -100,7 +102,11 @@ export async function GET(request: Request) {
   await ensureDefaultLandingPagesForCompetitor(admin, competitorId, user.id);
   const website = competitor.brand_domain?.trim() || competitor.slug?.trim();
   if (website) {
-    await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
+    try {
+      await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
+    } catch (syncErr) {
+      console.error("[landing-pages] sync from ads failed", syncErr);
+    }
   }
 
   const { data: ads, error: adsErr } = await supabase
@@ -219,8 +225,9 @@ export async function GET(request: Request) {
   const landingPagesSlice = landingPagesAll.slice(0, limit);
 
   const snapshotByGroupKey = await loadSnapshotsByGroupKey(supabase, competitorId, user.id);
+  const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
   for (const group of landingPagesSlice) {
-    group.snapshot = snapshotByGroupKey.get(group.groupId) ?? null;
+    group.snapshot = resolveSnapshotWithBlockedInheritance(group.groupId, snapshotByGroupKey, blockedHosts);
   }
 
   const landingPages = landingPagesSlice;
@@ -264,8 +271,7 @@ async function loadSnapshotsByGroupKey(
     .from("landing_pages")
     .select("id, url")
     .eq("competitor_id", competitorId)
-    .eq("user_id", userId)
-    .eq("is_active", true);
+    .eq("user_id", userId);
 
   if (!pages?.length) return result;
 

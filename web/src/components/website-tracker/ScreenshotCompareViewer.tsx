@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
+import { cn } from "@/lib/utils";
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -12,6 +14,9 @@ type Props = {
   afterUrl: string;
   beforeLabel?: string;
   afterLabel?: string;
+  heroBeforeUrl?: string | null;
+  heroAfterUrl?: string | null;
+  defaultMode?: "hero" | "full";
 };
 
 export function ScreenshotCompareViewer({
@@ -21,13 +26,23 @@ export function ScreenshotCompareViewer({
   afterUrl,
   beforeLabel = "Before",
   afterLabel = "After",
+  heroBeforeUrl = null,
+  heroAfterUrl = null,
+  defaultMode = "full",
 }: Props) {
   const [mounted, setMounted] = useState(false);
+  const [mode, setMode] = useState<"hero" | "full">(defaultMode);
   const leftRef = useRef<HTMLDivElement>(null);
   const rightRef = useRef<HTMLDivElement>(null);
   const syncing = useRef(false);
 
+  const canToggleHero = Boolean(heroBeforeUrl && heroAfterUrl);
+
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (open) setMode(defaultMode);
+  }, [open, defaultMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -52,7 +67,9 @@ export function ScreenshotCompareViewer({
     });
   }, []);
 
-  const singleView = beforeUrl === afterUrl;
+  const displayBefore = mode === "hero" && heroBeforeUrl ? heroBeforeUrl : beforeUrl;
+  const displayAfter = mode === "hero" && heroAfterUrl ? heroAfterUrl : afterUrl;
+  const singleView = displayBefore === displayAfter;
 
   if (!mounted) return null;
 
@@ -77,27 +94,53 @@ export function ScreenshotCompareViewer({
             exit={{ scale: 0.98, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="absolute right-3 top-3 z-20 rounded-lg bg-white p-2 text-slate-600 shadow-md ring-1 ring-slate-200 hover:bg-slate-50"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="absolute right-3 top-3 z-20 flex items-center gap-2">
+              {canToggleHero ? (
+                <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-md">
+                  <button
+                    type="button"
+                    onClick={() => setMode("hero")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1.5 text-[11px] font-semibold",
+                      mode === "hero" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    Hero
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("full")}
+                    className={cn(
+                      "rounded-md px-2.5 py-1.5 text-[11px] font-semibold",
+                      mode === "full" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50",
+                    )}
+                  >
+                    Full page
+                  </button>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="rounded-lg bg-white p-2 text-slate-600 shadow-md ring-1 ring-slate-200 hover:bg-slate-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
             {singleView ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-xl">
-                <div className="min-h-0 flex-1 overflow-auto pt-2">
+                <div className="min-h-0 flex-1 overflow-auto pt-12">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={beforeUrl} alt="Full page screenshot" className="block w-full" />
+                  <img src={displayBefore} alt="Screenshot" className="block w-full" />
                 </div>
               </div>
             ) : (
-              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 pt-10 md:grid-cols-2">
+              <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 pt-14 md:grid-cols-2">
                 {[
-                  { label: beforeLabel, url: beforeUrl, ref: leftRef, other: rightRef },
-                  { label: afterLabel, url: afterUrl, ref: rightRef, other: leftRef },
+                  { label: beforeLabel, url: displayBefore, ref: leftRef, other: rightRef },
+                  { label: afterLabel, url: displayAfter, ref: rightRef, other: leftRef },
                 ].map((panel) => (
                   <div
                     key={panel.label}

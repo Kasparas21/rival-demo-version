@@ -1,4 +1,10 @@
-import { SCREENSHOT_VIEWPORT_HEIGHT, SCREENSHOT_VIEWPORT_WIDTH } from "./constants";
+import {
+  SCREENSHOT_CAPTURE_DELAY_SEC,
+  SCREENSHOT_DUAL_CAPTURE_GAP_MS,
+  SCREENSHOT_VIEWPORT_HEIGHT,
+  SCREENSHOT_VIEWPORT_WIDTH,
+} from "./constants";
+import { scoreScreenshotQuality } from "./image-processing";
 
 const SCREENSHOTONE_BASE = "https://api.screenshotone.com/take";
 
@@ -21,7 +27,11 @@ function friendlyScreenshotError(status: number, rawMessage: string): string {
   return rawMessage || `Screenshot request failed (${status})`;
 }
 
-export async function captureScreenshot(url: string): Promise<Buffer> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchScreenshot(url: string, delaySec: number): Promise<Buffer> {
   const accessKey = process.env.SCREENSHOTONE_ACCESS_KEY?.trim();
   if (!accessKey) {
     throw new Error("SCREENSHOTONE_ACCESS_KEY not configured");
@@ -37,10 +47,8 @@ export async function captureScreenshot(url: string): Promise<Buffer> {
     block_cookie_banners: "true",
     block_chats: "true",
     block_ads: "true",
-    // Capture error/block pages (403, Cloudflare, etc.) instead of failing the request.
     ignore_host_errors: "true",
-    // `wait_for_network` requires a paid ScreenshotOne plan — use delay instead.
-    delay: "3",
+    delay: String(delaySec),
     timeout: "60",
   });
 
@@ -83,5 +91,38 @@ export async function captureScreenshot(url: string): Promise<Buffer> {
     return bytes;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+/** Single synchronous capture — the only path the user waits on. */
+export async function captureScreenshot(url: string): Promise<Buffer> {
+  return fetchScreenshot(url, SCREENSHOT_CAPTURE_DELAY_SEC);
+}
+
+/**
+ * Background helper: waits, captures a second frame, returns it only if better than the first.
+ * Returns null if the first frame should be kept or the second capture failed.
+ */
+export async function runDualCaptureImprovement(params: {
+  url: string;
+  firstBytes: Buffer;
+  referenceHeight?: number;
+  waitMs?: number;
+}): Promise<Buffer | null> {
+  const { url, firstBytes, referenceHeight, waitMs = SCREENSHOT_DUAL_CAPTURE_GAP_MS } = params;
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+
+  try {
+    const second = await fetchScreenshot(url, SCREENSHOT_CAPTURE_DELAY_SEC);
+    const [scoreA, scoreB] = await Promise.all([
+      scoreScreenshotQuality(firstBytes, referenceHeight),
+      scoreScreenshotQuality(second, referenceHeight),
+    ]);
+    return scoreB > scoreA ? second : null;
+  } catch (error) {
+    console.error("[screenshot] dual capture improvement failed", error);
+    return null;
   }
 }
