@@ -82,13 +82,11 @@ export type LandingHeroHeadlineCopy = {
   sublineMobile?: string;
 };
 
-export type LandingHeroCoverageKey = "paid" | "organic" | "email" | "autopilot" | "mcp";
-
-export type LandingHeroCoverageChip = {
-  key: LandingHeroCoverageKey;
-  label: string;
-  href?: string;
-  linkAriaLabel?: string;
+export type LandingHeroCoverage = {
+  paidLabel: string;
+  organicLabel: string;
+  emailLabel: string;
+  connectLabel: string;
 };
 
 export type LandingHowItWorksStep = {
@@ -145,9 +143,7 @@ export type LandingCopy = {
     brandMarqueeAria: string;
     brandMarqueeLabel: string;
     /** Channel checklist under the hero CTA. */
-    coverage: {
-      chips: LandingHeroCoverageChip[];
-    };
+    coverage: LandingHeroCoverage;
   };
   howItWorks: {
     titleLine1: string;

@@ -38,18 +38,10 @@ export const landingCopyNl: LandingCopy = {
     brandMarqueeAria: "Vertrouwd door performance marketeers",
     brandMarqueeLabel: "Vertrouwd door performance marketeers",
     coverage: {
-      chips: [
-        { key: "paid", label: "Paid ads" },
-        { key: "organic", label: "Organic" },
-        { key: "email", label: "E-mail" },
-        { key: "autopilot", label: "Autopilot" },
-        {
-          key: "mcp",
-          label: "MCP",
-          href: "/docs/mcp",
-          linkAriaLabel: "Leer hoe je Rival via MCP koppelt aan Claude en ChatGPT",
-        },
-      ],
+      paidLabel: "paid ads",
+      organicLabel: "organic",
+      emailLabel: "e-mail",
+      connectLabel: "verbonden in één dashboard",
     },
   },
   howItWorks: {
@@ -157,7 +149,7 @@ export const landingCopyNl: LandingCopy = {
         ],
       },
       {
-        label: "Koppel al die data aan Rival-features zoals",
+        label: "Al hun digitale marketing in één dashboard verbinden",
         cards: [
           {
             key: "strategy-map",

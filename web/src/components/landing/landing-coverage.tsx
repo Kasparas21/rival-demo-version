@@ -1,13 +1,16 @@
 import { Bookmark, Heart, MessageCircle, Send, Trophy } from "lucide-react";
+import type { ComponentType } from "react";
 
 import {
   LandingHeadlineHighlight,
   landingSectionHeadlineClasses,
 } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
+import { CoverageDemoVideo } from "@/components/landing/coverage-demo-video";
 import { LandingStrategyMapMock } from "@/components/landing/landing-strategy-map-mock";
 import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
 import {
+  FacebookLogo,
   GoogleLogo,
   InstagramLogo,
   LinkedInLogo,
@@ -15,6 +18,8 @@ import {
   PinterestLogo,
   SnapchatLogo,
   TikTokLogo,
+  XLogo,
+  YouTubeLogo,
 } from "@/components/platform-logos";
 import type { LandingCoverageCardKey, LandingCopy } from "@/lib/i18n/landing/types";
 
@@ -22,6 +27,41 @@ import type { LandingCoverageCardKey, LandingCopy } from "@/lib/i18n/landing/typ
 const COVERAGE_VISUAL_PANEL =
   "flex h-[260px] w-full shrink-0 items-stretch justify-center px-4 pb-3 pt-5 sm:h-[268px] sm:px-5";
 const COVERAGE_FOOTER = "min-h-[5.75rem] shrink-0 border-t border-[#f0efec] px-5 py-4";
+
+type PlatformLogo = ComponentType<{ className?: string }>;
+
+const PAID_PLATFORMS: PlatformLogo[] = [
+  MetaLogo,
+  GoogleLogo,
+  TikTokLogo,
+  LinkedInLogo,
+  PinterestLogo,
+  SnapchatLogo,
+];
+
+const ORGANIC_PLATFORMS: PlatformLogo[] = [
+  InstagramLogo,
+  TikTokLogo,
+  YouTubeLogo,
+  LinkedInLogo,
+  XLogo,
+  FacebookLogo,
+];
+
+function CoveragePlatformIconRow({ logos }: { logos: PlatformLogo[] }) {
+  return (
+    <div className="mt-2.5 flex shrink-0 items-center justify-between px-1">
+      {logos.map((Logo, i) => (
+        <span
+          key={i}
+          className="flex size-6 items-center justify-center rounded-full bg-white shadow-[0_1px_3px_rgba(26,26,26,0.1)] ring-1 ring-black/[0.04]"
+        >
+          <Logo className="h-3 w-3" />
+        </span>
+      ))}
+    </div>
+  );
+}
 
 /* ---------- Card 1 · Paid ad mockup ---------- */
 function PaidAdMock() {
@@ -56,18 +96,7 @@ function PaidAdMock() {
         </div>
       </div>
 
-      <div className="mt-2.5 flex shrink-0 items-center justify-between px-1">
-        {[MetaLogo, GoogleLogo, TikTokLogo, LinkedInLogo, PinterestLogo, SnapchatLogo].map(
-          (Logo, i) => (
-            <span
-              key={i}
-              className="flex size-6 items-center justify-center rounded-full bg-white shadow-[0_1px_3px_rgba(26,26,26,0.1)] ring-1 ring-black/[0.04]"
-            >
-              <Logo className="h-3 w-3" />
-            </span>
-          ),
-        )}
-      </div>
+      <CoveragePlatformIconRow logos={PAID_PLATFORMS} />
     </div>
   );
 }
@@ -75,31 +104,35 @@ function PaidAdMock() {
 /* ---------- Card 2 · Organic social post mockup ---------- */
 function OrganicPostMock() {
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-[0_4px_16px_-6px_rgba(26,26,26,0.14)]">
-      <div className="flex shrink-0 items-center gap-2 px-3 py-2.5">
-        <span className="flex size-7 items-center justify-center rounded-full bg-gradient-to-br from-[#f97316] via-[#e11d48] to-[#7c3aed] text-[11px] font-bold text-white">
-          A
-        </span>
-        <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate text-[11px] font-bold text-[#1a1a1a]">aurora.skin</p>
-          <p className="text-[9px] text-gray-400">Original audio · 2h</p>
+    <div className="flex h-full w-full flex-col justify-between">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-black/[0.06] bg-white shadow-[0_4px_16px_-6px_rgba(26,26,26,0.14)]">
+        <div className="flex shrink-0 items-center gap-2 px-3 py-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-gradient-to-br from-[#f97316] via-[#e11d48] to-[#7c3aed] text-[10px] font-bold text-white sm:size-7 sm:text-[11px]">
+            A
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate text-[10.5px] font-bold text-[#1a1a1a] sm:text-[11px]">aurora.skin</p>
+            <p className="text-[8.5px] text-gray-400 sm:text-[9px]">Original audio · 2h</p>
+          </div>
+          <InstagramLogo className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </div>
-        <InstagramLogo className="h-4 w-4" />
-      </div>
-      <div className="min-h-0 flex-1 w-full bg-[linear-gradient(135deg,#fff1f2_0%,#fda4af_50%,#e11d48_100%)]" />
-      <div className="shrink-0 px-3 pb-2.5 pt-2">
-        <div className="flex items-center gap-3.5 text-[#1a1a1a]">
-          <Heart className="size-[15px] fill-[#e11d48] text-[#e11d48]" strokeWidth={0} />
-          <MessageCircle className="size-[15px]" strokeWidth={1.8} />
-          <Send className="size-[15px]" strokeWidth={1.8} />
-          <Bookmark className="ml-auto size-[15px]" strokeWidth={1.8} />
+        <div className="min-h-0 flex-1 w-full bg-[linear-gradient(135deg,#fff1f2_0%,#fda4af_50%,#e11d48_100%)]" />
+        <div className="shrink-0 px-3 pb-2 pt-1.5">
+          <div className="flex items-center gap-3 text-[#1a1a1a]">
+            <Heart className="size-[13px] fill-[#e11d48] text-[#e11d48] sm:size-[15px]" strokeWidth={0} />
+            <MessageCircle className="size-[13px] sm:size-[15px]" strokeWidth={1.8} />
+            <Send className="size-[13px] sm:size-[15px]" strokeWidth={1.8} />
+            <Bookmark className="ml-auto size-[13px] sm:size-[15px]" strokeWidth={1.8} />
+          </div>
+          <p className="mt-1 text-[9px] font-bold text-[#1a1a1a] sm:text-[10px]">1,284 likes</p>
+          <p className="mt-0.5 truncate text-[9px] leading-snug text-gray-500 sm:text-[10px]">
+            <span className="font-semibold text-[#1a1a1a]">aurora.skin</span> the glow routine
+            everyone&apos;s asking about ✨
+          </p>
         </div>
-        <p className="mt-1.5 text-[10px] font-bold text-[#1a1a1a]">1,284 likes</p>
-        <p className="mt-0.5 truncate text-[10px] leading-snug text-gray-500">
-          <span className="font-semibold text-[#1a1a1a]">aurora.skin</span> the glow routine
-          everyone&apos;s asking about ✨
-        </p>
       </div>
+
+      <CoveragePlatformIconRow logos={ORGANIC_PLATFORMS} />
     </div>
   );
 }
@@ -319,76 +352,19 @@ function CoverageCard({
   );
 }
 
-/** Desktop-only hub connecting channel cards → Rival → feature cards. */
-function CoverageFlowConnector({ label }: { label: string }) {
-  const columns = [16.67, 50, 83.33];
-
+function CoverageBridgeText({
+  label,
+  className = "col-span-3",
+}: {
+  label: string;
+  className?: string;
+}) {
   return (
-    <div className="relative col-span-3 py-3">
-      <div className="relative mx-auto h-[7.5rem] max-w-5xl lg:h-[8.5rem]">
-        <svg
-          className="pointer-events-none absolute inset-0 h-full w-full"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          aria-hidden
-        >
-          <defs>
-            <linearGradient id="coverage-flow-stroke" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4a7fa5" stopOpacity="0.42" />
-              <stop offset="55%" stopColor="#4a7fa5" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="#4a7fa5" stopOpacity="0.38" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M 16.67 4 C 16.67 28, 28 38, 50 46 C 72 38, 83.33 28, 83.33 4"
-            fill="none"
-            stroke="url(#coverage-flow-stroke)"
-            strokeWidth="1.4"
-            vectorEffect="non-scaling-stroke"
-          />
-          <path
-            d="M 16.67 96 C 16.67 72, 28 62, 50 54 C 72 62, 83.33 72, 83.33 96"
-            fill="none"
-            stroke="url(#coverage-flow-stroke)"
-            strokeWidth="1.4"
-            vectorEffect="non-scaling-stroke"
-          />
-          {columns.map((x) => (
-            <line
-              key={`col-${x}`}
-              x1={x}
-              y1="4"
-              x2={x}
-              y2="96"
-              stroke="url(#coverage-flow-stroke)"
-              strokeWidth="1.1"
-              strokeDasharray={x === 50 ? undefined : "5 5"}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-          {columns.map((x) => (
-            <g key={`node-${x}`}>
-              <circle cx={x} cy="4" r="2.8" fill="#4a7fa5" fillOpacity="0.22" />
-              <circle cx={x} cy="4" r="1.4" fill="#4a7fa5" fillOpacity="0.55" />
-              <circle cx={x} cy="96" r="2.8" fill="#4a7fa5" fillOpacity="0.22" />
-              <circle cx={x} cy="96" r="1.4" fill="#4a7fa5" fillOpacity="0.55" />
-            </g>
-          ))}
-          <circle cx="50" cy="50" r="5.5" fill="#4a7fa5" fillOpacity="0.08" />
-        </svg>
-
-        <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2.5">
-          <div className="flex size-10 items-center justify-center rounded-full border border-[#4a7fa5]/20 bg-white shadow-[0_4px_20px_-6px_rgba(74,127,165,0.35)] ring-4 ring-[#4a7fa5]/[0.06] lg:size-11">
-            <span className="text-[10px] font-black uppercase tracking-[0.14em] text-[#4a7fa5] lg:text-[11px]">
-              Rival
-            </span>
-          </div>
-          <p className="max-w-md px-4 text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] lg:text-[11px] lg:tracking-[0.14em]">
-            {label}
-          </p>
-        </div>
-      </div>
-    </div>
+    <p
+      className={`${className} py-6 text-center text-sm leading-relaxed text-gray-500 sm:py-8 sm:text-[15px]`}
+    >
+      {label}
+    </p>
   );
 }
 
@@ -401,34 +377,39 @@ export function LandingCoverage({ copy }: Props) {
     copy.groups.map((group, groupIndex) => (
       <div key={group.label}>
         {groupIndex > 0 ? (
-          <div
-            aria-hidden
-            className="mx-auto mb-10 h-px max-w-md bg-gradient-to-r from-transparent via-[#e7e5e0] to-transparent sm:mb-12"
-          />
-        ) : null}
-        <p className="mx-auto mb-5 max-w-2xl text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:mb-6 sm:text-[11px] sm:tracking-[0.14em]">
-          {group.label}
-        </p>
-        <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-3 md:items-stretch">
-          {group.cards.map((card) => {
-            const index = mobileCardIndex++;
-            const isLastSolo =
-              group.cards.length % 3 === 1 && card === group.cards[group.cards.length - 1];
-            return (
-              <div key={card.key} className={`h-full ${isLastSolo ? "md:col-start-2" : ""}`}>
-                <CoverageCard card={card} index={index} />
-              </div>
-            );
-          })}
-        </div>
+          <>
+            <CoverageBridgeText label={featuresGroup.label} className="mb-2 sm:mb-4" />
+            <div className="relative -mx-1 w-[calc(100%+0.5rem)] sm:-mx-2 sm:w-[calc(100%+1rem)]">
+              <CoverageDemoVideo revealIndex={mobileCardIndex++} />
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mx-auto mb-5 max-w-2xl text-center text-[10px] font-bold uppercase tracking-[0.12em] text-[#4a7fa5] sm:mb-6 sm:text-[11px] sm:tracking-[0.14em]">
+              {group.label}
+            </p>
+            <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-3 md:items-stretch">
+              {group.cards.map((card) => {
+                const index = mobileCardIndex++;
+                const isLastSolo =
+                  group.cards.length % 3 === 1 && card === group.cards[group.cards.length - 1];
+                return (
+                  <div key={card.key} className={`h-full ${isLastSolo ? "md:col-start-2" : ""}`}>
+                    <CoverageCard card={card} index={index} />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     ));
 
   const channelsStart = 0;
-  const featuresStart = channelsGroup.cards.length;
+  const demoRevealIndex = channelsGroup.cards.length;
 
   return (
-    <section className="relative overflow-hidden px-4 pb-16 pt-8 text-center sm:px-6 sm:pb-24 sm:pt-10">
+    <section className="relative overflow-x-clip px-4 pb-16 pt-8 text-center sm:px-6 sm:pb-24 sm:pt-10">
       <LandingScrollReveal className="mx-auto w-full max-w-6xl">
         <h2 className={landingSectionHeadlineClasses}>
           {copy.titleLine1}
@@ -441,21 +422,26 @@ export function LandingCoverage({ copy }: Props) {
 
         <div className="mt-12 space-y-12 text-left sm:mt-14 md:hidden">{renderMobileGroups()}</div>
 
-        <div className="mt-12 hidden text-left md:mt-14 md:grid md:grid-cols-3 md:gap-x-6 md:gap-y-0">
-          <p className="col-span-3 mb-6 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#4a7fa5]">
-            {channelsGroup.label}
-          </p>
-          {channelsGroup.cards.map((card, i) => (
-            <div key={card.key} className="h-full">
-              <CoverageCard card={card} index={channelsStart + i} />
+        <div className="mt-12 hidden md:mt-14 md:block">
+          <div className="mx-auto w-full max-w-[min(88rem,calc(100vw-1.5rem))] px-2 sm:px-4">
+            <p className="mb-6 text-center text-[11px] font-bold uppercase tracking-[0.14em] text-[#4a7fa5]">
+              {channelsGroup.label}
+            </p>
+
+            <div className="grid grid-cols-3 gap-x-6 text-left">
+              {channelsGroup.cards.map((card, i) => (
+                <div key={card.key} className="h-full">
+                  <CoverageCard card={card} index={channelsStart + i} />
+                </div>
+              ))}
+
+              <CoverageBridgeText label={featuresGroup.label} />
+
+              <div className="col-span-3 -mt-1">
+                <CoverageDemoVideo revealIndex={demoRevealIndex} />
+              </div>
             </div>
-          ))}
-          <CoverageFlowConnector label={featuresGroup.label} />
-          {featuresGroup.cards.map((card, i) => (
-            <div key={card.key} className="h-full">
-              <CoverageCard card={card} index={featuresStart + i} />
-            </div>
-          ))}
+          </div>
         </div>
 
         <div className="mt-14 flex justify-center sm:mt-16">
