@@ -28,12 +28,12 @@ export default function LandingHome({ copy, locale }: Props) {
         <div className="relative">
           <LandingPostHeroBackdrop />
 
-          <div className="relative z-10 -mt-8 sm:-mt-12">
+          <div className="relative z-10">
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 z-[2] h-40 bg-gradient-to-b from-transparent via-white/70 to-transparent sm:h-52"
+              className="pointer-events-none absolute inset-x-0 top-0 z-[0] h-28 bg-[linear-gradient(to_bottom,#ffffff_0%,#ffffff_70%,rgba(255,255,255,0)_100%)] sm:h-32"
             />
-            <div className="relative pb-16 pt-20 sm:pb-24 sm:pt-28">
+            <div className="relative pb-16 pt-14 sm:pb-24 sm:pt-16">
               <LandingBrandMarqueeDeferred
                 embedded
                 ariaLabel={copy.hero.brandMarqueeAria}

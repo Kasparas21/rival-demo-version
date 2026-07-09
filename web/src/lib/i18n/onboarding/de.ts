@@ -1,5 +1,5 @@
 import type { OnboardingCopy } from "@/lib/i18n/onboarding/types";
-import { landingCopyDe } from "@/lib/i18n/landing/de";
+import { onboardingBillingPlansDe } from "@/lib/i18n/onboarding/billing-plans";
 
 const form: OnboardingCopy["form"] = {
   back: "← Zurück",
@@ -118,6 +118,6 @@ export const onboardingCopyDe: OnboardingCopy = {
   form,
   planPicker: {
     ...planPickerMeta,
-    plans: landingCopyDe.pricing.plans,
+    plans: onboardingBillingPlansDe,
   },
 };

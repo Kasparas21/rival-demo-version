@@ -2,6 +2,7 @@ import Image from "next/image";
 import { BadgeCheck } from "lucide-react";
 
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
+import { landingSectionHeadlineClasses } from "@/components/landing/landing-headline-highlight";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { TrustpilotRating } from "@/components/landing/trustpilot-rating";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
@@ -223,7 +224,7 @@ export function LandingReviews({ copy }: Props) {
       <LandingScrollReveal className="relative mx-auto w-full max-w-6xl px-4 sm:px-6">
         <h2
           id="reviews"
-          className={`${landingNavAnchorScrollClasses} text-2xl font-bold tracking-tight text-[#1a1a1a] sm:text-3xl`}
+          className={`${landingNavAnchorScrollClasses} ${landingSectionHeadlineClasses}`}
         >
           {copy.title}
         </h2>

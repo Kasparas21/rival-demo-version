@@ -35,12 +35,12 @@ export type LandingPlanMetricHighlight = {
 };
 
 export type LandingPlanOffer = {
-  slug: "starter" | "pro" | "agency";
+  slug: "starter" | "pro" | "agency" | "enterprise";
   name: string;
   summary: string;
-  monthlyUsd: number;
-  annualMonthlyUsd: number;
-  annualYearlyUsd: number;
+  monthlyUsd?: number;
+  annualMonthlyUsd?: number;
+  annualYearlyUsd?: number;
   /** Strikethrough "was" price on monthly billing (e.g. launch discount). */
   originalMonthlyUsd?: number;
   /** Primary decision metric - rendered large above the feature list. */
@@ -48,6 +48,12 @@ export type LandingPlanOffer = {
   features: string[];
   plusLabel?: string;
   popular?: boolean;
+  /** No public price — show contact CTA instead of trial checkout. */
+  customPricing?: boolean;
+  priceHeadline?: string;
+  priceSubline?: string;
+  contactCta?: string;
+  contactHref?: string;
 };
 
 export type ComparisonRowCopy = {
@@ -322,5 +328,6 @@ export type LandingCopy = {
     starterName: string;
     proName: string;
     agencyName: string;
+    enterpriseName: string;
   };
 };

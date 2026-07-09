@@ -1,20 +1,20 @@
 import type { BillingPeriod } from "@/lib/billing/config";
 import { formatPlanPrice } from "@/lib/billing/plan-price-format";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
-import type { LandingPlanOffer } from "@/lib/i18n/landing/types";
+import type { OnboardingBillingPlan } from "@/lib/i18n/onboarding/types";
 import type { PlanPickerCopy } from "@/lib/i18n/onboarding/types";
 
-function annualSavingsPercent(offer: LandingPlanOffer): number {
+function annualSavingsPercent(offer: OnboardingBillingPlan): number {
   const annualFull = offer.monthlyUsd * 12;
   return Math.round((1 - offer.annualYearlyUsd / annualFull) * 100);
 }
 
-export function maxAnnualSavingsPercentForPlans(plans: LandingPlanOffer[]): number {
+export function maxAnnualSavingsPercentForPlans(plans: OnboardingBillingPlan[]): number {
   return Math.max(...plans.map(annualSavingsPercent));
 }
 
 export function localizedPlanPriceDisplay(
-  offer: LandingPlanOffer,
+  offer: OnboardingBillingPlan,
   billing: BillingPeriod,
   copy: PlanPickerCopy,
 ): {

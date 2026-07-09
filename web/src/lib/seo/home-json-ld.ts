@@ -29,12 +29,21 @@ export function webSiteJsonLd() {
 }
 
 export function softwareApplicationJsonLd(copy: LandingCopy) {
+  const enterprise = copy.pricing.plans.find((p) => p.customPricing || p.slug === "enterprise");
   const starter = copy.pricing.plans.find((p) => p.slug === "starter");
   const pro = copy.pricing.plans.find((p) => p.slug === "pro");
   const agency = copy.pricing.plans.find((p) => p.slug === "agency");
 
   const offers = [
-    starter
+    enterprise
+      ? {
+          "@type": "Offer",
+          name: copy.jsonLd.enterpriseName,
+          description: enterprise.priceHeadline ?? "Contact for custom enterprise pricing",
+          url: enterprise.contactHref ?? "mailto:hello@spy-rival.com",
+        }
+      : null,
+    starter && starter.monthlyUsd != null
       ? {
           "@type": "Offer",
           name: copy.jsonLd.starterName,
@@ -49,7 +58,7 @@ export function softwareApplicationJsonLd(copy: LandingCopy) {
           },
         }
       : null,
-    pro
+    pro && pro.monthlyUsd != null
       ? {
           "@type": "Offer",
           name: copy.jsonLd.proName,
@@ -64,7 +73,7 @@ export function softwareApplicationJsonLd(copy: LandingCopy) {
           },
         }
       : null,
-    agency
+    agency && agency.monthlyUsd != null
       ? {
           "@type": "Offer",
           name: copy.jsonLd.agencyName,

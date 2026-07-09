@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ShieldCheck, User, Users } from "lucide-react";
+import { Check, ShieldCheck, User, Users, Building2 } from "lucide-react";
 
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { landingSectionHeadlineClasses, LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
@@ -51,6 +51,9 @@ function PlanIcon({
   className?: string;
   strokeWidth?: number;
 }) {
+  if (slug === "enterprise") {
+    return <Building2 className={className} strokeWidth={strokeWidth} aria-hidden />;
+  }
   if (slug === "pro") {
     return <Users className={className} strokeWidth={strokeWidth} aria-hidden />;
   }
@@ -253,8 +256,21 @@ function planPriceDisplay(
   primary: string;
   secondary: string;
   strikethroughUsd?: number;
+  customPricing?: boolean;
 } {
+  if (offer.customPricing) {
+    return {
+      primary: offer.priceHeadline ?? "Custom pricing",
+      secondary: offer.priceSubline ?? "",
+      customPricing: true,
+    };
+  }
+
   const { monthlyUsd, annualMonthlyUsd, annualYearlyUsd, originalMonthlyUsd } = offer;
+
+  if (monthlyUsd == null || annualMonthlyUsd == null || annualYearlyUsd == null) {
+    return { primary: "", secondary: "" };
+  }
 
   if (billing === "monthly") {
     return {
@@ -281,17 +297,20 @@ function PricingCard({
   labels: LandingCopy["pricing"];
 }) {
   const price = planPriceDisplay(offer, billing, labels);
-  const isPro = offer.popular === true;
+  const isEnterprise = offer.customPricing === true;
+  const isPro = offer.popular === true || isEnterprise;
   const isStarter = offer.slug === "starter";
   const competitorCount = offer.metricHighlight ? Number.parseInt(offer.metricHighlight.count, 10) : 0;
   const monthlyForUnit =
-    billing === "monthly" ? offer.monthlyUsd : offer.annualMonthlyUsd;
+    billing === "monthly" ? (offer.monthlyUsd ?? 0) : (offer.annualMonthlyUsd ?? 0);
   const perUnitLabel =
     offer.metricHighlight && competitorCount > 0
       ? fillCopyTemplate(labels.perCompetitor, {
           price: formatPerCompetitorAmount(monthlyForUnit, competitorCount),
         })
       : undefined;
+  const contactHref = offer.contactHref ?? "mailto:hello@spy-rival.com?subject=Enterprise%20pricing";
+  const contactCta = offer.contactCta ?? "Contact us";
 
   return (
     <article
@@ -323,7 +342,7 @@ function PricingCard({
       </div>
 
       <div className="mt-5">
-        {price.strikethroughUsd != null ? (
+        {!price.customPricing && price.strikethroughUsd != null ? (
           <div
             className={`flex flex-wrap items-baseline gap-2 ${
               isPro ? "text-white/50" : "text-gray-400"
@@ -333,21 +352,29 @@ function PricingCard({
             <span className="text-sm font-medium line-through">{labels.perMonth}</span>
           </div>
         ) : null}
-        <div className={`flex flex-wrap items-baseline gap-2 ${price.strikethroughUsd != null ? "mt-2.5" : ""}`}>
+        <div className={`flex flex-wrap items-baseline gap-2 ${!price.customPricing && price.strikethroughUsd != null ? "mt-2.5" : ""}`}>
           <span
             className={`font-bold leading-none tracking-tight ${
-              isPro ? "text-[2.75rem] text-white sm:text-[3rem]" : "text-[2.5rem] text-[#1a1a1a]"
+              price.customPricing
+                ? "text-[2.25rem] text-white sm:text-[2.5rem]"
+                : isPro
+                  ? "text-[2.75rem] text-white sm:text-[3rem]"
+                  : "text-[2.5rem] text-[#1a1a1a]"
             }`}
           >
             {price.primary}
           </span>
-          <span className={`text-base font-medium ${isPro ? "text-white/75" : "text-gray-500"}`}>
-            {labels.perMonth}
-          </span>
+          {!price.customPricing ? (
+            <span className={`text-base font-medium ${isPro ? "text-white/75" : "text-gray-500"}`}>
+              {labels.perMonth}
+            </span>
+          ) : null}
         </div>
-        <p className={`mt-2 text-sm font-medium ${isPro ? "text-white/85" : "text-[#4a7fa5]"}`}>
-          {price.secondary}
-        </p>
+        {price.secondary ? (
+          <p className={`mt-2 text-sm font-medium ${isPro ? "text-white/85" : "text-[#4a7fa5]"}`}>
+            {price.secondary}
+          </p>
+        ) : null}
       </div>
 
       <p className={`mt-4 text-sm leading-relaxed ${isPro ? "text-white/80" : "text-gray-600"}`}>
@@ -355,7 +382,9 @@ function PricingCard({
       </p>
 
       <div className="mt-5 flex justify-center">
-        {isPro ? (
+        {isEnterprise ? (
+          <HeroVariantBGlowCta href={contactHref}>{contactCta}</HeroVariantBGlowCta>
+        ) : isPro ? (
           <HeroVariantBGlowCta href="/onboarding">{labels.trialCta}</HeroVariantBGlowCta>
         ) : (
           <LandingTrialCta href="/onboarding" size="lg">
@@ -421,6 +450,7 @@ type Props = {
 
 export function LandingPricing({ copy }: Props) {
   const [billing, setBilling] = useState<BillingPeriod>("monthly");
+  const showBillingToggle = copy.plans.some((plan) => !plan.customPricing);
 
   return (
     <section className="relative overflow-x-clip py-16 sm:py-24">
@@ -451,73 +481,51 @@ export function LandingPricing({ copy }: Props) {
           </div>
         </div>
 
-        <div className="mt-8 mb-2 flex justify-center sm:mb-3 lg:mb-4">
-          <div
-            role="radiogroup"
-            aria-label={copy.billingAria}
-            className="relative inline-flex rounded-full border border-white/70 bg-white/45 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_24px_-8px_rgba(74,127,165,0.2)] backdrop-blur-xl"
-          >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={billing === "monthly"}
-              className={`relative z-[1] rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                billing === "monthly" ? "text-white" : "text-gray-500 hover:text-gray-700"
-              }`}
-              onClick={() => setBilling("monthly")}
+        {showBillingToggle ? (
+          <div className="mt-8 mb-2 flex justify-center sm:mb-3 lg:mb-4">
+            <div
+              role="radiogroup"
+              aria-label={copy.billingAria}
+              className="relative inline-flex rounded-full border border-white/70 bg-white/45 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_24px_-8px_rgba(74,127,165,0.2)] backdrop-blur-xl"
             >
-              {copy.monthly}
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={billing === "annual"}
-              className={`relative z-[1] rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                billing === "annual" ? "text-white" : "text-gray-500 hover:text-gray-700"
-              }`}
-              onClick={() => setBilling("annual")}
-            >
-              {copy.yearly}
-            </button>
-            <span
-              aria-hidden
-              className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full bg-gradient-to-r from-[#4a7fa5] to-[#35688a] shadow-[0_4px_14px_-4px_rgba(74,127,165,0.55)] transition-transform duration-300 ease-out ${
-                billing === "annual" ? "translate-x-[calc(100%+4px)]" : "translate-x-1"
-              }`}
-            />
+              <button
+                type="button"
+                role="radio"
+                aria-checked={billing === "monthly"}
+                className={`relative z-[1] rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
+                  billing === "monthly" ? "text-white" : "text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setBilling("monthly")}
+              >
+                {copy.monthly}
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={billing === "annual"}
+                className={`relative z-[1] rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
+                  billing === "annual" ? "text-white" : "text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setBilling("annual")}
+              >
+                {copy.yearly}
+              </button>
+              <span
+                aria-hidden
+                className={`absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-full bg-gradient-to-r from-[#4a7fa5] to-[#35688a] shadow-[0_4px_14px_-4px_rgba(74,127,165,0.55)] transition-transform duration-300 ease-out ${
+                  billing === "annual" ? "translate-x-[calc(100%+4px)]" : "translate-x-1"
+                }`}
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
       </LandingScrollReveal>
 
-      <div className="relative left-1/2 mt-14 w-[min(calc(100vw-1.5rem),96rem)] -translate-x-1/2 overflow-visible px-3 pt-5 sm:mt-16 sm:px-4 sm:pt-6 lg:mt-20 lg:px-6 lg:pt-8">
-        <div className="grid grid-cols-1 gap-6 text-left sm:gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)] lg:items-stretch lg:gap-x-16 xl:gap-x-20">
-          {copy.plans.map((offer) => {
-            const isPro = offer.popular === true;
-            const isStarter = offer.slug === "starter";
-            const isAgency = offer.slug === "agency";
-
-            return (
-              <div
-                key={offer.slug}
-                className={[
-                  "flex min-w-0",
-                  isPro ? "items-end lg:justify-self-center" : "h-full",
-                  isStarter && "lg:justify-self-start",
-                  isAgency && "lg:justify-self-end",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                <div
-                  className={
-                    isPro ? "w-full origin-bottom lg:scale-[1.08]" : "flex h-full w-full min-w-0"
-                  }
-                >
-                  <PricingCard offer={offer} billing={billing} labels={copy} />
-                </div>
-              </div>
-            );
-          })}
+      <div className="relative mx-auto mt-10 w-full max-w-lg px-4 sm:mt-12 sm:px-6">
+        <div className="text-left">
+          {copy.plans.map((offer) => (
+            <PricingCard key={offer.slug} offer={offer} billing={billing} labels={copy} />
+          ))}
         </div>
       </div>
 

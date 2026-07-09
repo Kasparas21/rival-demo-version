@@ -261,6 +261,14 @@ html:has([data-dashboard-app]) body {
   text-align: center;
 }
 
+.hero-headline .landing-hero-copy__line--secondary {
+  text-transform: lowercase;
+}
+
+.hero-headline .landing-hero-copy__line--secondary::first-letter {
+  text-transform: uppercase;
+}
+
 .landing-hero-copy__headline {
   display: flex;
   flex-direction: column;
@@ -380,6 +388,11 @@ html:has([data-dashboard-app]) body {
 /** Below-hero section h2s — hero scale; dark base + flat royal blue on highlight spans. */
 .landing-section-headline {
   color: #1a1a1a;
+  text-transform: lowercase;
+}
+
+.landing-section-headline::first-letter {
+  text-transform: uppercase;
 }
 
 .landing-section-headline .hero-headline-accent {
@@ -408,7 +421,9 @@ html:has([data-dashboard-app]) body {
 
   .landing-hero-variant-b .hero-headline-accent {
     animation: none;
-    color: inherit;
+    --hero-autopilot-angle: 90deg;
+    --hero-autopilot-x: 50%;
+    --hero-autopilot-y: 50%;
   }
 }
 
@@ -655,29 +670,62 @@ html:has([data-dashboard-app]) body {
   );
 }
 
-/* Variant B — light copy on darker blue hero wash */
+/* Variant B — headline matches accent navy on video backdrop */
 .landing-hero-variant-b .hero-headline {
-  color: #f5f9fc;
-  text-shadow: 0 1px 18px rgba(8, 28, 48, 0.22);
-}
-
-/* Variant B accent — flat brand navy so the highlight word pops off the sky. */
-.landing-hero-variant-b .hero-headline-accent {
-  animation: none;
   color: #15286b;
   text-shadow: none;
 }
 
-.landing-hero-variant-b .hero-subline {
-  color: rgb(23 37 61 / 0.68);
-  font-weight: 500;
+@property --hero-autopilot-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 100deg;
+}
+
+@property --hero-autopilot-x {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
+}
+
+@property --hero-autopilot-y {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 50%;
+}
+
+/* Variant B accent — seamless flow, blue shades only */
+.landing-hero-variant-b .hero-headline-accent {
+  --hero-autopilot-angle: 0deg;
+  --hero-autopilot-x: 50%;
+  --hero-autopilot-y: 0%;
+  background-image: linear-gradient(
+    var(--hero-autopilot-angle),
+    #0c1d4a 0%,
+    #15286b 10%,
+    #1a365d 20%,
+    #1e40af 30%,
+    #2563eb 42%,
+    #3b82f6 52%,
+    #4a7fa5 62%,
+    #1d4ed8 72%,
+    #2b5f8f 82%,
+    #5a94b8 92%,
+    #0c1d4a 100%
+  );
+  background-size: 340% 340%;
+  background-position: var(--hero-autopilot-x) var(--hero-autopilot-y);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   text-shadow: none;
+  animation: hero-autopilot-gradient-flow 18s linear infinite;
 }
 
 .hero-variant-b-headline-accent {
   font: inherit;
   letter-spacing: inherit;
-  animation: hero-variant-b-accent-color 4.5s linear infinite;
 }
 
 /* Variant B product demo — rises on first paint (transform + opacity only). */
@@ -792,17 +840,58 @@ html:has([data-dashboard-app]) body {
   }
 }
 
-@keyframes hero-variant-b-accent-color {
-  0%,
+@keyframes hero-autopilot-gradient-flow {
+  0% {
+    --hero-autopilot-angle: 0deg;
+    --hero-autopilot-x: 50%;
+    --hero-autopilot-y: 0%;
+  }
+  12.5% {
+    --hero-autopilot-angle: 45deg;
+    --hero-autopilot-x: 100%;
+    --hero-autopilot-y: 0%;
+  }
+  25% {
+    --hero-autopilot-angle: 90deg;
+    --hero-autopilot-x: 100%;
+    --hero-autopilot-y: 50%;
+  }
+  37.5% {
+    --hero-autopilot-angle: 135deg;
+    --hero-autopilot-x: 100%;
+    --hero-autopilot-y: 100%;
+  }
+  50% {
+    --hero-autopilot-angle: 180deg;
+    --hero-autopilot-x: 50%;
+    --hero-autopilot-y: 100%;
+  }
+  62.5% {
+    --hero-autopilot-angle: 225deg;
+    --hero-autopilot-x: 0%;
+    --hero-autopilot-y: 100%;
+  }
+  75% {
+    --hero-autopilot-angle: 270deg;
+    --hero-autopilot-x: 0%;
+    --hero-autopilot-y: 50%;
+  }
+  87.5% {
+    --hero-autopilot-angle: 315deg;
+    --hero-autopilot-x: 0%;
+    --hero-autopilot-y: 0%;
+  }
   100% {
-    color: #1a1a1a;
+    --hero-autopilot-angle: 0deg;
+    --hero-autopilot-x: 50%;
+    --hero-autopilot-y: 0%;
   }
-  45% {
-    color: #15286b;
-  }
-  55% {
-    color: #15286b;
-  }
+}
+
+.landing-hero-variant-b .hero-subline {
+  color: rgb(23 37 61 / 0.68);
+  font-weight: 500;
+  text-shadow: none;
 }
 
 /* Landing glow-line CTA — rotating conic border arc */
@@ -888,7 +977,13 @@ html:has([data-dashboard-app]) body {
 @media (prefers-reduced-motion: reduce) {
   .hero-variant-b-headline-accent {
     animation: none;
-    color: #15286b;
+  }
+
+  .landing-hero-variant-b .hero-headline-accent {
+    animation: none;
+    --hero-autopilot-angle: 90deg;
+    --hero-autopilot-x: 50%;
+    --hero-autopilot-y: 50%;
   }
 
   .hero-variant-b-demo-enter {

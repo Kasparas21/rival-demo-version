@@ -1,5 +1,12 @@
 import type { LandingPlanOffer } from "@/lib/i18n/landing/types";
 
+export type OnboardingBillingPlan = LandingPlanOffer & {
+  slug: "starter" | "pro" | "agency";
+  monthlyUsd: number;
+  annualMonthlyUsd: number;
+  annualYearlyUsd: number;
+};
+
 export type IdentifierValidationCopy = {
   metaAdLibrary: string;
   googleTransparency: string;
@@ -112,7 +119,7 @@ export type PlanPickerCopy = {
     claimError: string;
     networkError: string;
   };
-  plans: LandingPlanOffer[];
+  plans: OnboardingBillingPlan[];
 };
 
 export type OnboardingCopy = {

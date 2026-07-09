@@ -9,8 +9,30 @@ type Props = {
   showSubline?: boolean;
 };
 
-function HeroHeadlineAccent({ label }: { label: string }) {
-  return <span className="hero-headline-accent">{label}</span>;
+function HeroHeadlineAccent({
+  label,
+  variant = "control",
+}: {
+  label: string;
+  variant?: "control" | "variant-b";
+}) {
+  return (
+    <span
+      className={[
+        "hero-headline-accent",
+        variant === "variant-b" ? "hero-variant-b-headline-accent" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {label}
+    </span>
+  );
+}
+
+function capitalizeHeadlineStart(text: string): string {
+  if (!text) return text;
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /** Shared hero headline - same center axis as the header pill on mobile and desktop. */
@@ -26,7 +48,7 @@ export function HeroHeadline({
       <h1
         id="how-it-works"
         className={[
-          "landing-hero-copy__headline hero-headline lowercase",
+          "landing-hero-copy__headline hero-headline",
           isVariantB ? "hero-variant-b-headline" : "",
           !isVariantB ? landingNavAnchorScrollClasses : "",
         ]
@@ -34,8 +56,8 @@ export function HeroHeadline({
           .join(" ")}
       >
         <span className="landing-hero-copy__line landing-hero-copy__line--primary">
-          {headline.line1Prefix}
-          <HeroHeadlineAccent label={headline.highlight} />
+          {capitalizeHeadlineStart(headline.line1Prefix)}
+          <HeroHeadlineAccent label={headline.highlight} variant={variant} />
         </span>
         {headline.line2 ? (
           <span className="landing-hero-copy__line landing-hero-copy__line--secondary">

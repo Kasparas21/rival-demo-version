@@ -243,7 +243,7 @@ export function HeroCoverageStrip({ coverage }: StripProps) {
             <HeroCoverageFunnel arc={arc} />
           </div>
 
-          <p className="mt-2 text-center text-base font-medium lowercase tracking-[0.02em] text-[#1a1a1a]/75 sm:mt-3 sm:text-lg">
+          <p className="mb-6 mt-2 text-center text-base font-medium lowercase tracking-[0.02em] text-[#1a1a1a]/75 sm:mb-8 sm:mt-3 sm:text-lg">
             {coverage.connectLabel}
           </p>
         </div>
