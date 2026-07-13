@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
-import { ensureAdminUsersFromEnv, getAdminUser } from "@/lib/admin/auth";
+import { resolveAdminUser } from "@/lib/admin/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -15,12 +15,49 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect(`/login?next=${encodeURIComponent("/admin")}`);
   }
 
-  const adminClient = createSupabaseAdminClient();
-  await ensureAdminUsersFromEnv(adminClient);
+  let admin = null;
+  try {
+    const adminClient = createSupabaseAdminClient();
+    admin = await resolveAdminUser(adminClient, user);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Admin access check failed.";
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+        <div className="max-w-md rounded-xl border border-red-200 bg-white p-6 text-sm text-zinc-700">
+          <h1 className="text-lg font-semibold text-zinc-900">Admin unavailable</h1>
+          <p className="mt-2">{message}</p>
+          <p className="mt-3 text-zinc-500">
+            If you just added custom pricing, run the Supabase migration{" "}
+            <code className="rounded bg-zinc-100 px-1">20260713120000_custom_quotes_admin.sql</code> and ensure{" "}
+            <code className="rounded bg-zinc-100 px-1">SUPABASE_SECRET_KEY</code> is set.
+          </p>
+          <Link href="/dashboard/spy" className="mt-4 inline-block text-sky-600 hover:underline">
+            Back to app
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
-  const admin = await getAdminUser(supabase, user.id);
   if (!admin) {
-    redirect("/dashboard/spy");
+    const email = user.email ?? "unknown";
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4">
+        <div className="max-w-md rounded-xl border border-amber-200 bg-white p-6 text-sm text-zinc-700">
+          <h1 className="text-lg font-semibold text-zinc-900">Admin access denied</h1>
+          <p className="mt-2">
+            Signed in as <strong>{email}</strong>. This account is not on the admin allowlist.
+          </p>
+          <p className="mt-3 text-zinc-500">
+            Add your email to <code className="rounded bg-zinc-100 px-1">ADMIN_EMAILS</code> in{" "}
+            <code className="rounded bg-zinc-100 px-1">.env.local</code>, or sign in with an allowed admin account.
+          </p>
+          <Link href="/dashboard/spy" className="mt-4 inline-block text-sky-600 hover:underline">
+            Back to dashboard
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

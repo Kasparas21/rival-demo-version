@@ -27,7 +27,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const auth = await authorizeAdminRequest(req, supabase, user?.id ?? null);
+  const auth = await authorizeAdminRequest(req, supabase, user);
   if (!auth.ok || !adminCanWrite(auth.admin.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

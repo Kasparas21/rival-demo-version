@@ -90,35 +90,45 @@ export async function getActiveCustomQuoteForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<CustomQuoteRow | null> {
-  const { data } = await supabase
-    .from("custom_quotes")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "accepted")
-    .order("accepted_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("custom_quotes")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "accepted")
+      .order("accepted_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  return (data as CustomQuoteRow | null) ?? null;
+    if (error) return null;
+    return (data as CustomQuoteRow | null) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getSentCustomQuoteForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<CustomQuoteRow | null> {
-  const { data } = await supabase
-    .from("custom_quotes")
-    .select("*")
-    .eq("user_id", userId)
-    .eq("status", "sent")
-    .order("sent_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("custom_quotes")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "sent")
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  const quote = data as CustomQuoteRow | null;
-  if (!quote) return null;
-  if (isQuoteExpired(quote)) return null;
-  return quote;
+    if (error) return null;
+    const quote = data as CustomQuoteRow | null;
+    if (!quote) return null;
+    if (isQuoteExpired(quote)) return null;
+    return quote;
+  } catch {
+    return null;
+  }
 }
 
 export async function getCustomQuoteByToken(

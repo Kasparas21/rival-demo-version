@@ -22,7 +22,7 @@ import type { Database } from "./types";
  * /dashboard and /onboarding require auth (redirect to /login?next=…).
  * Unauthenticated /api/* must not be redirected to /login (would break JSON) — short-circuit below.
  */
-const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/reset-password", "/api/account"];
+const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/reset-password", "/api/account", "/admin"];
 const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
 const BILLING_EXEMPT_PREFIXES = ["/awaiting-quote", "/choose-plan", "/checkout", "/api/billing", "/auth/callback"];
 

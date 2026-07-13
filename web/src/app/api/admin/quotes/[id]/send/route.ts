@@ -19,7 +19,7 @@ export async function POST(_req: Request, context: RouteContext) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const auth = await authorizeAdminRequest(_req, supabase, user?.id ?? null);
+  const auth = await authorizeAdminRequest(_req, supabase, user);
   if (!auth.ok || !adminCanWrite(auth.admin.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

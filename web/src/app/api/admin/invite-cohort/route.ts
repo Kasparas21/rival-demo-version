@@ -39,7 +39,7 @@ export async function GET(req: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const auth = await authorizeAdminRequest(req, supabase, user?.id ?? null);
+  const auth = await authorizeAdminRequest(req, supabase, user);
   if (!auth.ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
