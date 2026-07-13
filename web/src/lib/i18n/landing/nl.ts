@@ -306,6 +306,15 @@ export const landingCopyNl: LandingCopy = {
     perCompetitor: "{price} / concurrent",
     billedMonthly: "Maandelijks gefactureerd",
     billedAnnually: "Jaarlijks gefactureerd (${yearlyUsd}/jaar)",
+    contactModal: {
+      title: "Neem contact op",
+      subtitle: "Kies je e-mailapp — we openen een concept naar ons.",
+      emailLabel: "Onze e-mail",
+      gmail: "Openen in Gmail",
+      appleMail: "Openen in Apple Mail",
+      outlook: "Openen in Outlook",
+      closeAria: "Contactdialoog sluiten",
+    },
     plans: [
       {
         slug: "enterprise",

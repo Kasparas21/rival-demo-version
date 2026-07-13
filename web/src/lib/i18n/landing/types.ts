@@ -287,6 +287,15 @@ export type LandingCopy = {
     billedMonthly: string;
     /** Template: `{yearlyUsd}` */
     billedAnnually: string;
+    contactModal: {
+      title: string;
+      subtitle: string;
+      emailLabel: string;
+      gmail: string;
+      appleMail: string;
+      outlook: string;
+      closeAria: string;
+    };
     plans: LandingPlanOffer[];
   };
   faq: {

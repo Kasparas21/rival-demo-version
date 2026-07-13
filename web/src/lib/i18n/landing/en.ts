@@ -502,6 +502,15 @@ export const landingCopyEn: LandingCopy = {
     perCompetitor: "{price} / competitor",
     billedMonthly: "Billed monthly",
     billedAnnually: "Billed annually (${yearlyUsd}/year)",
+    contactModal: {
+      title: "Get in touch",
+      subtitle: "Choose your email app and we'll open a draft to us.",
+      emailLabel: "Our email",
+      gmail: "Open in Gmail",
+      appleMail: "Open in Apple Mail",
+      outlook: "Open in Outlook",
+      closeAria: "Close contact dialog",
+    },
     plans: [
       {
         slug: "enterprise",

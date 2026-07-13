@@ -5,7 +5,7 @@ import {
   landingSectionHeadlineClasses,
 } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import type { ComparisonRowCopy, LandingCopy } from "@/lib/i18n/landing/types";
@@ -235,10 +235,7 @@ export function LandingComparison({ copy }: Props) {
         </div>
 
         <div className="mt-8 flex flex-col items-center gap-2.5 text-center sm:mt-10">
-          <LandingTrialCta href="/onboarding" size="md">
-            {copy.cta}
-            <span aria-hidden>→</span>
-          </LandingTrialCta>
+          <LandingContactCta size="md" trailingArrow />
           <p className="text-xs text-gray-500">{copy.ctaFootnote}</p>
         </div>
       </LandingScrollReveal>

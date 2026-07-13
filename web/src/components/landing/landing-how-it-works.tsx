@@ -7,7 +7,7 @@ import {
 } from "@/components/landing/landing-headline-highlight";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import {
   GoogleLogo,
   InstagramLogo,
@@ -223,10 +223,7 @@ export function LandingHowItWorks({ copy }: Props) {
         </ol>
 
         <div className="mt-12 flex justify-center sm:mt-16">
-          <LandingTrialCta href="/onboarding" size="md">
-            {copy.cta}
-            <span aria-hidden>→</span>
-          </LandingTrialCta>
+          <LandingContactCta size="md" trailingArrow />
         </div>
       </LandingScrollReveal>
     </section>

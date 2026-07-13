@@ -1,18 +1,10 @@
-import type { ReactNode } from "react";
-
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 
 type Props = {
-  href: string;
-  children: ReactNode;
   className?: string;
 };
 
-/** Hero-sized glow-line CTA - same component as the rest of the landing page. */
-export function HeroVariantBGlowCta({ href, children, className = "" }: Props) {
-  return (
-    <LandingTrialCta href={href} size="hero" className={className}>
-      {children}
-    </LandingTrialCta>
-  );
+/** Hero-sized glow-line CTA - opens the shared landing contact modal. */
+export function HeroVariantBGlowCta({ className = "" }: Props) {
+  return <LandingContactCta size="hero" className={className} />;
 }

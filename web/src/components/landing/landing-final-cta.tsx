@@ -4,7 +4,7 @@ import {
   landingSectionHeadlineClasses,
 } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 
 type Props = {
@@ -38,10 +38,7 @@ export function LandingFinalCTA({ copy }: Props) {
               </div>
 
               <div className="mx-auto mt-8 w-full max-w-lg">
-                <LandingTrialCta href="/onboarding" size="lg">
-                  {copy.trialCta}
-                  <span aria-hidden>→</span>
-                </LandingTrialCta>
+                <LandingContactCta size="lg" trailingArrow />
               </div>
 
               <p className="mt-5 text-xs text-gray-400">{copy.cancelNote}</p>

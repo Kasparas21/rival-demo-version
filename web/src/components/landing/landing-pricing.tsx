@@ -6,8 +6,7 @@ import { Check, ShieldCheck, User, Users, Building2 } from "lucide-react";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { landingSectionHeadlineClasses, LandingHeadlineHighlight } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import { HeroVariantBGlowCta } from "@/components/landing/hero-variant-b-glow-cta";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import type { BillingPeriod } from "@/lib/billing/config";
 import { formatLandingPlanPrice, LANDING_PRICE_SYMBOL } from "@/lib/billing/plan-price-format";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
@@ -309,8 +308,6 @@ function PricingCard({
           price: formatPerCompetitorAmount(monthlyForUnit, competitorCount),
         })
       : undefined;
-  const contactHref = offer.contactHref ?? "mailto:hello@spy-rival.com?subject=Enterprise%20pricing";
-  const contactCta = offer.contactCta ?? "Contact us";
 
   return (
     <article
@@ -382,15 +379,7 @@ function PricingCard({
       </p>
 
       <div className="mt-5 flex justify-center">
-        {isEnterprise ? (
-          <HeroVariantBGlowCta href={contactHref}>{contactCta}</HeroVariantBGlowCta>
-        ) : isPro ? (
-          <HeroVariantBGlowCta href="/onboarding">{labels.trialCta}</HeroVariantBGlowCta>
-        ) : (
-          <LandingTrialCta href="/onboarding" size="lg">
-            {labels.trialCta}
-          </LandingTrialCta>
-        )}
+        <LandingContactCta size="hero" />
       </div>
 
       <div className={`mt-6 border-t pt-5 ${isPro ? "border-white/20" : "border-white/60"}`}>

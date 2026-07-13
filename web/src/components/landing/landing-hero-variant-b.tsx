@@ -27,7 +27,7 @@ export function LandingHeroVariantB({ hero }: Props) {
         <div className="landing-hero-copy-zone landing-hero-copy-zone--variant-b pb-10 sm:pb-12 md:pb-14">
           <HeroHeadline headline={hero.headline} variant="variant-b" showSubline />
           <div className="landing-hero-copy-zone__cta">
-            <HeroVariantBGlowCta href="/onboarding">{hero.trialCta}</HeroVariantBGlowCta>
+            <HeroVariantBGlowCta />
           </div>
           <HeroCoverageStrip coverage={hero.coverage} />
         </div>

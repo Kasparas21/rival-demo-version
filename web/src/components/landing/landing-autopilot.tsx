@@ -20,7 +20,7 @@ import {
 } from "@/components/landing/landing-headline-highlight";
 import { landingNavAnchorScrollClasses } from "@/components/landing/landing-nav-anchor";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import { MetaLogo, TikTokLogo } from "@/components/platform-logos";
 import type { LandingAutopilotFeedItem, LandingCopy } from "@/lib/i18n/landing/types";
 
@@ -218,10 +218,7 @@ export function LandingAutopilot({ copy }: Props) {
                               </li>
                             ))}
                           </ul>
-                          <LandingTrialCta href="/onboarding" size="sm" className="mt-2 text-[12px] sm:mt-3 sm:text-[13px]">
-                            {copy.feed.brief.cta}
-                            <span aria-hidden>→</span>
-                          </LandingTrialCta>
+                          <LandingContactCta size="sm" trailingArrow className="mt-2 text-[12px] sm:mt-3 sm:text-[13px]" />
                         </div>
                       ) : null}
 
@@ -299,9 +296,7 @@ export function LandingAutopilot({ copy }: Props) {
         </div>
 
         <div className="mt-8 flex justify-center sm:mt-12">
-          <LandingTrialCta href="/onboarding" size="md">
-            {copy.cta}
-          </LandingTrialCta>
+          <LandingContactCta size="md" />
         </div>
       </LandingScrollReveal>
     </section>

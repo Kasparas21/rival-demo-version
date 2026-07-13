@@ -6,7 +6,7 @@ import {
   landingSectionHeadlineClasses,
 } from "@/components/landing/landing-headline-highlight";
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import {
   GoogleLogo,
   LinkedInLogo,
@@ -394,10 +394,7 @@ function WithRivalCard({ copy }: { copy: LandingCopy["stackReplacement"] }) {
         <div className="mt-auto space-y-4 pt-6 sm:space-y-5 sm:pt-7">
           <WithRivalPriceHero copy={copy} />
 
-          <LandingTrialCta href="/onboarding" size="lg">
-            {copy.trialCta}
-            <span aria-hidden>→</span>
-          </LandingTrialCta>
+          <LandingContactCta size="lg" trailingArrow />
         </div>
       </div>
     </article>
@@ -433,10 +430,7 @@ function WithRivalCardMobile({ copy }: { copy: LandingCopy["stackReplacement"] }
       />
 
       <div className="mt-3">
-        <LandingTrialCta href="/onboarding" size="lg" className="w-full">
-          {copy.trialCta}
-          <span aria-hidden>→</span>
-        </LandingTrialCta>
+        <LandingContactCta size="lg" trailingArrow className="w-full" />
       </div>
     </article>
   );

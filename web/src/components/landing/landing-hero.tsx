@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { HeroHeadline } from "@/components/landing/hero-headline";
 import { LandingBrandMarquee } from "@/components/landing/landing-brand-marquee";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import { ProgressiveRivalVideoBackdrop } from "@/components/ui/progressive-rival-video-backdrop";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
 import {
@@ -99,9 +99,7 @@ export function LandingHero({ copy }: Props) {
       <div className="relative z-10 mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="relative mx-auto w-full max-w-5xl overflow-hidden sm:overflow-visible">
           <div className="relative z-20 flex justify-center px-4">
-            <LandingTrialCta href="/onboarding" size="hero">
-              {copy.trialCta}
-            </LandingTrialCta>
+            <LandingContactCta size="hero" />
           </div>
 
           <div className="relative z-[5] mx-auto w-full max-w-[56rem] px-1 sm:px-6 md:px-8 lg:px-10">

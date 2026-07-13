@@ -8,7 +8,7 @@ import {
 import { LandingScrollReveal } from "@/components/landing/landing-scroll-reveal";
 import { CoverageDemoVideo } from "@/components/landing/coverage-demo-video";
 import { LandingStrategyMapMock } from "@/components/landing/landing-strategy-map-mock";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import {
   FacebookLogo,
   GoogleLogo,
@@ -445,10 +445,7 @@ export function LandingCoverage({ copy }: Props) {
         </div>
 
         <div className="mt-14 flex justify-center sm:mt-16">
-          <LandingTrialCta href="/features" size="md">
-            {copy.cta}
-            <span aria-hidden>→</span>
-          </LandingTrialCta>
+          <LandingContactCta size="md" trailingArrow />
         </div>
       </LandingScrollReveal>
     </section>

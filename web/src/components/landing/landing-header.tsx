@@ -4,7 +4,7 @@ import {
   LandingHeaderMobileMenu,
   LandingHeaderNav,
 } from "@/components/landing/landing-header-nav";
-import { LandingTrialCta } from "@/components/landing/landing-trial-cta";
+import { LandingContactCta } from "@/components/landing/landing-contact-provider";
 import { glassPillShellClass } from "@/components/ui/glass-styles";
 import type { LandingCopy } from "@/lib/i18n/landing/types";
 import type { Locale } from "@/lib/i18n/locale";
@@ -43,24 +43,18 @@ export function LandingHeader({ copy, theme = "light" }: Props) {
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <div className="md:hidden">
-            <LandingTrialCta
-              href="/onboarding"
+            <LandingContactCta
               size="md"
               appearance="plain"
               className="[&_.landing-trial-cta-face]:min-w-[9.5rem] [&_.landing-trial-cta-face]:px-7 [&_.landing-trial-cta-face]:py-2.5 [&_.landing-trial-cta-face]:text-sm [&_.landing-trial-cta-face]:font-bold [&_.landing-trial-cta-face]:tracking-[0.05em]"
-            >
-              {copy.startTrial}
-            </LandingTrialCta>
+            />
           </div>
           <div className="hidden md:block">
-            <LandingTrialCta
-              href="/onboarding"
+            <LandingContactCta
               size="sm"
               appearance="plain"
               className="[&_.landing-trial-cta-face]:min-w-[11rem] [&_.landing-trial-cta-face]:px-9 [&_.landing-trial-cta-face]:py-2.5 [&_.landing-trial-cta-face]:text-[15px] [&_.landing-trial-cta-face]:font-bold [&_.landing-trial-cta-face]:tracking-[0.05em]"
-            >
-              {copy.startTrial}
-            </LandingTrialCta>
+            />
           </div>
 
           <LandingHeaderMobileMenu items={siteNav} isDark={isDark} />
