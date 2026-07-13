@@ -21,17 +21,30 @@ function checkoutQuery(
   return params.toString();
 }
 
-/** Plan picker URL; optional `next` is preserved through Polar checkout return. */
-export function buildChoosePlanHref(next?: string | null): string {
+/** Awaiting custom quote page; optional `next` preserved through checkout return. */
+export function buildAwaitingQuoteHref(next?: string | null): string {
   const safeNext = safeCheckoutNextPath(next);
-  if (!safeNext) return "/choose-plan";
-  return `/choose-plan?next=${encodeURIComponent(safeNext)}`;
+  if (!safeNext) return "/awaiting-quote";
+  return `/awaiting-quote?next=${encodeURIComponent(safeNext)}`;
 }
 
-/** Polar hosted checkout back button — always return to plan picker, not onboarding. */
+/** @deprecated Use buildAwaitingQuoteHref */
+export function buildChoosePlanHref(next?: string | null): string {
+  return buildAwaitingQuoteHref(next);
+}
+
+/** Polar hosted checkout back button — return to awaiting-quote page. */
 export function buildPolarCheckoutReturnUrl(appUrl: string, next?: string | null): string {
   const base = appUrl.replace(/\/+$/, "");
-  return `${base}${buildChoosePlanHref(next)}`;
+  return `${base}${buildAwaitingQuoteHref(next)}`;
+}
+
+/** Custom quote checkout link for a user. */
+export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | null): string {
+  const params = new URLSearchParams({ quote: checkoutToken });
+  const safeNext = safeCheckoutNextPath(next);
+  if (safeNext) params.set("next", safeNext);
+  return `/checkout?${params.toString()}`;
 }
 
 /** Marketing page entry: `/checkout?plan=starter` or `?plan=pro&period=annual`. */

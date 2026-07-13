@@ -8,11 +8,11 @@ import {
 import {
   getBillingEntitlement,
   hasActivePaidSubscription,
-  shouldShowPostOnboardingPlanPicker,
+  shouldShowAwaitingQuotePage,
 } from "@/lib/billing/entitlements";
 import { recordUserDailyActivity } from "@/lib/billing/user-activity";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
-import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
+import { AWAITING_QUOTE_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { hasPrePaymentSetup, POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { getPublicSupabaseEnv } from "./env";
@@ -24,7 +24,7 @@ import type { Database } from "./types";
  */
 const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/reset-password", "/api/account"];
 const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
-const BILLING_EXEMPT_PREFIXES = ["/choose-plan", "/checkout", "/api/billing", "/auth/callback"];
+const BILLING_EXEMPT_PREFIXES = ["/awaiting-quote", "/choose-plan", "/checkout", "/api/billing", "/auth/callback"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
   return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -99,13 +99,13 @@ export async function updateSession(request: NextRequest) {
       const nextParam = request.nextUrl.searchParams.get("next");
       const trialPending = request.cookies.get(TRIAL_PENDING_COOKIE)?.value;
       if (shouldRedirectToTrialComplete(nextParam, trialPending)) {
-        const trialPlans = new URL(CHOOSE_PLAN_AFTER_TRIAL_PATH, request.url);
+        const trialPlans = new URL(AWAITING_QUOTE_AFTER_TRIAL_PATH, request.url);
         redirectUrl.pathname = trialPlans.pathname;
         redirectUrl.search = trialPlans.search;
         return NextResponse.redirect(redirectUrl);
       }
-      if (hasPrePaymentSetup(profile) && shouldShowPostOnboardingPlanPicker(billing)) {
-        redirectUrl.pathname = "/choose-plan";
+      if (hasPrePaymentSetup(profile) && shouldShowAwaitingQuotePage(billing)) {
+        redirectUrl.pathname = "/awaiting-quote";
         redirectUrl.searchParams.set("next", POST_PAYMENT_ONBOARDING_PATH);
         return NextResponse.redirect(redirectUrl);
       }
@@ -114,8 +114,8 @@ export async function updateSession(request: NextRequest) {
       redirectUrl.search = target.search;
       return NextResponse.redirect(redirectUrl);
     }
-    if (shouldShowPostOnboardingPlanPicker(billing)) {
-      redirectUrl.pathname = "/choose-plan";
+    if (shouldShowAwaitingQuotePage(billing)) {
+      redirectUrl.pathname = "/awaiting-quote";
       redirectUrl.searchParams.set("next", "/dashboard/spy");
       return NextResponse.redirect(redirectUrl);
     }
@@ -137,8 +137,8 @@ export async function updateSession(request: NextRequest) {
     if (!profile?.onboarding_completed) {
       const billing = await getBillingEntitlement(supabase, user.id);
       const redirectUrl = request.nextUrl.clone();
-      if (shouldShowPostOnboardingPlanPicker(billing)) {
-        redirectUrl.pathname = "/choose-plan";
+      if (shouldShowAwaitingQuotePage(billing)) {
+        redirectUrl.pathname = "/awaiting-quote";
         redirectUrl.searchParams.set("next", POST_PAYMENT_ONBOARDING_PATH);
       } else if (billing.isUnlimited || hasActivePaidSubscription(billing)) {
         redirectUrl.pathname = POST_PAYMENT_ONBOARDING_PATH;
@@ -161,9 +161,9 @@ export async function updateSession(request: NextRequest) {
       const isWorkspaceBrandScrape =
         pathname.startsWith("/dashboard/searching") &&
         request.nextUrl.searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
-      if (shouldShowPostOnboardingPlanPicker(billing) && !isWorkspaceBrandScrape) {
+      if (shouldShowAwaitingQuotePage(billing) && !isWorkspaceBrandScrape) {
         const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = "/choose-plan";
+        redirectUrl.pathname = "/awaiting-quote";
         redirectUrl.searchParams.set("next", `${pathname}${search}`);
         const gated = NextResponse.redirect(redirectUrl);
         cookieJarMerge(response, gated);

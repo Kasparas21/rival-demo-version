@@ -46,8 +46,8 @@
       "schedule": "15 7 * * *"
     },
     {
-      "path": "/api/cron/autopilot-report",
-      "schedule": "0 6 * * *"
+      "path": "/api/cron/admin-snapshots",
+      "schedule": "0 * * * *"
     }
   ]
 }

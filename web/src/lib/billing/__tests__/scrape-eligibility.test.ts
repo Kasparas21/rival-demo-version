@@ -28,6 +28,9 @@ function billingForTier(tier: BillingEntitlement["planTier"], overrides: Partial
     isUnlimited: false,
     canUseDevPlanSwitcher: false,
     devPlanOverride: null,
+    customQuote: null,
+    pendingQuote: null,
+    customPriceLabel: null,
     ...overrides,
   };
 }
@@ -97,14 +100,14 @@ describe("isScrapingPausedForInactiveUser", () => {
     ).toBe(false);
   });
 
-  it("does not pause paid starter users", () => {
+  it("pauses inactive paid starter users", () => {
     expect(
       isScrapingPausedForInactiveUser({
         activity: { lastActiveDate: ymdDaysAgo(30, now), updatedAt: null, createdAt: null },
         billing: billingForTier("starter"),
         now,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does not pause admin unlimited users", () => {

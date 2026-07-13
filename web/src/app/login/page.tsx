@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { adminSkipCheckoutDestination, getBillingEntitlement, shouldShowPostOnboardingPlanPicker } from "@/lib/billing/entitlements";
+import { adminSkipCheckoutDestination, getBillingEntitlement, shouldShowAwaitingQuotePage } from "@/lib/billing/entitlements";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/lib/auth/auth-page-helpers";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
 import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
-import { CHOOSE_PLAN_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
+import { AWAITING_QUOTE_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -50,12 +50,12 @@ export default async function LoginPage({
     const dest = adminSkipCheckoutDestination(rawNext, billing.isUnlimited);
     if (!profile?.onboarding_completed) {
       if (safeNext && isPostGuestSignupPath(safeNext)) {
-        redirect(CHOOSE_PLAN_AFTER_TRIAL_PATH);
+        redirect(AWAITING_QUOTE_AFTER_TRIAL_PATH);
       }
       redirect(resolveIncompleteOnboardingPath(profile, billing, dest));
     }
-    if (shouldShowPostOnboardingPlanPicker(billing)) {
-      redirect(`/choose-plan?next=${encodeURIComponent(dest)}`);
+    if (shouldShowAwaitingQuotePage(billing)) {
+      redirect(`/awaiting-quote?next=${encodeURIComponent(dest)}`);
     }
     redirect(dest);
   }

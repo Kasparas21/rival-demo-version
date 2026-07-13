@@ -1,5 +1,6 @@
 import type { Subscription } from "@polar-sh/sdk/models/components/subscription";
 import { isKnownPolarProductId } from "@/lib/billing/config";
+import { markCustomQuoteAccepted } from "@/lib/billing/custom-quotes";
 import { isSubscriptionStatusAllowed, resolvePlanTier } from "@/lib/billing/entitlements";
 import type { PolarRawSubscription } from "@/lib/billing/polar-api-raw";
 import { readProductId } from "@/lib/billing/polar-api-raw";
@@ -161,7 +162,30 @@ export async function upsertPolarSubscription(
     return { error: error.message, planTier };
   }
 
+  await acceptCustomQuoteFromSubscription(admin, subscription);
+
   return { error: null, planTier };
+}
+
+export async function acceptCustomQuoteFromSubscription(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  subscription: Subscription,
+): Promise<void> {
+  const quoteId = stringMetadataValue(subscription.metadata?.quote_id);
+  const source = stringMetadataValue(subscription.metadata?.source);
+  if (source !== "rival_custom_quote" || !quoteId) return;
+  if (!isSubscriptionStatusAllowed(subscription.status)) return;
+
+  try {
+    await markCustomQuoteAccepted(admin, quoteId);
+    await admin.from("admin_event_log").insert({
+      target_user_id: userIdFromSubscription(subscription),
+      event_type: "custom_quote_accepted",
+      payload: jsonSafe({ quote_id: quoteId, subscription_id: subscription.id }),
+    });
+  } catch (e) {
+    console.error("[polar-sync] custom quote acceptance", e);
+  }
 }
 
 export async function upsertPolarSubscriptionFromRaw(

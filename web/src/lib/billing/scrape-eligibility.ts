@@ -51,7 +51,6 @@ export function isScrapingPausedForInactiveUser(params: {
 }): boolean {
   const { activity, billing, now } = params;
   if (billing.isUnlimited) return false;
-  if (hasActivePaidSubscription(billing)) return false;
   return isUserInactiveForScrape(activity, now);
 }
 

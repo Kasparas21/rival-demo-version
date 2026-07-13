@@ -21,6 +21,9 @@ function proBilling(): BillingEntitlement {
     isUnlimited: false,
     canUseDevPlanSwitcher: false,
     devPlanOverride: null,
+    customQuote: null,
+    pendingQuote: null,
+    customPriceLabel: null,
   };
 }
 

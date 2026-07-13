@@ -7,17 +7,18 @@ import {
   polarCheckoutBrowserMetadataForApi,
 } from "@/lib/analytics/polar-checkout-metadata";
 import { appOriginForRequest } from "@/lib/auth/auth-link-origin";
-import { getPolarTesterDiscountId, type PolarPlanSlug } from "@/lib/billing/config";
+import { getPolarCustomProductId, getPolarTesterDiscountId, type PolarPlanSlug } from "@/lib/billing/config";
+import { getCustomQuoteByToken } from "@/lib/billing/custom-quotes";
+import { resolvePolarCustomCheckout } from "@/lib/billing/polar-custom-checkout";
 import { resolvePolarCheckoutProducts } from "@/lib/billing/polar-checkout";
 import {
+  buildAwaitingQuoteHref,
   buildCheckoutHref,
-  buildChoosePlanHref,
   buildPolarCheckoutReturnUrl,
   parseCheckoutPeriod,
   safeCheckoutNextPath,
 } from "@/lib/billing/checkout-url";
 import { getBillingEntitlement, hasActivePaidSubscription } from "@/lib/billing/entitlements";
-import { shouldRedirectCheckoutToUpgrade } from "@/lib/billing/upgrade-plan";
 import {
   friendlyPolarCheckoutError,
   shouldPrefillPolarCustomerEmail,
@@ -44,7 +45,7 @@ function checkoutBrowserFailure(
     return NextResponse.json({ ok: false, error: message }, { status });
   }
   const returnUrl = new URL(
-    buildChoosePlanHref(safeCheckoutNextPath(request.nextUrl.searchParams.get("next"))),
+    buildAwaitingQuoteHref(safeCheckoutNextPath(request.nextUrl.searchParams.get("next"))),
     request.nextUrl.origin,
   );
   returnUrl.searchParams.set("checkout_error", message);
@@ -52,74 +53,114 @@ function checkoutBrowserFailure(
 }
 
 function loginNextForCheckoutRequest(request: NextRequest): string {
-  const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
-  const plan: PolarPlanSlug =
-    planParam === "starter"
-      ? "starter"
-      : planParam === "agency"
-        ? "agency"
-        : planParam === "pro"
-          ? "pro"
-          : "starter";
-  const period = parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
-  return buildCheckoutHref(plan, period, safeCheckoutNextPath(request.nextUrl.searchParams.get("next")));
+  const quote = request.nextUrl.searchParams.get("quote")?.trim();
+  if (quote) {
+    const params = new URLSearchParams({ quote });
+    const next = safeCheckoutNextPath(request.nextUrl.searchParams.get("next"));
+    if (next) params.set("next", next);
+    return `/checkout?${params.toString()}`;
+  }
+  return buildAwaitingQuoteHref(safeCheckoutNextPath(request.nextUrl.searchParams.get("next")));
 }
 
-async function createCheckoutRedirect(request: NextRequest) {
-  const wantsJson = request.nextUrl.searchParams.get("intent") === "json";
+async function createCustomQuoteCheckout(
+  request: NextRequest,
+  wantsJson: boolean,
+  user: { id: string; email?: string | null },
+  quoteToken: string,
+) {
+  const admin = createSupabaseAdminClient();
+  const quote = await getCustomQuoteByToken(admin, quoteToken);
+  if (!quote) {
+    return checkoutBrowserFailure(request, wantsJson, "This checkout link is invalid or has expired.", 404);
+  }
+  if (quote.user_id !== user.id) {
+    return checkoutBrowserFailure(request, wantsJson, "This checkout link belongs to another account.", 403);
+  }
+
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    if (wantsJson) {
-      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-    }
-    const loginUrl = new URL("/login", request.nextUrl.origin);
-    loginUrl.searchParams.set("next", loginNextForCheckoutRequest(request));
-    return NextResponse.redirect(loginUrl);
-  }
-
-  await ensureUserProfile(supabase, user);
-
   const billing = await getBillingEntitlement(supabase, user.id);
-  if (billing.isUnlimited) {
-    if (wantsJson) {
-      return NextResponse.json({ ok: true, redirect: "/dashboard/spy" });
-    }
-    return NextResponse.redirect(new URL("/dashboard/spy", request.nextUrl.origin));
-  }
-
-  const isTesterCheckout = isTesterInviteCheckoutRequest(request);
-  const planParam = request.nextUrl.searchParams.get("plan")?.trim().toLowerCase();
-  const plan: PolarPlanSlug = isTesterCheckout
-    ? "pro"
-    : planParam === "starter"
-      ? "starter"
-      : planParam === "agency"
-        ? "agency"
-        : planParam === "pro"
-          ? "pro"
-          : "pro";
-  const period = isTesterCheckout ? "monthly" : parseCheckoutPeriod(request.nextUrl.searchParams.get("period"));
-
-  if (
-    shouldRedirectCheckoutToUpgrade({
-      requestedPlan: plan,
-      planTier: billing.planTier,
-      hasActivePaid: hasActivePaidSubscription(billing),
-    })
-  ) {
-    const upgradeUrl = new URL("/api/billing/upgrade", request.nextUrl.origin);
-    return NextResponse.redirect(upgradeUrl);
-  }
-
   if (hasActivePaidSubscription(billing)) {
     const portalUrl = new URL("/api/billing/portal", request.nextUrl.origin);
     return NextResponse.redirect(portalUrl);
   }
 
+  const appUrl = appOriginForRequest(request);
+  const polar = createPolarClient();
+  const browserMetadata = polarCheckoutBrowserMetadataForApi(buildPolarCheckoutBrowserMetadata(request));
+  const polarCheckout = await resolvePolarCustomCheckout(polar, quote);
+
+  const trialDays = Math.max(0, quote.trial_days ?? 0);
+  let checkoutBody: CheckoutCreate = {
+    ...polarCheckout,
+    externalCustomerId: user.id,
+    ...(shouldPrefillPolarCustomerEmail(user.email)
+      ? { customerEmail: user.email!.trim() }
+      : {}),
+    customerMetadata: {
+      user_id: user.id,
+    },
+    metadata: {
+      user_id: user.id,
+      source: "rival_custom_quote",
+      quote_id: quote.id,
+      billing_period: quote.billing_period,
+      price_cents: String(quote.price_cents),
+      ...browserMetadata,
+    },
+    allowTrial: trialDays > 0,
+    ...(trialDays > 0
+      ? {
+          trialInterval: TrialInterval.Day,
+          trialIntervalCount: trialDays,
+        }
+      : {}),
+    successUrl: `${appUrl}/checkout/success?checkout_id={CHECKOUT_ID}`,
+    returnUrl: buildPolarCheckoutReturnUrl(
+      appUrl,
+      safeCheckoutNextPath(request.nextUrl.searchParams.get("next")),
+    ),
+  };
+
+  await admin
+    .from("custom_quotes")
+    .update({
+      polar_product_id: getPolarCustomProductId(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", quote.id);
+
+  const checkout = await polar.checkouts.create(checkoutBody);
+
+  const posthog = getPostHogServerClient();
+  if (posthog) {
+    const distinctId = (await getPostHogDistinctId()) ?? user.id;
+    posthog.capture({
+      distinctId,
+      event: "checkout_created",
+      properties: {
+        user_id: user.id,
+        quote_id: quote.id,
+        price_cents: quote.price_cents,
+        billing_period: quote.billing_period,
+        is_custom_quote: true,
+      },
+    });
+  }
+
+  if (wantsJson) {
+    return NextResponse.json({ ok: true, url: checkout.url });
+  }
+  return NextResponse.redirect(checkout.url);
+}
+
+async function createTesterCheckout(
+  request: NextRequest,
+  wantsJson: boolean,
+  user: { id: string; email?: string | null },
+) {
+  const plan: PolarPlanSlug = "pro";
+  const period = "monthly";
   const appUrl = appOriginForRequest(request);
   const polar = createPolarClient();
   const browserMetadata = polarCheckoutBrowserMetadataForApi(buildPolarCheckoutBrowserMetadata(request));
@@ -151,46 +192,42 @@ async function createCheckoutRedirect(request: NextRequest) {
     ),
   };
 
-  let testerInviteCode: string | null = null;
+  const testerInviteCode = await resolveTesterInviteCodeForUser(user.id, request);
+  const admin = createSupabaseAdminClient();
+  const inviteStatus = await validateTesterInviteAccess(admin, {
+    inviteCode: testerInviteCode,
+    userId: user.id,
+  });
 
-  if (isTesterCheckout) {
-    testerInviteCode = await resolveTesterInviteCodeForUser(user.id, request);
-    const admin = createSupabaseAdminClient();
-    const inviteStatus = await validateTesterInviteAccess(admin, {
-      inviteCode: testerInviteCode,
-      userId: user.id,
-    });
-
-    if (!inviteStatus.valid || !inviteStatus.inviteCode) {
-      const message = testerInviteUnavailableMessage(inviteStatus.reason);
-      return checkoutBrowserFailure(request, wantsJson, message, 403);
-    }
-
-    const discountId = getPolarTesterDiscountId();
-    if (!discountId) {
-      return checkoutBrowserFailure(
-        request,
-        wantsJson,
-        "Tester discount is not configured (POLAR_TESTER_DISCOUNT_ID).",
-        503,
-      );
-    }
-
-    checkoutBody = {
-      ...checkoutBody,
-      allowTrial: false,
-      allowDiscountCodes: false,
-      discountId,
-      metadata: {
-        user_id: user.id,
-        source: "rival_tester_invite",
-        invite_code: inviteStatus.inviteCode,
-        plan: "pro",
-        billing_period: "monthly",
-        ...browserMetadata,
-      },
-    };
+  if (!inviteStatus.valid || !inviteStatus.inviteCode) {
+    const message = testerInviteUnavailableMessage(inviteStatus.reason);
+    return checkoutBrowserFailure(request, wantsJson, message, 403);
   }
+
+  const discountId = getPolarTesterDiscountId();
+  if (!discountId) {
+    return checkoutBrowserFailure(
+      request,
+      wantsJson,
+      "Tester discount is not configured (POLAR_TESTER_DISCOUNT_ID).",
+      503,
+    );
+  }
+
+  checkoutBody = {
+    ...checkoutBody,
+    allowTrial: false,
+    allowDiscountCodes: false,
+    discountId,
+    metadata: {
+      user_id: user.id,
+      source: "rival_tester_invite",
+      invite_code: inviteStatus.inviteCode,
+      plan: "pro",
+      billing_period: "monthly",
+      ...browserMetadata,
+    },
+  };
 
   const checkout = await polar.checkouts.create(checkoutBody);
 
@@ -204,7 +241,7 @@ async function createCheckoutRedirect(request: NextRequest) {
         user_id: user.id,
         plan,
         billing_period: period,
-        is_tester_invite: isTesterCheckout,
+        is_tester_invite: true,
       },
     });
   }
@@ -222,6 +259,54 @@ async function createCheckoutRedirect(request: NextRequest) {
     setTesterInviteCookie(redirect, testerInviteCode);
   }
   return redirect;
+}
+
+async function createCheckoutRedirect(request: NextRequest) {
+  const wantsJson = request.nextUrl.searchParams.get("intent") === "json";
+  const quoteToken = request.nextUrl.searchParams.get("quote")?.trim();
+  const isTesterCheckout = isTesterInviteCheckoutRequest(request);
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    if (wantsJson) {
+      return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+    const loginUrl = new URL("/login", request.nextUrl.origin);
+    loginUrl.searchParams.set("next", loginNextForCheckoutRequest(request));
+    return NextResponse.redirect(loginUrl);
+  }
+
+  await ensureUserProfile(supabase, user);
+
+  const billing = await getBillingEntitlement(supabase, user.id);
+  if (billing.isUnlimited) {
+    if (wantsJson) {
+      return NextResponse.json({ ok: true, redirect: "/dashboard/spy" });
+    }
+    return NextResponse.redirect(new URL("/dashboard/spy", request.nextUrl.origin));
+  }
+
+  if (quoteToken) {
+    return createCustomQuoteCheckout(request, wantsJson, user, quoteToken);
+  }
+
+  if (isTesterCheckout) {
+    return createTesterCheckout(request, wantsJson, user);
+  }
+
+  if (wantsJson) {
+    return NextResponse.json(
+      { ok: false, error: "A custom quote checkout link is required." },
+      { status: 400 },
+    );
+  }
+  return NextResponse.redirect(
+    new URL(buildAwaitingQuoteHref(safeCheckoutNextPath(request.nextUrl.searchParams.get("next"))), request.nextUrl.origin),
+  );
 }
 
 export async function GET(request: NextRequest) {
