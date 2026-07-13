@@ -5,7 +5,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureUserProfile } from "@/lib/auth/profile";
 import { claimTesterAccessForUser } from "@/lib/billing/claim-tester-access-core";
 import {
-  CHOOSE_PLAN_AFTER_TRIAL_PATH,
+  AWAITING_QUOTE_AFTER_TRIAL_PATH,
   resolveAuthCallbackNext,
   shouldRedirectToTrialComplete,
 } from "@/lib/auth/trial-flow";
@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
       pathname = postPayment.pathname;
       searchFromIncomplete = postPayment.search;
     } else {
-      const trialPlans = new URL(CHOOSE_PLAN_AFTER_TRIAL_PATH, url.origin);
+      const trialPlans = new URL(AWAITING_QUOTE_AFTER_TRIAL_PATH, url.origin);
       pathname = trialPlans.pathname;
       searchFromIncomplete = trialPlans.search;
     }

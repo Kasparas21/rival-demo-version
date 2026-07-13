@@ -57,6 +57,7 @@ import { clearAdsLibraryClientCachesForBrandDomains } from "@/lib/ad-library/ded
 import { RIVAL_BRANDS_UPDATED_EVENT, RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { PostOnboardingPricingOverlay } from "@/components/billing/post-onboarding-pricing-overlay";
 import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dashboard-mock";
+import { ScrapePausedBanner } from "@/components/dashboard/scrape-paused-banner";
 import { RecentPlatformRefreshNotice } from "@/components/dashboard/recent-platform-refresh-notice";
 import { Toaster } from "sonner";
 
@@ -1316,6 +1317,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <main className="rival-subtle-scroll relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-auto bg-slate-50">
+        <ScrapePausedBanner />
         <div
           className="relative z-10 flex h-full min-h-0 w-full flex-1 flex-col"
           onClick={() => setIsBrandMenuOpen(false)}

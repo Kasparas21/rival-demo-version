@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { authorizeAdminRequest } from "@/lib/admin/auth";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizeInviteCode } from "@/lib/billing/tester-invite";
 
 export const runtime = "nodejs";
@@ -30,10 +32,15 @@ type InviteCohortRow = {
   funnel_stage: string | null;
 };
 
-/** List invite cohort signups (service role). Bearer ADMIN_SECRET required. */
+/** List invite cohort signups. Admin session or Bearer ADMIN_SECRET. */
 export async function GET(req: Request) {
-  const adminSecret = process.env.ADMIN_SECRET?.trim();
-  if (!adminSecret || req.headers.get("authorization") !== `Bearer ${adminSecret}`) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const auth = await authorizeAdminRequest(req, supabase, user);
+  if (!auth.ok) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -41,8 +48,8 @@ export async function GET(req: Request) {
   const codeRaw = url.searchParams.get("code")?.trim();
   const inviteCode = codeRaw ? normalizeInviteCode(codeRaw) : null;
 
-  const supabase = createSupabaseAdminClient();
-  let query = supabase.from("invite_cohort_signups").select("*").order("redeemed_at", { ascending: false });
+  const admin = createSupabaseAdminClient();
+  let query = admin.from("invite_cohort_signups").select("*").order("redeemed_at", { ascending: false });
 
   if (inviteCode) {
     query = query.eq("invite_code", inviteCode);

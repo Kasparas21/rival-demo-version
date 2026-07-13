@@ -126,6 +126,7 @@ const LOCALE_PATHS = new Set([
   "/pricing",
   "/onboarding",
   "/choose-plan",
+  "/awaiting-quote",
   "/signup",
 ]);
 
@@ -164,6 +165,9 @@ export const config = {
     "/auth/:path*",
     "/onboarding",
     "/choose-plan",
+    "/awaiting-quote",
+    "/admin",
+    "/admin/:path*",
     "/invite/:path*",
     "/dashboard",
     "/dashboard/:path*",

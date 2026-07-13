@@ -40,12 +40,34 @@ export function polarProductIdForPlan(plan: PolarPlanSlug, period: BillingPeriod
   return ids.pro;
 }
 
+export function getPolarCustomProductId(): string {
+  const id = process.env.POLAR_CUSTOM_PRODUCT_ID?.trim();
+  if (!id) {
+    throw new Error(
+      "POLAR_CUSTOM_PRODUCT_ID is missing. In Polar → Catalogue, create a recurring 'Rival Custom' product, copy its Product ID into .env.local, then restart the dev server.",
+    );
+  }
+  return id;
+}
+
+export function isPolarCustomProductId(productId: string): boolean {
+  const custom = process.env.POLAR_CUSTOM_PRODUCT_ID?.trim();
+  return Boolean(custom && productId === custom);
+}
+
 export function isKnownPolarProductId(productId: string): boolean {
   const ids = getPolarProductIds();
   const known = new Set(
-    [ids.legacy, ids.starter, ids.starterAnnual, ids.pro, ids.proAnnual, ids.agency, ids.agencyAnnual].filter(
-      (id): id is string => Boolean(id?.trim()),
-    ),
+    [
+      ids.legacy,
+      ids.starter,
+      ids.starterAnnual,
+      ids.pro,
+      ids.proAnnual,
+      ids.agency,
+      ids.agencyAnnual,
+      process.env.POLAR_CUSTOM_PRODUCT_ID?.trim(),
+    ].filter((id): id is string => Boolean(id?.trim())),
   );
   return known.has(productId);
 }

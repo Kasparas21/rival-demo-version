@@ -1,5 +1,5 @@
-/** Subscription tier: free trial + paid Starter/Pro/Agency + admin. */
-export type PlanTier = "free_trial" | "starter" | "pro" | "agency" | "admin";
+/** Subscription tier: free trial + legacy Starter/Pro/Agency + custom quote + admin. */
+export type PlanTier = "free_trial" | "starter" | "pro" | "agency" | "custom" | "admin";
 
 export type DevPlanOverride = PlanTier;
 
@@ -172,6 +172,7 @@ export const PLAN_LIMITS_BY_TIER: Record<PlanTier, PlanLimits> = {
   starter: STARTER_LIMITS,
   pro: PRO_LIMITS,
   agency: AGENCY_LIMITS,
+  custom: PRO_LIMITS,
   admin: ADMIN_LIMITS,
 };
 
@@ -180,6 +181,7 @@ export const PLAN_DISPLAY_NAMES: Record<PlanTier, string> = {
   starter: "Starter",
   pro: "Pro",
   agency: "Agency",
+  custom: "Custom plan",
   admin: "Admin",
 };
 
@@ -188,7 +190,7 @@ export function limitsForTier(tier: PlanTier): PlanLimits {
 }
 
 export function isPaidTier(tier: PlanTier): boolean {
-  return tier === "starter" || tier === "pro" || tier === "agency";
+  return tier === "starter" || tier === "pro" || tier === "agency" || tier === "custom";
 }
 
 export function tierHasProductAccess(tier: PlanTier): boolean {
@@ -197,6 +199,7 @@ export function tierHasProductAccess(tier: PlanTier): boolean {
     tier === "starter" ||
     tier === "pro" ||
     tier === "agency" ||
+    tier === "custom" ||
     tier === "admin"
   );
 }
@@ -211,7 +214,16 @@ export function normalizePlanTier(value: string | null | undefined): PlanTier | 
   if (!value?.trim()) return null;
   const v = value.trim();
   if (v === "free" || v === "trial") return "free_trial";
-  if (v === "free_trial" || v === "starter" || v === "pro" || v === "agency" || v === "admin") return v;
+  if (
+    v === "free_trial" ||
+    v === "starter" ||
+    v === "pro" ||
+    v === "agency" ||
+    v === "custom" ||
+    v === "admin"
+  ) {
+    return v;
+  }
   return null;
 }
 

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
-import { CHOOSE_PLAN_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
+import { AWAITING_QUOTE_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { OnboardingDevHints } from "@/components/onboarding/onboarding-dev-hints";
 import { TrialSetupBackgroundSync } from "@/components/onboarding/trial-setup-background-sync";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
@@ -10,7 +10,7 @@ import {
   adminSkipCheckoutDestination,
   getBillingEntitlement,
   hasActivePaidSubscription,
-  shouldShowPostOnboardingPlanPicker,
+  shouldShowAwaitingQuotePage,
 } from "@/lib/billing/entitlements";
 import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
 import { OnboardingFlowHeader } from "@/components/onboarding/onboarding-flow-header";
@@ -127,16 +127,16 @@ export default async function OnboardingPage({
   const postPaymentResume = shouldResumePostPaymentOnboarding(profile, billing) || explicitPostPayment;
   const rawDestination = nextPath ? postOnboardingPath(nextPath) : DASHBOARD_HOME_PATH;
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
-  const needsPlanPicker = shouldShowPostOnboardingPlanPicker(billing);
+  const needsAwaitingQuote = shouldShowAwaitingQuotePage(billing);
   const postOnboardingDestination = postPaymentResume
     ? buildWorkspaceBrandScrapeHref()
-    : needsPlanPicker
-      ? `/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`
+    : needsAwaitingQuote
+      ? `/awaiting-quote?next=${encodeURIComponent(destinationAfterOnboarding)}`
       : destinationAfterOnboarding;
 
   if (profile?.onboarding_completed && !replayOnboarding) {
-    if (needsPlanPicker) {
-      redirect(`/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+    if (needsAwaitingQuote) {
+      redirect(`/awaiting-quote?next=${encodeURIComponent(destinationAfterOnboarding)}`);
     }
     redirect(destinationAfterOnboarding);
   }
@@ -151,11 +151,11 @@ export default async function OnboardingPage({
       (await cookies()).get(TRIAL_PENDING_COOKIE)?.value,
     )
   ) {
-    redirect(CHOOSE_PLAN_AFTER_TRIAL_PATH);
+    redirect(AWAITING_QUOTE_AFTER_TRIAL_PATH);
   }
 
-  if (hasPrePaymentSetup(profile) && needsPlanPicker && !replayOnboarding && !postPaymentResume) {
-    redirect(`/choose-plan?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+  if (hasPrePaymentSetup(profile) && needsAwaitingQuote && !replayOnboarding && !postPaymentResume) {
+    redirect(`/awaiting-quote?next=${encodeURIComponent(destinationAfterOnboarding)}`);
   }
 
   if (

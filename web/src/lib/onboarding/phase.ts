@@ -1,4 +1,4 @@
-import { hasActivePaidSubscription, shouldShowPostOnboardingPlanPicker } from "@/lib/billing/entitlements";
+import { hasActivePaidSubscription, shouldShowAwaitingQuotePage } from "@/lib/billing/entitlements";
 import type { BillingEntitlement } from "@/lib/billing/entitlements";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 
@@ -55,13 +55,13 @@ export function resolveIncompleteOnboardingPath(
   const dest = safeNext?.trim() || DASHBOARD_HOME_PATH;
 
   if (hasPrePaymentSetup(profile)) {
-    if (shouldShowPostOnboardingPlanPicker(billing)) {
-      return `/choose-plan?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
+    if (shouldShowAwaitingQuotePage(billing)) {
+      return `/awaiting-quote?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
     }
     if (canFinishPostPaymentOnboarding(billing)) {
       return POST_PAYMENT_ONBOARDING_PATH;
     }
-    return `/choose-plan?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
+    return `/awaiting-quote?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
   }
 
   return dest !== DASHBOARD_HOME_PATH ? `/onboarding?next=${encodeURIComponent(dest)}` : "/onboarding";

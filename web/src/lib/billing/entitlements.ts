@@ -2,7 +2,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 import { TESTER_FULL_PRO_PAYLOAD_KEY } from "@/lib/billing/claim-tester-access-core";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
-import { getPolarProductIds } from "@/lib/billing/config";
+import { getPolarProductIds, isPolarCustomProductId } from "@/lib/billing/config";
+import {
+  getActiveCustomQuoteForUser,
+  getSentCustomQuoteForUser,
+  parsePlanLimitsFromJson,
+  type CustomQuoteRow,
+} from "@/lib/billing/custom-quotes";
 import {
   limitsForTier,
   normalizePlanTier,
@@ -32,6 +38,9 @@ export type BillingEntitlement = {
   isUnlimited: boolean;
   canUseDevPlanSwitcher: boolean;
   devPlanOverride: DevPlanOverride | null;
+  customQuote: CustomQuoteRow | null;
+  pendingQuote: CustomQuoteRow | null;
+  customPriceLabel: string | null;
 };
 
 export function isSubscriptionStatusAllowed(status: string | null | undefined): boolean {
@@ -62,6 +71,7 @@ export function isDevPlanOverrideEnabled(): boolean {
 
 function tierFromPolarProductId(productId: string | null | undefined): PlanTier | null {
   if (!productId?.trim()) return null;
+  if (isPolarCustomProductId(productId)) return "custom";
   const ids = getPolarProductIds();
   if (
     (ids.starter && productId === ids.starter) ||
@@ -101,6 +111,11 @@ export function resolvePlanTier(params: {
     return "admin";
   }
 
+  const payload = readRawPayload(rawPayload);
+  if (payload.complimentary_quote_id && isSubscriptionStatusAllowed(status)) {
+    return "custom";
+  }
+
   const override = readDevPlanOverride(rawPayload);
   if (applyDevOverride && override) {
     return override;
@@ -121,13 +136,13 @@ export function resolvePlanTier(params: {
 export function hasAccessForTier(tier: PlanTier, status: string, isUnlimited: boolean): boolean {
   if (isUnlimited && tier === "admin") return true;
   if (tier === "free_trial") return true;
-  if (tier === "starter" || tier === "pro" || tier === "agency") {
+  if (tier === "starter" || tier === "pro" || tier === "agency" || tier === "custom") {
     return status === "active" || status === "trialing";
   }
   return false;
 }
 
-/** Active Polar paid subscription (Starter, Pro, or Agency — not workspace free-trial tier). */
+/** Active Polar paid subscription (legacy tiers or custom quote). */
 export function hasActivePaidSubscription(
   billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
 ): boolean {
@@ -135,7 +150,8 @@ export function hasActivePaidSubscription(
   return (
     (billing.planTier === "starter" ||
       billing.planTier === "pro" ||
-      billing.planTier === "agency") &&
+      billing.planTier === "agency" ||
+      billing.planTier === "custom") &&
     isSubscriptionStatusAllowed(billing.status)
   );
 }
@@ -254,15 +270,27 @@ export function shouldUsePolarSubscriptionUi(
 }
 
 /**
- * Post-onboarding plan picker (step 6 / choose-plan).
- * Free-trial tier still has `hasAccess` for product features, but must pick Starter or Pro to subscribe.
+ * Post-onboarding: user needs a custom quote / checkout (replaces plan picker).
  */
-export function shouldShowPostOnboardingPlanPicker(
-  billing: Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord">,
+export function shouldShowAwaitingQuotePage(
+  billing: Pick<
+    BillingEntitlement,
+    "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
+  >,
 ): boolean {
   if (billing.isUnlimited) return false;
-  if (billing.hasPolarBillingRecord) return false;
-  return !hasActivePaidSubscription(billing);
+  if (hasActivePaidSubscription(billing)) return false;
+  return true;
+}
+
+/** @deprecated Use shouldShowAwaitingQuotePage */
+export function shouldShowPostOnboardingPlanPicker(
+  billing: Pick<
+    BillingEntitlement,
+    "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
+  >,
+): boolean {
+  return shouldShowAwaitingQuotePage(billing);
 }
 
 export function isTesterInviteBillingAccount(
@@ -302,7 +330,7 @@ export function applyPolarTrialCompetitorCap(
   planTier: PlanTier,
 ): PlanLimits {
   if (status !== "trialing") return limits;
-  if (planTier !== "starter" && planTier !== "pro" && planTier !== "agency") return limits;
+  if (planTier !== "starter" && planTier !== "pro" && planTier !== "agency" && planTier !== "custom") return limits;
 
   const trialCap = limitsForTier("free_trial").maxWatchedCompetitors;
   if (limits.maxWatchedCompetitors <= trialCap) return limits;
@@ -317,7 +345,7 @@ export async function getBillingEntitlement(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<BillingEntitlement> {
-  const [billingRes, testerRedemptionRes] = await Promise.all([
+  const [billingRes, testerRedemptionRes, customQuoteRes, pendingQuoteRes] = await Promise.all([
     supabase
       .from("billing_subscriptions")
       .select(
@@ -326,10 +354,14 @@ export async function getBillingEntitlement(
       .eq("user_id", userId)
       .maybeSingle(),
     supabase.from("tester_invite_redemptions").select("id").eq("user_id", userId).maybeSingle(),
+    getActiveCustomQuoteForUser(supabase, userId),
+    getSentCustomQuoteForUser(supabase, userId),
   ]);
 
   const { data } = billingRes;
   const hasTesterRedemption = Boolean(testerRedemptionRes.data?.id);
+  const customQuote = customQuoteRes;
+  const pendingQuote = pendingQuoteRes;
 
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
@@ -347,6 +379,10 @@ export async function getBillingEntitlement(
   });
 
   let limits = limitsForTier(planTier);
+  if (planTier === "custom" && customQuote) {
+    const customLimits = parsePlanLimitsFromJson(customQuote.limits);
+    if (customLimits) limits = customLimits;
+  }
   if (isTesterInviteBillingAccount(rawPayload, hasTesterRedemption) && !isTesterFullProAccount(rawPayload)) {
     limits = applyTesterInvitePlanLimits(limits);
   } else {
@@ -355,6 +391,9 @@ export async function getBillingEntitlement(
   const hasAccess = hasAccessForTier(planTier, status, isUnlimited);
 
   let planName = PLAN_DISPLAY_NAMES[planTier];
+  if (planTier === "custom" && customQuote) {
+    planName = `Custom (${formatQuotePriceLabel(customQuote)})`;
+  }
   if (isUnlimited && planTier === "admin") {
     planName = data?.polar_product_name?.trim() || "Complimentary (admin)";
   }
@@ -377,7 +416,19 @@ export async function getBillingEntitlement(
     isUnlimited: isUnlimited && planTier === "admin",
     canUseDevPlanSwitcher,
     devPlanOverride,
+    customQuote,
+    pendingQuote,
+    customPriceLabel: customQuote ? formatQuotePriceLabel(customQuote) : null,
   };
+}
+
+function formatQuotePriceLabel(quote: CustomQuoteRow): string {
+  if (quote.price_cents === 0) return "Free";
+  const amount = quote.price_cents / 100;
+  const symbol = quote.currency?.toLowerCase() === "gbp" ? "£" : quote.currency?.toLowerCase() === "usd" ? "$" : "";
+  const formatted = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+  const period = quote.billing_period === "annual" ? "/yr" : "/mo";
+  return `${symbol}${formatted}${period}`;
 }
 
 function isCheckoutOrBillingPath(path: string): boolean {
@@ -397,10 +448,9 @@ export function remainingMonthlyAdsProcessed(
 }
 
 export function billingRequiredResponseBody(
-  message = "Upgrade to Starter or Pro to continue.",
-  checkoutPlan?: "starter" | "pro",
+  message = "A custom subscription is required to continue.",
+  checkoutUrl = "/awaiting-quote",
 ) {
-  const checkoutUrl = checkoutPlan ? `/checkout?plan=${checkoutPlan}` : "/checkout";
   return {
     ok: false,
     code: "subscription_required",
@@ -424,7 +474,7 @@ export function quotaExceededResponseBody(params: {
     used,
     requested,
     remaining: remainingMonthlyAdsProcessed(used, requested, limit),
-    checkoutUrl: "/checkout?plan=pro",
+    checkoutUrl: "/awaiting-quote",
   };
 }
 
@@ -433,8 +483,8 @@ export function freeTrialScrapeUsedResponseBody() {
     ok: false,
     code: "free_trial_scrape_used",
     error:
-      "Your free trial includes one competitor discovery scrape. Upgrade to Starter or Pro for ongoing refreshes.",
-    checkoutUrl: "/checkout?plan=starter",
+      "Your free trial includes one competitor discovery scrape. Subscribe with your custom plan for ongoing refreshes.",
+    checkoutUrl: "/awaiting-quote",
   };
 }
 
@@ -443,8 +493,8 @@ export function inactiveUserScrapePausedResponseBody() {
     ok: false,
     code: "inactive_scrape_paused",
     error:
-      "Automatic competitor tracking is paused because you have not opened Rival in the last week. Open the app or upgrade to Starter or Pro to resume.",
-    checkoutUrl: "/checkout?plan=starter",
+      "Automatic competitor tracking is paused because you have not opened Rival in the last week. Open the app to resume.",
+    checkoutUrl: "/awaiting-quote",
   };
 }
 
@@ -453,8 +503,8 @@ export function subscriptionEndedScrapePausedResponseBody() {
     ok: false,
     code: "subscription_ended_scrape_paused",
     error:
-      "Your subscription has ended. Renew Starter or Pro to resume automatic competitor tracking and fresh scrapes.",
-    checkoutUrl: "/checkout?plan=starter",
+      "Your subscription has ended. Contact us or complete checkout with your custom plan to resume automatic tracking.",
+    checkoutUrl: "/awaiting-quote",
   };
 }
 
@@ -471,12 +521,12 @@ export function streakGateScrapePausedResponseBody() {
   return inactiveUserScrapePausedResponseBody();
 }
 
-export function featureNotAvailableResponseBody(feature: string, requiredTier: PlanTier = "pro") {
+export function featureNotAvailableResponseBody(feature: string, requiredTier: PlanTier = "custom") {
   return {
     ok: false,
     code: "feature_not_available",
-    error: `${feature} is available on the ${PLAN_DISPLAY_NAMES[requiredTier]} plan.`,
+    error: `${feature} is not included in your current plan.`,
     requiredTier,
-    checkoutUrl: `/checkout?plan=${requiredTier === "starter" ? "starter" : "pro"}`,
+    checkoutUrl: "/awaiting-quote",
   };
 }

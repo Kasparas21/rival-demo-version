@@ -21,17 +21,54 @@ function checkoutQuery(
   return params.toString();
 }
 
-/** Plan picker URL; optional `next` is preserved through Polar checkout return. */
-export function buildChoosePlanHref(next?: string | null): string {
+/** Awaiting custom quote page; optional `next` preserved through checkout return. */
+export function buildAwaitingQuoteHref(next?: string | null): string {
   const safeNext = safeCheckoutNextPath(next);
-  if (!safeNext) return "/choose-plan";
-  return `/choose-plan?next=${encodeURIComponent(safeNext)}`;
+  if (!safeNext) return "/awaiting-quote";
+  return `/awaiting-quote?next=${encodeURIComponent(safeNext)}`;
 }
 
-/** Polar hosted checkout back button — always return to plan picker, not onboarding. */
+/** @deprecated Use buildAwaitingQuoteHref */
+export function buildChoosePlanHref(next?: string | null): string {
+  return buildAwaitingQuoteHref(next);
+}
+
+/** Polar hosted checkout back button — return to awaiting-quote page. */
 export function buildPolarCheckoutReturnUrl(appUrl: string, next?: string | null): string {
   const base = appUrl.replace(/\/+$/, "");
-  return `${base}${buildChoosePlanHref(next)}`;
+  return `${base}${buildAwaitingQuoteHref(next)}`;
+}
+
+function quoteQueryParams(checkoutToken: string, next?: string | null): URLSearchParams {
+  const params = new URLSearchParams({ quote: checkoutToken });
+  const safeNext = safeCheckoutNextPath(next);
+  if (safeNext) params.set("next", safeNext);
+  return params;
+}
+
+/** Paid custom quote — Polar checkout API (never used for £0). */
+export function buildQuoteApiCheckoutHref(checkoutToken: string, next?: string | null): string {
+  return `/api/billing/checkout?${quoteQueryParams(checkoutToken, next).toString()}`;
+}
+
+/** Complimentary £0 quote — activates access without Polar. */
+export function buildQuoteActivateHref(checkoutToken: string, next?: string | null): string {
+  return `/api/billing/activate-quote?${quoteQueryParams(checkoutToken, next).toString()}`;
+}
+
+export function buildQuoteAccessHref(
+  checkoutToken: string,
+  complimentary: boolean,
+  next?: string | null,
+): string {
+  return complimentary
+    ? buildQuoteActivateHref(checkoutToken, next)
+    : buildQuoteApiCheckoutHref(checkoutToken, next);
+}
+
+/** @deprecated Prefer buildQuoteApiCheckoutHref or buildQuoteActivateHref. */
+export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | null): string {
+  return buildQuoteApiCheckoutHref(checkoutToken, next);
 }
 
 /** Marketing page entry: `/checkout?plan=starter` or `?plan=pro&period=annual`. */
