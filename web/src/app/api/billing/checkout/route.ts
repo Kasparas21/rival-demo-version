@@ -8,8 +8,11 @@ import {
 } from "@/lib/analytics/polar-checkout-metadata";
 import { appOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { getPolarCustomProductId, getPolarTesterDiscountId, type PolarPlanSlug } from "@/lib/billing/config";
-import { activateComplimentaryCustomQuote } from "@/lib/billing/activate-complimentary-quote";
 import { getCustomQuoteByToken, isComplimentaryQuote } from "@/lib/billing/custom-quotes";
+import {
+  loginNextForQuoteApiRequest,
+  processComplimentaryQuoteAccess,
+} from "@/lib/billing/process-complimentary-quote";
 import { resolvePolarCustomCheckout } from "@/lib/billing/polar-custom-checkout";
 import { resolvePolarCheckoutProducts } from "@/lib/billing/polar-checkout";
 import {
@@ -54,14 +57,7 @@ function checkoutBrowserFailure(
 }
 
 function loginNextForCheckoutRequest(request: NextRequest): string {
-  const quote = request.nextUrl.searchParams.get("quote")?.trim();
-  if (quote) {
-    const params = new URLSearchParams({ quote });
-    const next = safeCheckoutNextPath(request.nextUrl.searchParams.get("next"));
-    if (next) params.set("next", next);
-    return `/checkout?${params.toString()}`;
-  }
-  return buildAwaitingQuoteHref(safeCheckoutNextPath(request.nextUrl.searchParams.get("next")));
+  return loginNextForQuoteApiRequest(request, "/api/billing/checkout");
 }
 
 async function createCustomQuoteCheckout(
@@ -80,17 +76,7 @@ async function createCustomQuoteCheckout(
   }
 
   if (isComplimentaryQuote(quote)) {
-    const activation = await activateComplimentaryCustomQuote(admin, quote, user.id);
-    if (!activation.ok) {
-      return checkoutBrowserFailure(request, wantsJson, activation.error, 500);
-    }
-
-    const next = safeCheckoutNextPath(request.nextUrl.searchParams.get("next"));
-    const destination = next ?? "/dashboard/spy";
-    if (wantsJson) {
-      return NextResponse.json({ ok: true, redirect: destination, complimentary: true });
-    }
-    return NextResponse.redirect(new URL(destination, request.nextUrl.origin));
+    return processComplimentaryQuoteAccess(request, wantsJson, user, quoteToken);
   }
 
   const supabase = await createSupabaseServerClient();

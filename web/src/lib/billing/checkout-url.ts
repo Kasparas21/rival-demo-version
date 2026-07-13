@@ -39,12 +39,36 @@ export function buildPolarCheckoutReturnUrl(appUrl: string, next?: string | null
   return `${base}${buildAwaitingQuoteHref(next)}`;
 }
 
-/** Custom quote checkout link for a user. */
-export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | null): string {
+function quoteQueryParams(checkoutToken: string, next?: string | null): URLSearchParams {
   const params = new URLSearchParams({ quote: checkoutToken });
   const safeNext = safeCheckoutNextPath(next);
   if (safeNext) params.set("next", safeNext);
-  return `/checkout?${params.toString()}`;
+  return params;
+}
+
+/** Paid custom quote — Polar checkout API (never used for £0). */
+export function buildQuoteApiCheckoutHref(checkoutToken: string, next?: string | null): string {
+  return `/api/billing/checkout?${quoteQueryParams(checkoutToken, next).toString()}`;
+}
+
+/** Complimentary £0 quote — activates access without Polar. */
+export function buildQuoteActivateHref(checkoutToken: string, next?: string | null): string {
+  return `/api/billing/activate-quote?${quoteQueryParams(checkoutToken, next).toString()}`;
+}
+
+export function buildQuoteAccessHref(
+  checkoutToken: string,
+  complimentary: boolean,
+  next?: string | null,
+): string {
+  return complimentary
+    ? buildQuoteActivateHref(checkoutToken, next)
+    : buildQuoteApiCheckoutHref(checkoutToken, next);
+}
+
+/** @deprecated Prefer buildQuoteApiCheckoutHref or buildQuoteActivateHref. */
+export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | null): string {
+  return buildQuoteApiCheckoutHref(checkoutToken, next);
 }
 
 /** Marketing page entry: `/checkout?plan=starter` or `?plan=pro&period=annual`. */

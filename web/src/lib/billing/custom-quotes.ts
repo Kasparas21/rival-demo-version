@@ -149,7 +149,7 @@ export async function getCustomQuoteByToken(
 }
 
 export function isComplimentaryQuote(quote: Pick<CustomQuoteRow, "price_cents">): boolean {
-  return quote.price_cents === 0;
+  return Number(quote.price_cents) === 0;
 }
 
 export async function markCustomQuoteAccepted(
@@ -164,12 +164,6 @@ export async function markCustomQuoteAccepted(
     .in("status", ["sent", "draft"]);
 
   return error?.message ?? null;
-}
-
-export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | null): string {
-  const params = new URLSearchParams({ quote: checkoutToken });
-  if (next?.trim()) params.set("next", next.trim());
-  return `/checkout?${params.toString()}`;
 }
 
 export function formatQuotePrice(priceCents: number, currency: string): string {

@@ -3,11 +3,14 @@ import Link from "next/link";
 import {
   buildApiBillingCheckoutHref,
   buildCheckoutHref,
+  buildQuoteAccessHref,
   parseCheckoutPeriod,
   safeCheckoutNextPath,
 } from "@/lib/billing/checkout-url";
+import { isComplimentaryQuote } from "@/lib/billing/custom-quotes";
 import type { PolarPlanSlug } from "@/lib/billing/config";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function SetupError({ message }: { message: string }) {
@@ -40,19 +43,50 @@ function SetupError({ message }: { message: string }) {
 }
 
 type CheckoutPageProps = {
-  searchParams: Promise<{ plan?: string; period?: string; next?: string }>;
+  searchParams: Promise<{ plan?: string; period?: string; next?: string; quote?: string; intent?: string }>;
 };
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
-  const { plan, period: periodParam, next: nextParam } = await searchParams;
+  const { plan, period: periodParam, next: nextParam, quote, intent } = await searchParams;
+  const quoteToken = quote?.trim();
   const planSlug: PolarPlanSlug | null =
     plan === "starter" || plan === "pro" || plan === "agency" ? plan : null;
   const period = parseCheckoutPeriod(periodParam);
   const checkoutNext = safeCheckoutNextPath(nextParam);
-  const checkoutEntryPath = planSlug ? buildCheckoutHref(planSlug, period, checkoutNext) : "/checkout";
-  const apiCheckoutPath = planSlug
+
+  let apiCheckoutPath = planSlug
     ? buildApiBillingCheckoutHref(planSlug, period, checkoutNext)
     : "/api/billing/checkout";
+
+  if (quoteToken) {
+    let complimentary = false;
+    try {
+      const admin = createSupabaseAdminClient();
+      const { data } = await admin
+        .from("custom_quotes")
+        .select("price_cents")
+        .eq("checkout_token", quoteToken)
+        .maybeSingle();
+      if (data) complimentary = isComplimentaryQuote(data);
+    } catch {
+      // Fall back to paid checkout API if quote lookup fails.
+    }
+    apiCheckoutPath = buildQuoteAccessHref(quoteToken, complimentary, checkoutNext);
+    if (intent === "json") {
+      apiCheckoutPath += `${apiCheckoutPath.includes("?") ? "&" : "?"}intent=json`;
+    }
+  }
+
+  const checkoutEntryPath = quoteToken
+    ? `/checkout?${new URLSearchParams({
+        quote: quoteToken,
+        ...(checkoutNext ? { next: checkoutNext } : {}),
+        ...(intent === "json" ? { intent: "json" } : {}),
+      }).toString()}`
+    : planSlug
+      ? buildCheckoutHref(planSlug, period, checkoutNext)
+      : "/checkout";
+
   let supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   try {
     supabase = await createSupabaseServerClient();

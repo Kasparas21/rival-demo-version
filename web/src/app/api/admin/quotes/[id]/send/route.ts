@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { authorizeAdminRequest, adminCanWrite } from "@/lib/admin/auth";
-import { buildQuoteCheckoutHref, isComplimentaryQuote } from "@/lib/billing/custom-quotes";
+import { buildQuoteAccessHref } from "@/lib/billing/checkout-url";
+import { isComplimentaryQuote } from "@/lib/billing/custom-quotes";
 import { getAppUrl } from "@/lib/billing/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -51,9 +52,9 @@ export async function POST(_req: Request, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const checkoutPath = buildQuoteCheckoutHref(updated.checkout_token);
-  const checkoutUrl = `${getAppUrl()}${checkoutPath}`;
   const complimentary = isComplimentaryQuote(updated);
+  const checkoutPath = buildQuoteAccessHref(updated.checkout_token, complimentary);
+  const checkoutUrl = `${getAppUrl()}${checkoutPath}`;
 
   try {
     await admin.from("admin_event_log").insert({
