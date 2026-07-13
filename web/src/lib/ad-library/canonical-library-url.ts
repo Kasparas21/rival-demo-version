@@ -16,6 +16,24 @@ export function buildMetaAdLibraryUrl(viewAllPageId: string): string {
   return `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&view_all_page_id=${encodeURIComponent(id)}`;
 }
 
+/** Rewrite `active_status` on Ad Library URLs so Apify input matches scrape settings. */
+export function alignMetaLibraryUrlActiveStatus(
+  raw: string,
+  activeStatus: "ACTIVE" | "ALL",
+): string {
+  const t = raw.trim();
+  if (!t) return raw;
+  try {
+    const u = new URL(normalizeHttpUrl(t));
+    const path = u.pathname.toLowerCase();
+    if (!path.includes("ads/library")) return raw;
+    u.searchParams.set("active_status", activeStatus === "ALL" ? "all" : "active");
+    return u.toString();
+  } catch {
+    return raw;
+  }
+}
+
 /**
  * Meta Ad Library URL for post-onboarding workspace brand scrape — active ads only, full page search params.
  * Matches the public Ad Library share URL shape (search_type=page, sort by total impressions).

@@ -103,6 +103,24 @@ describe("repair-library-ad-media", () => {
     expect(card?.img).toBe("https://scontent.xx.fbcdn.net/v/card-two.jpg");
   });
 
+  it("facebookItemToMetaCard picks image from second snapshot.images entry", () => {
+    const card = facebookItemToMetaCard(
+      {
+        ad_archive_id: "456",
+        page_name: "Clinic",
+        snapshot: {
+          body: { text: "Book now" },
+          images: [
+            { original_image_url: "" },
+            { original_image_url: "https://scontent.xx.fbcdn.net/v/second-image.jpg" },
+          ],
+        },
+      },
+      0,
+    );
+    expect(card?.img).toBe("https://scontent.xx.fbcdn.net/v/second-image.jpg");
+  });
+
   it("repairs Meta and TikTok slots in library response", () => {
     const shell = repairAdsLibraryResponseMedia({
       ok: true,

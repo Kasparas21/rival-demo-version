@@ -10,12 +10,12 @@ import {
   ExpandableCaption,
   ExternalPlatformLink,
   formatRelativeTime,
-  MediaFrame,
   PlatformChrome,
   PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
+import { OrganicPostMedia } from "./organic-post-media";
 
 export function FacebookPostCard({
   post,
@@ -27,13 +27,13 @@ export function FacebookPostCard({
 }: PlatformCardProps) {
   const author = resolveAuthor(post, socials);
   const content = post.content?.trim() ?? "";
-  const thumbnail = post.media_urls[0] ?? null;
   const isSection = variant === "section";
 
   return (
     <PlatformChrome
       platform="facebook"
       variant={variant}
+      standaloneMaxWidthClass={variant === "standalone" ? "max-w-[560px]" : undefined}
       className={cn(highlightEngagement && "ring-2 ring-amber-300", className)}
       onClick={onPostClick ? () => onPostClick(post) : undefined}
     >
@@ -56,11 +56,12 @@ export function FacebookPostCard({
         </div>
       ) : null}
 
-      <MediaFrame
-        src={thumbnail}
+      <OrganicPostMedia
         platform="facebook"
-        aspect={post.media_aspect ?? "landscape"}
-        capVerticalHeight={isSection}
+        mediaUrls={post.media_urls}
+        productType={post.product_type}
+        mediaAspect={post.media_aspect ?? "landscape"}
+        variant={variant}
       />
 
       <div className="flex items-center justify-between border-b border-[#dddfe2] px-3 py-2 text-[13px] text-[#65676b]">

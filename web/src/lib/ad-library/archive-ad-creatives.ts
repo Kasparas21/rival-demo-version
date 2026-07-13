@@ -7,6 +7,7 @@
 import { createHash } from "node:crypto";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { deepFindMetaPreviewUrl } from "@/lib/ad-library/normalize";
 
 const BUCKET = "ad-creatives";
 /** Per-run budget: keeps the post-scrape hook bounded (cron time-boxes at ~230s). */
@@ -48,12 +49,16 @@ export function pickArchivableImageUrl(row: ArchiveCandidate): string | null {
   }
   const snapshot = o.snapshot;
   if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+    const fromSnapshot = deepFindMetaPreviewUrl(snapshot);
+    if (fromSnapshot) return fromSnapshot;
     const s = snapshot as Record<string, unknown>;
     for (const key of ["image_url", "picture", "full_picture", "preview_url", "thumbnail_url"]) {
       const v = s[key];
       if (isHttpUrl(v)) return (v as string).trim();
     }
   }
+  const fromPayload = deepFindMetaPreviewUrl(p);
+  if (fromPayload) return fromPayload;
   return null;
 }
 

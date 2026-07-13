@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
+import type { AdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import { formatQuotePrice } from "@/lib/billing/custom-quotes";
 
 type UserDetail = {
@@ -44,6 +45,14 @@ type UserDetail = {
     sent_at: string | null;
     checkout_token: string;
   }[];
+  brands: { id: string; name: string; domain: string; is_primary: boolean; created_at: string }[];
+  snapshot: {
+    funnel_stage: string | null;
+    scrape_paused: boolean | null;
+    days_inactive: number | null;
+    email_ai_analyses_month: number | null;
+  } | null;
+  usageDetail: AdminUserUsageDetail;
 };
 
 const PLAN_OVERRIDE_OPTIONS: { value: string; label: string }[] = [
@@ -65,6 +74,36 @@ type EditForm = {
   planTier: string;
 };
 
+function formatLimit(value: number | null | undefined): string {
+  if (value == null) return "∞";
+  return String(value);
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString();
+}
+
+function formatChannels(value: unknown): string {
+  if (Array.isArray(value)) return value.join(", ") || "—";
+  if (typeof value === "string" && value.trim()) return value;
+  return "—";
+}
+
+function platformLabel(platform: string): string {
+  const labels: Record<string, string> = {
+    meta: "Meta",
+    google: "Google",
+    tiktok: "TikTok",
+    linkedin: "LinkedIn",
+    pinterest: "Pinterest",
+    snapchat: "Snapchat",
+    youtube: "YouTube",
+    microsoft: "Microsoft",
+  };
+  return labels[platform] ?? platform;
+}
+
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>();
   const userId = params.id;
@@ -76,6 +115,7 @@ export default function AdminUserDetailPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [form, setForm] = useState<EditForm | null>(null);
+  const [expandedCompetitorId, setExpandedCompetitorId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -178,6 +218,11 @@ export default function AdminUserDetailPage() {
   if (!data) {
     return <p className="text-red-600">User not found.</p>;
   }
+
+  const detail = data.usageDetail;
+  const competitorNameById = new Map(
+    detail.competitors.map((c) => [c.id, c.name ?? c.brand_domain ?? "—"]),
+  );
 
   return (
     <div className="space-y-6">
@@ -306,10 +351,6 @@ export default function AdminUserDetailPage() {
               Cancel
             </button>
           </div>
-          <p className="mt-3 text-xs text-zinc-400">
-            Changing the email updates the login email immediately (marked confirmed). Setting a plan overrides
-            Polar billing until cleared here, even across Polar webhook syncs.
-          </p>
         </section>
       ) : null}
 
@@ -340,8 +381,24 @@ export default function AdminUserDetailPage() {
             </div>
             <div>
               <dt className="text-zinc-500">Last active</dt>
-              <dd>{data.profile.last_active_date ?? "—"} (streak {data.profile.app_streak_days})</dd>
+              <dd>
+                {data.profile.last_active_date ?? "—"} (streak {data.profile.app_streak_days})
+              </dd>
             </div>
+            <div>
+              <dt className="text-zinc-500">Funnel stage</dt>
+              <dd>{data.snapshot?.funnel_stage ?? "—"}</dd>
+            </div>
+            {data.snapshot?.scrape_paused ? (
+              <div>
+                <dt className="text-zinc-500">Scrape status</dt>
+                <dd>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                    Paused ({data.snapshot.days_inactive ?? "?"}d inactive)
+                  </span>
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </section>
 
@@ -371,31 +428,470 @@ export default function AdminUserDetailPage() {
         </section>
 
         <section className="rounded-xl border border-zinc-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-zinc-700">Usage ({data.usage.month})</h2>
+          <h2 className="text-sm font-semibold text-zinc-700">Usage ({detail.month})</h2>
           <dl className="mt-3 space-y-2 text-sm">
             <div>
               <dt className="text-zinc-500">Ads scraped</dt>
-              <dd>{data.usage.adsScraped}</dd>
+              <dd>
+                {detail.usage.adsScraped} / {formatLimit(detail.limits.maxAdsProcessedPerMonth)}
+              </dd>
             </div>
             <div>
               <dt className="text-zinc-500">Scrape ops</dt>
               <dd>
-                {data.usage.scrapeOperations} (lifetime {data.usage.lifetimeScrapeOperations})
+                {detail.usage.scrapeOperations} (lifetime {detail.usage.lifetimeScrapeOperations})
               </dd>
             </div>
             <div>
-              <dt className="text-zinc-500">Swaps / CSV / AI</dt>
+              <dt className="text-zinc-500">Swaps / CSV exports</dt>
               <dd>
-                {data.usage.swapCount} / {data.usage.csvExportCount} / {data.usage.adPreviewAnalyses}
+                {detail.usage.swapCount} / {detail.usage.csvExportCount}
+                {detail.usage.csvAdsExported > 0 ? ` (${detail.usage.csvAdsExported} ads exported)` : ""}
               </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">AI preview analyses</dt>
+              <dd>
+                {detail.usage.adPreviewAnalyses} / {formatLimit(detail.limits.maxAdPreviewAnalysesPerMonth)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Email AI analyses</dt>
+              <dd>
+                {detail.usage.emailAiAnalyses} / {formatLimit(detail.limits.maxEmailAiAnalysesPerMonth)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Manual refreshes</dt>
+              <dd>{detail.usage.manualRefreshes}</dd>
             </div>
             <div>
               <dt className="text-zinc-500">Competitors</dt>
-              <dd>{data.competitors.length}</dd>
+              <dd>
+                {detail.competitors.length} / {formatLimit(detail.limits.maxWatchedCompetitors)}
+              </dd>
             </div>
           </dl>
         </section>
       </div>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-zinc-700">Inventory totals</h2>
+        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-zinc-500">Active scraped ads</dt>
+            <dd className="font-medium">{detail.inventory.activeScrapedAds}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Organic posts</dt>
+            <dd className="font-medium">{detail.inventory.organicPosts}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Strategy overviews</dt>
+            <dd className="font-medium">{detail.inventory.strategyOverviews}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Ad library cache rows</dt>
+            <dd className="font-medium">{detail.inventory.adLibraryRefreshes}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Ad AI cache rows</dt>
+            <dd className="font-medium">{detail.inventory.adPreviewCacheCount}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Organic AI cache rows</dt>
+            <dd className="font-medium">{detail.inventory.organicPreviewCacheCount}</dd>
+          </div>
+          <div>
+            <dt className="text-zinc-500">Organic insights</dt>
+            <dd className="font-medium">{detail.inventory.organicInsightsCount}</dd>
+          </div>
+        </dl>
+        <p className="mt-3 text-xs text-zinc-400">
+          OpenRouter token/cost is not logged — only metered feature quotas are shown above.
+        </p>
+      </section>
+
+      {data.brands.length > 0 ? (
+        <section className="rounded-xl border border-zinc-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-zinc-700">Brands</h2>
+          <ul className="mt-3 divide-y divide-zinc-100 text-sm">
+            {data.brands.map((brand) => (
+              <li key={brand.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <span>
+                  {brand.name}{" "}
+                  <span className="text-zinc-500">({brand.domain})</span>
+                  {brand.is_primary ? (
+                    <span className="ml-2 rounded-full bg-zinc-100 px-2 py-0.5 text-xs">primary</span>
+                  ) : null}
+                </span>
+                <span className="text-zinc-400">{formatDate(brand.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-zinc-700">Competitors</h2>
+        {detail.competitors.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500">No competitors.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 text-zinc-500">
+                  <th className="py-2 pr-3 font-medium">Competitor</th>
+                  <th className="py-2 pr-3 font-medium">Paid platforms</th>
+                  <th className="py-2 pr-3 font-medium">Active ads</th>
+                  <th className="py-2 pr-3 font-medium">Organic</th>
+                  <th className="py-2 pr-3 font-medium">Landing pages</th>
+                  <th className="py-2 font-medium">Last scrape</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.competitors.map((c) => (
+                  <Fragment key={c.id}>
+                    <tr
+                      className="cursor-pointer border-b border-zinc-50 hover:bg-zinc-50"
+                      onClick={() =>
+                        setExpandedCompetitorId((prev) => (prev === c.id ? null : c.id))
+                      }
+                    >
+                      <td className="py-3 pr-3">
+                        <div className="font-medium">{c.name ?? c.brand_domain ?? "—"}</div>
+                        {c.brand_domain ? (
+                          <div className="text-xs text-zinc-500">{c.brand_domain}</div>
+                        ) : null}
+                      </td>
+                      <td className="py-3 pr-3">
+                        <div className="flex flex-wrap gap-1">
+                          {c.platforms.length === 0 ? (
+                            <span className="text-zinc-400">—</span>
+                          ) : (
+                            c.platforms.map((p) => (
+                              <span
+                                key={`${c.id}-${p.platform}`}
+                                className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-800"
+                              >
+                                {platformLabel(p.platform)} ({p.active_ad_count})
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-3">{c.totalActiveAds}</td>
+                      <td className="py-3 pr-3">
+                        {c.organicPlatforms.length > 0 ? (
+                          <div>
+                            <div className="flex flex-wrap gap-1">
+                              {c.organicPlatforms.map((p) => (
+                                <span
+                                  key={`${c.id}-org-${p}`}
+                                  className="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-800"
+                                >
+                                  {p}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="mt-1 text-xs text-zinc-500">{c.organicPostCount} posts</div>
+                          </div>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-3">
+                        {c.landingPages.length > 0 ? (
+                          <span>
+                            {c.landingPages.length} page{c.landingPages.length === 1 ? "" : "s"} ·{" "}
+                            {c.landingPages.reduce((sum, p) => sum + p.snapshotCount, 0)} shots
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">—</span>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        <div className="text-xs">
+                          <div>Paid: {formatDate(c.last_scraped_at)}</div>
+                          <div className="text-zinc-500">
+                            Organic: {formatDate(c.organic_last_scraped_at)}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                    {expandedCompetitorId === c.id ? (
+                      <tr className="border-b border-zinc-100 bg-zinc-50/50">
+                        <td colSpan={6} className="px-3 py-3 text-xs text-zinc-600">
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div>
+                              <p className="font-medium text-zinc-700">Ads by platform</p>
+                              {Object.keys(c.adsByPlatform).length === 0 ? (
+                                <p className="mt-1">No active ads stored.</p>
+                              ) : (
+                                <ul className="mt-1 space-y-1">
+                                  {Object.entries(c.adsByPlatform).map(([platform, count]) => (
+                                    <li key={platform}>
+                                      {platformLabel(platform)}: {count}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-zinc-700">Landing pages</p>
+                              {c.landingPages.length === 0 ? (
+                                <p className="mt-1">None tracked.</p>
+                              ) : (
+                                <ul className="mt-1 space-y-1">
+                                  {c.landingPages.map((p) => (
+                                    <li key={p.id}>
+                                      {p.label || p.url}{" "}
+                                      {p.is_active ? "" : "(inactive)"} · {p.snapshotCount} shots
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-zinc-400">Click a row to expand platform and landing page detail.</p>
+      </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-zinc-700">Landing page screenshots</h2>
+        <p className="mt-1 text-xs text-zinc-500">
+          Includes active and inactive pages, including auto-detected URLs the user may not have opened.
+        </p>
+        {detail.landingPages.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500">No landing pages tracked.</p>
+        ) : (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {detail.landingPages.map((page) => (
+              <div key={page.id} className="rounded-lg border border-zinc-100 p-3">
+                <div className="flex gap-3">
+                  {page.latestScreenshotUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={page.latestScreenshotUrl}
+                      alt=""
+                      className="h-16 w-24 shrink-0 rounded border border-zinc-200 object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-24 shrink-0 items-center justify-center rounded border border-dashed border-zinc-200 text-xs text-zinc-400">
+                      No shot
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p className="truncate font-medium">{page.label || page.url}</p>
+                    <p className="truncate text-xs text-zinc-500">{page.competitor_name}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {page.is_active ? "Active" : "Inactive"} · {page.snapshotCount} shots
+                    </p>
+                    <p className="text-xs text-zinc-400">{formatDate(page.latestTakenAt)}</p>
+                    {page.auto_detected_from ? (
+                      <p className="text-xs text-zinc-400">Auto: {page.auto_detected_from}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <a
+                  href={page.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 block truncate text-xs text-sky-600 hover:underline"
+                >
+                  {page.url}
+                </a>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-xl border border-zinc-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-zinc-700">AI usage</h2>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt className="text-zinc-500">Ad + organic preview AI (this month)</dt>
+              <dd>
+                {detail.usage.adPreviewAnalyses} / {formatLimit(detail.limits.maxAdPreviewAnalysesPerMonth)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Email intelligence AI (this month)</dt>
+              <dd>
+                {detail.usage.emailAiAnalyses} / {formatLimit(detail.limits.maxEmailAiAnalysesPerMonth)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Cached ad analyses</dt>
+              <dd>{detail.inventory.adPreviewCacheCount}</dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Cached organic post analyses</dt>
+              <dd>{detail.inventory.organicPreviewCacheCount}</dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Organic insights generated</dt>
+              <dd>{detail.inventory.organicInsightsCount}</dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Strategy overviews</dt>
+              <dd>{detail.inventory.strategyOverviews}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 bg-white p-4">
+          <h2 className="text-sm font-semibold text-zinc-700">Email activity</h2>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt className="text-zinc-500">Active trackers</dt>
+              <dd>
+                {detail.email.activeTrackers} / {formatLimit(detail.email.trackerLimit)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Inbound competitor emails</dt>
+              <dd>
+                {detail.email.inboundCount} received · {detail.email.analyzedCount} AI-analyzed
+              </dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Saved emails</dt>
+              <dd>{detail.email.savedCount}</dd>
+            </div>
+            <div>
+              <dt className="text-zinc-500">Last inbound</dt>
+              <dd>{formatDate(detail.email.lastReceivedAt)}</dd>
+            </div>
+          </dl>
+          {detail.email.trackers.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-xs text-zinc-600">
+              {detail.email.trackers.map((t) => (
+                <li key={t.id}>
+                  {t.tracking_address} · {competitorNameById.get(t.competitor_id) ?? t.competitor_id}
+                  {t.is_active ? "" : " (inactive)"}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {detail.email.recentInbound.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-xs font-medium text-zinc-500">Recent inbound</p>
+              <ul className="mt-1 space-y-1 text-xs">
+                {detail.email.recentInbound.map((e, i) => (
+                  <li key={`${e.received_at}-${i}`}>
+                    <span className="text-zinc-700">{e.subject ?? "(no subject)"}</span>
+                    <span className="text-zinc-400"> · {formatDate(e.received_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </section>
+      </div>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-zinc-700">Intelligence delivery</h2>
+        <div className="mt-3 grid gap-4 lg:grid-cols-3">
+          <div className="text-sm">
+            <h3 className="font-medium text-zinc-700">Autopilot</h3>
+            {detail.intelligence.autopilot.configured ? (
+              <dl className="mt-2 space-y-1 text-xs">
+                <div>
+                  <dt className="text-zinc-500">Enabled</dt>
+                  <dd>{detail.intelligence.autopilot.enabled ? "Yes" : "No"}</dd>
+                </div>
+                <div>
+                  <dt className="text-zinc-500">Watch / Report / Brief</dt>
+                  <dd>
+                    {detail.intelligence.autopilot.watch_enabled ? "Watch" : "—"} /{" "}
+                    {detail.intelligence.autopilot.report_enabled ? "Report" : "—"} /{" "}
+                    {detail.intelligence.autopilot.brief_enabled ? "Brief" : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-zinc-500">Slack</dt>
+                  <dd>{detail.intelligence.autopilot.slackConnected ? "Connected" : "Not connected"}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-500">Not configured.</p>
+            )}
+            {detail.intelligence.autopilot.recentOutputs.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-xs">
+                {detail.intelligence.autopilot.recentOutputs.map((o, i) => (
+                  <li key={`ap-${i}`}>
+                    {o.output_type} · {o.status} · {formatDate(o.sent_at)}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="text-sm">
+            <h3 className="font-medium text-zinc-700">Rival Agent</h3>
+            {detail.intelligence.agent.configured ? (
+              <dl className="mt-2 space-y-1 text-xs">
+                <div>
+                  <dt className="text-zinc-500">Enabled</dt>
+                  <dd>{detail.intelligence.agent.enabled ? "Yes" : "No"}</dd>
+                </div>
+                <div>
+                  <dt className="text-zinc-500">Weekly brief</dt>
+                  <dd>{detail.intelligence.agent.weekly_brief_enabled ? "Yes" : "No"}</dd>
+                </div>
+                <div>
+                  <dt className="text-zinc-500">Channels</dt>
+                  <dd>{formatChannels(detail.intelligence.agent.channels)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-500">Not configured.</p>
+            )}
+            {detail.intelligence.agent.recentMessages.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-xs">
+                {detail.intelligence.agent.recentMessages.map((m, i) => (
+                  <li key={`ag-${i}`}>
+                    {m.subject ?? "(no subject)"} · {m.status} · {formatDate(m.sent_at)}
+                    {m.channels_delivered.length > 0 ? ` · ${m.channels_delivered.join(", ")}` : ""}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div className="text-sm">
+            <h3 className="font-medium text-zinc-700">MCP (Claude / ChatGPT)</h3>
+            <dl className="mt-2 space-y-1 text-xs">
+              <div>
+                <dt className="text-zinc-500">Active API keys</dt>
+                <dd>{detail.intelligence.mcp.activeKeys}</dd>
+              </div>
+            </dl>
+            {detail.intelligence.mcp.keys.length > 0 ? (
+              <ul className="mt-2 space-y-1 text-xs">
+                {detail.intelligence.mcp.keys.map((k, i) => (
+                  <li key={`mcp-${i}`}>
+                    {k.label || "Key"} ({k.key_hint}) · last used {formatDate(k.last_used_at)}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-xs text-zinc-500">No active MCP keys.</p>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-zinc-700">Quotes</h2>
@@ -424,17 +920,6 @@ export default function AdminUserDetailPage() {
             ))}
           </ul>
         )}
-      </section>
-
-      <section className="rounded-xl border border-zinc-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-zinc-700">Competitors</h2>
-        <ul className="mt-3 flex flex-wrap gap-2 text-sm">
-          {data.competitors.map((c, i) => (
-            <li key={`${c.brand_domain}-${i}`} className="rounded-full bg-zinc-100 px-3 py-1">
-              {c.name ?? c.brand_domain ?? "—"}
-            </li>
-          ))}
-        </ul>
       </section>
     </div>
   );

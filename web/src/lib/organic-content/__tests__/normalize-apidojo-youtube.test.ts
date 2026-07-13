@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { normalizeOrganicItem } from "../normalize";
-import { organicPostDisplayFields } from "../post-display";
+import { enrichOrganicPostForApi, organicPostDisplayFields } from "../post-display";
 
 const adidasVideo = {
   inputSource: "@adidas",
@@ -71,5 +71,17 @@ describe("organicPostDisplayFields apidojo youtube", () => {
       product_type: "video",
       media_aspect: "landscape",
     });
+  });
+});
+
+describe("enrichOrganicPostForApi youtube", () => {
+  it("re-extracts thumbnails from raw_data when media_urls are empty", () => {
+    expect(
+      enrichOrganicPostForApi({
+        platform: "youtube",
+        media_urls: [],
+        raw_data: adidasVideo,
+      }).media_urls[0],
+    ).toBe("https://i.ytimg.com/vi/mHdmGHk-ZJ0/maxresdefault.jpg");
   });
 });

@@ -311,6 +311,13 @@ export function extractTwitterViewsFromRaw(raw_data: unknown): number {
   return pickXtdataTwitterViews(row);
 }
 
+/** Re-extract media URLs from stored xtdata Twitter raw_data. */
+export function extractTwitterMediaFromRaw(raw_data: unknown): string[] {
+  const row = asRecord(raw_data);
+  if (!row) return [];
+  return pickXtdataTwitterMediaUrls(row);
+}
+
 function pickXtdataTwitterMentions(row: Record<string, unknown>): OrganicCollaboratorAccount[] {
   const entities = asRecord(row.entities);
   const mentions = entities?.user_mentions;
@@ -627,33 +634,186 @@ function isApifyFacebookPostRow(row: Record<string, unknown>): boolean {
   );
 }
 
-function pickFacebookMediaUrls(row: Record<string, unknown>): string[] {
+function pickBestFacebookImageUrl(rec: Record<string, unknown>): string | null {
+  const candidates = [
+    asRecord(rec.image)?.uri,
+    asRecord(rec.thumbnailImage)?.uri,
+    rec.thumbnail,
+    asRecord(asRecord(rec.preferred_thumbnail)?.image)?.uri,
+  ];
+  for (const v of candidates) {
+    if (typeof v === "string" && v.startsWith("http") && !isFacebookContentPageUrl(v)) {
+      return v;
+    }
+  }
+  return null;
+}
+
+function collectFacebookAttachmentUrls(attachments: unknown, add: (url: string) => void): void {
+  if (!Array.isArray(attachments)) return;
+  for (const att of attachments) {
+    const rec = asRecord(att);
+    if (!rec) continue;
+    const media = asRecord(rec.media);
+    if (media) {
+      const url = pickBestFacebookImageUrl(media);
+      if (url) add(url);
+    }
+    const subattachments = rec.subattachments;
+    if (Array.isArray(subattachments)) {
+      for (const sub of subattachments) {
+        const subRec = asRecord(sub);
+        const subMedia = asRecord(subRec?.media);
+        if (subMedia) {
+          const url = pickBestFacebookImageUrl(subMedia);
+          if (url) add(url);
+        }
+      }
+    }
+  }
+}
+
+function facebookPageProfileUrls(row: Record<string, unknown>): Set<string> {
   const urls = new Set<string>();
   const add = (v: unknown) => {
-    if (typeof v !== "string" || !v.startsWith("http") || isFacebookContentPageUrl(v)) return;
-    urls.add(v);
+    const s = pickString(v as string | undefined);
+    if (s?.startsWith("http")) urls.add(s);
   };
-
-  add(row.fullPicture);
-  add(row.full_picture);
+  const user = asRecord(row.user);
   add(row.picture);
+  add(row.pageProfilePicture);
+  add(user?.profilePic);
+  add(user?.profilePicture);
+  add(user?.profile_pic);
+  return urls;
+}
+
+function facebookImageUrlMatches(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    if (ua.pathname === ub.pathname) return true;
+    const idA = ua.pathname.match(/(\d{12,})/)?.[1];
+    const idB = ub.pathname.match(/(\d{12,})/)?.[1];
+    return Boolean(idA && idB && idA === idB);
+  } catch {
+    return false;
+  }
+}
+
+function isPersistedOrganicStorageUrl(url: string): boolean {
+  return /\/organic-media\//i.test(url) || /\/storage\/v1\/object\/public\/organic-media\//i.test(url);
+}
+
+/** Whether two media URLs refer to the same underlying image/video preview. */
+export function organicMediaUrlsMatch(
+  a: string,
+  b: string,
+  platform?: OrganicPlatform,
+): boolean {
+  if (a === b) return true;
+  if (facebookImageUrlMatches(a, b)) return true;
+
+  const twA = a.match(/pbs\.twimg\.com\/media\/([^./?]+)/)?.[1];
+  const twB = b.match(/pbs\.twimg\.com\/media\/([^./?]+)/)?.[1];
+  if (twA && twB && twA === twB) return true;
+
+  const ytA = a.match(/i\.ytimg\.com\/vi\/([^/]+)/)?.[1];
+  const ytB = b.match(/i\.ytimg\.com\/vi\/([^/]+)/)?.[1];
+  if (ytA && ytB && ytA === ytB) return true;
+
+  if (platform === "instagram" || a.includes("cdninstagram.com") || b.includes("cdninstagram.com")) {
+    const igA = a.match(/(\d{10,})/)?.[1];
+    const igB = b.match(/(\d{10,})/)?.[1];
+    if (igA && igB && igA === igB) return true;
+  }
+
+  return false;
+}
+
+/** Remove duplicate previews (thumbnail + full, archived + CDN, media + attachments). */
+export function dedupeOrganicMediaUrls(urls: string[], platform?: OrganicPlatform): string[] {
+  const out: string[] = [];
+  for (const raw of urls) {
+    const url = raw?.trim();
+    if (!url) continue;
+    const dupeIndex = out.findIndex((existing) => organicMediaUrlsMatch(existing, url, platform));
+    if (dupeIndex >= 0) {
+      const kept = out[dupeIndex]!;
+      const prefer =
+        isPersistedOrganicStorageUrl(url) && !isPersistedOrganicStorageUrl(kept) ? url : kept;
+      out[dupeIndex] = prefer;
+      continue;
+    }
+    out.push(url);
+  }
+  return out;
+}
+
+function isFacebookPageProfileImage(url: string, profileUrls: Set<string>): boolean {
+  const trimmed = url.trim();
+  if (profileUrls.has(trimmed)) return true;
+  for (const profile of profileUrls) {
+    if (facebookImageUrlMatches(trimmed, profile)) return true;
+  }
+  return false;
+}
+
+/** Drop page logo / profile picture URLs when the post has real photo media. */
+export function filterFacebookPageLogoFromPostMedia(
+  urls: string[],
+  row: Record<string, unknown>,
+): string[] {
+  if (urls.length <= 1) return urls;
+  const profileUrls = facebookPageProfileUrls(row);
+  const filtered = urls.filter((url) => !isFacebookPageProfileImage(url, profileUrls));
+  return filtered.length > 0 ? filtered : urls;
+}
+
+/** Whether a URL is the Facebook page profile picture (not post media). */
+export function isFacebookPageLogoMediaUrl(url: string, raw_data: unknown): boolean {
+  const row = asRecord(raw_data);
+  if (!row) return false;
+  return isFacebookPageProfileImage(url, facebookPageProfileUrls(row));
+}
+
+function isFacebookNonPostMediaItem(rec: Record<string, unknown>): boolean {
+  const typename = pickString(rec.__typename)?.toLowerCase() ?? "";
+  return typename === "profilepicture" || typename === "page" || typename === "user";
+}
+
+function pickFacebookMediaUrls(row: Record<string, unknown>): string[] {
+  const urls: string[] = [];
+  const addUrl = (v: string) => {
+    if (!v.startsWith("http") || isFacebookContentPageUrl(v)) return;
+    urls.push(v);
+  };
 
   const media = row.media;
   if (Array.isArray(media)) {
     for (const item of media) {
       const rec = asRecord(item);
-      if (!rec) continue;
-      add(rec.thumbnail);
-      add(asRecord(rec.thumbnailImage)?.uri);
-      add(asRecord(rec.image)?.uri);
-      add(asRecord(asRecord(rec.preferred_thumbnail)?.image)?.uri);
+      if (!rec || isFacebookNonPostMediaItem(rec)) continue;
+      const best = pickBestFacebookImageUrl(rec);
+      if (best) addUrl(best);
     }
   }
 
-  const deep = deepFindMetaPreviewUrl(row);
-  if (deep && !isFacebookContentPageUrl(deep)) urls.add(deep);
+  if (urls.length === 0) {
+    collectFacebookAttachmentUrls(row.attachments, addUrl);
+  }
 
-  return [...urls];
+  if (urls.length === 0) {
+    const fallbacks = [row.fullPicture, row.full_picture, row.picture];
+    for (const v of fallbacks) {
+      if (typeof v === "string") addUrl(v);
+    }
+    const deep = deepFindMetaPreviewUrl(row);
+    if (deep) addUrl(deep);
+  }
+
+  return filterFacebookPageLogoFromPostMedia(dedupeOrganicMediaUrls(urls, "facebook"), row);
 }
 
 /** Re-extract preview URLs from stored Apify Facebook raw_data (e.g. when serving API). */
@@ -689,7 +849,13 @@ function normalizeFacebookPost(
   const postId = pickString(row.postId, row.post_id, row.id) ?? `${platform}-${index}`;
   const mediaUrls = pickFacebookMediaUrls(row);
   const isReel = isFacebookReelRow(row);
-  const productType = isReel ? "reel" : mediaUrls.length > 0 ? "photo" : null;
+  const productType = isReel
+    ? "reel"
+    : mediaUrls.length > 1
+      ? "carousel"
+      : mediaUrls.length > 0
+        ? "photo"
+        : null;
   const postUrl =
     pickString(row.url, row.postUrl, row.post_url, row.link) ??
     (Array.isArray(row.media)
@@ -778,6 +944,91 @@ export function extractTikTokMediaFromRaw(raw_data: unknown): string[] {
   const row = asRecord(raw_data);
   if (!row) return [];
   return pickTikTokMediaUrls(row);
+}
+
+function pickInstagramMediaUrls(row: Record<string, unknown>): string[] {
+  const urls = new Set<string>();
+  const add = (v: string | null) => {
+    if (v?.startsWith("http") && !/\.(mp4|mov|webm|m3u8)(\?|$)/i.test(v)) urls.add(v);
+  };
+
+  add(pickString(row.image_url, row.imageUrl, row.displayUrl));
+
+  const carousel = row.carousel_media ?? row.carouselMedia ?? row.children;
+  if (Array.isArray(carousel)) {
+    for (const item of carousel) {
+      const rec = asRecord(item);
+      if (!rec) continue;
+      add(pickString(rec.image_url, rec.imageUrl, rec.displayUrl));
+    }
+  }
+
+  if (urls.size === 0) {
+    for (const url of pickMediaUrls(row)) {
+      if (!/\.(mp4|mov|webm|m3u8)(\?|$)/i.test(url)) urls.add(url);
+    }
+  }
+
+  return [...urls];
+}
+
+/** Re-extract preview URLs from stored Instagram Sones raw_data. */
+export function extractInstagramMediaFromRaw(raw_data: unknown): string[] {
+  const row = asRecord(raw_data);
+  if (!row) return [];
+  if (isInstagramSonesRow(row)) return pickInstagramMediaUrls(row);
+  return pickMediaUrls(row).filter((url) => !/\.(mp4|mov|webm|m3u8)(\?|$)/i.test(url));
+}
+
+function pickYouTubeMediaUrls(row: Record<string, unknown>): string[] {
+  const urls = new Set<string>();
+  const add = (v: string | null | undefined) => {
+    if (v?.startsWith("http") && !/\.(mp4|mov|webm|m3u8)(\?|$)/i.test(v)) urls.add(v);
+  };
+
+  add(apidojoBestThumbnail(row));
+  add(pickString(row.thumbnailUrl, row.thumbnail));
+
+  const details = asRecord(row.details);
+  add(pickString(details?.thumbnailUrl as string | undefined));
+
+  for (const url of pickMediaUrls(row)) {
+    if (!/\.(mp4|mov|webm|m3u8)(\?|$)/i.test(url)) urls.add(url);
+  }
+
+  if (urls.size === 0) {
+    const videoId = pickString(row.id, row.video_id, details?.id as string | undefined);
+    if (videoId) urls.add(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`);
+  }
+
+  return [...urls];
+}
+
+/** Re-extract thumbnail URLs from stored YouTube raw_data. */
+export function extractYouTubeMediaFromRaw(raw_data: unknown): string[] {
+  const row = asRecord(raw_data);
+  if (!row) return [];
+  return pickYouTubeMediaUrls(row);
+}
+
+/** Re-extract preview URLs from stored organic raw_data for any platform. */
+export function repairOrganicMediaFromRaw(platform: OrganicPlatform, raw_data: unknown): string[] {
+  switch (platform) {
+    case "facebook":
+      return extractFacebookMediaFromRaw(raw_data);
+    case "linkedin":
+      return extractLinkedInMediaFromRaw(raw_data);
+    case "tiktok":
+      return extractTikTokMediaFromRaw(raw_data);
+    case "instagram":
+      return extractInstagramMediaFromRaw(raw_data);
+    case "twitter":
+      return extractTwitterMediaFromRaw(raw_data);
+    case "youtube":
+      return extractYouTubeMediaFromRaw(raw_data);
+    default:
+      return [];
+  }
 }
 
 function normalizeHarvestapiLinkedInPost(

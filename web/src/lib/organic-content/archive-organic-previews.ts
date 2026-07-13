@@ -1,6 +1,6 @@
 /**
  * Archives organic post preview images into Supabase Storage (`organic-media` bucket)
- * so TikTok/Instagram CDN thumbnails survive after signed URLs expire.
+ * so platform CDN thumbnails survive after signed URLs expire.
  */
 import { createHash } from "node:crypto";
 
@@ -8,15 +8,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/types";
 
-import {
-  extractFacebookMediaFromRaw,
-  extractLinkedInMediaFromRaw,
-  extractTikTokMediaFromRaw,
-} from "./normalize";
+import { dedupeOrganicMediaUrls, filterFacebookPageLogoFromPostMedia, repairOrganicMediaFromRaw } from "./normalize";
 import type { OrganicPlatform } from "./types";
 
 const BUCKET = "organic-media";
 const MAX_ARCHIVES_PER_RUN = 60;
+const MAX_IMAGES_PER_POST = 10;
 const CONCURRENCY = 6;
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -33,11 +30,17 @@ type ArchiveCandidate = {
   platform: string;
   media_urls: string[];
   raw_data: unknown;
+  archived_preview_url?: string | null;
 };
 
-function isRasterPreviewUrl(url: string): boolean {
+export function isRasterPreviewUrl(url: string): boolean {
   const trimmed = url.trim();
   return /^https?:\/\//i.test(trimmed) && !/\.(mp4|mov|webm|m3u8)(\?|$)/i.test(trimmed);
+}
+
+export function isPersistedOrganicMediaUrl(url: string): boolean {
+  const trimmed = url.trim();
+  return /\/organic-media\//i.test(trimmed) || /\/storage\/v1\/object\/public\/organic-media\//i.test(trimmed);
 }
 
 function firstRasterUrl(urls: string[]): string | null {
@@ -47,28 +50,51 @@ function firstRasterUrl(urls: string[]): string | null {
   return null;
 }
 
+function extractRasterUrlsFromRaw(platform: OrganicPlatform, raw: unknown): string[] {
+  const urls = repairOrganicMediaFromRaw(platform, raw).filter(isRasterPreviewUrl);
+  const row = raw as Record<string, unknown>;
+  if (platform === "facebook" && row && typeof row === "object") {
+    return filterFacebookPageLogoFromPostMedia(urls, row);
+  }
+  return urls;
+}
+
+/** Raster preview URLs to archive for an organic post (stored column + raw_data fallback). */
+export function pickOrganicArchivableRasterUrls(row: ArchiveCandidate): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (list: string[]) => {
+    for (const url of list) {
+      const trimmed = url?.trim();
+      if (trimmed && isRasterPreviewUrl(trimmed) && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        out.push(trimmed);
+      }
+    }
+  };
+
+  add(row.media_urls ?? []);
+  add(extractRasterUrlsFromRaw(row.platform as OrganicPlatform, row.raw_data));
+  return dedupeOrganicMediaUrls(out, row.platform as OrganicPlatform).slice(0, MAX_IMAGES_PER_POST);
+}
+
 /** Best raster preview URL for an organic post row at archive time. */
 export function pickOrganicArchivablePreviewUrl(row: ArchiveCandidate): string | null {
-  const fromColumn = firstRasterUrl(row.media_urls ?? []);
-  if (fromColumn) return fromColumn;
+  return firstRasterUrl(pickOrganicArchivableRasterUrls(row));
+}
 
-  const platform = row.platform as OrganicPlatform;
-  const raw = row.raw_data;
-  let extracted: string[] = [];
-  switch (platform) {
-    case "tiktok":
-      extracted = extractTikTokMediaFromRaw(raw);
-      break;
-    case "facebook":
-      extracted = extractFacebookMediaFromRaw(raw);
-      break;
-    case "linkedin":
-      extracted = extractLinkedInMediaFromRaw(raw);
-      break;
-    default:
-      break;
-  }
-  return firstRasterUrl(extracted);
+/** Whether a post still has external CDN raster URLs that should be copied to storage. */
+export function organicPostNeedsArchiving(row: ArchiveCandidate): boolean {
+  const rasterTargets = pickOrganicArchivableRasterUrls(row);
+  if (rasterTargets.length === 0) return false;
+
+  const stored = row.media_urls ?? [];
+  const hasExternalRaster = stored.some((url) => isRasterPreviewUrl(url) && !isPersistedOrganicMediaUrl(url));
+  if (hasExternalRaster) return true;
+
+  const archived = row.archived_preview_url?.trim();
+  if (!archived) return true;
+  return !isPersistedOrganicMediaUrl(archived);
 }
 
 async function downloadImage(url: string): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
@@ -91,36 +117,68 @@ async function downloadImage(url: string): Promise<{ bytes: ArrayBuffer; content
   }
 }
 
+async function uploadArchivedImage(
+  admin: SupabaseClient<Database>,
+  params: { userId: string; competitorId: string; rowId: string; platform: string; sourceUrl: string; bytes: ArrayBuffer; contentType: string },
+): Promise<string | null> {
+  const ext = CONTENT_TYPE_EXT[params.contentType] ?? "jpg";
+  const hash = createHash("sha1").update(`${params.rowId}:${params.sourceUrl}`).digest("hex").slice(0, 12);
+  const path = `${params.userId}/${params.competitorId}/${params.platform}/${params.rowId}-${hash}.${ext}`;
+
+  const { error: uploadErr } = await admin.storage
+    .from(BUCKET)
+    .upload(path, params.bytes, { contentType: params.contentType, upsert: true });
+  if (uploadErr) {
+    console.error("[archiveOrganicPreviews] upload", uploadErr.message);
+    return null;
+  }
+
+  const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(path);
+  return pub?.publicUrl ?? null;
+}
+
 async function archiveOne(
   admin: SupabaseClient<Database>,
   params: { userId: string; competitorId: string; row: ArchiveCandidate },
 ): Promise<boolean> {
   const { userId, competitorId, row } = params;
-  const url = pickOrganicArchivablePreviewUrl(row);
-  if (!url) return false;
+  const rasterUrls = pickOrganicArchivableRasterUrls(row);
+  if (rasterUrls.length === 0) return false;
 
-  const media = await downloadImage(url);
-  if (!media) return false;
-
-  const ext = CONTENT_TYPE_EXT[media.contentType] ?? "jpg";
-  const hash = createHash("sha1").update(row.id).digest("hex").slice(0, 12);
-  const path = `${userId}/${competitorId}/${row.platform}/${row.id}-${hash}.${ext}`;
-
-  const { error: uploadErr } = await admin.storage
-    .from(BUCKET)
-    .upload(path, media.bytes, { contentType: media.contentType, upsert: true });
-  if (uploadErr) {
-    console.error("[archiveOrganicPreviews] upload", uploadErr.message);
-    return false;
+  const archivedBySource = new Map<string, string>();
+  for (const sourceUrl of rasterUrls) {
+    if (isPersistedOrganicMediaUrl(sourceUrl)) {
+      archivedBySource.set(sourceUrl, sourceUrl);
+      continue;
+    }
+    const media = await downloadImage(sourceUrl);
+    if (!media) continue;
+    const publicUrl = await uploadArchivedImage(admin, {
+      userId,
+      competitorId,
+      rowId: row.id,
+      platform: row.platform,
+      sourceUrl,
+      bytes: media.bytes,
+      contentType: media.contentType,
+    });
+    if (publicUrl) archivedBySource.set(sourceUrl, publicUrl);
   }
 
-  const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(path);
-  const publicUrl = pub?.publicUrl;
-  if (!publicUrl) return false;
+  if (archivedBySource.size === 0) return false;
+
+  const baseUrls = row.media_urls?.length ? row.media_urls : rasterUrls;
+  const media_urls = dedupeOrganicMediaUrls(
+    baseUrls.map((url) => archivedBySource.get(url.trim()) ?? url),
+    row.platform as OrganicPlatform,
+  );
+
+  const archived_preview_url = media_urls[0] ?? archivedBySource.get(rasterUrls[0]!) ?? null;
+  if (!archived_preview_url) return false;
 
   const { error: updateErr } = await admin
     .from("organic_posts")
-    .update({ archived_preview_url: publicUrl })
+    .update({ archived_preview_url, media_urls })
     .eq("id", row.id);
   if (updateErr) {
     console.error("[archiveOrganicPreviews] row update", updateErr.message);
@@ -145,12 +203,11 @@ export async function archiveOrganicPreviewsForCompetitor(
 
   let query = admin
     .from("organic_posts")
-    .select("id, platform, media_urls, raw_data")
+    .select("id, platform, media_urls, raw_data, archived_preview_url")
     .eq("user_id", userId)
     .eq("competitor_id", competitorId)
-    .is("archived_preview_url", null)
     .order("scraped_at", { ascending: false })
-    .limit(MAX_ARCHIVES_PER_RUN);
+    .limit(MAX_ARCHIVES_PER_RUN * 3);
 
   if (params.platforms?.length) {
     query = query.in("platform", params.platforms);
@@ -162,7 +219,9 @@ export async function archiveOrganicPreviewsForCompetitor(
     return { archived: 0, candidates: 0 };
   }
 
-  const candidates = (rows ?? []) as ArchiveCandidate[];
+  const candidates = ((rows ?? []) as ArchiveCandidate[])
+    .filter(organicPostNeedsArchiving)
+    .slice(0, MAX_ARCHIVES_PER_RUN);
   let archived = 0;
 
   for (let i = 0; i < candidates.length; i += CONCURRENCY) {

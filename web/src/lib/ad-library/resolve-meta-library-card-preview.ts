@@ -31,11 +31,14 @@ export function resolveMetaLibraryCardPreview(ad: MetaAdCard): string {
 export function hydrateMetaLibraryCardForDisplay(ad: MetaAdCard): MetaAdCard {
   const repaired = repairMetaAdCardMedia(ad);
   const preview = resolveMetaLibraryCardPreview(repaired);
+  const stream = repaired.videoUrl?.trim() ?? "";
   if (!preview) {
+    if (stream && repaired.isVideo) {
+      return { ...repaired, img: "", isVideo: true, videoUrl: stream };
+    }
     return { ...repaired, img: "", isVideo: false, videoUrl: undefined };
   }
 
-  const stream = repaired.videoUrl?.trim() ?? "";
   const wantsVideo = Boolean(stream && repaired.isVideo);
   return {
     ...repaired,

@@ -10,12 +10,12 @@ import {
   ExpandableCaption,
   ExternalPlatformLink,
   formatRelativeTime,
-  MediaFrame,
   PlatformChrome,
   PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
+import { OrganicPostMedia } from "./organic-post-media";
 
 export function XPostCard({
   post,
@@ -27,7 +27,7 @@ export function XPostCard({
 }: PlatformCardProps) {
   const author = resolveAuthor(post, socials);
   const content = post.content?.trim() ?? "";
-  const thumbnail = post.media_urls[0] ?? null;
+  const hasMedia = post.media_urls.some((u) => u?.trim());
   const isSection = variant === "section";
 
   return (
@@ -56,12 +56,19 @@ export function XPostCard({
             <ExpandableCaption content={content} className="mt-1 whitespace-pre-wrap text-[15px] text-black" />
           ) : null}
 
-          {thumbnail ? (
-            <div className="mt-3 overflow-hidden rounded-2xl border border-[#eff3f4]">
-              <MediaFrame
-                src={thumbnail}
+          {hasMedia ? (
+            <div
+              className={cn(
+                isSection && "mt-3 overflow-hidden rounded-2xl border border-[#eff3f4]",
+                !isSection && "mt-3",
+              )}
+            >
+              <OrganicPostMedia
                 platform="twitter"
-                aspect={post.media_aspect ?? "landscape"}
+                mediaUrls={post.media_urls}
+                productType={post.product_type}
+                mediaAspect={post.media_aspect ?? "landscape"}
+                variant={variant}
                 capVerticalHeight={isSection}
               />
             </div>

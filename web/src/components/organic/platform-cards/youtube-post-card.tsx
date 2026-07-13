@@ -9,12 +9,12 @@ import {
   EngagementCount,
   ExternalPlatformLink,
   formatRelativeTime,
-  MediaFrame,
   PlatformChrome,
   PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
+import { OrganicPostMedia } from "./organic-post-media";
 
 export function YouTubePostCard({
   post,
@@ -26,7 +26,6 @@ export function YouTubePostCard({
 }: PlatformCardProps) {
   const author = resolveAuthor(post, socials);
   const content = post.content?.trim() ?? "";
-  const thumbnail = post.media_urls[0] ?? null;
   const title = content.split("\n")[0] || "Untitled video";
   const isSection = variant === "section";
 
@@ -38,10 +37,12 @@ export function YouTubePostCard({
       onClick={onPostClick ? () => onPostClick(post) : undefined}
     >
       <div className="relative">
-        <MediaFrame
-          src={thumbnail}
+        <OrganicPostMedia
           platform="youtube"
-          aspect={post.media_aspect ?? "landscape"}
+          mediaUrls={post.media_urls}
+          productType={post.product_type}
+          mediaAspect={post.media_aspect ?? "landscape"}
+          variant={variant}
           capVerticalHeight={isSection}
           overlay={
             <div className="absolute inset-0 flex items-center justify-center bg-black/10">

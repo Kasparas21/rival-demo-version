@@ -12,7 +12,7 @@ import {
   type LibraryRunStatus,
 } from "@/lib/ad-library/library-run-status";
 import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
-import { safeHttpsUrl } from "@/lib/ad-library/normalize";
+import { safeHttpsUrl, looksLikeMetaRasterPreviewUrl } from "@/lib/ad-library/normalize";
 import { resolveMetaLibraryCardPreview } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import { UnverifiedSourceBadge } from "@/components/ads-library/unverified-source-overlay";
 
@@ -56,10 +56,14 @@ function MetaCreativeMedia({
   }, [ad.id, stream, ad.img]);
   const still = resolveMetaLibraryCardPreview(ad);
   const fallbackStill = ad.img?.trim() ?? "";
+  const pagePicFallback =
+    ad.pageProfilePic?.trim() && looksLikeMetaRasterPreviewUrl(ad.pageProfilePic.trim())
+      ? ad.pageProfilePic.trim()
+      : "";
   const archived = !archivedFailed ? archivedUrl?.trim() ?? "" : "";
   const cdnStill = still || fallbackStill;
-  /** CDN link first (freshest); archived Storage copy when the CDN link has expired. */
-  const displayStill = !imageFailed ? cdnStill || archived : archived;
+  /** CDN link first (freshest); archived Storage copy when the CDN link has expired; page logo last. */
+  const displayStill = !imageFailed ? cdnStill || archived || pagePicFallback : archived || pagePicFallback;
   const onStillError = () => {
     if (!imageFailed) setImageFailed(true);
     else setArchivedFailed(true);

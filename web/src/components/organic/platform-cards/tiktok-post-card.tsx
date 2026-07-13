@@ -7,12 +7,12 @@ import { cn } from "@/lib/utils";
 import {
   EngagementCount,
   ExternalPlatformLink,
-  MediaFrame,
   PlatformChrome,
   PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
+import { OrganicPostMedia } from "./organic-post-media";
 
 export function TikTokPostCard({
   post,
@@ -24,7 +24,6 @@ export function TikTokPostCard({
 }: PlatformCardProps) {
   const author = resolveAuthor(post, socials);
   const content = post.content?.trim() ?? "";
-  const thumbnail = post.media_urls[0] ?? null;
   const isSection = variant === "section";
 
   return (
@@ -41,10 +40,12 @@ export function TikTokPostCard({
             <PostExternalLinkIcon platform="tiktok" postUrl={post.post_url} dark />
           </div>
         ) : null}
-        <MediaFrame
-          src={thumbnail}
+        <OrganicPostMedia
           platform="tiktok"
-          aspect="vertical"
+          mediaUrls={post.media_urls}
+          productType={post.product_type}
+          mediaAspect="vertical"
+          variant={variant}
           capVerticalHeight={isSection}
           className="bg-black"
           overlay={

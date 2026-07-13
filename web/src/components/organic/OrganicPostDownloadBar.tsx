@@ -67,9 +67,30 @@ export function OrganicPostDownloadBar({
   platform: string;
   postId: string;
 }) {
-  const url = mediaUrls.find((u) => u.trim())?.trim();
-  if (!url) return null;
+  const urls = mediaUrls.map((u) => u.trim()).filter(Boolean);
+  if (urls.length === 0) return null;
 
+  if (urls.length > 1) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        {urls.map((url, index) => {
+          const isVideo = isVideoUrl(url);
+          const ext = isVideo ? "mp4" : "jpg";
+          const filename = `${platform}-post-${postId.slice(0, 8)}-${index + 1}.${ext}`;
+          return (
+            <DownloadButton
+              key={`${url}-${index}`}
+              label={`Photo ${index + 1}`}
+              url={url}
+              filename={filename}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+
+  const url = urls[0]!;
   const isVideo = isVideoUrl(url);
   const ext = isVideo ? "mp4" : "jpg";
   const filename = `${platform}-post-${postId.slice(0, 8)}.${ext}`;

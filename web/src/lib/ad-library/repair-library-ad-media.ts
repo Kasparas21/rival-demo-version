@@ -89,9 +89,21 @@ function repairMetaSnapshotImage(snapshot: unknown): string {
   }
 
   const images = snap.images;
-  if (Array.isArray(images) && images[0] && typeof images[0] === "object") {
-    const img0 = images[0] as Record<string, unknown>;
-    return firstHttpUrl(img0, ["resized_image_url", "original_image_url", "video_preview_image_url"]);
+  if (Array.isArray(images)) {
+    for (const entry of images) {
+      if (!entry || typeof entry !== "object") continue;
+      const imgObj = entry as Record<string, unknown>;
+      const imageUrl = firstHttpUrl(imgObj, [
+        "resized_image_url",
+        "original_image_url",
+        "video_preview_image_url",
+        "image_url",
+        "imageUrl",
+        "preview_url",
+        "previewUrl",
+      ]);
+      if (imageUrl) return imageUrl;
+    }
   }
 
   return "";
@@ -107,6 +119,9 @@ export function repairMetaAdCardMedia(ad: MetaAdCard): MetaAdCard {
 
   const fromDeep = deepFindMetaPreviewUrl(loose);
   if (fromDeep) return { ...ad, img: fromDeep };
+
+  const fromSnapshotDeep = deepFindMetaPreviewUrl(loose.snapshot);
+  if (fromSnapshotDeep) return { ...ad, img: fromSnapshotDeep };
 
   if (currentImg && looksLikeMetaRasterPreviewUrl(currentImg)) return ad;
 

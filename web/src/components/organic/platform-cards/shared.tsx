@@ -187,6 +187,7 @@ export function PlatformChrome({
   dark = false,
   variant = "section",
   showPlatformBar,
+  standaloneMaxWidthClass,
   onClick,
 }: {
   platform: string;
@@ -196,6 +197,8 @@ export function PlatformChrome({
   variant?: OrganicCardVariant;
   /** Show logo + platform label bar in section mode (e.g. Hot Right Now cards). */
   showPlatformBar?: boolean;
+  /** Override default standalone max width (e.g. Facebook photo posts). */
+  standaloneMaxWidthClass?: string;
   onClick?: () => void;
 }) {
   const key = platform as OrganicPlatform;
@@ -223,7 +226,7 @@ export function PlatformChrome({
         "relative w-full overflow-hidden border",
         isSection
           ? "rounded-2xl transition-shadow hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-2 hover:ring-slate-200"
-          : "mx-auto max-w-[420px] rounded-none shadow-sm",
+          : cn("mx-auto rounded-none shadow-sm", standaloneMaxWidthClass ?? "max-w-[420px]"),
         onClick && "cursor-pointer",
         dark ? "border-black bg-black text-white" : cn(chrome.border, chrome.bg),
         className,

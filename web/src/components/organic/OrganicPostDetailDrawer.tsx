@@ -364,7 +364,7 @@ export function OrganicPostDetailDrawer({
 
           {data && !loading ? (
             <div className="flex min-h-0 flex-1 overflow-hidden">
-              <div className="flex flex-1 flex-col items-center overflow-y-auto bg-slate-50 p-6 sm:p-8">
+              <div className="flex min-h-0 max-w-[640px] flex-1 flex-col items-center overflow-y-auto bg-slate-50 p-6 sm:p-8">
                 <OrganicPostCard post={data.post} socials={socials} variant="standalone" />
                 <OrganicPostDownloadBar
                   mediaUrls={data.post.media_urls}

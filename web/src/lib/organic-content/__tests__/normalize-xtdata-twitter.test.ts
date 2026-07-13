@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeOrganicItem } from "../normalize";
 import { buildPlatformActorInput } from "../socials";
+import { enrichOrganicPostForApi } from "../post-display";
 
 const adidasRetweetRow = {
   id: "2072264051183264016",
@@ -134,6 +135,18 @@ describe("normalizeXtdataTwitterPost", () => {
       },
     };
     expect(normalizeOrganicItem("twitter", withNestedViews, 0)?.views).toBe(0);
+  });
+});
+
+describe("enrichOrganicPostForApi twitter", () => {
+  it("re-extracts media from raw_data when media_urls are empty", () => {
+    expect(
+      enrichOrganicPostForApi({
+        platform: "twitter",
+        media_urls: [],
+        raw_data: adidasOriginalTweet,
+      }).media_urls[0],
+    ).toBe("https://pbs.twimg.com/media/HMHTVqIXcAA8ItU.jpg");
   });
 });
 

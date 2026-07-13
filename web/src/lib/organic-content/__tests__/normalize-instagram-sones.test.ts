@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { normalizeOrganicItem } from "../normalize";
 import { buildPlatformActorInput } from "../socials";
-import { organicPostDisplayFields } from "../post-display";
+import { enrichOrganicPostForApi, organicPostDisplayFields } from "../post-display";
 
 const calaiFeedPost = {
   pk: "3575419123901651887",
@@ -98,5 +98,17 @@ describe("organicPostDisplayFields", () => {
       post_url: "https://www.instagram.com/p/DGecL_zS9uv/",
       product_type: "feed",
     });
+  });
+});
+
+describe("enrichOrganicPostForApi instagram", () => {
+  it("re-extracts image_url from raw_data when media_urls are empty", () => {
+    expect(
+      enrichOrganicPostForApi({
+        platform: "instagram",
+        media_urls: [],
+        raw_data: calaiFeedPost,
+      }).media_urls[0],
+    ).toBe("https://instagram.example/calai-feed.jpg");
   });
 });

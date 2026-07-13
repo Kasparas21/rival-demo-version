@@ -1,11 +1,14 @@
 import type { OrganicPlatform } from "./types";
 
 import {
-  extractFacebookMediaFromRaw,
-  extractLinkedInMediaFromRaw,
-  extractTikTokMediaFromRaw,
+  dedupeOrganicMediaUrls,
   extractTwitterViewsFromRaw,
+  filterFacebookPageLogoFromPostMedia,
+  isFacebookPageLogoMediaUrl,
+  organicMediaUrlsMatch,
+  repairOrganicMediaFromRaw,
 } from "./normalize";
+import { isPersistedOrganicMediaUrl } from "./archive-organic-previews";
 
 export type OrganicMediaAspect = "square" | "vertical" | "landscape";
 
@@ -184,6 +187,7 @@ function inferMediaAspect(
   }
 
   if (platform === "facebook") {
+    if (productType === "carousel") return "landscape";
     if (productType === "reel" || productType === "video" || productType === "clips") return "vertical";
     const postUrl = pickString(raw.url, raw.post_url, raw.postUrl);
     if (postUrl && /facebook\.com\/reel\//i.test(postUrl)) return "vertical";
@@ -277,24 +281,36 @@ export function enrichOrganicPostForApi<
   const display = organicPostDisplayFields(post.raw_data, platform);
   const storedViews = post.views ?? 0;
   const rawViews = platform === "twitter" ? extractTwitterViewsFromRaw(post.raw_data) : 0;
-  const facebookMedia =
-    platform === "facebook" ? extractFacebookMediaFromRaw(post.raw_data) : [];
-  const linkedinMedia =
-    platform === "linkedin" ? extractLinkedInMediaFromRaw(post.raw_data) : [];
-  const tiktokMedia = platform === "tiktok" ? extractTikTokMediaFromRaw(post.raw_data) : [];
-  const repairedMedia =
-    facebookMedia.length > 0
-      ? facebookMedia
-      : linkedinMedia.length > 0
-        ? linkedinMedia
-        : tiktokMedia.length > 0
-          ? tiktokMedia
-          : [];
-  const fallback = repairedMedia.length > 0 ? repairedMedia : (post.media_urls ?? []);
+  const stored = post.media_urls ?? [];
+  const repaired = repairOrganicMediaFromRaw(platform, post.raw_data);
+  const hasPersistedArchive =
+    stored.some((url) => isPersistedOrganicMediaUrl(url)) ||
+    Boolean(post.archived_preview_url?.trim() && isPersistedOrganicMediaUrl(post.archived_preview_url));
+  const fallback = dedupeOrganicMediaUrls(
+    hasPersistedArchive && stored.length > 0 ? stored : repaired.length > 0 ? repaired : stored,
+    platform,
+  );
   const archived = post.archived_preview_url?.trim();
-  const media_urls = archived
-    ? [archived, ...fallback.filter((url) => url !== archived)]
-    : fallback;
+  const rawRow = asRecord(post.raw_data);
+  let media_urls: string[];
+  if (archived) {
+    const archivedIsPageLogo =
+      platform === "facebook" && isFacebookPageLogoMediaUrl(archived, post.raw_data);
+    const withoutArchived = fallback.filter((url) => !organicMediaUrlsMatch(url, archived, platform));
+    if (archivedIsPageLogo && withoutArchived.length > 0) {
+      media_urls = withoutArchived;
+    } else if (fallback.some((url) => organicMediaUrlsMatch(url, archived, platform))) {
+      media_urls = fallback;
+    } else {
+      media_urls = [archived, ...withoutArchived];
+    }
+  } else {
+    media_urls = fallback;
+  }
+  if (platform === "facebook" && rawRow) {
+    media_urls = filterFacebookPageLogoFromPostMedia(media_urls, rawRow);
+  }
+  media_urls = dedupeOrganicMediaUrls(media_urls, platform);
   return {
     ...post,
     ...display,

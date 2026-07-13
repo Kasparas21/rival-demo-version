@@ -5,7 +5,12 @@ import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
-import { buildMetaAdLibraryUrl, buildWorkspaceBrandActiveMetaAdLibraryUrl, extractMetaAdsLibraryPageId } from "@/lib/ad-library/canonical-library-url";
+import {
+  alignMetaLibraryUrlActiveStatus,
+  buildMetaAdLibraryUrl,
+  buildWorkspaceBrandActiveMetaAdLibraryUrl,
+  extractMetaAdsLibraryPageId,
+} from "@/lib/ad-library/canonical-library-url";
 
 const DEFAULT_FACEBOOK_ADS_ACTOR = "curious_coder/facebook-ads-library-scraper";
 const DEFAULT_MAX_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
@@ -101,7 +106,11 @@ function buildInputUrls(
         digits.length <= 22 &&
         /^[\d\s-]+$/.test(metaRaw.replace(/[^\d\s-]/g, ""))
       ) {
-        urls.add(buildMetaAdLibraryUrl(digits));
+        urls.add(
+          activeStatus === "ACTIVE"
+            ? buildWorkspaceBrandActiveMetaAdLibraryUrl(digits)
+            : buildMetaAdLibraryUrl(digits),
+        );
       }
     }
   }
@@ -111,7 +120,9 @@ function buildInputUrls(
     urls.add(buildKeywordSearchUrl(keyword, activeStatus, country, startDateIso, endDateIso));
   }
 
-  return [...urls].map((url) => ({ url }));
+  return [...urls].map((url) => ({
+    url: alignMetaLibraryUrlActiveStatus(url, activeStatus),
+  }));
 }
 
 export async function scrapeFacebookAds(

@@ -38,7 +38,7 @@ describe("resolveMetaLibraryCardPreview", () => {
     );
   });
 
-  it("hydrates display cards with resolved preview and drops video-only tiles", () => {
+  it("hydrates display cards with resolved preview and video poster", () => {
     const hydrated = hydrateMetaLibraryCardForDisplay(
       baseMeta({
         img: "",
@@ -50,6 +50,20 @@ describe("resolveMetaLibraryCardPreview", () => {
       }),
     );
     expect(hydrated.img).toBe("https://scontent.xx.fbcdn.net/v/poster.jpg");
+    expect(hydrated.isVideo).toBe(true);
+    expect(hydrated.videoUrl).toBe("https://video.xx.fbcdn.net/v/sample.mp4");
+  });
+
+  it("keeps playable video when poster is missing", () => {
+    const hydrated = hydrateMetaLibraryCardForDisplay(
+      baseMeta({
+        img: "",
+        isVideo: true,
+        videoUrl: "https://video.xx.fbcdn.net/v/sample.mp4",
+        snapshot: { cards: [{ video_hd_url: "https://video.xx.fbcdn.net/v/sample.mp4" }] },
+      }),
+    );
+    expect(hydrated.img).toBe("");
     expect(hydrated.isVideo).toBe(true);
     expect(hydrated.videoUrl).toBe("https://video.xx.fbcdn.net/v/sample.mp4");
   });

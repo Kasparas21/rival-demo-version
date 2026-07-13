@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  alignMetaLibraryUrlActiveStatus,
   buildMetaAdLibraryUrl,
   buildWorkspaceBrandActiveMetaAdLibraryUrl,
   canonicalLinkedInAdLibraryUrl,
@@ -37,6 +38,18 @@ describe("canonicalMetaAdsLibraryUrl", () => {
       "https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&search_type=page&sort_data[direction]=desc&sort_data[mode]=total_impressions&view_all_page_id=182162001806727";
     expect(canonicalMetaAdsLibraryUrl(raw)).toBe(buildMetaAdLibraryUrl("182162001806727"));
     expect(extractMetaAdsLibraryPageId(raw)).toBe("182162001806727");
+  });
+});
+
+describe("alignMetaLibraryUrlActiveStatus", () => {
+  it("forces active_status=active for ACTIVE scrapes", () => {
+    const raw = buildMetaAdLibraryUrl("182162001806727");
+    expect(alignMetaLibraryUrlActiveStatus(raw, "ACTIVE")).toContain("active_status=active");
+  });
+
+  it("preserves active_status=all for ALL scrapes", () => {
+    const raw = buildWorkspaceBrandActiveMetaAdLibraryUrl("182162001806727");
+    expect(alignMetaLibraryUrlActiveStatus(raw, "ALL")).toContain("active_status=all");
   });
 });
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { adminCanWrite, authorizeAdminRequest } from "@/lib/admin/auth";
+import { loadAdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import { rebuildAdminUserSnapshot } from "@/lib/admin/rebuild-snapshots";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { normalizePlanTier, type PlanTier } from "@/lib/billing/plan-limits";
@@ -31,18 +32,29 @@ export async function GET(req: Request, context: RouteContext) {
   const admin = createSupabaseAdminClient();
   const yearMonth = utcYearMonth();
 
-  const [profileRes, billing, activity, usage, lifetimeScrapes, competitorsRes, quotesRes, brandsRes, snapshotRes] =
-    await Promise.all([
-      admin.from("profiles").select("*").eq("id", userId).maybeSingle(),
-      getBillingEntitlement(admin, userId),
-      getUserActivitySnapshot(admin, userId),
-      loadMonthlyUsageSnapshot(admin, userId, yearMonth),
-      loadLifetimeScrapeOperations(admin, userId),
-      admin.from("saved_competitors").select("id, brand_domain, name, created_at, last_scraped_at").eq("user_id", userId),
-      admin.from("custom_quotes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
-      admin.from("brands").select("id, name, domain, is_primary, created_at").eq("user_id", userId),
-      admin.from("admin_user_snapshots").select("*").eq("user_id", userId).maybeSingle(),
-    ]);
+  const [
+    profileRes,
+    billing,
+    activity,
+    usage,
+    lifetimeScrapes,
+    competitorsRes,
+    quotesRes,
+    brandsRes,
+    snapshotRes,
+    usageDetail,
+  ] = await Promise.all([
+    admin.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    getBillingEntitlement(admin, userId),
+    getUserActivitySnapshot(admin, userId),
+    loadMonthlyUsageSnapshot(admin, userId, yearMonth),
+    loadLifetimeScrapeOperations(admin, userId),
+    admin.from("saved_competitors").select("id, brand_domain, name, created_at, last_scraped_at").eq("user_id", userId),
+    admin.from("custom_quotes").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+    admin.from("brands").select("id, name, domain, is_primary, created_at").eq("user_id", userId),
+    admin.from("admin_user_snapshots").select("*").eq("user_id", userId).maybeSingle(),
+    loadAdminUserUsageDetail(admin, userId),
+  ]);
 
   if (!profileRes.data) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -58,6 +70,7 @@ export async function GET(req: Request, context: RouteContext) {
     quotes: quotesRes.data ?? [],
     brands: brandsRes.data ?? [],
     snapshot: snapshotRes.data,
+    usageDetail,
   });
 }
 

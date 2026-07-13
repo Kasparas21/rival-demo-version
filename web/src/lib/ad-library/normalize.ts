@@ -618,21 +618,24 @@ function baseObjSnapshotFromActor(baseObj: Record<string, unknown>): unknown {
 }
 
 function snapshotHasRenderableCreative(s: FacebookAdSnapshot): boolean {
-  const c = s.cards?.[0];
-  if (
-    c &&
-    (c.original_image_url ||
-      c.resized_image_url ||
-      c.video_preview_image_url ||
-      c.video_hd_url ||
-      c.video_sd_url)
-  ) {
-    return true;
+  for (const c of s.cards ?? []) {
+    if (
+      c &&
+      (c.original_image_url ||
+        c.resized_image_url ||
+        c.video_preview_image_url ||
+        c.video_hd_url ||
+        c.video_sd_url)
+    ) {
+      return true;
+    }
   }
-  const img0 = s.images?.[0];
-  if (img0 && (img0.original_image_url || img0.resized_image_url)) return true;
-  const v0 = s.videos?.[0];
-  if (v0 && (v0.video_preview_image_url || v0.video_hd_url || v0.video_sd_url)) return true;
+  for (const img of s.images ?? []) {
+    if (img && (img.original_image_url || img.resized_image_url)) return true;
+  }
+  for (const v of s.videos ?? []) {
+    if (v && (v.video_preview_image_url || v.video_hd_url || v.video_sd_url)) return true;
+  }
   const rec = s as Record<string, unknown>;
   if (typeof rec.image_url === "string" && rec.image_url.trim()) return true;
   if (typeof rec.imageUrl === "string" && rec.imageUrl.trim()) return true;
@@ -828,8 +831,11 @@ function pickMetaVideoPoster(
   if (fromCard) return fromCard;
   const fromPreview = card?.video_preview_image_url?.trim() || "";
   if (fromPreview) return fromPreview;
-  const snapImg = snapshotImages?.[0];
-  return snapImg?.resized_image_url?.trim() || snapImg?.original_image_url?.trim() || "";
+  for (const snapImg of snapshotImages ?? []) {
+    const url = snapImg?.resized_image_url?.trim() || snapImg?.original_image_url?.trim() || "";
+    if (url) return url;
+  }
+  return "";
 }
 
 function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; isVideo: boolean } {
@@ -885,16 +891,19 @@ function pickMetaImage(snap: FacebookAdLibraryItem["snapshot"]): { url: string; 
 
   const v = snap.videos?.[0];
   if (v?.video_hd_url || v?.video_sd_url || v?.video_preview_image_url) {
-    const poster =
-      snap.images?.[0]?.resized_image_url?.trim() ||
-      snap.images?.[0]?.original_image_url?.trim() ||
-      v.video_preview_image_url?.trim() ||
-      "";
+    for (const snapImg of snap.images ?? []) {
+      const poster =
+        snapImg?.resized_image_url?.trim() || snapImg?.original_image_url?.trim() || "";
+      if (poster) return { url: poster, isVideo: true };
+    }
+    const poster = v.video_preview_image_url?.trim() || "";
     return { url: poster, isVideo: true };
   }
-  const img = snap.images?.[0];
-  const url = img?.resized_image_url || img?.original_image_url || "";
-  if (url) return { url, isVideo: fmt === "VIDEO" && Boolean(v) };
+
+  for (const imgEntry of snap.images ?? []) {
+    const url = imgEntry?.resized_image_url?.trim() || imgEntry?.original_image_url?.trim() || "";
+    if (url) return { url, isVideo: fmt === "VIDEO" && Boolean(v) };
+  }
 
   const deep = deepFindMetaPreviewUrl(snap);
   if (deep) return { url: deep, isVideo: false };
@@ -908,9 +917,11 @@ function pickMetaVideoUrl(snap: FacebookAdLibraryItem["snapshot"]): string | und
     const fromCard = card?.video_hd_url || card?.video_sd_url;
     if (fromCard) return fromCard;
   }
-  const first = snap.videos?.[0];
-  const fromSnapshot = first?.video_hd_url || first?.video_sd_url;
-  return fromSnapshot || undefined;
+  for (const video of snap.videos ?? []) {
+    const fromSnapshot = video?.video_hd_url || video?.video_sd_url;
+    if (fromSnapshot) return fromSnapshot;
+  }
+  return undefined;
 }
 
 function facebookSnapshotString(snap: FacebookAdSnapshot | undefined, keys: string[]): string {

@@ -10,12 +10,12 @@ import {
   ExpandableCaption,
   ExternalPlatformLink,
   formatRelativeTime,
-  MediaFrame,
   PlatformChrome,
   PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
+import { OrganicPostMedia } from "./organic-post-media";
 
 export function LinkedInPostCard({
   post,
@@ -27,7 +27,6 @@ export function LinkedInPostCard({
 }: PlatformCardProps) {
   const author = resolveAuthor(post, socials);
   const content = post.content?.trim() ?? "";
-  const thumbnail = post.media_urls[0] ?? null;
   const isSection = variant === "section";
 
   return (
@@ -57,10 +56,12 @@ export function LinkedInPostCard({
         </div>
       ) : null}
 
-      <MediaFrame
-        src={thumbnail}
+      <OrganicPostMedia
         platform="linkedin"
-        aspect={post.media_aspect ?? "landscape"}
+        mediaUrls={post.media_urls}
+        productType={post.product_type}
+        mediaAspect={post.media_aspect ?? "landscape"}
+        variant={variant}
         capVerticalHeight={isSection}
       />
 

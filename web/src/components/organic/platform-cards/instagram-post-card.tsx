@@ -10,12 +10,12 @@ import {
   ExpandableCaption,
   ExternalPlatformLink,
   formatRelativeTime,
-  MediaFrame,
   PlatformChrome,
   PostExternalLinkIcon,
   resolveAuthor,
   type PlatformCardProps,
 } from "./shared";
+import { OrganicPostMedia } from "./organic-post-media";
 
 export function InstagramPostCard({
   post,
@@ -28,7 +28,6 @@ export function InstagramPostCard({
   const author = resolveAuthor(post, socials);
   const isReel = post.product_type === "clips" || post.media_aspect === "vertical";
   const content = post.content?.trim() ?? "";
-  const thumbnail = post.media_urls[0] ?? null;
   const isSection = variant === "section";
 
   return (
@@ -53,10 +52,12 @@ export function InstagramPostCard({
         )}
       </header>
 
-      <MediaFrame
-        src={thumbnail}
+      <OrganicPostMedia
         platform="instagram"
-        aspect={isReel ? "vertical" : post.media_aspect ?? "square"}
+        mediaUrls={post.media_urls}
+        productType={post.product_type}
+        mediaAspect={isReel ? "vertical" : (post.media_aspect ?? "square")}
+        variant={variant}
         capVerticalHeight={isSection}
         overlay={
           isReel ? (
