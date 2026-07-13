@@ -13,6 +13,7 @@ import {
   limitsForTier,
   normalizePlanTier,
   PLAN_DISPLAY_NAMES,
+  tierHasProductAccess,
   type DevPlanOverride,
   type PlanLimits,
   type PlanTier,
@@ -27,6 +28,8 @@ export type BillingEntitlement = {
   status: string;
   planTier: PlanTier;
   planName: string;
+  /** Manually set from the admin dashboard; wins over Polar-derived tier. */
+  adminPlanOverride: PlanTier | null;
   polarProductId: string | null;
   polarCustomerId: string | null;
   polarSubscriptionId: string | null;
@@ -61,6 +64,13 @@ function isManualAdminUnlimited(rawPayload: unknown): boolean {
 
 function readDevPlanOverride(rawPayload: unknown): DevPlanOverride | null {
   const v = readRawPayload(rawPayload).dev_plan_override;
+  if (typeof v !== "string") return null;
+  return normalizePlanTier(v);
+}
+
+/** Set only via the admin dashboard (service role) — always applied when present. */
+export function readAdminPlanOverride(rawPayload: unknown): PlanTier | null {
+  const v = readRawPayload(rawPayload).admin_plan_override;
   if (typeof v !== "string") return null;
   return normalizePlanTier(v);
 }
@@ -102,6 +112,11 @@ export function resolvePlanTier(params: {
   applyDevOverride: boolean;
 }): PlanTier {
   const { status, polarProductId, rawPayload, applyDevOverride } = params;
+
+  const adminOverride = readAdminPlanOverride(rawPayload);
+  if (adminOverride) {
+    return adminOverride;
+  }
 
   if (isManualAdminUnlimited(rawPayload)) {
     const override = readDevPlanOverride(rawPayload);
@@ -365,7 +380,8 @@ export async function getBillingEntitlement(
 
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
-  const isUnlimited = isManualAdminUnlimited(rawPayload);
+  const adminPlanOverride = readAdminPlanOverride(rawPayload);
+  const isUnlimited = isManualAdminUnlimited(rawPayload) || adminPlanOverride === "admin";
   const devPlanOverride = readDevPlanOverride(rawPayload);
   const applyDevOverride = isUnlimited || isDevPlanOverrideEnabled();
   const canUseDevPlanSwitcher =
@@ -388,7 +404,9 @@ export async function getBillingEntitlement(
   } else {
     limits = applyPolarTrialCompetitorCap(limits, status, planTier);
   }
-  const hasAccess = hasAccessForTier(planTier, status, isUnlimited);
+  const hasAccess = adminPlanOverride
+    ? tierHasProductAccess(planTier)
+    : hasAccessForTier(planTier, status, isUnlimited);
 
   let planName = PLAN_DISPLAY_NAMES[planTier];
   if (planTier === "custom" && customQuote) {
@@ -405,6 +423,7 @@ export async function getBillingEntitlement(
     status,
     planTier,
     planName,
+    adminPlanOverride,
     polarProductId: data?.polar_product_id ?? null,
     polarCustomerId: data?.polar_customer_id ?? null,
     polarSubscriptionId: data?.polar_subscription_id ?? null,

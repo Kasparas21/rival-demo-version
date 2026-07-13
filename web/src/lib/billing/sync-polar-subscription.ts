@@ -131,6 +131,28 @@ export function buildBillingSubscriptionUpsertRow(params: {
   };
 }
 
+/** Polar syncs rebuild raw_payload from the subscription; keep manual admin overrides intact. */
+async function readPreservedAdminPayloadKeys(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const { data } = await admin
+    .from("billing_subscriptions")
+    .select("raw_payload")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const payload = data?.raw_payload;
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return {};
+
+  const preserved: Record<string, unknown> = {};
+  const override = (payload as Record<string, unknown>).admin_plan_override;
+  if (typeof override === "string" && override.trim()) {
+    preserved.admin_plan_override = override;
+  }
+  return preserved;
+}
+
 export async function upsertPolarSubscription(
   admin: ReturnType<typeof createSupabaseAdminClient>,
   subscription: Subscription,
@@ -149,6 +171,16 @@ export async function upsertPolarSubscription(
     userId,
     lastWebhookEventId: options?.lastWebhookEventId ?? null,
   });
+
+  const preserved = await readPreservedAdminPayloadKeys(admin, userId);
+  if (Object.keys(preserved).length > 0) {
+    row.raw_payload = jsonSafe({
+      ...(typeof row.raw_payload === "object" && row.raw_payload !== null && !Array.isArray(row.raw_payload)
+        ? (row.raw_payload as Record<string, unknown>)
+        : {}),
+      ...preserved,
+    });
+  }
 
   const { error } = await admin.from("billing_subscriptions").upsert(row, { onConflict: "user_id" });
   const planTier = resolvePlanTier({
@@ -209,10 +241,12 @@ export async function upsertPolarSubscriptionFromRaw(
     applyDevOverride: false,
   });
 
+  const preserved = await readPreservedAdminPayloadKeys(admin, userId);
   const mergedPayload = {
     ...raw,
     productId,
     plan_tier: planTier,
+    ...preserved,
   };
 
   const { error } = await admin.from("billing_subscriptions").upsert(

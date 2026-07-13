@@ -9,6 +9,7 @@ import { formatQuotePrice } from "@/lib/billing/custom-quotes";
 type UserDetail = {
   profile: {
     email: string | null;
+    full_name: string | null;
     company_name: string | null;
     company_url: string | null;
     company_role: string | null;
@@ -21,6 +22,7 @@ type UserDetail = {
     planName: string;
     planTier: string;
     status: string;
+    adminPlanOverride: string | null;
     customPriceLabel: string | null;
   };
   usage: {
@@ -44,12 +46,36 @@ type UserDetail = {
   }[];
 };
 
+const PLAN_OVERRIDE_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "No override (Polar-managed)" },
+  { value: "free_trial", label: "Free trial" },
+  { value: "starter", label: "Starter" },
+  { value: "pro", label: "Pro" },
+  { value: "agency", label: "Agency" },
+  { value: "admin", label: "Admin (unlimited)" },
+];
+
+type EditForm = {
+  email: string;
+  full_name: string;
+  company_name: string;
+  company_url: string;
+  company_role: string;
+  onboarding_completed: boolean;
+  planTier: string;
+};
+
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>();
   const userId = params.id;
   const [data, setData] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [form, setForm] = useState<EditForm | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +88,78 @@ export default function AdminUserDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  function formFromData(d: UserDetail): EditForm {
+    return {
+      email: d.profile.email ?? "",
+      full_name: d.profile.full_name ?? "",
+      company_name: d.profile.company_name ?? "",
+      company_url: d.profile.company_url ?? "",
+      company_role: d.profile.company_role ?? "",
+      onboarding_completed: d.profile.onboarding_completed,
+      planTier: d.billing.adminPlanOverride ?? "",
+    };
+  }
+
+  function startEditing() {
+    if (!data) return;
+    setForm(formFromData(data));
+    setSaveError(null);
+    setSaveSuccess(false);
+    setEditing(true);
+  }
+
+  function updateForm<K extends keyof EditForm>(key: K, value: EditForm[K]) {
+    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }
+
+  async function saveEdits() {
+    if (!data || !form) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    const initial = formFromData(data);
+    const profile: Record<string, string | boolean | null> = {};
+    if (form.email.trim() !== initial.email) profile.email = form.email.trim();
+    if (form.full_name.trim() !== initial.full_name) profile.full_name = form.full_name.trim() || null;
+    if (form.company_name.trim() !== initial.company_name) profile.company_name = form.company_name.trim() || null;
+    if (form.company_url.trim() !== initial.company_url) profile.company_url = form.company_url.trim() || null;
+    if (form.company_role.trim() !== initial.company_role) profile.company_role = form.company_role.trim() || null;
+    if (form.onboarding_completed !== initial.onboarding_completed) {
+      profile.onboarding_completed = form.onboarding_completed;
+    }
+
+    const body: Record<string, unknown> = {};
+    if (Object.keys(profile).length > 0) body.profile = profile;
+    if (form.planTier !== initial.planTier) body.planTier = form.planTier || null;
+
+    if (Object.keys(body).length === 0) {
+      setSaving(false);
+      setEditing(false);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setSaveError(json.error ?? `Update failed (${res.status})`);
+        return;
+      }
+      setSaveSuccess(true);
+      setEditing(false);
+      await load();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function sendQuote(quoteId: string) {
     const res = await fetch(`/api/admin/quotes/${quoteId}/send`, { method: "POST" });
@@ -91,13 +189,129 @@ export default function AdminUserDetailPage() {
           <h1 className="mt-1 text-xl font-semibold">{data.profile.email}</h1>
           <p className="text-sm text-zinc-500">{data.profile.company_name}</p>
         </div>
-        <Link
-          href={`/admin/users/${userId}/quote`}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white"
-        >
-          Create quote
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={startEditing}
+            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+          >
+            Edit user
+          </button>
+          <Link
+            href={`/admin/users/${userId}/quote`}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white"
+          >
+            Create quote
+          </Link>
+        </div>
       </div>
+
+      {saveSuccess ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          User updated.
+        </div>
+      ) : null}
+
+      {editing && form ? (
+        <section className="rounded-xl border border-zinc-300 bg-white p-4">
+          <h2 className="text-sm font-semibold text-zinc-700">Edit user</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-zinc-500">Email</span>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => updateForm("email", e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-500">Full name</span>
+              <input
+                type="text"
+                value={form.full_name}
+                onChange={(e) => updateForm("full_name", e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-500">Company name</span>
+              <input
+                type="text"
+                value={form.company_name}
+                onChange={(e) => updateForm("company_name", e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-500">Company URL</span>
+              <input
+                type="text"
+                value={form.company_url}
+                onChange={(e) => updateForm("company_url", e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-500">Role</span>
+              <input
+                type="text"
+                value={form.company_role}
+                onChange={(e) => updateForm("company_role", e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-zinc-500">Plan</span>
+              <select
+                value={form.planTier}
+                onChange={(e) => updateForm("planTier", e.target.value)}
+                className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
+              >
+                {PLAN_OVERRIDE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.onboarding_completed}
+                onChange={(e) => updateForm("onboarding_completed", e.target.checked)}
+                className="h-4 w-4 rounded border-zinc-300"
+              />
+              <span>Onboarding completed</span>
+            </label>
+          </div>
+
+          {saveError ? <p className="mt-3 text-sm text-red-600">{saveError}</p> : null}
+
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void saveEdits()}
+              disabled={saving}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-50"
+            >
+              Cancel
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-zinc-400">
+            Changing the email updates the login email immediately (marked confirmed). Setting a plan overrides
+            Polar billing until cleared here, even across Polar webhook syncs.
+          </p>
+        </section>
+      ) : null}
 
       {checkoutUrl ? (
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
@@ -136,7 +350,14 @@ export default function AdminUserDetailPage() {
           <dl className="mt-3 space-y-2 text-sm">
             <div>
               <dt className="text-zinc-500">Plan</dt>
-              <dd>{data.billing.planName}</dd>
+              <dd>
+                {data.billing.planName}
+                {data.billing.adminPlanOverride ? (
+                  <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                    admin override
+                  </span>
+                ) : null}
+              </dd>
             </div>
             <div>
               <dt className="text-zinc-500">Status</dt>

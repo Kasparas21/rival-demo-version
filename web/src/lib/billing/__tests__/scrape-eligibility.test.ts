@@ -28,6 +28,7 @@ function billingForTier(tier: BillingEntitlement["planTier"], overrides: Partial
     isUnlimited: false,
     canUseDevPlanSwitcher: false,
     devPlanOverride: null,
+    adminPlanOverride: null,
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,
