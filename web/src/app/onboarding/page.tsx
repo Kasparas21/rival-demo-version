@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { X } from "lucide-react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
@@ -26,9 +28,12 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { normalizedWorkspaceHost, sanitizeCompanyUrlInput } from "@/lib/onboarding/host";
 import {
   hasPrePaymentSetup,
+  isNewBrandOnboardingSearchParams,
   isPostPaymentOnboardingSearchParams,
+  NEW_BRAND_ONBOARDING_PATH,
   shouldResumePostPaymentOnboarding,
 } from "@/lib/onboarding/phase";
+import { tierAllowsMultipleBrandWorkspaces } from "@/lib/billing/plan-limits";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
@@ -61,12 +66,27 @@ function initialDomainFromParams(params: SearchParams): string | null {
 function OnboardingShell({
   children,
   showReplay,
+  showClose,
+  closeHref,
+  closeAriaLabel = "Cancel",
 }: {
   children: ReactNode;
   showReplay?: boolean;
+  showClose?: boolean;
+  closeHref?: string;
+  closeAriaLabel?: string;
 }) {
   return (
     <RivalVideoShell footerTint="light">
+      {showClose && closeHref ? (
+        <Link
+          href={closeHref}
+          aria-label={closeAriaLabel}
+          className="fixed right-4 top-4 z-50 flex size-10 items-center justify-center rounded-full border border-white/60 bg-white/50 text-gray-700 shadow-[0_8px_32px_0_rgba(31,38,135,0.07)] backdrop-blur-md transition hover:bg-white/70 hover:text-gray-900 sm:right-6 sm:top-6"
+        >
+          <X className="size-5" strokeWidth={2} aria-hidden />
+        </Link>
+      ) : null}
       <div className="flex w-full flex-col items-center px-4 sm:px-6">
         <OnboardingFlowHeader className="max-w-5xl" />
         {children}
@@ -88,6 +108,7 @@ export default async function OnboardingPage({
   const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
   const initialDomain = initialDomainFromParams(params);
   const explicitPostPayment = isPostPaymentOnboardingSearchParams(params);
+  const newBrandMode = isNewBrandOnboardingSearchParams(params);
   const testerFromQuery = firstParam(params.tester);
   const testerInviteCode =
     testerFromQuery && matchesTesterInviteCode(testerFromQuery)
@@ -101,6 +122,9 @@ export default async function OnboardingPage({
   } = await supabase.auth.getUser();
 
   if (!user) {
+    if (newBrandMode) {
+      redirect(`/login?next=${encodeURIComponent(NEW_BRAND_ONBOARDING_PATH)}`);
+    }
     return (
       <OnboardingShell>
         <OnboardingForm
@@ -111,6 +135,32 @@ export default async function OnboardingPage({
           userId="guest"
           showPlanStep={false}
           testerInviteCode={testerInviteCodeFromCookie}
+        />
+      </OnboardingShell>
+    );
+  }
+
+  if (newBrandMode) {
+    const billing = await getBillingEntitlement(supabase, user.id);
+    const admin = createSupabaseAdminClient();
+    const { count: brandCount } = await admin
+      .from("brands")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    const atBrandCap = (brandCount ?? 0) >= billing.limits.maxOwnBrandWorkspaces;
+    if (!tierAllowsMultipleBrandWorkspaces(billing.planTier) || atBrandCap) {
+      redirect(DASHBOARD_HOME_PATH);
+    }
+
+    return (
+      <OnboardingShell showClose closeHref={DASHBOARD_HOME_PATH} closeAriaLabel="Cancel adding brand">
+        <OnboardingForm
+          copy={copy}
+          locale={locale}
+          userId={user.id}
+          newBrandMode
+          showPlanStep={false}
         />
       </OnboardingShell>
     );

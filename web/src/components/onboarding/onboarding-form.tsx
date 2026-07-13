@@ -139,7 +139,8 @@ const STEP_CHOOSE_PLAN = 5;
 
 const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = CHANNELS.map((c) => c.id);
 
-function getHydrationDraft(): OnboardingDraft | null {
+function getHydrationDraft(skipDraft = false): OnboardingDraft | null {
+  if (skipDraft) return null;
   if (typeof window === "undefined") return null;
   return readOnboardingDraft();
 }
@@ -315,6 +316,8 @@ type Props = {
   prePaymentOnly?: boolean;
   /** Resume at regions (step 3) after payment — skips website / brand / platforms. */
   postPaymentResume?: boolean;
+  /** Agency user adding another own-brand workspace (full onboarding, no profile mutation). */
+  newBrandMode?: boolean;
   initialStep?: number;
   initialBrandSetup?: AdsProfileSetup | null;
   initialDomain?: string | null;
@@ -362,6 +365,7 @@ export function OnboardingForm({
   guestMode = false,
   prePaymentOnly = false,
   postPaymentResume = false,
+  newBrandMode = false,
   initialStep,
   initialBrandSetup = null,
   initialDomain = null,
@@ -387,8 +391,9 @@ export function OnboardingForm({
   /** Last website host seen when advancing from step 0 — invalidates caches when edited */
   const lastContinueFromWebsiteHostRef = useRef<string>("");
 
+  const skipDraftHydration = newBrandMode;
   const [companyUrl, setCompanyUrl] = useState(() => {
-    const draft = getHydrationDraft();
+    const draft = getHydrationDraft(skipDraftHydration);
     if (draft?.companyUrl?.trim()) return sanitizeCompanyUrlInput(draft.companyUrl);
     if (initialDomain) return sanitizeCompanyUrlInput(initialDomain);
     return sanitizeCompanyUrlInput(initialData?.company_url ?? "");
@@ -396,7 +401,7 @@ export function OnboardingForm({
 
   const [brandLoading, setBrandLoading] = useState(false);
   const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(() => {
-    const draft = getHydrationDraft();
+    const draft = getHydrationDraft(skipDraftHydration);
     return draft ? brandInsightsFromDraft(draft) : null;
   });
 
@@ -414,7 +419,7 @@ export function OnboardingForm({
   const [workspaceMarketsAuto, setWorkspaceMarketsAuto] = useState(true);
   const [workspaceMarketsPickerExpanded, setWorkspaceMarketsPickerExpanded] = useState(false);
   const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => {
-    const draft = getHydrationDraft();
+    const draft = getHydrationDraft(skipDraftHydration);
     const hostFromDraft = draft?.companyHost
       ? normalizedWorkspaceHost(draft.companyHost)
       : "";
@@ -422,7 +427,9 @@ export function OnboardingForm({
       hostFromDraft ||
       (initialDomain
         ? normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialDomain))
-        : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? "")));
+        : newBrandMode
+          ? ""
+          : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? "")));
     const base = emptyWorkspaceScrapeRow(host);
     if (!initialBrandSetup?.scrape) return base;
     return { ...base, ...initialBrandSetup.scrape };
@@ -431,6 +438,11 @@ export function OnboardingForm({
   const brandSetupHydratedRef = useRef(false);
 
   const normalizedCompany = useMemo(() => normalizedWorkspaceHost(companyUrl.trim()), [companyUrl]);
+
+  useEffect(() => {
+    if (!newBrandMode) return;
+    clearOnboardingDraft();
+  }, [newBrandMode]);
 
   useEffect(() => {
     const draft = readOnboardingDraft();
@@ -832,23 +844,6 @@ export function OnboardingForm({
         /* non-fatal */
       }
 
-      const supabase = createSupabaseBrowserClient();
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          company_name: primaryName,
-          company_url: companyHost,
-          onboarding_completed: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
-
-      if (profileError) {
-        setError(profileError.message);
-        return false;
-      }
-
       const logoUrlPatch =
         logoFromInsights && !logoFromInsights.includes("google.com/s2/favicons")
           ? ({ logo_url: logoFromInsights } as const)
@@ -862,11 +857,56 @@ export function OnboardingForm({
         ads_profile_setup: adsSetupJson,
       };
 
+      let targetBrandId: string | null = null;
+
+      if (newBrandMode) {
+        const createRes = await fetch("/api/account/brands", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: primaryName,
+            domain: companyHost,
+            color: "#343434",
+          }),
+        });
+        const created = (await createRes.json()) as {
+          ok?: boolean;
+          brand?: { id: string };
+          error?: string;
+        };
+        if (!createRes.ok || !created.brand?.id) {
+          setError(created.error ?? t.errors.saveBrandFailed);
+          return false;
+        }
+        targetBrandId = created.brand.id;
+      } else {
+        const supabase = createSupabaseBrowserClient();
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            company_name: primaryName,
+            company_url: companyHost,
+            onboarding_completed: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", userId);
+
+        if (profileError) {
+          setError(profileError.message);
+          return false;
+        }
+      }
+
       let brandRes = await fetch("/api/account/brands", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(brandPatchBody),
+        body: JSON.stringify({
+          ...(targetBrandId ? { id: targetBrandId } : {}),
+          ...brandPatchBody,
+        }),
       });
       let brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
 
@@ -880,7 +920,10 @@ export function OnboardingForm({
           method: "PATCH",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(coreOnly),
+          body: JSON.stringify({
+            ...(targetBrandId ? { id: targetBrandId } : {}),
+            ...coreOnly,
+          }),
         });
         brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
       }
@@ -912,7 +955,11 @@ export function OnboardingForm({
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ competitors: competitorPayload }),
+          body: JSON.stringify(
+            newBrandMode && targetBrandId
+              ? { brandId: targetBrandId, competitors: competitorPayload }
+              : { competitors: competitorPayload },
+          ),
         });
 
         if (!res.ok) {
@@ -933,7 +980,19 @@ export function OnboardingForm({
       }
 
       if (shouldNavigate) {
-        const destination = postPaymentResume ? buildWorkspaceBrandScrapeHref() : postOnboardingPath;
+        const destination =
+          newBrandMode && targetBrandId
+            ? buildWorkspaceBrandScrapeHref(targetBrandId)
+            : postPaymentResume
+              ? buildWorkspaceBrandScrapeHref()
+              : postOnboardingPath;
+        if (newBrandMode && targetBrandId) {
+          try {
+            localStorage.setItem("rival_active_brand", targetBrandId);
+          } catch {
+            /* non-fatal */
+          }
+        }
         router.push(destination);
         router.refresh();
       }

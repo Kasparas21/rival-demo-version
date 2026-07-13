@@ -12,6 +12,7 @@ import { SidebarRivalAgentControl } from "@/components/agent/SidebarRivalAgentCo
 import { SidebarCompetitorAvatar } from "@/components/sidebar-competitor-avatar";
 import { SidebarCompetitorSkeleton } from "@/components/sidebar-competitor-skeleton";
 import { limitsForTier, tierAllowsMultipleBrandWorkspaces, type PlanTier } from "@/lib/billing/plan-limits";
+import { NEW_BRAND_ONBOARDING_PATH } from "@/lib/onboarding/phase";
 import { buildUpgradeToAgencyHref } from "@/lib/billing/checkout-url";
 import {
   buildCompetitorSidebarHref,
@@ -483,7 +484,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     setBrandWorkspaceLimitDialog(billingPlanTier === "free_trial" ? "trial" : "upgrade_agency");
   }, [billingPlanTier]);
 
-  const handleAddBrand = useCallback(async () => {
+  const handleAddBrand = useCallback(() => {
     if (!tierAllowsMultipleBrandWorkspaces(billingPlanTier)) {
       openBrandWorkspaceLimitDialog();
       return;
@@ -492,56 +493,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       setBrandWorkspaceLimitDialog("plan_cap");
       return;
     }
-    try {
-      const res = await fetch("/api/account/brands", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: `Brand ${brands.length + 1}`,
-          color: "#343434",
-        }),
-      });
-      const json = (await res.json()) as {
-        ok?: boolean;
-        code?: string;
-        brand?: {
-          id: string;
-          name: string;
-          domain?: string | null;
-          logo_url?: string | null;
-          color?: string | null;
-          brand_context?: string | null;
-          ads_profile_setup?: unknown | null;
-        };
-        error?: string;
-      };
-      if (!res.ok || !json.brand) {
-        if (json.code === "brand_workspace_limit") {
-          openBrandWorkspaceLimitDialog();
-        }
-        return;
-      }
-      const next = mapApiBrandRow(json.brand);
-      setBrands((prev) => [...prev.filter((b) => b.id !== next.id), next]);
-      setActiveBrandId(next.id);
-      localStorage.setItem("rival_active_brand", next.id);
-      setIsBrandMenuOpen(false);
-      saveSidebarCompetitors([]);
-      refreshSavedCompetitors();
-      refreshBillingUsage();
-      const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=ads%20library&sub=paid-media-settings`;
-      router.push(href, { scroll: false });
-    } catch {
-      // Keep current workspace if creation fails.
-    }
+    setIsBrandMenuOpen(false);
+    router.push(NEW_BRAND_ONBOARDING_PATH);
   }, [
-    brands.length,
     billingPlanTier,
+    brands.length,
     maxOwnBrandWorkspaces,
     openBrandWorkspaceLimitDialog,
-    refreshBillingUsage,
-    refreshSavedCompetitors,
     router,
   ]);
 

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
 import {
   hasPrePaymentSetup,
+  isNewBrandOnboardingSearchParams,
+  NEW_BRAND_ONBOARDING_PATH,
   POST_PAYMENT_ONBOARDING_PATH,
   resolveIncompleteOnboardingPath,
   shouldResumePostPaymentOnboarding,
@@ -22,6 +24,12 @@ describe("onboarding phase helpers", () => {
     );
     expect(path).toContain("/choose-plan");
     expect(path).toContain(encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH));
+  });
+
+  it("detects new-brand onboarding mode", () => {
+    expect(isNewBrandOnboardingSearchParams({ mode: "new_brand" })).toBe(true);
+    expect(isNewBrandOnboardingSearchParams({ mode: "post_payment" })).toBe(false);
+    expect(NEW_BRAND_ONBOARDING_PATH).toBe("/onboarding?mode=new_brand");
   });
 
   it("resolves paid pre-payment users to post-payment onboarding", () => {

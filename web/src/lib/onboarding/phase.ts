@@ -22,6 +22,17 @@ export function isPostPaymentOnboardingSearchParams(params: {
   return phase === "post_payment";
 }
 
+/** Agency (or admin) user adding another own-brand workspace via full onboarding. */
+export function isNewBrandOnboardingSearchParams(params: {
+  mode?: string | string[] | undefined;
+}): boolean {
+  const raw = params.mode;
+  const mode = Array.isArray(raw) ? raw[0] : raw;
+  return mode === "new_brand";
+}
+
+export const NEW_BRAND_ONBOARDING_PATH = "/onboarding?mode=new_brand";
+
 export type OnboardingBillingSlice = Pick<
   BillingEntitlement,
   "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
