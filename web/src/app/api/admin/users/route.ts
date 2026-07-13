@@ -1,11 +1,38 @@
 import { NextResponse } from "next/server";
 
 import { authorizeAdminRequest } from "@/lib/admin/auth";
+import { rebuildAllAdminUserSnapshots } from "@/lib/admin/rebuild-snapshots";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const SNAPSHOT_STALE_MS = 30 * 60 * 1000;
+
+/** Refresh pre-aggregated admin rows on demand (no hourly Vercel cron on Hobby). */
+async function maybeRefreshAdminSnapshots(admin: ReturnType<typeof createSupabaseAdminClient>) {
+  const { data } = await admin
+    .from("admin_user_snapshots")
+    .select("snapshot_at")
+    .order("snapshot_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const latestAt = data?.snapshot_at ? Date.parse(data.snapshot_at) : null;
+  const isEmpty = latestAt === null || Number.isNaN(latestAt);
+  const isStale = !isEmpty && Date.now() - latestAt > SNAPSHOT_STALE_MS;
+
+  if (isEmpty) {
+    await rebuildAllAdminUserSnapshots(admin);
+    return;
+  }
+  if (isStale) {
+    void rebuildAllAdminUserSnapshots(admin).catch((e) => {
+      console.error("[admin] background snapshot rebuild", e);
+    });
+  }
+}
 
 export async function GET(req: Request) {
   const supabase = await createSupabaseServerClient();
@@ -25,6 +52,8 @@ export async function GET(req: Request) {
   const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
 
   const admin = createSupabaseAdminClient();
+  await maybeRefreshAdminSnapshots(admin);
+
   let query = admin
     .from("admin_user_snapshots")
     .select("*", { count: "exact" })

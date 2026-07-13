@@ -44,10 +44,6 @@
     {
       "path": "/api/cron/autopilot-watch",
       "schedule": "15 7 * * *"
-    },
-    {
-      "path": "/api/cron/admin-snapshots",
-      "schedule": "0 * * * *"
     }
   ]
 }

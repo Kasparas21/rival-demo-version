@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/** Hourly rebuild of admin_user_snapshots for fast admin dashboard queries. */
+/** Rebuild admin_user_snapshots on demand (admin dashboard or manual trigger). */
 export async function GET(req: Request) {
   if (!authorizeCron(req)) {
     return cronUnauthorizedResponse();
