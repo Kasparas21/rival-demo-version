@@ -7,8 +7,7 @@ import {
   hasActivePaidSubscription,
   shouldShowAwaitingQuotePage,
 } from "@/lib/billing/entitlements";
-import { buildQuoteCheckoutHref } from "@/lib/billing/checkout-url";
-import { formatQuotePrice } from "@/lib/billing/custom-quotes";
+import { buildQuoteCheckoutHref, formatQuotePrice, isComplimentaryQuote } from "@/lib/billing/custom-quotes";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -58,6 +57,7 @@ export default async function AwaitingQuotePage({
   const priceLabel = pendingQuote
     ? formatQuotePrice(pendingQuote.price_cents, pendingQuote.currency)
     : null;
+  const isComplimentary = pendingQuote ? isComplimentaryQuote(pendingQuote) : false;
 
   return (
     <AwaitingQuoteContent
@@ -66,6 +66,7 @@ export default async function AwaitingQuotePage({
       priceLabel={priceLabel}
       billingPeriod={pendingQuote?.billing_period ?? null}
       nextPath={nextPath}
+      isComplimentary={isComplimentary}
     />
   );
 }

@@ -32,6 +32,7 @@ export default function AdminCreateQuotePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [isComplimentaryLink, setIsComplimentaryLink] = useState(false);
 
   const loadUsage = useCallback(async () => {
     const res = await fetch(`/api/admin/users/${userId}`);
@@ -60,51 +61,82 @@ export default function AdminCreateQuotePage() {
   async function saveDraft(send: boolean) {
     setSaving(true);
     setError(null);
-    const priceCents = Math.round(parseFloat(priceGbp) * 100);
-    if (!Number.isFinite(priceCents) || priceCents < 50) {
-      setError("Enter a valid price (minimum £0.50).");
-      setSaving(false);
-      return;
-    }
+    setCheckoutUrl(null);
+    setIsComplimentaryLink(false);
 
-    const createRes = await fetch("/api/admin/quotes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        priceCents,
-        currency: "gbp",
-        billingPeriod,
-        trialDays: Number(trialDays) || 0,
-        limits,
-        salesNotes,
-        internalNotes,
-      }),
-    });
-    const created = (await createRes.json()) as { quote?: { id: string }; error?: string };
-    if (!createRes.ok || !created.quote?.id) {
-      setError(created.error ?? "Failed to create quote");
-      setSaving(false);
-      return;
-    }
-
-    if (send) {
-      const sendRes = await fetch(`/api/admin/quotes/${created.quote.id}/send`, { method: "POST" });
-      const sent = (await sendRes.json()) as { checkoutUrl?: string; error?: string };
-      if (!sendRes.ok) {
-        setError(sent.error ?? "Failed to send quote");
-        setSaving(false);
+    try {
+      const priceCents = Math.round(parseFloat(priceGbp) * 100);
+      if (!Number.isFinite(priceCents) || priceCents < 0) {
+        setError("Enter a valid price (0 for free access, or minimum £0.50 for paid).");
         return;
       }
-      if (sent.checkoutUrl) {
-        setCheckoutUrl(sent.checkoutUrl);
-        await navigator.clipboard.writeText(sent.checkoutUrl);
+      if (priceCents > 0 && priceCents < 50) {
+        setError("Paid quotes must be at least £0.50. Use 0 for complimentary access.");
+        return;
       }
-    }
 
-    setSaving(false);
-    router.push(`/admin/users/${userId}`);
+      const createRes = await fetch("/api/admin/quotes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          priceCents,
+          currency: "gbp",
+          billingPeriod,
+          trialDays: Number(trialDays) || 0,
+          limits,
+          salesNotes,
+          internalNotes,
+        }),
+      });
+      const created = (await createRes.json()) as { quote?: { id: string }; error?: string };
+      if (!createRes.ok || !created.quote?.id) {
+        setError(created.error ?? `Failed to create quote (${createRes.status})`);
+        return;
+      }
+
+      if (!send) {
+        router.push(`/admin/users/${userId}`);
+        return;
+      }
+
+      const sendRes = await fetch(`/api/admin/quotes/${created.quote.id}/send`, { method: "POST" });
+      const sent = (await sendRes.json()) as { checkoutUrl?: string; complimentary?: boolean; error?: string };
+      if (!sendRes.ok) {
+        setError(sent.error ?? `Failed to send quote (${sendRes.status})`);
+        return;
+      }
+
+      if (!sent.checkoutUrl) {
+        setError("Quote was sent but no checkout URL was returned.");
+        return;
+      }
+
+      setCheckoutUrl(sent.checkoutUrl);
+      setIsComplimentaryLink(Boolean(sent.complimentary));
+      try {
+        await navigator.clipboard.writeText(sent.checkoutUrl);
+      } catch {
+        // Clipboard can fail without HTTPS or permission — URL is still shown below.
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Something went wrong.";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  async function copyCheckoutUrl() {
+    if (!checkoutUrl) return;
+    try {
+      await navigator.clipboard.writeText(checkoutUrl);
+    } catch {
+      setError("Could not copy automatically — select the link below and copy manually.");
+    }
+  }
+
+  const complimentaryPrice = Number.parseFloat(priceGbp) === 0;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -116,11 +148,47 @@ export default function AdminCreateQuotePage() {
         <p className="mt-1 text-sm text-zinc-500">{usageHint}</p>
       </div>
 
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-medium">Could not create quote</p>
+          <p className="mt-2 whitespace-pre-wrap">{error}</p>
+          {error.includes("custom_quotes") || error.includes("db:apply-admin") ? (
+            <p className="mt-3 text-xs text-red-700">
+              Fastest fix: Supabase dashboard → SQL Editor → run{" "}
+              <code className="rounded bg-red-100 px-1">20260713120000_custom_quotes_admin.sql</code> and{" "}
+              <code className="rounded bg-red-100 px-1">20260713130000_seed_admin_users.sql</code> from{" "}
+              <code className="rounded bg-red-100 px-1">web/supabase/migrations/</code>, then wait 10s and retry.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {checkoutUrl ? (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          Checkout link copied: {checkoutUrl}
-        </p>
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <p className="font-medium">
+            {isComplimentaryLink ? "Free access link ready" : "Checkout link ready"}
+          </p>
+          <p className="mt-1 text-xs text-emerald-800">
+            {isComplimentaryLink
+              ? "User opens this link, logs in, and gets access — no Polar payment."
+              : "User opens this link to complete payment in Polar."}
+          </p>
+          <p className="mt-2 break-all font-mono text-xs">{checkoutUrl}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void copyCheckoutUrl()}
+              className="rounded-lg bg-emerald-800 px-3 py-1.5 text-xs font-medium text-white"
+            >
+              Copy link again
+            </button>
+            <Link
+              href={`/admin/users/${userId}`}
+              className="rounded-lg border border-emerald-300 px-3 py-1.5 text-xs font-medium text-emerald-900"
+            >
+              Back to user
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       <section className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4">
@@ -133,6 +201,7 @@ export default function AdminCreateQuotePage() {
               onChange={(e) => setPriceGbp(e.target.value)}
               className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2"
             />
+            <p className="mt-1 text-xs text-zinc-500">Use 0 for free access (skips Polar).</p>
           </label>
           <label className="text-sm">
             <span className="text-zinc-500">Billing period</span>
@@ -250,9 +319,13 @@ export default function AdminCreateQuotePage() {
           type="button"
           disabled={saving}
           onClick={() => void saveDraft(true)}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white"
+          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-60"
         >
-          Send & copy checkout link
+          {saving
+            ? "Sending…"
+            : complimentaryPrice
+              ? "Send & copy access link"
+              : "Send & copy checkout link"}
         </button>
       </div>
     </div>

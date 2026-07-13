@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeAdminRequest, adminCanWrite } from "@/lib/admin/auth";
-import { buildQuoteCheckoutHref } from "@/lib/billing/custom-quotes";
+import { buildQuoteCheckoutHref, isComplimentaryQuote } from "@/lib/billing/custom-quotes";
 import { getAppUrl } from "@/lib/billing/config";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -53,13 +53,18 @@ export async function POST(_req: Request, context: RouteContext) {
 
   const checkoutPath = buildQuoteCheckoutHref(updated.checkout_token);
   const checkoutUrl = `${getAppUrl()}${checkoutPath}`;
+  const complimentary = isComplimentaryQuote(updated);
 
-  await admin.from("admin_event_log").insert({
-    actor_user_id: user!.id,
-    target_user_id: updated.user_id,
-    event_type: "custom_quote_sent",
-    payload: { quote_id: id, checkout_url: checkoutUrl } as Json,
-  });
+  try {
+    await admin.from("admin_event_log").insert({
+      actor_user_id: user!.id,
+      target_user_id: updated.user_id,
+      event_type: complimentary ? "custom_quote_sent_complimentary" : "custom_quote_sent",
+      payload: { quote_id: id, checkout_url: checkoutUrl, complimentary } as Json,
+    });
+  } catch {
+    // Non-blocking audit log.
+  }
 
-  return NextResponse.json({ ok: true, quote: updated, checkoutUrl, checkoutPath });
+  return NextResponse.json({ ok: true, quote: updated, checkoutUrl, checkoutPath, complimentary });
 }

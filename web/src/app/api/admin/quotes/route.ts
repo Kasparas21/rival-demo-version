@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { authorizeAdminRequest, adminCanWrite } from "@/lib/admin/auth";
+import { customQuotesMigrationHelp, isMissingCustomQuotesTableError } from "@/lib/admin/migration-help";
 import {
   defaultCustomQuoteLimits,
   planLimitsToJson,
@@ -73,8 +74,8 @@ export async function POST(req: Request) {
 
   const userId = body.userId?.trim();
   const priceCents = body.priceCents;
-  if (!userId || typeof priceCents !== "number" || priceCents < 50) {
-    return NextResponse.json({ error: "userId and priceCents (>= 50) are required" }, { status: 400 });
+  if (!userId || typeof priceCents !== "number" || priceCents < 0) {
+    return NextResponse.json({ error: "userId and priceCents (>= 0) are required" }, { status: 400 });
   }
 
   const defaults = defaultCustomQuoteLimits();
@@ -106,15 +107,25 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const message = isMissingCustomQuotesTableError(error.message)
+      ? customQuotesMigrationHelp()
+      : error.message;
+    return NextResponse.json(
+      { error: message },
+      { status: isMissingCustomQuotesTableError(error.message) ? 503 : 500 },
+    );
   }
 
-  await admin.from("admin_event_log").insert({
-    actor_user_id: user!.id,
-    target_user_id: userId,
-    event_type: "custom_quote_created",
-    payload: { quote_id: data.id } as Json,
-  });
+  try {
+    await admin.from("admin_event_log").insert({
+      actor_user_id: user!.id,
+      target_user_id: userId,
+      event_type: "custom_quote_created",
+      payload: { quote_id: data.id } as Json,
+    });
+  } catch {
+    // Non-blocking audit log.
+  }
 
   return NextResponse.json({ ok: true, quote: data });
 }

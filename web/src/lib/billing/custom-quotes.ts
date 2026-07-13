@@ -148,16 +148,22 @@ export async function getCustomQuoteByToken(
   return quote;
 }
 
+export function isComplimentaryQuote(quote: Pick<CustomQuoteRow, "price_cents">): boolean {
+  return quote.price_cents === 0;
+}
+
 export async function markCustomQuoteAccepted(
   admin: SupabaseClient<Database>,
   quoteId: string,
-): Promise<void> {
+): Promise<string | null> {
   const now = new Date().toISOString();
-  await admin
+  const { error } = await admin
     .from("custom_quotes")
     .update({ status: "accepted", accepted_at: now, updated_at: now })
     .eq("id", quoteId)
     .in("status", ["sent", "draft"]);
+
+  return error?.message ?? null;
 }
 
 export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | null): string {
@@ -167,6 +173,7 @@ export function buildQuoteCheckoutHref(checkoutToken: string, next?: string | nu
 }
 
 export function formatQuotePrice(priceCents: number, currency: string): string {
+  if (priceCents === 0) return "Free";
   const amount = priceCents / 100;
   const symbol = currency.toLowerCase() === "gbp" ? "£" : currency.toLowerCase() === "usd" ? "$" : "";
   const formatted = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);

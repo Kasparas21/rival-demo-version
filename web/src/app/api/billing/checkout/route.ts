@@ -8,7 +8,8 @@ import {
 } from "@/lib/analytics/polar-checkout-metadata";
 import { appOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { getPolarCustomProductId, getPolarTesterDiscountId, type PolarPlanSlug } from "@/lib/billing/config";
-import { getCustomQuoteByToken } from "@/lib/billing/custom-quotes";
+import { activateComplimentaryCustomQuote } from "@/lib/billing/activate-complimentary-quote";
+import { getCustomQuoteByToken, isComplimentaryQuote } from "@/lib/billing/custom-quotes";
 import { resolvePolarCustomCheckout } from "@/lib/billing/polar-custom-checkout";
 import { resolvePolarCheckoutProducts } from "@/lib/billing/polar-checkout";
 import {
@@ -76,6 +77,20 @@ async function createCustomQuoteCheckout(
   }
   if (quote.user_id !== user.id) {
     return checkoutBrowserFailure(request, wantsJson, "This checkout link belongs to another account.", 403);
+  }
+
+  if (isComplimentaryQuote(quote)) {
+    const activation = await activateComplimentaryCustomQuote(admin, quote, user.id);
+    if (!activation.ok) {
+      return checkoutBrowserFailure(request, wantsJson, activation.error, 500);
+    }
+
+    const next = safeCheckoutNextPath(request.nextUrl.searchParams.get("next"));
+    const destination = next ?? "/dashboard/spy";
+    if (wantsJson) {
+      return NextResponse.json({ ok: true, redirect: destination, complimentary: true });
+    }
+    return NextResponse.redirect(new URL(destination, request.nextUrl.origin));
   }
 
   const supabase = await createSupabaseServerClient();

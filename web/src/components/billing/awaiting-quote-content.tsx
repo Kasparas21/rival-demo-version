@@ -6,6 +6,7 @@ type Props = {
   priceLabel: string | null;
   billingPeriod: string | null;
   nextPath: string;
+  isComplimentary?: boolean;
 };
 
 export function AwaitingQuoteContent({
@@ -14,6 +15,7 @@ export function AwaitingQuoteContent({
   priceLabel,
   billingPeriod,
   nextPath,
+  isComplimentary = false,
 }: Props) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4 py-12 text-white">
@@ -23,7 +25,9 @@ export function AwaitingQuoteContent({
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-400">
           {checkoutHref
-            ? "After your sales call we built a subscription tailored to your usage. Complete checkout to unlock full access."
+            ? isComplimentary
+              ? "Your complimentary plan is ready. Open the link below while logged in to activate access — no payment required."
+              : "After your sales call we built a subscription tailored to your usage. Complete checkout to unlock full access."
             : "Our team will send you a checkout link after your call. You can keep exploring on the free trial in the meantime."}
         </p>
 
@@ -38,15 +42,17 @@ export function AwaitingQuoteContent({
             <p className="text-sm text-zinc-400">Your price</p>
             <p className="mt-1 text-3xl font-semibold">
               {priceLabel}
-              <span className="text-base font-normal text-zinc-500">
-                /{billingPeriod === "annual" ? "year" : "month"}
-              </span>
+              {!isComplimentary ? (
+                <span className="text-base font-normal text-zinc-500">
+                  /{billingPeriod === "annual" ? "year" : "month"}
+                </span>
+              ) : null}
             </p>
             <Link
               href={checkoutHref}
               className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-zinc-900"
             >
-              Continue to checkout
+              {isComplimentary ? "Activate free access" : "Continue to checkout"}
             </Link>
           </div>
         ) : (

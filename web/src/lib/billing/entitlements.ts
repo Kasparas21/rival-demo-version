@@ -111,6 +111,11 @@ export function resolvePlanTier(params: {
     return "admin";
   }
 
+  const payload = readRawPayload(rawPayload);
+  if (payload.complimentary_quote_id && isSubscriptionStatusAllowed(status)) {
+    return "custom";
+  }
+
   const override = readDevPlanOverride(rawPayload);
   if (applyDevOverride && override) {
     return override;
@@ -418,6 +423,7 @@ export async function getBillingEntitlement(
 }
 
 function formatQuotePriceLabel(quote: CustomQuoteRow): string {
+  if (quote.price_cents === 0) return "Free";
   const amount = quote.price_cents / 100;
   const symbol = quote.currency?.toLowerCase() === "gbp" ? "£" : quote.currency?.toLowerCase() === "usd" ? "$" : "";
   const formatted = Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
