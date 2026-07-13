@@ -2,58 +2,25 @@
  * Shared dropdown options for Ads Library scrape settings (labels + API values).
  */
 
+import { ISO_3166_1_ALPHA2_CODES } from "@/lib/ad-library/google-ads-regions";
+
 export type LabeledValue = { value: string; label: string };
 
-/** Meta/Facebook Ad Library — country dropdown (`ALL` or ISO 3166-1 alpha-2). */
-export const META_COUNTRY_OPTIONS: LabeledValue[] = [
-  { value: "ALL", label: "All countries" },
-  { value: "US", label: "United States" },
-  { value: "GB", label: "United Kingdom" },
-  { value: "CA", label: "Canada" },
-  { value: "AU", label: "Australia" },
-  { value: "DE", label: "Germany" },
-  { value: "FR", label: "France" },
-  { value: "IT", label: "Italy" },
-  { value: "ES", label: "Spain" },
-  { value: "NL", label: "Netherlands" },
-  { value: "BE", label: "Belgium" },
-  { value: "AT", label: "Austria" },
-  { value: "CH", label: "Switzerland" },
-  { value: "SE", label: "Sweden" },
-  { value: "NO", label: "Norway" },
-  { value: "DK", label: "Denmark" },
-  { value: "FI", label: "Finland" },
-  { value: "IE", label: "Ireland" },
-  { value: "PL", label: "Poland" },
-  { value: "PT", label: "Portugal" },
-  { value: "GR", label: "Greece" },
-  { value: "CZ", label: "Czechia" },
-  { value: "RO", label: "Romania" },
-  { value: "HU", label: "Hungary" },
-  { value: "BG", label: "Bulgaria" },
-  { value: "HR", label: "Croatia" },
-  { value: "SK", label: "Slovakia" },
-  { value: "SI", label: "Slovenia" },
-  { value: "LT", label: "Lithuania" },
-  { value: "LV", label: "Latvia" },
-  { value: "EE", label: "Estonia" },
-  { value: "LU", label: "Luxembourg" },
-  { value: "MT", label: "Malta" },
-  { value: "CY", label: "Cyprus" },
-  { value: "IS", label: "Iceland" },
-  { value: "LI", label: "Liechtenstein" },
-  { value: "IN", label: "India" },
-  { value: "BR", label: "Brazil" },
-  { value: "MX", label: "Mexico" },
-  { value: "JP", label: "Japan" },
-  { value: "KR", label: "South Korea" },
-  { value: "TW", label: "Taiwan" },
-  { value: "SG", label: "Singapore" },
-  { value: "NZ", label: "New Zealand" },
-  { value: "ZA", label: "South Africa" },
-  { value: "AR", label: "Argentina" },
-  { value: "CO", label: "Colombia" },
-];
+/** Build Meta/Facebook Ad Library country options (`ALL` or any ISO 3166-1 alpha-2). */
+export function buildMetaCountryOptions(): LabeledValue[] {
+  const dn = new Intl.DisplayNames(["en"], { type: "region" });
+  const rest = ISO_3166_1_ALPHA2_CODES.map((code) => ({
+    value: code,
+    label: `${dn.of(code) ?? code} (${code})`,
+  })).sort((a, b) => a.label.localeCompare(b.label, "en"));
+  return [{ value: "ALL", label: "All countries" }, ...rest];
+}
+
+/**
+ * Meta/Facebook Ad Library — country filter passed to the Ad Library URL (`country=XX` or `ALL`).
+ * Uses the full ISO list (same as Google Ads region picker) — not a hand-picked subset.
+ */
+export const META_COUNTRY_OPTIONS: LabeledValue[] = buildMetaCountryOptions();
 
 /** LinkedIn actor — optional country filter (empty = all). Same ISO2 list without ALL at top. */
 export const LINKEDIN_COUNTRY_OPTIONS: LabeledValue[] = [
