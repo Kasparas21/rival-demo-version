@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest";
 
-import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview-url";
+import { creativeThumbnailSrc, libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview-url";
+
+describe("creativeThumbnailSrc", () => {
+  it("prefers live CDN over archived copy", () => {
+    expect(
+      creativeThumbnailSrc({
+        ad_creative_url: "https://cdn.example.com/live.jpg",
+        archived_creative_url: "https://storage.example.com/archived.jpg",
+      }),
+    ).toBe("https://cdn.example.com/live.jpg");
+  });
+
+  it("uses archived copy when live URL is missing", () => {
+    expect(
+      creativeThumbnailSrc({
+        ad_creative_url: null,
+        archived_creative_url: "https://storage.example.com/archived.jpg",
+      }),
+    ).toBe("https://storage.example.com/archived.jpg");
+  });
+});
 
 describe("libraryPreviewUrlFromScrapedRow", () => {
   it("reads Meta img from scraped raw_payload like the detail drawer", () => {

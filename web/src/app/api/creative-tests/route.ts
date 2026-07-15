@@ -1,22 +1,27 @@
-import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import {
   computeCreativeTestsForCompetitor,
   launchDateKeyForAd,
 } from "@/lib/creative-tests/compute-creative-tests";
+import { filterCreativeTestsWithExpiredPreviews } from "@/lib/creative-tests/filter-creative-tests-previews";
+import { enrichCreativeTestAdForDisplay } from "@/lib/creative-tests/resolve-creative-test-preview";
+import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
+import { isDemoSettingsCompetitor } from "@/lib/demo/sales-demo-settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type ScrapedAdRow = {
   id: string;
   platform: string;
   ad_creative_url: string | null;
+  archived_creative_url: string | null;
   ad_text: string;
   ai_extracted_angle: string | null;
   first_seen_at: string;
   last_seen_at: string;
   format: string;
   ai_extracted_launch_date: string | null;
+  raw_payload: unknown;
 };
 
 function hydrateCreativeTestAds(test: {
@@ -98,11 +103,10 @@ export async function GET(request: Request) {
       supabase
         .from("scraped_ads")
         .select(
-          "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, ai_extracted_launch_date"
+          "id, platform, ad_creative_url, archived_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, ai_extracted_launch_date, raw_payload"
         )
         .eq("user_id", userId)
         .eq("competitor_id", competitorId)
-        .eq("is_active", true)
         .limit(1500),
     ]);
 
@@ -136,30 +140,53 @@ export async function GET(request: Request) {
   let { tests, allAds, adsById } = loaded;
 
   if (!force && tests.length > 0 && testsNeedRecompute(tests, adsById, allAds)) {
-    after(async () => {
-      try {
-        await computeCreativeTestsForCompetitor({ supabase, userId, competitorId });
-      } catch (e) {
-        console.warn("[creative-tests] background recompute failed", e);
-      }
+    const recomputeResult = await computeCreativeTestsForCompetitor({
+      supabase,
+      userId,
+      competitorId,
     });
+    if (recomputeResult.ok) {
+      loaded = await loadTestsAndAds();
+      if ("error" in loaded) {
+        return NextResponse.json({ ok: false, error: loaded.error }, { status: 500 });
+      }
+      ({ tests, allAds, adsById } = loaded);
+    }
   }
 
-  const hydratedTests = tests.map((test) => {
-    const ads = hydrateCreativeTestAds(test, adsById, allAds);
-    return {
-      ...test,
-      ads,
-      ad_count: ads.length > 0 ? ads.length : test.ad_count,
-    };
-  });
+  const hydratedTests = tests
+    .map((test) => {
+      const ads = hydrateCreativeTestAds(test, adsById, allAds).map(enrichCreativeTestAdForDisplay);
+      return {
+        ...test,
+        ads,
+        ad_count: ads.length > 0 ? ads.length : test.ad_count,
+      };
+    })
+    .filter((test) => test.ads.length >= 2);
+
+  const competitorDomain = (competitor.brand_domain ?? "").trim().toLowerCase();
+  const adidasDemo = isDemoSettingsCompetitor(competitorDomain);
+
+  const displayTests =
+    isDebugPlatformClassificationEnabled() || adidasDemo
+      ? hydratedTests
+      : filterCreativeTestsWithExpiredPreviews(hydratedTests);
+
+  const clientTests = displayTests.map((test) => ({
+    ...test,
+    ads: test.ads.map((ad) => {
+      const { raw_payload: _omit, ...rest } = ad;
+      return rest;
+    }),
+  }));
 
   const summary = {
-    total: hydratedTests.length,
-    winnerIdentified: hydratedTests.filter((t) => t.test_status === "winner_identified").length,
-    running: hydratedTests.filter((t) => t.test_status === "running").length,
-    allKilledFast: hydratedTests.filter((t) => t.test_status === "all_killed_fast").length,
-    noClearWinner: hydratedTests.filter((t) => t.test_status === "no_clear_winner").length,
+    total: clientTests.length,
+    winnerIdentified: clientTests.filter((t) => t.test_status === "winner_identified").length,
+    running: clientTests.filter((t) => t.test_status === "running").length,
+    allKilledFast: clientTests.filter((t) => t.test_status === "all_killed_fast").length,
+    noClearWinner: clientTests.filter((t) => t.test_status === "no_clear_winner").length,
   };
 
   const displayName = competitor.brand_name?.trim() || competitor.name?.trim() || "Competitor";
@@ -171,7 +198,7 @@ export async function GET(request: Request) {
       name: displayName,
       domain: competitor.brand_domain,
     },
-    tests: hydratedTests,
+    tests: clientTests,
     summary,
   });
 }

@@ -69,6 +69,14 @@ import {
   shouldHideDemoMarkedSidebarCompetitor,
   shouldShowDemoMarkedCompetitorDot,
 } from "@/lib/debug/demo-sidebar-competitors";
+import { DemoSidebarLink } from "@/components/demo/demo-sidebar-link";
+import {
+  buildDashboardDemoCompetitorPath,
+  demoHostFromDashboardPathname,
+  DEMO_OWN_BRAND,
+  getDemoSidebarCompetitors,
+  isDashboardDemoPath,
+} from "@/lib/demo/dashboard-demo-config";
 
 const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
@@ -436,6 +444,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const goToBrandHub = useCallback(
     (brand: Brand) => {
       setIsBrandMenuOpen(false);
+      if (isDashboardDemoPath(pathname)) {
+        router.push(buildDashboardDemoCompetitorPath(DEMO_OWN_BRAND.domain), { scroll: false });
+        return;
+      }
       const domain = brand.domain?.trim();
       if (!domain) {
         const href = `${buildCompetitorDashboardPath(WORKSPACE_BRAND_PLACEHOLDER_SLUG)}?tab=ads%20library&sub=paid-media-settings`;
@@ -456,7 +468,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       const qs = q.toString();
       router.push(qs ? `${base}?${qs}` : base, { scroll: false });
     },
-    [router],
+    [router, pathname],
   );
 
   const workspaceFallbackBrand: Brand = useMemo(() => {
@@ -481,6 +493,20 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     if (b) return b;
     return workspaceFallbackBrand;
   }, [activeBrandId, brands, workspaceFallbackBrand]);
+
+  const isOnDemoPath = isDashboardDemoPath(pathname);
+
+  const effectiveBrand = useMemo((): Brand => {
+    if (!isOnDemoPath) return activeBrand;
+    return {
+      id: "demo-own-brand",
+      name: DEMO_OWN_BRAND.name,
+      badge: DEMO_OWN_BRAND.initial,
+      logoUrl: DEMO_OWN_BRAND.logoUrl,
+      domain: DEMO_OWN_BRAND.domain,
+      color: DEMO_OWN_BRAND.color,
+    };
+  }, [activeBrand, isOnDemoPath]);
 
   const previousActiveBrandIdRef = useRef<string | null>(null);
 
@@ -706,11 +732,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   const demoOwnerEmail = userProfile?.email ?? null;
   const sidebarCompetitorRows = useMemo(() => {
+    if (isOnDemoPath) return getDemoSidebarCompetitors();
     const deduped = dedupeSidebarCompetitors(savedCompetitors);
     const rows = withoutOwnedBrandRows(deduped, brands, activeBrand.domain);
     return rows.filter((competitor) => !shouldHideDemoMarkedSidebarCompetitor(demoOwnerEmail, competitor));
-  }, [savedCompetitors, brands, activeBrand.domain, demoOwnerEmail]);
-  const pathCompetitorHost = competitorHostFromDashboardPathname(pathname);
+  }, [isOnDemoPath, savedCompetitors, brands, activeBrand.domain, demoOwnerEmail]);
+  const pathCompetitorHost = isOnDemoPath
+    ? demoHostFromDashboardPathname(pathname)
+    : competitorHostFromDashboardPathname(pathname);
   const queryCompetitorHost = searchParams.get("url")?.trim();
   const pricingGate = searchParams.get("pricing") === "1";
   const activeCompetitorSlug =
@@ -862,14 +891,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           {collapsed ? (
             <button
               type="button"
-              onClick={() => goToBrandHub(activeBrand)}
+              onClick={() => goToBrandHub(effectiveBrand)}
               className="size-11 shrink-0 rounded-xl overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[#DDF1FD] active:scale-[0.97] transition-all mx-auto shadow-sm"
-              title={activeBrand.name}
+              title={effectiveBrand.name}
             >
-              {activeBrand.logoUrl || activeBrand.domain ? (
+              {effectiveBrand.logoUrl || effectiveBrand.domain ? (
                 <CompetitorLogo
-                  sources={{ primary: activeBrand.logoUrl, domain: activeBrand.domain }}
-                  name={activeBrand.name}
+                  sources={{ primary: effectiveBrand.logoUrl, domain: effectiveBrand.domain }}
+                  name={effectiveBrand.name}
                   size="lg"
                   shape="rounded"
                   className="h-11 w-11 rounded-xl border-0 shadow-none"
@@ -877,9 +906,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               ) : (
                 <div
                   className="w-full h-full text-white flex items-center justify-center text-[11px] font-bold shrink-0"
-                  style={{ backgroundColor: activeBrand.color ?? "#343434" }}
+                  style={{ backgroundColor: effectiveBrand.color ?? "#343434" }}
                 >
-                  {activeBrand.badge}
+                  {effectiveBrand.badge}
                 </div>
               )}
             </button>
@@ -887,14 +916,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between w-full rounded-xl bg-white/50 border border-white/60 hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all text-left group shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
               <button
                 type="button"
-                onClick={() => goToBrandHub(activeBrand)}
+                onClick={() => goToBrandHub(effectiveBrand)}
                 className="flex min-w-0 flex-1 items-center gap-3 rounded-l-xl px-3 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/35"
               >
-                {activeBrand.logoUrl || activeBrand.domain ? (
+                {effectiveBrand.logoUrl || effectiveBrand.domain ? (
                   <div className="h-[36px] w-[36px] shrink-0 overflow-hidden rounded-[10px] border border-white/60 shadow-sm">
                     <CompetitorLogo
-                      sources={{ primary: activeBrand.logoUrl, domain: activeBrand.domain }}
-                      name={activeBrand.name}
+                      sources={{ primary: effectiveBrand.logoUrl, domain: effectiveBrand.domain }}
+                      name={effectiveBrand.name}
                       size="md"
                       shape="rounded"
                       className="h-9 w-9 rounded-[10px] border-0 shadow-none"
@@ -903,13 +932,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 ) : (
                   <div
                     className="w-[36px] h-[36px] rounded-[10px] text-white flex items-center justify-center text-[13px] font-bold shrink-0 shadow-sm"
-                    style={{ backgroundColor: activeBrand.color ?? "#343434" }}
+                    style={{ backgroundColor: effectiveBrand.color ?? "#343434" }}
                   >
-                    {activeBrand.badge}
+                    {effectiveBrand.badge}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold text-[#343434] truncate">{activeBrand.name}</span>
+                  <span className="block text-[14px] font-semibold text-[#343434] truncate">{effectiveBrand.name}</span>
                   <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
                 </div>
               </button>
@@ -926,14 +955,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           ) : (
             <button
               type="button"
-              onClick={() => goToBrandHub(activeBrand)}
+              onClick={() => goToBrandHub(effectiveBrand)}
               className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-white/50 border border-white/60 shadow-[0_2px_8px_rgba(0,0,0,0.03)] text-left hover:bg-white/80 hover:border-[#DDF1FD]/60 transition-all outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/35"
             >
-              {activeBrand.logoUrl || activeBrand.domain ? (
+              {effectiveBrand.logoUrl || effectiveBrand.domain ? (
                 <div className="h-[36px] w-[36px] shrink-0 overflow-hidden rounded-[10px] border border-white/60 shadow-sm">
                   <CompetitorLogo
-                    sources={{ primary: activeBrand.logoUrl, domain: activeBrand.domain }}
-                    name={activeBrand.name}
+                    sources={{ primary: effectiveBrand.logoUrl, domain: effectiveBrand.domain }}
+                    name={effectiveBrand.name}
                     size="md"
                     shape="rounded"
                     className="h-9 w-9 rounded-[10px] border-0 shadow-none"
@@ -942,13 +971,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               ) : (
                 <div
                   className="w-[36px] h-[36px] rounded-[10px] text-white flex items-center justify-center text-[13px] font-bold shrink-0 shadow-sm"
-                  style={{ backgroundColor: activeBrand.color ?? "#343434" }}
+                  style={{ backgroundColor: effectiveBrand.color ?? "#343434" }}
                 >
-                  {activeBrand.badge}
+                  {effectiveBrand.badge}
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold text-[#343434] truncate">{activeBrand.name}</span>
+                <span className="block text-[14px] font-semibold text-[#343434] truncate">{effectiveBrand.name}</span>
                 <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
               </div>
             </button>
@@ -1115,9 +1144,10 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               const rowSlug = urlHost || normalizeCompetitorSlug(competitor.slug);
               const rowReactKey = `${normalizeCompetitorSlug(competitor.slug)}:${competitorIdx}`;
 
-              const showDemoMarkedDot = shouldShowDemoMarkedCompetitorDot(demoOwnerEmail, competitor);
-              const onCompetitorView =
-                pathname.startsWith("/dashboard/competitor/") || pathname === "/dashboard/competitor";
+              const showDemoMarkedDot = !isOnDemoPath && shouldShowDemoMarkedCompetitorDot(demoOwnerEmail, competitor);
+              const onCompetitorView = isOnDemoPath
+                ? pathname.startsWith("/dashboard/demo/competitor/")
+                : pathname.startsWith("/dashboard/competitor/") || pathname === "/dashboard/competitor";
               const isActive =
                 onCompetitorView && activeCompetitorSlug !== "" && activeCompetitorSlug === rowSlug;
               const competitorRowRing =
@@ -1144,7 +1174,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     >
                       <SidebarCompetitorSkeleton collapsed />
                       <div className="absolute inset-0 flex items-start justify-end pt-0.5 pr-0.5">
-                        {renderRemoveCompetitorButton(competitor, rowSlug, removing, { strictHoverOnly: true })}
+                        {!isOnDemoPath
+                          ? renderRemoveCompetitorButton(competitor, rowSlug, removing, { strictHoverOnly: true })
+                          : null}
                       </div>
                     </div>
                   );
@@ -1160,12 +1192,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   >
                     <SidebarCompetitorSkeleton collapsed={false} />
                     <div className="absolute inset-y-0 right-0 z-10 flex items-center pr-2">
-                      {renderRemoveCompetitorButton(competitor, rowSlug, removing, { strictHoverOnly: true })}
+                      {!isOnDemoPath
+                        ? renderRemoveCompetitorButton(competitor, rowSlug, removing, { strictHoverOnly: true })
+                        : null}
                     </div>
                   </div>
                 );
               }
-              const href = buildCompetitorSidebarHref(competitor);
+              const href = isOnDemoPath
+                ? buildDashboardDemoCompetitorPath(rowSlug)
+                : buildCompetitorSidebarHref(competitor);
 
               if (collapsed) {
                 return (
@@ -1231,7 +1267,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     </div>
                   </Link>
                   <div className="relative flex shrink-0 items-center pr-2">
-                    {renderRemoveCompetitorButton(competitor, rowSlug, removing)}
+                    {!isOnDemoPath ? renderRemoveCompetitorButton(competitor, rowSlug, removing) : null}
                   </div>
                 </div>
               );
@@ -1245,6 +1281,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         >
           {collapsed ? (
             <div className="flex flex-col items-center gap-2.5 overflow-visible">
+              <DemoSidebarLink collapsed />
               <button
                 type="button"
                 onClick={() => router.push("/dashboard/settings", { scroll: false })}
@@ -1272,6 +1309,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             </div>
           ) : (
             <div className="space-y-1">
+              <DemoSidebarLink collapsed={false} />
               <button
                 type="button"
                 onClick={() => router.push("/dashboard/settings", { scroll: false })}
@@ -1341,7 +1379,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           ) : null}
-          <BrandProvider brand={activeBrand}>
+          <BrandProvider brand={effectiveBrand}>
             <div className="relative z-[6] flex min-h-0 min-w-0 flex-1 flex-col">
               {pricingGate ? (
                 <div

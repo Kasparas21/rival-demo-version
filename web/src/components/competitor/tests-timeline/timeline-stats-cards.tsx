@@ -19,6 +19,7 @@ export type TimelineStatSnapshot = {
 
 type Props = {
   stats: TimelineStatSnapshot;
+  className?: string;
 };
 
 function useInViewCount(target: number) {
@@ -76,22 +77,19 @@ function StatCard({
   const { ref, formatted } = useInViewCount(numTarget ?? 0);
   const main = showDash ? "—" : textValue ?? formatted;
   return (
-    <div ref={ref} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div ref={ref} className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-2 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{main}</p>
-      <p className="mt-2 text-xs text-slate-500 leading-snug">{annotation}</p>
+      <p className="mt-2 min-h-[2.75rem] text-xs leading-snug text-slate-500 line-clamp-2">{annotation}</p>
     </div>
   );
 }
 
-export function TimelineStatsCards({ stats }: Props) {
-  const longestAnn =
-    stats.longestHeadline.length > 0
-      ? stats.longestHeadline.slice(0, 36) + (stats.longestHeadline.length > 36 ? "…" : "")
-      : "—";
+export function TimelineStatsCards({ stats, className }: Props) {
+  const longestAnnotation = stats.longestHeadline;
 
   return (
-    <div className={cn("grid gap-3 sm:grid-cols-2 lg:grid-cols-4")}>
+    <div className={cn("grid grid-cols-2 gap-3 xl:grid-cols-4", className)}>
       <StatCard
         label="Avg lifespan"
         numTarget={stats.avgLifespan}
@@ -102,7 +100,7 @@ export function TimelineStatsCards({ stats }: Props) {
         label="Longest run"
         numTarget={stats.longestDays}
         showDash={stats.sampleSize === 0}
-        annotation={longestAnn}
+        annotation={longestAnnotation.length > 0 ? longestAnnotation : "—"}
       />
       <StatCard
         label="Active now"

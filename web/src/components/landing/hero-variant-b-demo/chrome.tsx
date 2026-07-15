@@ -15,10 +15,10 @@ import { DEMO_COMPETITOR } from "@/lib/landing/hero-variant-b-demo-data";
 export function GenericLogo({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#94a3b8] to-[#64748b] text-xs font-bold text-white ${className}`.trim()}
+      className={`inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[#e5e7eb] bg-white ${className}`.trim()}
       aria-hidden
     >
-      A
+      <img src={DEMO_COMPETITOR.logoUrl} alt="" className="size-[70%] object-contain" />
     </span>
   );
 }

@@ -5,18 +5,21 @@ import { useMemo, useState } from "react";
 import { Beaker, ChevronDown, ChevronUp, HelpCircle, Info, Lightbulb, Pin, Play, Skull, Trophy } from "lucide-react";
 
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
+import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import type { ComparisonPlatformIconId } from "@/lib/platforms/comparison-platform-order";
 import { COMPETITOR_PAGE_SHELL } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { CreativeTestsSkeleton } from "@/components/ui/feature-skeleton";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 import { DurationAdRow } from "./duration-lifespan-bar";
-import { computeLifespanDays, DAY_MS } from "./timeline-helpers";
+import { computeLifespanDays, DAY_MS, maxLifespanInCreativeTest } from "./timeline-helpers";
 
 type CreativeTestAd = {
   id: string;
   platform: string;
   ad_creative_url: string | null;
+  archived_creative_url?: string | null;
   ad_text: string;
   ai_extracted_angle: string | null;
   first_seen_at: string;
@@ -48,6 +51,43 @@ type Summary = {
 
 type FilterStatus = "all" | "winner_identified" | "running" | "all_killed_fast" | "no_clear_winner";
 
+function platformDisplayLabel(platform: string): string {
+  const p = platform.trim().toLowerCase();
+  if (p === "meta") return "Meta";
+  if (p === "google") return "Google";
+  if (p === "youtube") return "YouTube";
+  if (p === "tiktok") return "TikTok";
+  if (p === "linkedin") return "LinkedIn";
+  if (p === "pinterest") return "Pinterest";
+  if (p === "snapchat") return "Snapchat";
+  return platform;
+}
+
+function buildCreativeTestsSummary(rows: CreativeTest[]): Summary {
+  return {
+    total: rows.length,
+    winnerIdentified: rows.filter((t) => t.test_status === "winner_identified").length,
+    running: rows.filter((t) => t.test_status === "running").length,
+    allKilledFast: rows.filter((t) => t.test_status === "all_killed_fast").length,
+    noClearWinner: rows.filter((t) => t.test_status === "no_clear_winner").length,
+  };
+}
+
+function creativeTestsCacheIsConsistent(c: CreativeTestsApiResponse): boolean {
+  if (!c.ok) return false;
+  const rows = (c.tests ?? []).filter((t) => (t.ads?.length ?? 0) >= 2);
+  if (rows.some((t) => (t.ad_count ?? 0) >= 2 && (t.ads?.length ?? 0) === 0)) return false;
+  if (!c.summary) return rows.length === 0;
+  const built = buildCreativeTestsSummary(rows);
+  return (
+    built.total === c.summary.total &&
+    built.winnerIdentified === c.summary.winnerIdentified &&
+    built.running === c.summary.running &&
+    built.allKilledFast === c.summary.allKilledFast &&
+    built.noClearWinner === c.summary.noClearWinner
+  );
+}
+
 type CreativeTestsApiResponse = {
   ok?: boolean;
   error?: string;
@@ -76,16 +116,12 @@ export function CreativeTestsTab({
 }: Props) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
-  const cacheKey = `${domainKey}:creative-tests:${competitorId}:${stamp}`;
+  const cacheKey = `${domainKey}:creative-tests:v5:${competitorId}:${stamp}`;
 
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<CreativeTestsApiResponse>({
     cacheKey,
     enabled: Boolean(competitorId && domainKey && fetchEnabled),
-    validateCached: (c) => {
-      if (!c.ok) return false;
-      const rows = c.tests ?? [];
-      return !rows.some((t) => (t.ad_count ?? 0) >= 2 && (t.ads?.length ?? 0) === 0);
-    },
+    validateCached: creativeTestsCacheIsConsistent,
     fetcher: async () => {
       const r = await fetch(`/api/creative-tests?competitorId=${encodeURIComponent(competitorId)}`, {
         credentials: "include",
@@ -98,8 +134,11 @@ export function CreativeTestsTab({
     },
   });
 
-  const tests = useMemo(() => data?.tests ?? [], [data?.tests]);
-  const summary = data?.summary ?? null;
+  const tests = useMemo(
+    () => (data?.tests ?? []).filter((t) => (t.ads?.length ?? 0) >= 2),
+    [data?.tests],
+  );
+  const summary = useMemo(() => buildCreativeTestsSummary(tests), [tests]);
   const loadErr = hookError?.message ?? null;
 
   const [filter, setFilter] = useState<FilterStatus>("all");
@@ -175,7 +214,7 @@ export function CreativeTestsTab({
         }
       />
 
-      {summary ? (
+      {summary.total > 0 ? (
         <div className="mb-6 flex flex-wrap items-center gap-2">
           <FilterPill
             label="All tests"
@@ -298,7 +337,7 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
     test.platform === "google" && test.median_lifespan_days === 0 && test.max_lifespan_days === 0;
 
   const runningCount = test.ads.filter(isAdRunning).length;
-  const maxDays = Math.max(test.max_lifespan_days, 1);
+  const maxDays = Math.max(test.max_lifespan_days, maxLifespanInCreativeTest(test.ads));
   const headerDotActive = test.test_status === "running" || runningCount > 0;
 
   return (
@@ -313,6 +352,14 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
           aria-hidden
         />
         <Pin className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+
+        <span
+          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+          title={`${platformDisplayLabel(test.platform)} creative test`}
+        >
+          <ComparisonPlatformIcon platform={test.platform as ComparisonPlatformIconId} className="h-3 w-3" />
+          {platformDisplayLabel(test.platform)}
+        </span>
 
         <span className="min-w-0 flex-1 text-[14px] font-medium text-slate-900">{launchDate}</span>
 
@@ -336,12 +383,6 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
 
       {expanded ? (
         <div className="border-t border-slate-100 px-1 py-1">
-          {test.ads.length === 0 ? (
-            <p className="mx-3 my-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-3 py-4 text-center text-[12px] text-slate-500">
-              Could not load ads for this test. Refresh competitor data or open Creative Tests again after the next
-              scrape.
-            </p>
-          ) : null}
           {test.ads.map((ad) => {
             const isWinner = ad.id === test.winner_ad_id;
             const lifespanDays = computeLifespanDays(ad.first_seen_at, ad.last_seen_at);
@@ -352,6 +393,7 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
                 <div key={ad.id} className="px-3 py-2">
                   <DurationAdRow
                     creativeUrl={ad.ad_creative_url}
+                    archivedCreativeUrl={ad.archived_creative_url}
                     platform={ad.platform}
                     format={ad.format}
                     lifespanDays={0}
@@ -370,6 +412,7 @@ function TestRow({ test, expanded, onToggle, onOpenAd }: TestRowProps) {
               <DurationAdRow
                 key={ad.id}
                 creativeUrl={ad.ad_creative_url}
+                archivedCreativeUrl={ad.archived_creative_url}
                 platform={ad.platform}
                 format={ad.format}
                 lifespanDays={lifespanDays}

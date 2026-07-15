@@ -12,6 +12,14 @@ const CY = SIZE / 2;
 const MAX_R = 72;
 const LABEL_R = 102;
 const VIEW_PAD = 28;
+const SCORE_PILL_W = 26;
+const SCORE_PILL_H = 14;
+
+function labelTextAnchor(x: number): "start" | "middle" | "end" {
+  if (x < CX - 10) return "end";
+  if (x > CX + 10) return "start";
+  return "middle";
+}
 
 function polarToCartesian(angleRad: number, radius: number): { x: number; y: number } {
   return {
@@ -141,24 +149,29 @@ export function PsychologicalRadarChart({ scores, animate = true }: Props) {
           {PSYCHOLOGICAL_SCORE_LABELS.map(({ key, label }, i) => {
             const value = scores[key];
             const { x, y } = polarToCartesian(start + i * step, LABEL_R);
-            const anchor = x < CX - 10 ? "end" : x > CX + 10 ? "start" : "middle";
+            const anchor = labelTextAnchor(x);
+            const pillY = y - 16;
+            const pillX =
+              anchor === "middle" ? x - SCORE_PILL_W / 2 : anchor === "end" ? x - SCORE_PILL_W : x;
+            const scoreX = pillX + SCORE_PILL_W / 2;
+            const scoreY = pillY + SCORE_PILL_H / 2 + 3.5;
 
             return (
               <g key={key}>
                 <rect
-                  x={anchor === "middle" ? x - 13 : anchor === "end" ? x - 26 : x}
-                  y={y - 16}
-                  width={26}
-                  height={14}
+                  x={pillX}
+                  y={pillY}
+                  width={SCORE_PILL_W}
+                  height={SCORE_PILL_H}
                   rx={7}
                   fill="rgba(255,255,255,0.88)"
                   stroke="rgba(149,193,75,0.35)"
                   strokeWidth={0.75}
                 />
                 <text
-                  x={x}
-                  y={y - 6}
-                  textAnchor={anchor}
+                  x={scoreX}
+                  y={scoreY}
+                  textAnchor="middle"
                   className="fill-slate-900 text-[9px] font-bold"
                 >
                   {value}

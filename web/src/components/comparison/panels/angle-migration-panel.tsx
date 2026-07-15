@@ -19,6 +19,8 @@ type Props = {
   competitor: { name: string; payload: CompetitorStrategyOverviewPayload | null };
   competitorId: string;
   onOpenAd: (adId: string) => void;
+  /** Demo/static mode — skip vault API and return these ads per angle. */
+  resolveVaultAds?: (angle: string) => VaultAd[] | Promise<VaultAd[]>;
 };
 
 type Tag = "Shared" | "Theirs only" | "Yours only";
@@ -41,7 +43,13 @@ function tagDotClass(tag: Tag): string {
   return "bg-sky-500";
 }
 
-export function AngleMigrationPanel({ workspace, competitor, competitorId, onOpenAd }: Props) {
+export function AngleMigrationPanel({
+  workspace,
+  competitor,
+  competitorId,
+  onOpenAd,
+  resolveVaultAds,
+}: Props) {
   const reduce = useReducedMotion() ?? false;
 
   const [expanded, setExpanded] = useState(false);
@@ -98,6 +106,11 @@ export function AngleMigrationPanel({ workspace, competitor, competitorId, onOpe
       setDrawerAngle(angle);
       setDrawerLoading(true);
       setDrawerAds([]);
+      if (resolveVaultAds) {
+        setDrawerAds(await Promise.resolve(resolveVaultAds(angle)));
+        setDrawerLoading(false);
+        return;
+      }
       const res = await fetch(
         `/api/comparison/vault-ads?competitorId=${encodeURIComponent(competitorId)}&angle=${encodeURIComponent(angle)}`,
         { credentials: "include" }
@@ -106,7 +119,7 @@ export function AngleMigrationPanel({ workspace, competitor, competitorId, onOpe
       setDrawerAds(json.ads ?? []);
       setDrawerLoading(false);
     },
-    [competitorId]
+    [competitorId, resolveVaultAds]
   );
 
   const formatAds = (tag: Tag, wDetail?: AnglesByPlatformInsight, cDetail?: AnglesByPlatformInsight) => {

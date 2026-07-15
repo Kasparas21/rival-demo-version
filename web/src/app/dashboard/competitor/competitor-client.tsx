@@ -187,6 +187,7 @@ import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 import {
   markEnsurePersistedSuccess,
   prefetchCompetitorFeatureCaches,
+  prefetchPaidMediaSubTabCaches,
   shouldSkipEnsurePersisted,
 } from "@/lib/cache/prefetch-competitor-features";
 import type { ComparisonPayloadJson } from "@/lib/comparison/comparison-payload-types";
@@ -2678,6 +2679,8 @@ function CompetitorDashboardBody({
   const workspaceLibraryInteractive =
     !isOwnWorkspace || workspaceLibraryLinkState === "ready";
 
+  const eagerPreload = Boolean(competitorDbIdForSaved && cacheDomainNorm.trim());
+
   const showAdLibraryAnalyticsPanel =
     workspaceLibraryInteractive &&
     (Boolean(competitorDbIdForSaved.trim()) || adsLibraryShowsCreativesOnScreen);
@@ -2687,8 +2690,7 @@ function CompetitorDashboardBody({
     cacheDomainNorm
   }:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
-  const comparisonPayloadFetchEnabled =
-    Boolean(cacheDomainNorm.trim()) && navTab === "comparison";
+  const comparisonPayloadFetchEnabled = Boolean(cacheDomainNorm.trim()) && !isOwnWorkspace;
 
   const landingPagesFetchEnabled =
     Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()) && workspaceLibraryInteractive;
@@ -3109,49 +3111,52 @@ function CompetitorDashboardBody({
 
   const openAdLibraryCard = useCallback(
     (platform: string, libraryItemId: string, alternateIds: string[] = [], rawAd?: unknown) => {
+      const openGen = ++adLibraryOpenGenRef.current;
+
+      const pl = platform.trim().toLowerCase();
+      const lid = libraryItemId.trim();
+      if (!lid) return;
+
+      const initialCid = competitorDbIdForSaved.trim();
+      // Empty id is fine here: the seed competitor id is only used for display fields.
+      const seedCompetitor = {
+        id: initialCid,
+        name: competitorDisplayLabel,
+        domain: brand.domain,
+        logo_url: brand.logoUrl ?? null,
+      };
+
+      const knownScrapedId = scrapedIdForCard(pl, lid, alternateIds);
+      if (knownScrapedId) {
+        const seed = rawAd
+          ? buildLibraryCardDetailSeed(pl, knownScrapedId, rawAd, seedCompetitor)
+          : undefined;
+        openAd(knownScrapedId, seed);
+        return;
+      }
+
+      // Open the drawer instantly from card data; resolve the real UUID in the background.
+      const hasSeed = Boolean(rawAd);
+      if (rawAd) {
+        setPendingOpenSeed(buildLibraryCardDetailSeed(pl, lid, rawAd, seedCompetitor));
+      }
+
       void (async () => {
-        const openGen = ++adLibraryOpenGenRef.current;
-
-        let cid = competitorDbIdForSaved.trim();
-        const pl = platform.trim().toLowerCase();
-        const lid = libraryItemId.trim();
-        if (!lid) return;
-
+        let cid = initialCid;
         if (!cid && isOwnWorkspace) {
           cid = (await ensureWorkspaceLibraryLinked())?.trim() ?? "";
         }
         if (openGen !== adLibraryOpenGenRef.current) return;
 
         if (!cid) {
-          toast.error("Still linking your brand library — try again in a moment.");
+          if (!hasSeed) {
+            toast.error("Still linking your brand library — try again in a moment.");
+          }
           return;
-        }
-
-        const seedCompetitor = {
-          id: cid,
-          name: competitorDisplayLabel,
-          domain: brand.domain,
-          logo_url: brand.logoUrl ?? null,
-        };
-
-        const knownScrapedId = scrapedIdForCard(pl, lid, alternateIds);
-        if (knownScrapedId) {
-          const seed = rawAd
-            ? buildLibraryCardDetailSeed(pl, knownScrapedId, rawAd, seedCompetitor)
-            : undefined;
-          openAd(knownScrapedId, seed);
-          return;
-        }
-
-        if (rawAd) {
-          setPendingOpenSeed(buildLibraryCardDetailSeed(pl, lid, rawAd, seedCompetitor));
         }
 
         const firstResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
-        if (openGen !== adLibraryOpenGenRef.current) {
-          setPendingOpenSeed(null);
-          return;
-        }
+        if (openGen !== adLibraryOpenGenRef.current) return;
         if (firstResolve.ok) return;
 
         try {
@@ -3165,42 +3170,36 @@ function CompetitorDashboardBody({
             }),
           });
           const persistJson = (await persistRes.json()) as { ok?: boolean; error?: string; errors?: string[] };
-          if (openGen !== adLibraryOpenGenRef.current) {
-            setPendingOpenSeed(null);
-            return;
-          }
-          if (!persistRes.ok || persistJson.ok === false) {
+          if (openGen !== adLibraryOpenGenRef.current) return;
+          if ((!persistRes.ok || persistJson.ok === false) && !hasSeed) {
             toast.error(
               persistJson.error ?? persistJson.errors?.[0] ?? "Ads are still syncing — try again shortly.",
             );
           }
         } catch {
-          if (openGen !== adLibraryOpenGenRef.current) {
-            setPendingOpenSeed(null);
-            return;
+          if (openGen !== adLibraryOpenGenRef.current) return;
+          if (!hasSeed) {
+            toast.error("Ads are still syncing — try again shortly.");
           }
-          toast.error("Ads are still syncing — try again shortly.");
         }
 
-        if (openGen !== adLibraryOpenGenRef.current) {
-          setPendingOpenSeed(null);
-          return;
-        }
+        if (openGen !== adLibraryOpenGenRef.current) return;
 
         refreshLibraryMappings();
         const retryResolve = await resolveLibraryAdAndOpen(cid, pl, lid);
-        if (openGen !== adLibraryOpenGenRef.current) {
-          setPendingOpenSeed(null);
-          return;
-        }
+        if (openGen !== adLibraryOpenGenRef.current) return;
         if (retryResolve.ok) return;
 
-        setPendingOpenSeed(null);
-        toast.error(
-          retryResolve.error === "Ad not found"
-            ? "Could not open this ad. Try refreshing the library."
-            : retryResolve.error || "Could not open this ad. Try refreshing the library.",
-        );
+        // With a seed, keep the drawer open showing card data; only surface an
+        // error when there is nothing to show.
+        if (!hasSeed) {
+          setPendingOpenSeed(null);
+          toast.error(
+            retryResolve.error === "Ad not found"
+              ? "Could not open this ad. Try refreshing the library."
+              : retryResolve.error || "Could not open this ad. Try refreshing the library.",
+          );
+        }
       })();
     },
     [
@@ -3276,6 +3275,8 @@ function CompetitorDashboardBody({
 
   /** Insights tabs read from `scraped_ads` — ensure ads_cache was copied before strategy/creative-tests load. */
   useEffect(() => {
+    const eagerAdsLibraryReady =
+      eagerPreload && adsLibraryShowsCreativesOnScreen && navTab === "ads library";
     const needsPersistedAds =
       (navTab === "insights" &&
         (navSub === "strategy-map" || navSub === "activity-feed")) ||
@@ -3284,12 +3285,24 @@ function CompetitorDashboardBody({
           navSub === "timeline" ||
           navSub === "audience" ||
           navSub === "copy-vault")) ||
-      (navTab === "website" && navSub === "from-ads");
+      (navTab === "website" && navSub === "from-ads") ||
+      eagerAdsLibraryReady;
     if (!needsPersistedAds || !cacheDomainNorm.trim()) return;
+
+    const prefetchSubTabs = () => {
+      if (!eagerAdsLibraryReady || !competitorDbIdForSaved) return;
+      prefetchPaidMediaSubTabCaches({
+        cacheDomainNorm,
+        competitorId: competitorDbIdForSaved,
+        scrapeStamp: accountLastScrapedAt ?? "none",
+      });
+    };
+
     if (
       competitorDbIdForSaved &&
       shouldSkipEnsurePersisted(brand.domain, competitorDbIdForSaved)
     ) {
+      prefetchSubTabs();
       return;
     }
 
@@ -3306,10 +3319,14 @@ function CompetitorDashboardBody({
       .then(async (res) => {
         if (cancelled) return;
         const json = (await res.json()) as { ok?: boolean; scrapedAdsPersisted?: number };
-        if (!json.ok || !(json.scrapedAdsPersisted ?? 0)) return;
+        if (!json.ok || !(json.scrapedAdsPersisted ?? 0)) {
+          prefetchSubTabs();
+          return;
+        }
         if (competitorDbIdForSaved) {
           markEnsurePersistedSuccess(brand.domain, competitorDbIdForSaved);
         }
+        prefetchSubTabs();
         prefetchCompetitorFeatureCaches({
           cacheDomainNorm,
           competitorDomain: brand.domain,
@@ -3336,6 +3353,8 @@ function CompetitorDashboardBody({
     cacheDomainNorm,
     competitorDbIdForSaved,
     accountLastScrapedAt,
+    eagerPreload,
+    adsLibraryShowsCreativesOnScreen,
   ]);
 
   const runStatusForLibraryCard = useCallback(
@@ -3848,7 +3867,10 @@ function CompetitorDashboardBody({
             </div>
           </div>
         </KeepMountedTab>
-        {navSub === "creative-tests" || navSub === "timeline" ? (
+        <KeepMountedTab
+          active={navSub === "creative-tests" || navSub === "timeline"}
+          className="!flex-none flex-col"
+        >
           <div className="bg-slate-50">
             {shouldRenderAiAnalysisNotice ? (
               <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
@@ -3876,7 +3898,11 @@ function CompetitorDashboardBody({
               />
             </KeepMountedTab>
           </div>
-        ) : navSub === "audience" || navSub === "copy-vault" ? (
+        </KeepMountedTab>
+        <KeepMountedTab
+          active={navSub === "audience" || navSub === "copy-vault"}
+          className="!flex-none flex-col"
+        >
           <div className="bg-slate-50">
             {shouldRenderAiAnalysisNotice ? (
               <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
@@ -3909,7 +3935,17 @@ function CompetitorDashboardBody({
               />
             </KeepMountedTab>
           </div>
-        ) : navSub === "paid-media-settings" ? null : (
+        </KeepMountedTab>
+        <KeepMountedTab
+          active={
+            navSub !== "creative-tests" &&
+            navSub !== "timeline" &&
+            navSub !== "audience" &&
+            navSub !== "copy-vault" &&
+            navSub !== "paid-media-settings"
+          }
+          className="!flex-none flex-col"
+        >
         <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
             {renderAiAnalysisNotice()}
@@ -4817,7 +4853,7 @@ function CompetitorDashboardBody({
             </div>
           </div>
         </div>
-        )}
+        </KeepMountedTab>
       </KeepMountedTab>
 
       <KeepMountedTab active={navTab === "insights"} className="!flex-none flex-col">

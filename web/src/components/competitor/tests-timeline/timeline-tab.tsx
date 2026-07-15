@@ -119,7 +119,7 @@ export function TimelineTab({
 }: Props) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
-  const cacheKey = `${domainKey}:timeline:${competitorId}:${stamp}`;
+  const cacheKey = `${domainKey}:timeline:v3:${competitorId}:${stamp}`;
 
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<TimelineResponseLight>({
     cacheKey,

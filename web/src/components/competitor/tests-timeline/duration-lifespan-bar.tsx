@@ -2,9 +2,8 @@
 
 import { Image as ImageIcon, Video } from "lucide-react";
 
-import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { CreativeTestPreviewThumb } from "@/components/competitor/tests-timeline/creative-test-preview-thumb";
 import { cn } from "@/lib/utils";
-import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 /** Human-readable lifespan label matching pinned-tests UI ("2 Days", "4 Days"). */
 export function formatLifespanLabel(days: number): string {
@@ -74,6 +73,8 @@ export function DurationLifespanBar({
 
 type DurationAdRowProps = {
   creativeUrl: string | null;
+  /** Supabase Storage copy when the platform CDN link has expired. */
+  archivedCreativeUrl?: string | null;
   platform: string;
   format?: string | null;
   lifespanDays: number;
@@ -94,6 +95,7 @@ function mediaIcon(format: string | null | undefined) {
 
 export function DurationAdRow({
   creativeUrl,
+  archivedCreativeUrl,
   platform,
   format,
   lifespanDays,
@@ -120,20 +122,11 @@ export function DurationAdRow({
       className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 transition-colors hover:bg-slate-50/80"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
-        {creativeUrl ? (
-          <img
-            src={creativeUrl}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
-        ) : (
-          <ComparisonPlatformIcon platform={platform as StrategyPlatform} className="h-4 w-4 opacity-40" />
-        )}
+        <CreativeTestPreviewThumb
+          creativeUrl={creativeUrl}
+          archivedCreativeUrl={archivedCreativeUrl}
+          platform={platform}
+        />
       </div>
 
       {mediaIcon(format)}

@@ -838,6 +838,15 @@ html:has([data-dashboard-app]) body {
   .hero-variant-b-demo-content-zoom .hero-demo-ad-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .hero-variant-b-demo-content-zoom .demo-timeline-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-variant-b-demo-content-zoom .demo-timeline-view .rounded-2xl.border {
+    border-radius: 1rem;
+    padding: 1rem;
+  }
 }
 
 @keyframes hero-autopilot-gradient-flow {

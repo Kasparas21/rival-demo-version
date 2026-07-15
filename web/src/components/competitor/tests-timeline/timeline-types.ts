@@ -2,6 +2,7 @@ export type TimelineAd = {
   id: string;
   platform: string;
   ad_creative_url: string | null;
+  archived_creative_url?: string | null;
   ad_text: string;
   ai_extracted_angle: string | null;
   first_seen_at: string;

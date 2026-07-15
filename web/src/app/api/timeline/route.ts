@@ -10,6 +10,7 @@ export type TimelineAdDto = {
   id: string;
   platform: string;
   ad_creative_url: string | null;
+  archived_creative_url: string | null;
   ad_text: string;
   ai_extracted_angle: string | null;
   first_seen_at: string;
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
 
   const { data: competitor, error: compErr } = await supabase
     .from("saved_competitors")
-    .select("id, brand_name, name, last_scraped_at")
+    .select("id, brand_name, name, brand_domain, last_scraped_at")
     .eq("id", competitorId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
   const { data: ads, error: adsErr } = await supabase
     .from("scraped_ads")
     .select(
-      "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, is_active, raw_payload",
+      "id, platform, ad_creative_url, archived_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, is_active, raw_payload",
     )
     .eq("user_id", user.id)
     .eq("competitor_id", competitorId)
@@ -81,6 +82,7 @@ export async function GET(request: Request) {
     id: ad.id,
     platform: ad.platform,
     ad_creative_url: ad.ad_creative_url,
+    archived_creative_url: ad.archived_creative_url,
     ad_text: ad.ad_text,
     ai_extracted_angle: ad.ai_extracted_angle,
     first_seen_at: ad.first_seen_at,

@@ -6,12 +6,17 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Globe,
   Link as LinkIcon,
-  Play,
 } from "lucide-react";
 
-import { DemoSectionHeader, GenericLogo } from "@/components/landing/hero-variant-b-demo/chrome";
+import { DemoSectionHeader } from "@/components/landing/hero-variant-b-demo/chrome";
+import { DemoAdDetailDrawer } from "@/components/demo/demo-ad-detail-drawer";
+import { DemoPlatformAdCard } from "@/components/demo/demo-platform-ad-cards";
+import { DemoPlatformAdsAllModal } from "@/components/demo/demo-platform-ads-all-modal";
+import { DemoPlatformSection } from "@/components/demo/demo-platform-section";
+import { primeDemoAdDetailCache } from "@/lib/demo/demo-ad-detail-payload";
+import { resolveDemoAdSource } from "@/lib/demo/demo-platform-ads-modal-feed";
+import { META_ADS_INLINE_PREVIEW } from "@/lib/ad-library/constants";
 import {
   GoogleLogo,
   LinkedInLogo,
@@ -22,17 +27,8 @@ import {
 } from "@/components/platform-logos";
 import { describeArcClockwise } from "@/lib/charts/arc-geometry";
 import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
-import {
-  DEMO_ACTIVITY_SCORE,
-  DEMO_ADS,
-  DEMO_COMPETITOR,
-  DEMO_LANDING_PAGES,
-  DEMO_PLATFORM_ACTIVE_COUNTS,
-  DEMO_PLATFORM_TOTAL_COUNTS,
-  DEMO_SAVED_AD,
-  type DemoAd,
-  type DemoPlatform,
-} from "@/lib/landing/hero-variant-b-demo-data";
+import { getDemoBrandPayload } from "@/lib/demo/demo-brand-payload";
+import type { DemoAd, DemoPlatform } from "@/lib/demo/dashboard-demo-data";
 
 const PLATFORM_CONFIG: {
   id: DemoPlatform;
@@ -59,7 +55,16 @@ const PLATFORM_COLORS: Record<DemoPlatform, string> = {
 };
 
 const PLATFORM_ORDER: DemoPlatform[] = ["meta", "google", "tiktok", "linkedin", "pinterest", "snapchat"];
-const DEFAULT_VISIBLE: DemoPlatform[] = ["meta", "google", "pinterest", "snapchat"];
+const DEFAULT_VISIBLE: DemoPlatform[] = ["meta", "google", "pinterest", "snapchat", "tiktok", "linkedin"];
+
+const PLATFORM_LABELS: Record<DemoPlatform, string> = {
+  meta: "Meta",
+  google: "Google",
+  tiktok: "TikTok",
+  linkedin: "LinkedIn",
+  pinterest: "Pinterest",
+  snapchat: "Snapchat",
+};
 
 function DemoGauge({
   activeCounts,
@@ -106,25 +111,39 @@ function DemoGauge({
             stroke="#f1f5f9"
             strokeWidth={strokeWidth}
           />
-          {segments.map((seg) => (
+          {segments.map((seg) => {
+            const platform = seg.platform as DemoPlatform;
+            const count = activeCounts[platform];
+            const label = PLATFORM_LABELS[platform];
+            return (
             <path
               key={seg.platform}
               d={describeArcClockwise(cx, cy, radius, seg.startDeg, seg.endDeg)}
               fill="none"
               stroke={seg.color}
-              strokeWidth={hovered === seg.platform ? strokeWidth + 2 : strokeWidth}
-              className="transition-all duration-300"
-              style={{ opacity: hovered && hovered !== seg.platform ? 0.25 : 1 }}
-              onMouseEnter={() => setHovered(seg.platform as DemoPlatform)}
+              strokeWidth={hovered === platform ? strokeWidth + 2 : strokeWidth}
+              className="cursor-pointer transition-all duration-300"
+              style={{ opacity: hovered && hovered !== platform ? 0.25 : 1 }}
+              title={`${count} ${label}`}
+              onMouseEnter={() => setHovered(platform)}
               onMouseLeave={() => setHovered(null)}
             />
-          ))}
+            );
+          })}
         </svg>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center translate-y-2">
           {hovered ? (
-            <p className="text-[28px] font-bold" style={{ color: PLATFORM_COLORS[hovered] }}>
-              {activeCounts[hovered]}
-            </p>
+            <>
+              <p className="text-[28px] font-bold leading-none" style={{ color: PLATFORM_COLORS[hovered] }}>
+                {activeCounts[hovered]}
+              </p>
+              <p
+                className="mt-1 text-[11px] font-semibold uppercase tracking-wide"
+                style={{ color: PLATFORM_COLORS[hovered] }}
+              >
+                {PLATFORM_LABELS[hovered]}
+              </p>
+            </>
           ) : (
             <>
               <p className="text-[28px] font-bold text-[#343434]">{total}</p>
@@ -141,67 +160,14 @@ function DemoGauge({
   );
 }
 
-function DemoAdCard({
-  ad,
-  saved,
-  onToggleSave,
-}: {
-  ad: DemoAd;
-  saved: boolean;
-  onToggleSave: () => void;
-}) {
-  return (
-    <article className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex items-start gap-2.5 border-b border-[#f1f5f9] p-3">
-        <GenericLogo className="size-9 rounded-full text-[11px]" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-[#343434]">{ad.pageName}</p>
-          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#6b7280]">
-            Sponsored <Globe className="size-3 text-[#9ca3af]" aria-hidden />
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1 text-[10px] text-[#6b7280]">
-          <span className="size-1.5 rounded-full bg-green-500" aria-hidden />
-          <span className="font-medium">Active {ad.activeDays}D</span>
-        </div>
-      </div>
-      <p className="line-clamp-3 px-3 pt-2.5 text-[12px] text-[#374151]">{ad.body}</p>
-      <div className="relative mx-3 mt-2.5 overflow-hidden rounded-xl">
-        <div
-          className="aspect-[4/5] max-h-[180px] w-full sm:max-h-[200px]"
-          style={{ background: ad.gradient }}
-        >
-          {ad.isVideo ? (
-            <span className="flex h-full items-center justify-center">
-              <span className="flex size-10 items-center justify-center rounded-full bg-black/50 text-white">
-                <Play className="ml-0.5 size-4" fill="currentColor" aria-hidden />
-              </span>
-            </span>
-          ) : null}
-        </div>
-      </div>
-      <div className="mx-3 mt-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-2.5">
-        <p className="truncate font-mono text-[10px] text-[#6b7280]">{ad.siteLabel}</p>
-        <p className="mt-0.5 truncate text-[12px] font-semibold">{ad.headline}</p>
-        <span className="mt-2 inline-flex rounded-md bg-[#e5e7eb] px-2.5 py-1 text-[11px] font-semibold">
-          {ad.cta}
-        </span>
-      </div>
-      <button
-        type="button"
-        onClick={onToggleSave}
-        className={`mx-3 mb-3 mt-2.5 rounded-lg py-2.5 text-[12px] font-semibold transition-colors ${
-          saved ? "bg-[#1e293b] text-white" : "bg-[#f1f5f9] text-[#334155] hover:bg-[#e2e8f0]"
-        }`}
-      >
-        {saved ? "Saved" : "Save the Ad"}
-      </button>
-    </article>
-  );
-}
+type SavedAdSnapshot = {
+  title: string;
+  body: string;
+  savedAt: string;
+  gradient: string;
+};
 
-function SavedAdCard({ onUnsave }: { onUnsave: () => void }) {
-  const ad = DEMO_SAVED_AD;
+function SavedAdCard({ ad, onUnsave }: { ad: SavedAdSnapshot; onUnsave: () => void }) {
   return (
     <article className="mx-auto max-w-sm overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
       <div className="aspect-[4/3] w-full" style={{ background: ad.gradient }} />
@@ -227,29 +193,40 @@ type Props = {
   onToggleSave: (id: string) => void;
   /** Marketing /adspy pages - lock to one platform and hide the platform picker. */
   lockedPlatform?: DemoPlatform;
+  /** Dashboard demo host — switches competitor vs own-brand fixtures. */
+  domain?: string;
 };
 
-export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatform }: Props) {
+export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatform, domain }: Props) {
+  const payload = useMemo(() => getDemoBrandPayload(domain), [domain]);
   const [analyticsOpen, setAnalyticsOpen] = useState(true);
   const [visiblePlatforms, setVisiblePlatforms] = useState<DemoPlatform[]>(
-    lockedPlatform ? [lockedPlatform] : DEFAULT_VISIBLE,
+    lockedPlatform ? [lockedPlatform] : payload.defaultVisiblePlatforms,
   );
   const [showDemoSaved, setShowDemoSaved] = useState(true);
+  const [detailAd, setDetailAd] = useState<DemoAd | null>(null);
+  const [viewAllPlatform, setViewAllPlatform] = useState<DemoPlatform | null>(null);
+
+  const openAdDetail = (ad: DemoAd) => {
+    const source = resolveDemoAdSource(ad);
+    primeDemoAdDetailCache(source);
+    setDetailAd(source);
+  };
 
   const totalActive = useMemo(
-    () => PLATFORM_ORDER.reduce((sum, p) => sum + DEMO_PLATFORM_ACTIVE_COUNTS[p], 0),
-    [],
+    () => PLATFORM_ORDER.reduce((sum, p) => sum + payload.platformActiveCounts[p], 0),
+    [payload.platformActiveCounts],
   );
   const totalAll = useMemo(
-    () => PLATFORM_ORDER.reduce((sum, p) => sum + DEMO_PLATFORM_TOTAL_COUNTS[p], 0),
-    [],
+    () => PLATFORM_ORDER.reduce((sum, p) => sum + payload.platformTotalCounts[p], 0),
+    [payload.platformTotalCounts],
   );
-  const maxLandingAds = Math.max(...DEMO_LANDING_PAGES.map((p) => p.ads));
+  const maxLandingAds = Math.max(...payload.landingPages.map((p) => p.ads));
 
   const visibleAds = useMemo(() => {
     if (subTab === "saved") return [];
-    return DEMO_ADS.filter((ad) => visiblePlatforms.includes(ad.platform));
-  }, [subTab, visiblePlatforms]);
+    return payload.ads.filter((ad) => visiblePlatforms.includes(ad.platform));
+  }, [payload.ads, subTab, visiblePlatforms]);
 
   const adsByPlatform = useMemo(() => {
     const map = new Map<DemoPlatform, DemoAd[]>();
@@ -261,7 +238,7 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
     return map;
   }, [visibleAds]);
 
-  const savedFromGrid = DEMO_ADS.filter((ad) => savedIds.has(ad.id));
+  const savedFromGrid = payload.ads.filter((ad) => savedIds.has(ad.id));
 
   if (subTab === "saved") {
     const hasAny = showDemoSaved || savedFromGrid.length > 0;
@@ -269,7 +246,7 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
       <>
         <DemoSectionHeader
           overline="Saved ads"
-          title={`Saved ads from ${DEMO_COMPETITOR.name}`}
+          title={`Saved ads from ${payload.name}`}
           description={`${(showDemoSaved ? 1 : 0) + savedFromGrid.length} saved - preserved even if removed from the source`}
         />
         {!hasAny ? (
@@ -279,12 +256,20 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {showDemoSaved ? <SavedAdCard onUnsave={() => setShowDemoSaved(false)} /> : null}
+            {showDemoSaved ? <SavedAdCard ad={payload.savedAd} onUnsave={() => setShowDemoSaved(false)} /> : null}
             {savedFromGrid.map((ad) => (
-              <DemoAdCard key={ad.id} ad={ad} saved onToggleSave={() => onToggleSave(ad.id)} />
+              <DemoPlatformAdCard
+                key={ad.id}
+                platform={ad.platform}
+                ad={ad}
+                saved
+                onToggleSave={() => onToggleSave(ad.id)}
+                onOpen={() => openAdDetail(ad)}
+              />
             ))}
           </div>
         )}
+      <DemoAdDetailDrawer ad={detailAd} onClose={() => setDetailAd(null)} />
       </>
     );
   }
@@ -293,11 +278,11 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
     <>
       <DemoSectionHeader
         overline="Ad library"
-        title={`Scraped creatives for ${DEMO_COMPETITOR.name}`}
+        title={`Scraped creatives for ${payload.name}`}
         description={
           lockedPlatform
-            ? `Last scraped ${DEMO_COMPETITOR.lastScraped} · ${PLATFORM_CONFIG.find((p) => p.id === lockedPlatform)?.sectionLabel ?? "Platform"} ads from your latest scrape.`
-            : `Last scraped ${DEMO_COMPETITOR.lastScraped} · Choose platforms below, then browse each channel section.`
+            ? `Last scraped ${payload.lastScraped} · ${PLATFORM_CONFIG.find((p) => p.id === lockedPlatform)?.sectionLabel ?? "Platform"} ads from your latest scrape.`
+            : `Last scraped ${payload.lastScraped} · Choose platforms below, then browse each channel section.`
         }
       />
 
@@ -319,21 +304,21 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">
                 Active ads · platform mix
               </p>
-              <DemoGauge activeCounts={DEMO_PLATFORM_ACTIVE_COUNTS} total={totalActive} totalAll={totalAll} />
+              <DemoGauge activeCounts={payload.platformActiveCounts} total={totalActive} totalAll={totalAll} />
             </div>
             <div className="hero-demo-analytics-side grid grid-cols-1 lg:col-span-2 lg:grid-cols-2">
               <div className="border-b border-[#e2e8f0]/90 p-4 lg:border-b-0 lg:border-r">
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">Activity score</p>
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-[30px] font-bold">{DEMO_ACTIVITY_SCORE.score}</span>
+                  <span className="text-[30px] font-bold">{payload.activityScore.score}</span>
                   <span className="text-[13px] text-[#64748b]">/100</span>
                   <span className="rounded-md border border-blue-300 bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-                    {DEMO_ACTIVITY_SCORE.tierLabel}
+                    {payload.activityScore.tierLabel}
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-[#475569]">{DEMO_ACTIVITY_SCORE.spend}</p>
+                <p className="mt-1 text-[11px] text-[#475569]">{payload.activityScore.spend}</p>
                 <ul className="mt-3 space-y-1.5">
-                  {DEMO_ACTIVITY_SCORE.reasons.map((r) => (
+                  {payload.activityScore.reasons.map((r) => (
                     <li key={r} className="flex gap-1.5 text-[11px] text-[#334155]">
                       <Check className="mt-0.5 size-3 shrink-0 text-green-600" aria-hidden />
                       {r}
@@ -347,7 +332,7 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
                   Top landing pages
                 </p>
                 <div className="space-y-2">
-                  {DEMO_LANDING_PAGES.slice(0, 4).map((page) => (
+                  {payload.landingPages.slice(0, 4).map((page) => (
                     <div key={page.id}>
                       <div className="mb-0.5 flex justify-between gap-2 text-[10px] sm:text-[11px]">
                         <span className="truncate font-mono">{page.url}</span>
@@ -416,33 +401,47 @@ export function DemoAdLibraryView({ subTab, savedIds, onToggleSave, lockedPlatfo
           <p className="font-medium text-[#475569]">No platforms selected</p>
         </div>
       ) : (
-        <div className="space-y-8">
-          {PLATFORM_CONFIG.filter((c) => visiblePlatforms.includes(c.id)).map(({ id, sectionLabel }) => {
+        <div className="flex flex-col gap-12">
+          {PLATFORM_CONFIG.filter((c) => visiblePlatforms.includes(c.id)).map(({ id }) => {
             const ads = adsByPlatform.get(id);
             if (!ads?.length) return null;
             return (
-              <section key={id}>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-[15px] font-semibold">{sectionLabel}</h4>
-                  <span className="text-[12px] font-semibold text-[#2563eb]">
-                    View all {DEMO_PLATFORM_ACTIVE_COUNTS[id]} ads
-                  </span>
-                </div>
-                <div className="hero-demo-ad-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {ads.map((ad) => (
-                    <DemoAdCard
-                      key={ad.id}
+              <DemoPlatformSection
+                key={id}
+                platform={id}
+                lastScraped={payload.lastScraped}
+                totalCount={payload.platformActiveCounts[id]}
+                onViewAll={() => setViewAllPlatform(id)}
+              >
+                {ads.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                  <div key={ad.id} className="flex h-full min-h-0 flex-col">
+                    <DemoPlatformAdCard
+                      platform={id}
                       ad={ad}
                       saved={savedIds.has(ad.id)}
                       onToggleSave={() => onToggleSave(ad.id)}
+                      onOpen={() => openAdDetail(ad)}
                     />
-                  ))}
-                </div>
-              </section>
+                  </div>
+                ))}
+              </DemoPlatformSection>
             );
           })}
         </div>
       )}
+      {viewAllPlatform ? (
+        <DemoPlatformAdsAllModal
+          open
+          onClose={() => setViewAllPlatform(null)}
+          platform={viewAllPlatform}
+          baseAds={payload.ads}
+          displayTotal={payload.platformActiveCounts[viewAllPlatform]}
+          savedIds={savedIds}
+          onToggleSave={onToggleSave}
+          onOpenAd={openAdDetail}
+        />
+      ) : null}
+      <DemoAdDetailDrawer ad={detailAd} onClose={() => setDetailAd(null)} />
     </>
   );
 }

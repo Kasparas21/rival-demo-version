@@ -324,9 +324,9 @@ export function JourneyGoalSheet({ open, goal, channelSignals, onClose, onOpenLa
             <section>
               <SectionTitle>Channel roles</SectionTitle>
               <ul className="space-y-2">
-                {goal.goalEdges.map((edge) => (
+                {goal.goalEdges.map((edge, index) => (
                   <li
-                    key={`${edge.from}-${edge.kind}`}
+                    key={`${edge.from}-${edge.kind}-${edge.pathIntent}-${index}`}
                     className={`rounded-xl border border-slate-200/90 border-l-[3px] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)] ${INTENT_ACCENT[edge.pathIntent]}`}
                   >
                     <div className="flex items-center justify-between gap-2">

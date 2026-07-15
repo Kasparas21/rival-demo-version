@@ -6,6 +6,7 @@
     "check:supabase-env": "tsx scripts/check-supabase-env.ts",
     "db:apply-admin": "tsx scripts/apply-admin-migrations.ts",
     "debug:spend-footprint": "tsx scripts/debug-spend-footprint.ts",
+    "audit:creative-previews": "tsx scripts/audit-creative-test-previews.ts",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "analyze": "ANALYZE=true next build --webpack",

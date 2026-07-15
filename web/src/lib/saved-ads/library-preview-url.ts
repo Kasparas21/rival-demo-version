@@ -2,6 +2,16 @@ import { resolveAdDetailCreativeMedia } from "@/lib/ad-detail/resolve-creative-m
 import { resolveMetaLibraryCardPreview } from "@/lib/ad-library/resolve-meta-library-card-preview";
 import type { MetaAdCard } from "@/lib/ad-library/normalize";
 
+/** Thumbnail src for list UIs — live CDN first, archived Storage copy as immediate fallback. */
+export function creativeThumbnailSrc(row: {
+  ad_creative_url: string | null;
+  archived_creative_url?: string | null;
+}): string | null {
+  const live = row.ad_creative_url?.trim();
+  if (live) return live;
+  return row.archived_creative_url?.trim() || null;
+}
+
 /** Still preview URL from a `scraped_ads` row — same sources as the ad detail drawer. */
 export function libraryPreviewUrlFromScrapedRow(row: {
   platform: string;

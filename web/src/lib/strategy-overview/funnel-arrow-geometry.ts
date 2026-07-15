@@ -105,10 +105,12 @@ export function buildChannelArrows(params: {
     reasoning: string;
     confidence: number;
     kind?: "organic_to_paid" | "paid_to_email" | "bof_to_goal" | "email_to_goal";
+    pathIntent?: string;
   }[];
   layout: Map<string, FunnelCellLayoutEntry>;
 }): ResolvedFunnelArrow[] {
   const out: ResolvedFunnelArrow[] = [];
+  const usedKeys = new Map<string, number>();
 
   for (const e of params.edges) {
     const fromBox = params.layout.get(e.from);
@@ -120,7 +122,11 @@ export function buildChannelArrows(params: {
     const { path, arrowPoints } = buildFunnelArrowPath(fromBox, toBox, fromSide, toSide);
     const start = anchor(fromBox, fromSide);
     const end = anchor(toBox, toSide);
-    const safeKey = `ch_${e.from}__${e.to}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const intentSuffix = e.pathIntent ? `__${e.pathIntent}` : "";
+    const baseKey = `ch_${e.from}__${e.to}${intentSuffix}`.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const seen = usedKeys.get(baseKey) ?? 0;
+    usedKeys.set(baseKey, seen + 1);
+    const safeKey = seen === 0 ? baseKey : `${baseKey}__${seen}`;
 
     const fromColor =
       e.kind === "paid_to_email"

@@ -44,12 +44,19 @@ type PageDetailResponse = {
   error?: string;
 };
 
+export type PageDetailStaticPayload = {
+  page: TrackedPageRow;
+  stats: PageDetailStats;
+  snapshots: TrackedPageSnapshot[];
+};
+
 type TabId = "overview" | "history" | "compare";
 
 type Props = {
   competitorId: string;
   pageId: string | null;
   seedPage?: TrackedPageRow | null;
+  staticDetail?: PageDetailStaticPayload | null;
   onClose: () => void;
   onUpdated: () => void;
   onCaptureNow?: (pageId: string) => boolean | Promise<boolean>;
@@ -90,6 +97,7 @@ export function PageDetailDrawer({
   competitorId,
   pageId,
   seedPage,
+  staticDetail = null,
   onClose,
   onUpdated,
   onCaptureNow,
@@ -143,14 +151,35 @@ export function PageDetailDrawer({
     }
   }, [competitorId, pageId]);
 
+  const applyStaticDetail = useCallback((detail: PageDetailStaticPayload) => {
+    setPage({
+      ...detail.page,
+      latestSnapshot: detail.snapshots[0] ?? detail.page.latestSnapshot ?? null,
+    });
+    setStats(detail.stats);
+    setSnapshots(detail.snapshots);
+    if (detail.snapshots.length >= 2) {
+      setCompareA(detail.snapshots[1]!.id);
+      setCompareB(detail.snapshots[0]!.id);
+    } else if (detail.snapshots[0]) {
+      setCompareB(detail.snapshots[0].id);
+      setCompareA("");
+    }
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     setTab("overview");
+    if (staticDetail) {
+      applyStaticDetail(staticDetail);
+      return;
+    }
     if (seedPage) {
       setPage(seedPage);
     }
     void loadDetail();
-  }, [open, pageId, seedPage, loadDetail]);
+  }, [open, pageId, seedPage, loadDetail, staticDetail, applyStaticDetail]);
 
   useEffect(() => {
     if (!open) return;

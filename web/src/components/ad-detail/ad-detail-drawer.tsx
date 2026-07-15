@@ -71,7 +71,6 @@ import {
   metaLocationAudienceRows,
   metaPublisherDetailRows,
   metaReachBreakdownDrawerGroups,
-  metaTargetMarketFooterLine,
   metaTargetsEuExplicit,
   type MetaLocationAudienceParsedRow,
   type MetaPublisherDetailRow,
@@ -686,6 +685,26 @@ function CreativeMediaBlock({ ad }: { ad: AdDetailData["ad"] }) {
   const showYoutubePlay = googleFamilyDrawerIsYoutubeish(ad.platform, ad.raw_payload);
 
   if (resolved.kind === "empty") {
+    const payload =
+      ad.raw_payload && typeof ad.raw_payload === "object" && !Array.isArray(ad.raw_payload)
+        ? (ad.raw_payload as Record<string, unknown>)
+        : null;
+    const demoGradient = typeof payload?.demo_gradient === "string" ? payload.demo_gradient : null;
+    const demoIsVideo = payload?.demo_is_video === true;
+
+    if (demoGradient) {
+      return (
+        <DetailCreativeMediaFrame showYoutubePlayOverlay={demoIsVideo}>
+          <div
+            className={detailCreativeMediaClasses(vertical, demoIsVideo)}
+            style={{ background: demoGradient }}
+            role="img"
+            aria-label="Ad creative preview"
+          />
+        </DetailCreativeMediaFrame>
+      );
+    }
+
     return (
       <div className="flex aspect-square w-full items-center justify-center">
         <ComparisonPlatformIcon platform={drawerComparisonPlatformIconId(ad.platform, ad.raw_payload)} className="h-12 w-12 opacity-30" />
@@ -1594,8 +1613,6 @@ function DetailsTab({ data }: { data: AdDetailData }) {
     });
   }
 
-  const metaTargetMarketFooter = pl === "meta" ? metaTargetMarketFooterLine(ad.raw_payload) : null;
-
   return (
     <div className="p-4">
       {context.is_creative_test_winner && context.creative_test ? (
@@ -1615,30 +1632,6 @@ function DetailsTab({ data }: { data: AdDetailData }) {
             <div className="min-w-0 text-right">{value}</div>
           </div>
         ))}
-      </div>
-
-      <div className="mt-6 border-t border-slate-100 pt-4">
-        <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-400">Coming soon</p>
-        <div className="space-y-2 text-[11px] text-slate-400">
-          <div className="flex items-center justify-between">
-            <span>Product Category</span>
-            <span>—</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Niche</span>
-            <span>—</span>
-          </div>
-          <div
-            className={`flex items-start justify-between gap-2 ${metaTargetMarketFooter ? "" : "text-slate-400"}`}
-          >
-            <span className={metaTargetMarketFooter ? "text-slate-500" : undefined}>Target Market</span>
-            <span
-              className={`max-w-[62%] text-right ${metaTargetMarketFooter ? "font-medium text-slate-900 [overflow-wrap:anywhere]" : ""}`}
-            >
-              {metaTargetMarketFooter ?? "—"}
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   );

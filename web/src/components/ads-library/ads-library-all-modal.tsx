@@ -13,6 +13,8 @@ import {
 } from "@/components/ads-library/platform-ads-modal-types";
 import { usePlatformAdsModalFeed } from "@/components/ads-library/use-platform-ads-modal-feed";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
+import type { DemoAd } from "@/lib/demo/dashboard-demo-data";
+import { useDemoPlatformAdsModalFeed } from "@/lib/demo/demo-platform-ads-modal-feed";
 import { cn } from "@/lib/utils";
 
 export function AdsLibraryAllModal<T>({
@@ -25,6 +27,7 @@ export function AdsLibraryAllModal<T>({
   getKey,
   viewMode,
   renderItem,
+  demoFeed,
 }: {
   open: boolean;
   onClose: () => void;
@@ -35,6 +38,10 @@ export function AdsLibraryAllModal<T>({
   getKey: (ad: T) => string;
   viewMode: "grid" | "list";
   renderItem: (ad: T, ctx: { metaScrapeAtMs: number | null }) => ReactNode;
+  demoFeed?: {
+    baseAds: DemoAd[];
+    displayTotal: number;
+  };
 }) {
   const titleId = useId();
   const scrollBodyRef = useRef<HTMLDivElement>(null);
@@ -47,8 +54,21 @@ export function AdsLibraryAllModal<T>({
     setToolbar((prev) => ({ ...prev, ...patch }));
   }, []);
 
+  const apiFeed = usePlatformAdsModalFeed({
+    open: open && !demoFeed,
+    domain,
+    platform,
+    toolbar,
+  });
+  const demoFeedResult = useDemoPlatformAdsModalFeed({
+    open: open && !!demoFeed,
+    platform: platform as DemoAd["platform"],
+    baseAds: demoFeed?.baseAds ?? [],
+    displayTotal: demoFeed?.displayTotal ?? 0,
+    toolbar,
+  });
   const { ads, total, hasMore, loading, loadingMore, error, dateRange, metaScrapeAtMs, loadMore, retry } =
-    usePlatformAdsModalFeed({ open, domain, platform, toolbar });
+    demoFeed ? demoFeedResult : apiFeed;
 
   useEffect(() => {
     setMounted(true);

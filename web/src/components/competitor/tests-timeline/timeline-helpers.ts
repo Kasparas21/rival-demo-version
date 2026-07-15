@@ -34,6 +34,17 @@ export function computeLifespanDays(firstSeenAt: string, lastSeenAt: string): nu
   return Math.max(0, Math.floor((end - start) / DAY_MS));
 }
 
+/** Longest lifespan among ads in a creative test — scales duration bars correctly. */
+export function maxLifespanInCreativeTest(
+  ads: ReadonlyArray<{ first_seen_at: string; last_seen_at: string }>,
+): number {
+  let max = 0;
+  for (const ad of ads) {
+    max = Math.max(max, computeLifespanDays(ad.first_seen_at, ad.last_seen_at));
+  }
+  return Math.max(1, max);
+}
+
 /** Effective end for bar: active ads run through "today" clamped to view. */
 export function effectiveBarEndMs(ad: TimelineAd, viewEnd: number, nowMs: number): number {
   if (!ad.is_killed) {

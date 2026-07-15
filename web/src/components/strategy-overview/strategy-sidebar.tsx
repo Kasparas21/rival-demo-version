@@ -18,6 +18,8 @@ type Props = {
   activityScoreEnabled?: boolean;
   /** Static fallback when no saved competitor (e.g. landing hero demo). */
   activityScoreFallback?: ReactNode;
+  /** When false, hides the 2×2 audience/format/tone/angles grid (demo strategy map). */
+  showInsightCards?: boolean;
 };
 
 const CARD =
@@ -65,6 +67,7 @@ export function StrategyOverviewSidebar({
   onFreshnessRescrape,
   activityScoreEnabled = true,
   activityScoreFallback,
+  showInsightCards = true,
 }: Props) {
   const m = normalizeStrategyMapPayload(map);
   const signals = m.audienceSignals;
@@ -94,6 +97,7 @@ export function StrategyOverviewSidebar({
         </div>
       )}
 
+      {showInsightCards ? (
       <div className="grid grid-cols-2 gap-2.5">
         <InsightCard title="Audience signals" icon={Users} accent="#6366f1">
           <ul className="space-y-2">
@@ -196,6 +200,7 @@ export function StrategyOverviewSidebar({
           ) : null}
         </InsightCard>
       </div>
+      ) : null}
     </div>
   );
 }

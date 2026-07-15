@@ -9,13 +9,16 @@ export function KeepMountedTab({
   active,
   children,
   className = "",
+  /** When true, mount children immediately so data hooks can warm caches before first visit. */
+  preload = true,
 }: {
   active: boolean;
   children: ReactNode;
   /** Extra classes on the outer wrapper (e.g. overflow). */
   className?: string;
+  preload?: boolean;
 }) {
-  const [hasMounted, setHasMounted] = useState(active);
+  const [hasMounted, setHasMounted] = useState(active || preload);
   const idleTimerRef = useRef<number | null>(null);
 
   useEffect(() => {

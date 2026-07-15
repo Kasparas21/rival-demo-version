@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Image as ImageIcon, LayoutList, Minus, Plus, Trophy, Video } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
+import { CreativeTestPreviewThumb } from "@/components/competitor/tests-timeline/creative-test-preview-thumb";
 import { parseAngleForDisplay } from "@/lib/comparison/stealable-angle-present";
 import { cn } from "@/lib/utils";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
@@ -195,22 +196,11 @@ function RowLabel({ ad, viewFields, duplicateCount }: LabelProps) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
-        {ad.ad_creative_url ? (
-          <img
-            src={ad.ad_creative_url}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-5 w-5 opacity-40" />
-          </div>
-        )}
+        <CreativeTestPreviewThumb
+          creativeUrl={ad.ad_creative_url}
+          archivedCreativeUrl={ad.archived_creative_url}
+          platform={ad.platform}
+        />
       </div>
       {timelineMediaIcon(ad.format)}
       <div className="min-w-0 flex-1">

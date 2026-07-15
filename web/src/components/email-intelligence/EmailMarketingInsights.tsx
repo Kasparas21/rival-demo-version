@@ -168,20 +168,27 @@ function AngleMixBar({ breakdown }: { breakdown: Record<string, number> }) {
 export function EmailMarketingInsights({
   competitorId,
   isOwnWorkspace = false,
+  insights: insightsProp = null,
+  readOnly = false,
 }: {
   competitorId: string;
   competitorName: string;
   isOwnWorkspace?: boolean;
+  /** When set, skips API fetch (demo / storybook). */
+  insights?: EmailInsightsPayload | null;
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [insights, setInsights] = useState<EmailInsightsPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [insightsFetched, setInsightsFetched] = useState<EmailInsightsPayload | null>(null);
+  const [loading, setLoading] = useState(() => !insightsProp);
   const [error, setError] = useState<string | null>(null);
   const [subjectSearch, setSubjectSearch] = useState("");
   const [showAllOffers, setShowAllOffers] = useState(false);
   const [emailGaps, setEmailGaps] = useState<StrategyGapItem[]>([]);
+
+  const insights = insightsProp ?? insightsFetched;
 
   const loadInsights = useCallback(async () => {
     setLoading(true);
@@ -203,7 +210,7 @@ export function EmailMarketingInsights({
           `Insights unlock after ${data.unlockAt ?? 5} captured emails (${data.emailCount ?? 0}/${data.unlockAt ?? 5}).`,
         );
       }
-      setInsights(data.insights);
+      setInsightsFetched(data.insights);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load insights");
     } finally {
@@ -212,11 +219,16 @@ export function EmailMarketingInsights({
   }, [competitorId]);
 
   useEffect(() => {
+    if (insightsProp) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     void loadInsights();
-  }, [loadInsights]);
+  }, [loadInsights, insightsProp]);
 
   useEffect(() => {
-    if (!isOwnWorkspace) return;
+    if (!isOwnWorkspace || insightsProp) return;
     void (async () => {
       try {
         const res = await fetch("/api/workspace/email-gaps", { credentials: "include" });
@@ -242,16 +254,17 @@ export function EmailMarketingInsights({
 
   const openEmailInInbox = useCallback(
     (emailId: string) => {
+      if (readOnly) return;
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "email-marketing");
       params.set("sub", "inbox");
       params.set("email_id", emailId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [pathname, router, searchParams],
+    [pathname, router, searchParams, readOnly],
   );
 
-  if (loading) {
+  if (loading && !insightsProp) {
     return (
       <div className="space-y-8">
         <StatSkeletonRow />
