@@ -25,6 +25,7 @@ import {
 } from "@/lib/ad-library/api-types";
 import {
   fetchAdsLibraryDeduplicated,
+  purgeAdsLibraryPlatformsForBrandDomain,
   readAdsLibrarySessionCache,
   stableAdsLibraryPayloadKey,
   writeAdsLibrarySessionCache,
@@ -289,6 +290,18 @@ export function CompetitorPaidMediaSettingsPanel({
     setSavedFlash(true);
     window.setTimeout(() => setSavedFlash(false), 2000);
     onSaved?.({ ids, channels });
+
+    const removedChannels = lastSavedChannelsRef.current.filter((ch) => !channels.includes(ch));
+    const removedPlatforms = channelsQueryToAdsPlatforms(removedChannels);
+    if (removedPlatforms.length > 0) {
+      purgeAdsLibraryPlatformsForBrandDomain(domain, removedPlatforms);
+      window.dispatchEvent(
+        new CustomEvent<AdsLibraryUpdatedDetail>(ADS_LIBRARY_UPDATED_EVENT, {
+          detail: { domain },
+        }),
+      );
+    }
+
     lastSavedChannelsRef.current = [...channels];
     return ids;
   };

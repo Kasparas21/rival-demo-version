@@ -112,3 +112,34 @@ export function unionAdsPlatformsFromSources(
   }
   return ALL_ADS_API_PLATFORMS.filter((p) => set.has(p));
 }
+
+/** When channels are explicitly saved, ignore identifier keys for disabled networks. */
+export function filterPlatformIdsToEnabledChannels(
+  ids: Record<string, string> | null | undefined,
+  channelsCsv: string,
+): Record<string, string> | null {
+  if (!ids) return null;
+  const trimmed = channelsCsv.trim();
+  if (!trimmed) return ids;
+  const enabled = new Set(
+    trimmed
+      .split(",")
+      .map((c) => c.trim())
+      .filter(Boolean),
+  );
+  const out: Record<string, string> = {};
+  const take = (channel: ChannelId, ...keys: string[]) => {
+    if (!enabled.has(channel)) return;
+    for (const key of keys) {
+      const val = ids[key];
+      if (typeof val === "string" && val.trim()) out[key] = val;
+    }
+  };
+  take("meta", "meta", "metaPageUrl");
+  take("google", "google");
+  take("linkedin", "linkedin");
+  take("tiktok", "tiktok");
+  take("pinterest", "pinterest", "pinterestAdvertiserName");
+  take("snapchat", "snapchat");
+  return Object.keys(out).length > 0 ? out : null;
+}

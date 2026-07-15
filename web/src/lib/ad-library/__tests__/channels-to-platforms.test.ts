@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ALL_ADS_API_PLATFORMS,
   channelsQueryToAdsPlatforms,
+  filterPlatformIdsToEnabledChannels,
   resolveAdsPlatformsForCompetitorView,
   resolveCompetitorTrackedAdsPlatforms,
   unionAdsPlatformsFromSources,
@@ -44,6 +45,17 @@ describe("resolveCompetitorTrackedAdsPlatforms", () => {
 describe("channelsQueryToAdsPlatforms", () => {
   it("maps channel ids to API platforms", () => {
     expect(channelsQueryToAdsPlatforms(["meta", "google"])).toEqual(["meta", "google"]);
+  });
+});
+
+describe("filterPlatformIdsToEnabledChannels", () => {
+  it("drops ids for disabled channels", () => {
+    expect(
+      filterPlatformIdsToEnabledChannels(
+        { meta: "1", tiktok: "@brand", google: "g" },
+        "meta,google",
+      ),
+    ).toEqual({ meta: "1", google: "g" });
   });
 });
 

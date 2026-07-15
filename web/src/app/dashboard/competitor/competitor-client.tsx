@@ -84,6 +84,7 @@ import {
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import {
   channelsQueryToAdsPlatforms,
+  filterPlatformIdsToEnabledChannels,
   resolveCompetitorTrackedAdsPlatforms,
   unionAdsPlatformsFromSources,
 } from "@/lib/ad-library/channels-to-platforms";
@@ -1767,16 +1768,19 @@ function CompetitorDashboardBody({
   }, [channelsFromResolver, isOwnWorkspace, workspaceLibraryContext]);
 
   const effectivePlatformIds = useMemo(() => {
-    if (platformIds && Object.keys(platformIds).length > 0) return platformIds;
-    if (
+    let ids: Record<string, string> | null = null;
+    if (platformIds && Object.keys(platformIds).length > 0) ids = platformIds;
+    else if (
       isOwnWorkspace &&
       workspaceLibraryContext?.ids &&
       Object.keys(workspaceLibraryContext.ids).length > 0
     ) {
-      return workspaceLibraryContext.ids;
+      ids = workspaceLibraryContext.ids;
+    } else {
+      ids = platformIds;
     }
-    return platformIds;
-  }, [platformIds, isOwnWorkspace, workspaceLibraryContext]);
+    return filterPlatformIdsToEnabledChannels(ids, effectiveChannelsFromResolver);
+  }, [platformIds, isOwnWorkspace, workspaceLibraryContext, effectiveChannelsFromResolver]);
 
   const paidMediaSettingsFallbackChannels = useMemo(
     () => effectiveChannelsFromResolver.split(",").filter(Boolean),

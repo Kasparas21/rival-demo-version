@@ -1,5 +1,6 @@
 import type { AdsLibraryPartialJson, AdsLibraryResponse } from "./api-types";
-import { coerceAdsLibraryResponse } from "./api-types";
+import { clearAdsLibraryPlatforms, coerceAdsLibraryResponse } from "./api-types";
+import type { AdsLibraryPlatform } from "./ads-library-platform";
 import { ALL_ADS_API_PLATFORMS } from "./channels-to-platforms";
 import { countLibraryAdsForPlatform } from "./library-response-utils";
 import { mirrorToLocalStorageIfSmall, safeSetSessionStorage } from "@/lib/cache/storage-quota";
@@ -221,6 +222,57 @@ export function writeAdsLibrarySessionCache(
     mirrorToLocalStorageIfSmall(localKey, serialized);
   } catch {
     // Ignore storage quota and serialization issues.
+  }
+}
+
+function rewriteBrandDomainCacheEntries(
+  store: Storage,
+  prefix: string,
+  brandDomain: string,
+  platforms: readonly AdsLibraryPlatform[],
+): void {
+  const target = cleanDomainForCacheKey(brandDomain);
+  for (let i = 0; i < store.length; i += 1) {
+    const key = store.key(i);
+    if (!key || !key.startsWith(prefix)) continue;
+    const suffix = key.slice(prefix.length);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(suffix);
+    } catch {
+      continue;
+    }
+    const dom = (payload as { brand?: { domain?: string } }).brand?.domain;
+    if (!dom || cleanDomainForCacheKey(dom) !== target) continue;
+    const raw = store.getItem(key);
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw) as { expires?: number; result?: FetchAdsLibraryResult };
+      if (!parsed?.result?.response) continue;
+      const cleared = clearAdsLibraryPlatforms(parsed.result.response, platforms);
+      const next = {
+        expires: typeof parsed.expires === "number" ? parsed.expires : Date.now() + DEFAULT_SUCCESS_TTL_MS,
+        result: { ...parsed.result, response: cleared },
+      };
+      store.setItem(key, JSON.stringify(next));
+    } catch {
+      continue;
+    }
+  }
+}
+
+/** Drop disabled platforms from every cached ads-library payload for this brand. */
+export function purgeAdsLibraryPlatformsForBrandDomain(
+  brandDomain: string,
+  platforms: readonly AdsLibraryPlatform[],
+): void {
+  if (typeof window === "undefined" || platforms.length === 0) return;
+  try {
+    rewriteBrandDomainCacheEntries(window.sessionStorage, SESSION_CACHE_PREFIX, brandDomain, platforms);
+    rewriteBrandDomainCacheEntries(window.localStorage, LOCAL_CACHE_PREFIX, brandDomain, platforms);
+    clearAdsCacheHydrateClientMetaForDomains([brandDomain]);
+  } catch {
+    /* best-effort */
   }
 }
 

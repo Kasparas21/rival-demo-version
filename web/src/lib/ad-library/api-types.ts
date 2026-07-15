@@ -17,6 +17,7 @@ import type {
   SnapchatAdCard,
   TikTokAdCard,
 } from "./normalize";
+import type { AdsLibraryPlatform } from "./ads-library-platform";
 
 export type { AdsLibraryPlatform } from "./ads-library-platform";
 
@@ -203,4 +204,23 @@ export function mergeAdsLibraryState(
           )
         : base.snapchat,
   });
+}
+
+/** Remove creatives for platforms the user turned off in Paid Media settings. */
+export function clearAdsLibraryPlatforms(
+  input: AdsLibraryResponse | AdsLibraryPartialJson | null | undefined,
+  platforms: readonly AdsLibraryPlatform[],
+): AdsLibraryResponse {
+  const base = coerceAdsLibraryResponse(input);
+  if (platforms.length === 0) return base;
+  const drop = new Set(platforms);
+  const next = { ...base };
+  if (drop.has("meta")) next.meta = { ads: [], error: null };
+  if (drop.has("google")) next.google = { rows: [], error: null };
+  if (drop.has("linkedin")) next.linkedin = { ads: [], error: null };
+  if (drop.has("tiktok")) next.tiktok = { ads: [], error: null };
+  if (drop.has("microsoft")) next.microsoft = { ads: [], error: null };
+  if (drop.has("pinterest")) next.pinterest = { ads: [], error: null };
+  if (drop.has("snapchat")) next.snapchat = { ads: [], error: null };
+  return next;
 }

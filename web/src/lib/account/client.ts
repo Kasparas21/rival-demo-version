@@ -29,7 +29,9 @@ async function safeJson(response: Response) {
 }
 
 /** JSON body for POST `/api/account/saved-competitors` — includes `adsLibraryContext` when present. */
-export function sidebarCompetitorToAccountPayload(h: SidebarCompetitor): SavedCompetitorPayload {
+export function sidebarCompetitorToAccountPayload(
+  h: SidebarCompetitor & Partial<Pick<SavedCompetitorPayload, "adsLibraryContext">>,
+): SavedCompetitorPayload {
   const payload: SavedCompetitorPayload = {
     slug: h.slug,
     name: h.name,
@@ -38,21 +40,40 @@ export function sidebarCompetitorToAccountPayload(h: SidebarCompetitor): SavedCo
     pending: h.pending,
     lastScrapedAt: h.lastScrapedAt,
   };
+
+  const fromExplicit = h.adsLibraryContext;
   const lc = h.libraryContext;
-  if (
-    lc &&
-    (lc.ids ||
-      lc.channels?.length ||
-      lc.confirmed !== undefined ||
-      (lc.regions && Object.keys(lc.regions).length > 0))
-  ) {
-    payload.adsLibraryContext = {
-      ...(lc.ids && Object.keys(lc.ids).length > 0 ? { ids: { ...lc.ids } } : {}),
-      ...(lc.channels?.length ? { channels: [...lc.channels] } : {}),
-      ...(lc.confirmed !== undefined ? { confirmed: lc.confirmed } : {}),
-      ...(lc.regions && Object.keys(lc.regions).length > 0 ? { regions: { ...lc.regions } } : {}),
-    };
+  const source =
+    fromExplicit !== undefined
+      ? fromExplicit
+      : lc &&
+          (lc.ids ||
+            lc.channels?.length ||
+            lc.confirmed !== undefined ||
+            (lc.regions && Object.keys(lc.regions).length > 0))
+        ? {
+            ...(lc.ids && Object.keys(lc.ids).length > 0 ? { ids: { ...lc.ids } } : {}),
+            ...(lc.channels?.length ? { channels: [...lc.channels] } : {}),
+            ...(lc.confirmed !== undefined ? { confirmed: lc.confirmed } : {}),
+            ...(lc.regions && Object.keys(lc.regions).length > 0 ? { regions: { ...lc.regions } } : {}),
+          }
+        : undefined;
+
+  if (source !== undefined) {
+    if (source === null) {
+      payload.adsLibraryContext = null;
+    } else {
+      payload.adsLibraryContext = {
+        ...(source.ids && Object.keys(source.ids).length > 0 ? { ids: { ...source.ids } } : {}),
+        ...(source.channels?.length ? { channels: [...source.channels] } : {}),
+        ...(source.confirmed !== undefined ? { confirmed: source.confirmed } : {}),
+        ...(source.regions && Object.keys(source.regions).length > 0
+          ? { regions: { ...source.regions } }
+          : {}),
+      };
+    }
   }
+
   return payload;
 }
 

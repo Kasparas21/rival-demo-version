@@ -205,8 +205,7 @@ export function mergeSidebarLibraryContext(
   if (!incoming && !prev) return undefined;
   if (!incoming) return prev;
   if (!prev) return incoming;
-  const channels =
-    incoming.channels != null && incoming.channels.length > 0 ? incoming.channels : prev.channels;
+  const channels = incoming.channels !== undefined ? incoming.channels : prev.channels;
   const ids = incoming.ids !== undefined ? incoming.ids : prev.ids;
   const confirmed = incoming.confirmed !== undefined ? incoming.confirmed : prev.confirmed;
   return { ids, channels, confirmed };
