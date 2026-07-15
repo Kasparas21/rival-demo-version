@@ -162,7 +162,6 @@ export function LinkedInMediaGallery({
     >
       <GalleryImage
         src={src}
-        alt=""
         fit={vertical ? "cover" : "contain"}
         className={vertical ? "h-full w-full" : "max-h-full max-w-full"}
       />
