@@ -20,6 +20,11 @@ import { useState } from "react";
 import { alertGlassChipBaseClass } from "@/components/competitor/alerts/alert-ui-styles";
 import { MAX_AI_ANALYSIS_ATTEMPTS } from "@/lib/email-intelligence/constants";
 import {
+  detectNonMarketingEmail,
+  getEmailBodyForDetection,
+  isNonMarketingEmailRow,
+} from "@/lib/email-intelligence/detect-non-marketing-email";
+import {
   emailDeepAnalysisSchema,
   emailNeedsDeepAnalysis,
   type EmailDeepAnalysis,
@@ -37,6 +42,7 @@ import {
   angleBadgeClass,
   emailTypeBadgeClass,
   formatEmailType,
+  getEmailTypeDisplayLabel,
   parseOffers,
   truncateDisplayText,
 } from "./email-intelligence-ui";
@@ -178,6 +184,47 @@ function ExpandableText({
           )}
         </button>
       ) : null}
+    </div>
+  );
+}
+
+function NonMarketingInsightPanel({
+  email,
+  compact,
+}: {
+  email: CompetitorEmailRow;
+  compact: boolean;
+}) {
+  const label = getEmailTypeDisplayLabel(email);
+  const detected = detectNonMarketingEmail({
+    subject: email.subject ?? null,
+    preview_text: email.preview_text ?? null,
+    body: getEmailBodyForDetection(email),
+  });
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-slate-200 bg-slate-50/90 p-3",
+        compact && "rounded-lg",
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize",
+            emailTypeBadgeClass("transactional"),
+          )}
+        >
+          <Tag className="h-3 w-3" />
+          {label}
+        </span>
+      </div>
+      <p className={cn("mt-2 leading-relaxed text-slate-600", compact ? "text-[11px]" : "text-[12px]")}>
+        {detected?.summary ??
+          email.ai_summary ??
+          "This is an account or security email. Marketing analysis does not apply."}
+      </p>
     </div>
   );
 }
@@ -373,6 +420,7 @@ export function EmailAiInsightPanel({
   const failed = emailAnalysisFailed(email);
   const pending = emailAnalysisPending(email);
   const upgrading = email.ai_processed_at && emailNeedsDeepAnalysis(email) && !failed;
+  const nonMarketing = isNonMarketingEmailRow(email);
 
   const retryAnalysis = async () => {
     setRetrying(true);
@@ -444,6 +492,27 @@ export function EmailAiInsightPanel({
             ? "Building a deeper breakdown. This usually takes under a minute."
             : "Summary and angle will appear shortly."}
         </p>
+      </div>
+    );
+  }
+
+  if (nonMarketing && !pending && !upgrading) {
+    const content = <NonMarketingInsightPanel email={email} compact={compact} />;
+    if (embedded) return <div className="space-y-2">{content}</div>;
+    return (
+      <div className={cn(aiGlassShellClass, "p-4")}>
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-600 text-white shadow-sm">
+            <Tag className="h-3.5 w-3.5" />
+          </div>
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-700">
+              Account email
+            </p>
+            <p className="text-[12px] text-slate-500">Not included in marketing analysis</p>
+          </div>
+        </div>
+        {content}
       </div>
     );
   }

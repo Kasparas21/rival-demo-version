@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { ORGANIC_FEED_PAGE_SIZE } from "@/lib/organic-content/constants";
+import { ORGANIC_FEED_PAGE_SIZE, ORGANIC_SCRAPE_MAX_ITEMS } from "@/lib/organic-content/constants";
 import { toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import type { OrganicPlatform, OrganicPostSort } from "@/lib/organic-content/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -34,7 +34,7 @@ function parsePage(raw: string | null): number {
 function parsePageSize(raw: string | null): number {
   const n = raw ? Number.parseInt(raw, 10) : ORGANIC_FEED_PAGE_SIZE;
   if (!Number.isFinite(n) || n < 1) return ORGANIC_FEED_PAGE_SIZE;
-  return Math.min(n, ORGANIC_FEED_PAGE_SIZE);
+  return Math.min(n, ORGANIC_SCRAPE_MAX_ITEMS);
 }
 
 export async function GET(

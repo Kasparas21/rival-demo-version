@@ -167,7 +167,15 @@ async function archiveOne(
 
   if (archivedBySource.size === 0) return false;
 
-  const baseUrls = row.media_urls?.length ? row.media_urls : rasterUrls;
+  const baseUrls =
+    row.media_urls?.length && rasterUrls.length <= row.media_urls.length
+      ? row.media_urls
+      : dedupeOrganicMediaUrls(
+          rasterUrls.length > 0
+            ? [...rasterUrls, ...(row.media_urls ?? [])]
+            : (row.media_urls ?? []),
+          row.platform as OrganicPlatform,
+        );
   const media_urls = dedupeOrganicMediaUrls(
     baseUrls.map((url) => archivedBySource.get(url.trim()) ?? url),
     row.platform as OrganicPlatform,

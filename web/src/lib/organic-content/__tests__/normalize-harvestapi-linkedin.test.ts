@@ -112,4 +112,41 @@ describe("normalizeHarvestapiLinkedInPost", () => {
       }).media_urls[0],
     ).toContain("adidas-campaign.jpg");
   });
+
+  it("extracts all carousel images from multi-photo LinkedIn posts", () => {
+    const multiPhotoPost = {
+      type: "post",
+      id: "7391573088309534721",
+      linkedinUrl: "https://www.linkedin.com/posts/nike_example-activity-7391573088309534721-abcd",
+      content: "One year in. Six continents.",
+      author: {
+        universalName: "nike",
+        name: "Nike",
+      },
+      postedAt: { date: "2026-06-01T10:00:00.000Z" },
+      postImages: [
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-1.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-2.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-3.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-4.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-5.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-6.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-7.jpg" },
+        { url: "https://media.licdn.com/dms/image/v2/example/nike-photo-8.jpg" },
+      ],
+      engagement: { likes: 441, comments: 20, shares: 5 },
+    };
+
+    const normalized = normalizeOrganicItem("linkedin", multiPhotoPost, 0);
+    expect(normalized?.media_urls).toHaveLength(8);
+    expect(normalized?.raw_data).toMatchObject({ product_type: "carousel" });
+
+    const enriched = enrichOrganicPostForApi({
+      platform: "linkedin",
+      media_urls: ["https://media.licdn.com/dms/image/v2/example/nike-photo-1.jpg"],
+      raw_data: multiPhotoPost,
+    });
+    expect(enriched.media_urls).toHaveLength(8);
+    expect(enriched.product_type).toBe("carousel");
+  });
 });

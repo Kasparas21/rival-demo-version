@@ -11,6 +11,11 @@ import type { Json } from "@/lib/supabase/types";
 
 import { MAX_AI_ANALYSIS_ATTEMPTS } from "./constants";
 import {
+  detectNonMarketingEmail,
+  SKIPPED_TRANSACTIONAL_ANALYSIS_VERSION,
+  type NonMarketingEmailDetection,
+} from "./detect-non-marketing-email";
+import {
   EMAIL_AI_ANALYSIS_VERSION,
   emailDeepAnalysisSchema,
   emailNeedsDeepAnalysis,
@@ -149,6 +154,30 @@ function normalizeEspForDb(aiEsp: string, existingEsp: string | null): string {
   return normalized;
 }
 
+async function markSkippedNonMarketingEmail(
+  emailId: string,
+  detection: NonMarketingEmailDetection,
+  existingEsp: string | null,
+): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from("competitor_emails")
+    .update({
+      email_type: "transactional",
+      ai_summary: detection.summary,
+      ai_offers: [],
+      ai_cta: null,
+      ai_angle: null,
+      esp_detected: existingEsp?.trim() || "Unknown",
+      ai_deep_analysis: null,
+      ai_analysis_version: SKIPPED_TRANSACTIONAL_ANALYSIS_VERSION,
+      ai_processed_at: new Date().toISOString(),
+      ai_analysis_error: null,
+      ai_analysis_attempts: 0,
+    })
+    .eq("id", emailId);
+}
+
 async function recordAnalysisFailure(
   emailId: string,
   currentAttempts: number,
@@ -199,6 +228,28 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
     return { ok: false, error: fetchErr?.message ?? "Email not found" };
   }
 
+  let body = row.plain_text?.trim() || "";
+  if (!body && row.html_body?.trim()) {
+    body = stripHtmlToPlainText(row.html_body);
+  }
+  body = body.slice(0, 6000);
+
+  const nonMarketing = detectNonMarketingEmail({
+    subject: row.subject,
+    preview_text: row.preview_text,
+    body,
+  });
+
+  if (nonMarketing) {
+    const alreadySkipped =
+      row.ai_processed_at &&
+      row.ai_analysis_version === SKIPPED_TRANSACTIONAL_ANALYSIS_VERSION;
+    if (!alreadySkipped) {
+      await markSkippedNonMarketingEmail(emailId, nonMarketing, row.esp_detected);
+    }
+    return { ok: true };
+  }
+
   const needsUpgrade = emailNeedsDeepAnalysis(row);
 
   if (row.ai_processed_at && !needsUpgrade) {
@@ -224,12 +275,6 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
   if (!quotaCheck.ok) {
     return { ok: false, error: quotaCheck.error, quotaExceeded: true };
   }
-
-  let body = row.plain_text?.trim() || "";
-  if (!body && row.html_body?.trim()) {
-    body = stripHtmlToPlainText(row.html_body);
-  }
-  body = body.slice(0, 6000);
 
   const res = await llmFast({
     task: "email_intelligence",

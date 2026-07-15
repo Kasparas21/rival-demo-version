@@ -23,6 +23,7 @@ export async function GET(req: Request) {
       supabase,
       userId: user.id,
       brandId,
+      userEmail: user.email,
     });
     return NextResponse.json(payload);
   } catch (err) {

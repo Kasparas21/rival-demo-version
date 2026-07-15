@@ -14,11 +14,12 @@ import {
   emailFromLabel,
   emailTypeBadgeClass,
   estimatePlainBodyLength,
-  formatEmailType,
   formatReceivedDateTime,
   formatRelativeTime,
+  getEmailTypeDisplayLabel,
   parseOffers,
 } from "./email-intelligence-ui";
+import { isNonMarketingEmailRow } from "@/lib/email-intelligence/detect-non-marketing-email";
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   if (value == null || value === "") return null;
@@ -36,6 +37,8 @@ function EmailDetailsTab({ email }: { email: CompetitorEmailRow }) {
   const preheader = cleanPreheaderForDisplay(email.preview_text);
   const bodyLength = estimatePlainBodyLength(email);
   const hasHtml = Boolean(email.html_body?.trim());
+  const nonMarketing = isNonMarketingEmailRow(email);
+  const typeLabel = getEmailTypeDisplayLabel(email);
 
   return (
     <div className="py-1">
@@ -80,25 +83,25 @@ function EmailDetailsTab({ email }: { email: CompetitorEmailRow }) {
           value={<span className="font-medium">~{bodyLength.toLocaleString()} chars</span>}
         />
       ) : null}
-      {email.email_type ? (
+      {email.email_type || nonMarketing ? (
         <DetailRow
           label="Type"
           value={
             <span
               className={cn(
                 "inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize",
-                emailTypeBadgeClass(email.email_type),
+                emailTypeBadgeClass(nonMarketing ? "transactional" : email.email_type),
               )}
             >
-              {formatEmailType(email.email_type)}
+              {typeLabel}
             </span>
           }
         />
       ) : null}
-      {email.ai_cta ? (
+      {email.ai_cta && !nonMarketing ? (
         <DetailRow label="Main CTA" value={<span className="font-medium">{email.ai_cta}</span>} />
       ) : null}
-      {email.ai_angle ? (
+      {email.ai_angle && !nonMarketing ? (
         <DetailRow
           label="Angle"
           value={
@@ -116,7 +119,7 @@ function EmailDetailsTab({ email }: { email: CompetitorEmailRow }) {
       {email.esp_detected && email.esp_detected !== "Unknown" ? (
         <DetailRow label="ESP" value={<span className="font-medium">{email.esp_detected}</span>} />
       ) : null}
-      {offers.length > 0 ? (
+      {offers.length > 0 && !nonMarketing ? (
         <DetailRow
           label="Offers"
           value={
@@ -133,10 +136,21 @@ function EmailDetailsTab({ email }: { email: CompetitorEmailRow }) {
       ) : null}
       {email.ai_summary ? (
         <DetailRow
-          label="Summary"
+          label={nonMarketing ? "Note" : "Summary"}
           value={
             <span className="block text-left text-[11px] font-normal leading-relaxed text-slate-600">
-              {email.ai_summary}
+              {nonMarketing
+                ? "This is an account or security email. Marketing analysis does not apply."
+                : email.ai_summary}
+            </span>
+          }
+        />
+      ) : nonMarketing ? (
+        <DetailRow
+          label="Note"
+          value={
+            <span className="block text-left text-[11px] font-normal leading-relaxed text-slate-600">
+              This is an account or security email. Marketing analysis does not apply.
             </span>
           }
         />

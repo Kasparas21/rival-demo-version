@@ -10,6 +10,7 @@ import {
 } from "@/lib/benchmark/build-brand-benchmark";
 import type { BenchmarkPayload } from "@/lib/benchmark/benchmark-types";
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
+import { applyDemoInsightsBenchmarkFilter } from "@/lib/debug/demo-insights-filter";
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -58,11 +59,16 @@ export async function GET(req: Request): Promise<NextResponse> {
         const p = cached.payload as BenchmarkPayload;
         if (p.ok === true && p.aiSummary) {
           console.log("[benchmark cache HIT]", { userId: user.id, fingerprint });
-          return NextResponse.json({
-            ...p,
-            fromCache: true,
-            computedAt: cached.computed_at ?? p.computedAt,
-          });
+          return NextResponse.json(
+            applyDemoInsightsBenchmarkFilter(
+              {
+                ...p,
+                fromCache: true,
+                computedAt: cached.computed_at ?? p.computedAt,
+              },
+              user.email,
+            ),
+          );
         }
       } else {
         console.log("[benchmark cache MISS]", { userId: user.id, fingerprint, hadRow: Boolean(cached) });
@@ -94,7 +100,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       computedAt: payload.computedAt,
     });
 
-    return NextResponse.json(payload);
+    return NextResponse.json(applyDemoInsightsBenchmarkFilter(payload, user.email));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Benchmark failed";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

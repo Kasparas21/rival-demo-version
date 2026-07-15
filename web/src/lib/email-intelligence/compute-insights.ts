@@ -3,6 +3,15 @@ import type {
   EmailMarketingInsightsOffer,
   EmailRowForInsights,
 } from "./types";
+import { detectNonMarketingEmail } from "./detect-non-marketing-email";
+
+const MARKETING_EMAIL_TYPES = new Set([
+  "promotional",
+  "nurture",
+  "newsletter",
+  "reengagement",
+  "cart_abandonment",
+]);
 
 const DAY_NAMES = [
   "Sunday",
@@ -79,31 +88,48 @@ function resolveEspDetected(emails: EmailRowForInsights[]): string | null {
   return modeKey(countByKey(all));
 }
 
+function isMarketingEmailForInsights(row: EmailRowForInsights): boolean {
+  if (
+    detectNonMarketingEmail({
+      subject: row.subject ?? null,
+      preview_text: null,
+      body: "",
+    })
+  ) {
+    return false;
+  }
+
+  const type = row.email_type?.trim();
+  if (!type) return true;
+  return MARKETING_EMAIL_TYPES.has(type);
+}
+
 export function computeEmailInsights(emails: EmailRowForInsights[]): EmailMarketingInsights {
-  const total_emails = emails.length;
+  const marketingEmails = emails.filter(isMarketingEmailForInsights);
+  const total_emails = marketingEmails.length;
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 86_400_000;
 
-  const recentCount = emails.filter((e) => {
+  const recentCount = marketingEmails.filter((e) => {
     const t = Date.parse(e.received_at);
     return !Number.isNaN(t) && t >= thirtyDaysAgo;
   }).length;
   const emails_per_week = round1(recentCount / (30 / 7));
 
-  const most_active_day = total_emails > 0 ? mostActiveDayName(emails) : "Monday";
+  const most_active_day = total_emails > 0 ? mostActiveDayName(marketingEmails) : "Monday";
 
-  const receivedTimes = emails
+  const receivedTimes = marketingEmails
     .map((e) => Date.parse(e.received_at))
     .filter((t) => !Number.isNaN(t));
   const avg_days_between_emails = avgDaysBetween(receivedTimes) ?? 0;
 
-  const emailTypes = emails
+  const emailTypes = marketingEmails
     .map((e) => e.email_type?.trim())
     .filter((v): v is string => Boolean(v));
   const type_breakdown = countByKey(emailTypes);
   const most_common_type = modeKey(type_breakdown) ?? "other";
 
-  const offerEmails = emails.filter((e) => parseOffersFromRow(e.ai_offers).length > 0);
+  const offerEmails = marketingEmails.filter((e) => parseOffersFromRow(e.ai_offers).length > 0);
   const total_emails_with_offers = offerEmails.length;
 
   const offerEmailTimes = offerEmails
@@ -113,7 +139,7 @@ export function computeEmailInsights(emails: EmailRowForInsights[]): EmailMarket
 
   const all_offers: EmailMarketingInsightsOffer[] = [];
   const offerTypeCounts: Record<string, number> = {};
-  for (const row of emails) {
+  for (const row of marketingEmails) {
     for (const offer of parseOffersFromRow(row.ai_offers)) {
       all_offers.push({
         email_id: row.id,
@@ -128,7 +154,7 @@ export function computeEmailInsights(emails: EmailRowForInsights[]): EmailMarket
   all_offers.sort((a, b) => Date.parse(b.received_at) - Date.parse(a.received_at));
   const most_common_offer_type = modeKey(offerTypeCounts);
 
-  const subjects = emails.map((e) => e.subject ?? "");
+  const subjects = marketingEmails.map((e) => e.subject ?? "");
   const avg_subject_length =
     total_emails > 0
       ? round1(subjects.reduce((sum, s) => sum + s.trim().length, 0) / total_emails)
@@ -138,7 +164,7 @@ export function computeEmailInsights(emails: EmailRowForInsights[]): EmailMarket
   const emoji_usage_percent =
     total_emails > 0 ? Math.round((withEmoji / total_emails) * 100) : 0;
 
-  const subject_lines = emails
+  const subject_lines = marketingEmails
     .map((e) => ({
       email_id: e.id,
       subject: e.subject?.trim() || "(no subject)",
@@ -147,11 +173,11 @@ export function computeEmailInsights(emails: EmailRowForInsights[]): EmailMarket
     }))
     .sort((a, b) => Date.parse(b.received_at) - Date.parse(a.received_at));
 
-  const angles = emails.map((e) => e.ai_angle?.trim()).filter((v): v is string => Boolean(v));
+  const angles = marketingEmails.map((e) => e.ai_angle?.trim()).filter((v): v is string => Boolean(v));
   const angle_breakdown = countByKey(angles);
   const most_common_angle = modeKey(angle_breakdown);
 
-  const esp_detected = resolveEspDetected(emails);
+  const esp_detected = resolveEspDetected(marketingEmails);
 
   return {
     total_emails,

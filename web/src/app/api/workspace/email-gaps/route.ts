@@ -23,6 +23,7 @@ export async function GET(req: Request) {
       supabase,
       userId: user.id,
       brandId,
+      userEmail: user.email,
     });
     const emailGaps = payload.gaps.filter((g) => g.channel === "email");
     return NextResponse.json({

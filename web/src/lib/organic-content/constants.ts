@@ -18,10 +18,10 @@ export const ORGANIC_YOUTUBE_SHORTS_ACTOR =
 export const ORGANIC_YOUTUBE_VIDEOS_ACTOR =
   process.env.APIFY_ORGANIC_YOUTUBE_VIDEOS_ACTOR?.trim() || "apidojo/youtube-scraper";
 
-export const ORGANIC_FIRST_SCRAPE_POST_LIMIT = 10;
 export const ORGANIC_SCRAPE_INTERVAL_DAYS = 3;
 export const ORGANIC_INSIGHTS_MAX_TOKENS = 4096;
-export const ORGANIC_FEED_PAGE_SIZE = 20;
+/** Page size for organic “View all” modal — matches Apify per-platform cap. */
+export const ORGANIC_FEED_PAGE_SIZE = ORGANIC_SCRAPE_MAX_ITEMS;
 /** Inline preview count per platform section (matches Ads Library teaser grid). */
 export const ORGANIC_POSTS_INLINE_PREVIEW = 3;
 

@@ -32,6 +32,7 @@ import {
   YouTubeLogo,
 } from "@/components/platform-logos";
 import { useAdLibrary } from "@/hooks/use-ad-library";
+import { useSalesDemoSettings } from "@/hooks/use-sales-demo-settings";
 import { AdLibraryAnalyticsPanel } from "@/components/ads-library/analytics-panel";
 import { ExpandableAdText } from "@/components/ads-library/expandable-ad-text";
 import { GoogleAdFormatIcon } from "@/components/ads-library/google-ad-format-icon";
@@ -68,6 +69,14 @@ import {
   snapchatAdHasDashboardInlinePreview,
   tikTokAdHasDashboardInlinePreview,
 } from "@/lib/ad-library/dashboard-inline-preview";
+import {
+  filterGoogleRowsForDemo,
+  filterLinkedInAdsForDemo,
+  filterMetaAdsForDemo,
+  filterPinterestAdsForDemo,
+  filterSnapchatAdsForDemo,
+  filterTikTokAdsForDemo,
+} from "@/lib/demo/apply-sales-demo-ad-filters";
 import {
   canonicalLinkedInAdLibraryUrl,
   canonicalMetaAdsLibraryUrl,
@@ -3402,6 +3411,52 @@ function CompetitorDashboardBody({
     [displayTikTokAds]
   );
 
+  const { enabled: salesDemoEnabled, settings: salesDemoSettings } = useSalesDemoSettings(cacheDomainNorm);
+
+  const libraryMetaAdsDisplay = useMemo(() => {
+    if (!salesDemoEnabled || !salesDemoSettings) return inlinePreviewMetaAdsDisplay;
+    return filterMetaAdsForDemo(displayMetaAdsWithPreviews, salesDemoSettings, metaScrapeAtMs);
+  }, [
+    salesDemoEnabled,
+    salesDemoSettings,
+    inlinePreviewMetaAdsDisplay,
+    displayMetaAdsWithPreviews,
+    metaScrapeAtMs,
+  ]);
+
+  const libraryGoogleRowsDisplay = useMemo(() => {
+    if (!salesDemoEnabled || !salesDemoSettings) return inlinePreviewGoogleRows;
+    return filterGoogleRowsForDemo(filteredGoogleRows, salesDemoSettings, runStatusForLibraryCard);
+  }, [salesDemoEnabled, salesDemoSettings, inlinePreviewGoogleRows, filteredGoogleRows, runStatusForLibraryCard]);
+
+  const libraryLinkedInAdsDisplay = useMemo(() => {
+    if (!salesDemoEnabled || !salesDemoSettings) return inlinePreviewLinkedInAds;
+    return filterLinkedInAdsForDemo(filteredLinkedInAds, salesDemoSettings);
+  }, [salesDemoEnabled, salesDemoSettings, inlinePreviewLinkedInAds, filteredLinkedInAds]);
+
+  const libraryTikTokAdsDisplay = useMemo(() => {
+    if (!salesDemoEnabled || !salesDemoSettings) return inlinePreviewTikTokAdsDisplay;
+    return filterTikTokAdsForDemo(displayTikTokAds, salesDemoSettings);
+  }, [salesDemoEnabled, salesDemoSettings, inlinePreviewTikTokAdsDisplay, displayTikTokAds]);
+
+  const libraryPinterestAdsDisplay = useMemo(() => {
+    if (!salesDemoEnabled || !salesDemoSettings) return inlinePreviewPinterestAds;
+    return filterPinterestAdsForDemo(filteredPinterestAds, salesDemoSettings);
+  }, [salesDemoEnabled, salesDemoSettings, inlinePreviewPinterestAds, filteredPinterestAds]);
+
+  const librarySnapchatAdsDisplay = useMemo(() => {
+    if (!salesDemoEnabled || !salesDemoSettings) return inlinePreviewSnapchatAds;
+    return filterSnapchatAdsForDemo(filteredSnapchatAds, salesDemoSettings);
+  }, [salesDemoEnabled, salesDemoSettings, inlinePreviewSnapchatAds, filteredSnapchatAds]);
+
+  const demoShowPlatformSection = useCallback(
+    (displayCount: number) => {
+      if (!salesDemoEnabled || !salesDemoSettings?.hideEmptyPlatforms) return true;
+      return displayCount > 0;
+    },
+    [salesDemoEnabled, salesDemoSettings],
+  );
+
   /** Skeleton grid only when there are no creatives yet; platform-only refresh keeps existing cards — spinner is on the refresh button. */
   const metaSectionBusy = useMemo(
     () =>
@@ -4069,7 +4124,7 @@ function CompetitorDashboardBody({
 
             <div className="flex flex-col gap-12">
             {/* Meta / Facebook — Apify */}
-            {fetchMeta && effectiveVisibleAdPlatforms.includes("meta") ? (
+            {fetchMeta && effectiveVisibleAdPlatforms.includes("meta") && demoShowPlatformSection(libraryMetaAdsDisplay.length) ? (
             <section style={{ order: platformOrder.meta ?? 0 }}>
               <div className={platformSectionPanelClass}>
                 <div className="flex flex-col gap-4 border-b border-white/55 px-4 pb-4 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5 sm:pb-4 sm:pt-5">
@@ -4149,11 +4204,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredMetaAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No active Meta ads loaded yet. Try Refresh Meta only below." />
-                  ) : inlinePreviewMetaAdsDisplay.length === 0 ? (
+                  ) : libraryMetaAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={META_ADS_GRID_CLASS}>
-                      {inlinePreviewMetaAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {libraryMetaAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <div key={ad.id} className="flex h-full min-h-0 flex-col">
                           <MetaAdCard
                             ad={ad}
@@ -4181,7 +4236,7 @@ function CompetitorDashboardBody({
             ) : null}
 
             {/* Google + YouTube — Apify Google Ads Transparency scraper */}
-            {fetchGoogle && effectiveVisibleAdPlatforms.includes("google") ? (
+            {fetchGoogle && effectiveVisibleAdPlatforms.includes("google") && demoShowPlatformSection(libraryGoogleRowsDisplay.length) ? (
             <section style={{ order: platformOrder.google ?? 0 }}>
               <div className={platformSectionPanelClass}>
                 <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
@@ -4257,11 +4312,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredGoogleRows.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No Google ads returned for this domain. Confirm the website domain from discovery." />
-                  ) : inlinePreviewGoogleRows.length === 0 ? (
+                  ) : libraryGoogleRowsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewGoogleRows.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {libraryGoogleRowsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <GoogleAdRowCard
                           key={ad.id}
                           ad={ad}
@@ -4305,7 +4360,7 @@ function CompetitorDashboardBody({
             ) : null}
 
             {/* LinkedIn — Apify */}
-            {fetchLinkedIn && effectiveVisibleAdPlatforms.includes("linkedin") ? (
+            {fetchLinkedIn && effectiveVisibleAdPlatforms.includes("linkedin") && demoShowPlatformSection(libraryLinkedInAdsDisplay.length) ? (
             <section style={{ order: platformOrder.linkedin ?? 0 }}>
               <div className={platformSectionPanelClass}>
                 <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
@@ -4380,11 +4435,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredLinkedInAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No LinkedIn ads returned. Add a LinkedIn company URL in discovery or try refreshing." />
-                  ) : inlinePreviewLinkedInAds.length === 0 ? (
+                  ) : libraryLinkedInAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewLinkedInAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {libraryLinkedInAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <LinkedInFeedAdCard
                           key={ad.id}
                           ad={ad}
@@ -4419,7 +4474,7 @@ function CompetitorDashboardBody({
             ) : null}
 
             {/* TikTok — Apify */}
-            {fetchTikTok && effectiveVisibleAdPlatforms.includes("tiktok") ? (
+            {fetchTikTok && effectiveVisibleAdPlatforms.includes("tiktok") && demoShowPlatformSection(libraryTikTokAdsDisplay.length) ? (
             <section style={{ order: platformOrder.tiktok ?? 0 }}>
               <div className={platformSectionPanelClass}>
                 <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
@@ -4492,11 +4547,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredTikTokAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="No TikTok ads returned. The search uses your brand name as the advertiser query on TikTok Ads Library." />
-                  ) : inlinePreviewTikTokAdsDisplay.length === 0 ? (
+                  ) : libraryTikTokAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewTikTokAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {libraryTikTokAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <TikTokAdCard
                           key={ad.id}
                           ad={ad}
@@ -4529,7 +4584,7 @@ function CompetitorDashboardBody({
             ) : null}
 
             {/* Pinterest Ad Transparency — Apify (EU / BR / TR; not US) */}
-            {fetchPinterest && effectiveVisibleAdPlatforms.includes("pinterest") ? (
+            {fetchPinterest && effectiveVisibleAdPlatforms.includes("pinterest") && demoShowPlatformSection(libraryPinterestAdsDisplay.length) ? (
             <section style={{ order: platformOrder.pinterest ?? 0 }}>
               <div className={platformSectionPanelClass}>
                 <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
@@ -4614,11 +4669,11 @@ function CompetitorDashboardBody({
                         </>
                       }
                     />
-                  ) : inlinePreviewPinterestAds.length === 0 ? (
+                  ) : libraryPinterestAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewPinterestAds.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
+                      {libraryPinterestAdsDisplay.slice(0, META_ADS_INLINE_PREVIEW).map((ad) => (
                         <PinterestAdCard
                           key={ad.id}
                           ad={ad}
@@ -4646,7 +4701,7 @@ function CompetitorDashboardBody({
             </section>
             ) : null}
 
-            {fetchSnapchat && effectiveVisibleAdPlatforms.includes("snapchat") ? (
+            {fetchSnapchat && effectiveVisibleAdPlatforms.includes("snapchat") && demoShowPlatformSection(librarySnapchatAdsDisplay.length) ? (
               <section style={{ order: platformOrder.snapchat ?? 0 }}>
                 <div className={platformSectionPanelClass}>
                   <div className="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
@@ -4720,11 +4775,11 @@ function CompetitorDashboardBody({
                     </div>
                   ) : filteredSnapchatAds.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message="Nothing turned up for this combination. Pick another EU market, adjust the date range in your scrape settings, and try Refresh." />
-                  ) : inlinePreviewSnapchatAds.length === 0 ? (
+                  ) : librarySnapchatAdsDisplay.length === 0 ? (
                     <AdsLibraryEmptyWithPlaceholders message={DASHBOARD_ADS_NO_INLINE_PREVIEW_MESSAGE} />
                   ) : (
                     <div className={ADS_GRID_CLASS}>
-                      {inlinePreviewSnapchatAds
+                      {librarySnapchatAdsDisplay
                         .slice(0, META_ADS_INLINE_PREVIEW)
                         .map((ad) => (
                           <SnapchatAdCard

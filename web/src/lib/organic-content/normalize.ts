@@ -903,6 +903,20 @@ function pickHarvestapiLinkedInMediaUrls(row: Record<string, unknown>): string[]
       const rec = asRecord(item);
       add(rec?.url);
       add(rec?.imageUrl);
+      const nestedUrls = rec?.imageUrls;
+      if (Array.isArray(nestedUrls)) {
+        for (const url of nestedUrls) add(url);
+      }
+    }
+  }
+
+  const images = row.images;
+  if (Array.isArray(images)) {
+    for (const item of images) {
+      add(item);
+      const rec = asRecord(item);
+      add(rec?.url);
+      add(rec?.imageUrl);
     }
   }
 
@@ -915,6 +929,8 @@ function pickHarvestapiLinkedInMediaUrls(row: Record<string, unknown>): string[]
       if (Array.isArray(imageUrls)) {
         for (const url of imageUrls) add(url);
       }
+      add(rec?.url);
+      add(rec?.imageUrl);
     }
   }
 
@@ -1044,7 +1060,20 @@ function normalizeHarvestapiLinkedInPost(
   const avatar = asRecord(author?.avatar);
   const mediaUrls = pickHarvestapiLinkedInMediaUrls(row);
   const postUrl = pickString(row.linkedinUrl);
-  const productType = mediaUrls.length > 0 ? (asRecord(row.postVideo) ? "video" : "photo") : null;
+  const hasDocument = Boolean(asRecord(row.document));
+  const hasVideo = Boolean(asRecord(row.postVideo));
+  const productType =
+    mediaUrls.length > 1
+      ? hasDocument
+        ? "document"
+        : "carousel"
+      : hasVideo
+        ? "video"
+        : mediaUrls.length > 0
+          ? "photo"
+          : hasDocument
+            ? "document"
+            : null;
 
   const enrichedRaw: Record<string, unknown> = {
     ...row,

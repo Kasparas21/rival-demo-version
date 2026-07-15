@@ -5,6 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
 import { normalizeAdsLibraryEventDomain } from "@/lib/ad-library/build-client-ads-library-payload";
 import { PLATFORM_ADS_MODAL_BATCH_SIZE } from "@/lib/ad-library/constants";
+import { demoAdPassesPreviewFilter } from "@/lib/demo/apply-sales-demo-ad-filters";
+import {
+  isDemoSettingsCompetitor,
+  readSalesDemoSettings,
+  SALES_DEMO_SETTINGS_CHANGED_EVENT,
+} from "@/lib/demo/sales-demo-settings";
 import {
   ADS_LIBRARY_UPDATED_EVENT,
   type AdsLibraryUpdatedDetail,
@@ -44,6 +50,13 @@ export function usePlatformAdsModalFeed({
   const [error, setError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<{ earliest: string; latest: string } | null>(null);
   const [metaScrapeAtMs, setMetaScrapeAtMs] = useState<number | null>(null);
+  const [demoSettingsRevision, setDemoSettingsRevision] = useState(0);
+
+  useEffect(() => {
+    const onChange = () => setDemoSettingsRevision((n) => n + 1);
+    window.addEventListener(SALES_DEMO_SETTINGS_CHANGED_EVENT, onChange);
+    return () => window.removeEventListener(SALES_DEMO_SETTINGS_CHANGED_EVENT, onChange);
+  }, []);
 
   const offsetRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -179,9 +192,23 @@ export function usePlatformAdsModalFeed({
     return () => window.removeEventListener(ADS_LIBRARY_UPDATED_EVENT, onLibraryUpdated);
   }, [domain, open, retry]);
 
+  const visibleAds = useMemo(() => {
+    if (!isDemoSettingsCompetitor(domain)) return ads;
+    const settings = readSalesDemoSettings();
+    if (!settings.onlyWithPreviews) return ads;
+    return ads.filter((ad) => demoAdPassesPreviewFilter(platform, ad));
+  }, [ads, domain, platform, demoSettingsRevision]);
+
+  const visibleTotal = useMemo(() => {
+    if (!isDemoSettingsCompetitor(domain)) return total;
+    const settings = readSalesDemoSettings();
+    if (!settings.onlyWithPreviews) return total;
+    return visibleAds.length;
+  }, [domain, total, visibleAds.length, demoSettingsRevision]);
+
   return {
-    ads,
-    total,
+    ads: visibleAds,
+    total: visibleTotal,
     hasMore,
     loading,
     loadingMore,

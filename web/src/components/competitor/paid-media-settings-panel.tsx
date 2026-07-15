@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { CHANNELS, type ChannelId, DEFAULT_SELECTED_CHANNELS } from "@/components/channel-picker-modal";
 import { CollapsibleSingleSelectFlagChipRow, type RegionChipOption } from "@/components/ad-library/single-select-flag-chip-row";
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
+import { PaidMediaDemoSettingsPopover } from "@/components/competitor/paid-media-demo-settings-popover";
 import { saveCompetitorToAccount } from "@/lib/account/client";
 import type { AdLibraryRegionPrefs } from "@/lib/ad-library/ad-library-region-prefs";
 import { writeAdLibraryRegionPrefsToSession } from "@/lib/ad-library/ad-library-region-prefs";
@@ -57,6 +58,7 @@ import {
   type AdsLibraryUpdatedDetail,
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import { validateIdentifierField } from "@/lib/validate-identifier-field";
+import { isDemoSettingsCompetitor } from "@/lib/demo/sales-demo-settings";
 
 function stableIdsFingerprint(ids: Record<string, string> | null | undefined): string {
   if (!ids) return "";
@@ -158,6 +160,9 @@ export function CompetitorPaidMediaSettingsPanel({
   const [scraping, setScraping] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [demoSettingsOpen, setDemoSettingsOpen] = useState(false);
+  const demoBtnRef = useRef<HTMLButtonElement>(null);
+  const showDemoSettingsToggle = isDemoSettingsCompetitor(domain);
 
   useEffect(() => {
     if (!enabled) return;
@@ -534,13 +539,42 @@ export function CompetitorPaidMediaSettingsPanel({
   return (
     <div className="relative overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_4px_24px_rgba(15,23,42,0.06)]">
       <div className="border-b border-slate-100 px-4 py-4 sm:px-6">
-        <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Paid media</p>
-        <p className="mt-0.5 text-[17px] font-bold tracking-[-0.02em] text-slate-900">Ad library connections</p>
-        <p className="mt-1.5 max-w-[52rem] text-[12px] leading-snug text-slate-600">
-          Update the links and handles we use to find{" "}
-          <span className="font-semibold text-slate-800">{competitor.name}</span> in each ad library. The Ad Library
-          tab is for browsing creatives—keep connection settings here.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-slate-500">Paid media</p>
+            <p className="mt-0.5 text-[17px] font-bold tracking-[-0.02em] text-slate-900">Ad library connections</p>
+            <p className="mt-1.5 max-w-[52rem] text-[12px] leading-snug text-slate-600">
+              Update the links and handles we use to find{" "}
+              <span className="font-semibold text-slate-800">{competitor.name}</span> in each ad library. The Ad
+              Library tab is for browsing creatives—keep connection settings here.
+            </p>
+          </div>
+          {showDemoSettingsToggle ? (
+            <button
+              ref={demoBtnRef}
+              type="button"
+              onClick={() => setDemoSettingsOpen((open) => !open)}
+              aria-label={demoSettingsOpen ? "Hide demo settings" : "Show demo settings"}
+              aria-pressed={demoSettingsOpen}
+              title={demoSettingsOpen ? "Hide demo settings" : "Show demo settings"}
+              className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+                demoSettingsOpen
+                  ? "border-violet-300 bg-violet-50 text-violet-700"
+                  : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600"
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+            </button>
+          ) : null}
+        </div>
+        {showDemoSettingsToggle ? (
+          <PaidMediaDemoSettingsPopover
+            open={demoSettingsOpen}
+            onClose={() => setDemoSettingsOpen(false)}
+            anchorRef={demoBtnRef}
+            competitorDomain={domain}
+          />
+        ) : null}
       </div>
 
       <div className="space-y-5 px-4 py-5 sm:px-6 sm:py-6">

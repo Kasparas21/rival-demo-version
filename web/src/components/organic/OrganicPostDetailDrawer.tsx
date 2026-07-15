@@ -44,6 +44,7 @@ function formatPostType(productType: string | null | undefined): string {
     video: "Video",
     photo: "Photo",
     carousel: "Carousel",
+    document: "Document",
     text: "Text",
   };
   return map[productType.toLowerCase()] ?? productType;

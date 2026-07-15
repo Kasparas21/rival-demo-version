@@ -281,15 +281,20 @@ export function enrichOrganicPostForApi<
   const display = organicPostDisplayFields(post.raw_data, platform);
   const storedViews = post.views ?? 0;
   const rawViews = platform === "twitter" ? extractTwitterViewsFromRaw(post.raw_data) : 0;
-  const stored = post.media_urls ?? [];
   const repaired = repairOrganicMediaFromRaw(platform, post.raw_data);
+  const stored = post.media_urls ?? [];
   const hasPersistedArchive =
     stored.some((url) => isPersistedOrganicMediaUrl(url)) ||
     Boolean(post.archived_preview_url?.trim() && isPersistedOrganicMediaUrl(post.archived_preview_url));
-  const fallback = dedupeOrganicMediaUrls(
-    hasPersistedArchive && stored.length > 0 ? stored : repaired.length > 0 ? repaired : stored,
-    platform,
-  );
+  let sourceUrls: string[];
+  if (platform === "linkedin" && repaired.length > stored.length) {
+    sourceUrls = [...repaired, ...stored];
+  } else if (hasPersistedArchive && stored.length > 0) {
+    sourceUrls = stored;
+  } else {
+    sourceUrls = repaired.length > 0 ? repaired : stored;
+  }
+  const fallback = dedupeOrganicMediaUrls(sourceUrls, platform);
   const archived = post.archived_preview_url?.trim();
   const rawRow = asRecord(post.raw_data);
   let media_urls: string[];
@@ -311,9 +316,16 @@ export function enrichOrganicPostForApi<
     media_urls = filterFacebookPageLogoFromPostMedia(media_urls, rawRow);
   }
   media_urls = dedupeOrganicMediaUrls(media_urls, platform);
+
+  let product_type = display.product_type;
+  if (!product_type && platform === "linkedin" && media_urls.length > 1) {
+    product_type = rawRow?.document ? "document" : "carousel";
+  }
+
   return {
     ...post,
     ...display,
+    product_type,
     media_urls,
     views: storedViews > 0 ? storedViews : rawViews,
   };

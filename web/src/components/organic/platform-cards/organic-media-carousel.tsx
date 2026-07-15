@@ -8,6 +8,8 @@ import { dedupeOrganicMediaUrls } from "@/lib/organic-content/normalize";
 import type { OrganicPlatform } from "@/lib/organic-content/types";
 import { cn } from "@/lib/utils";
 
+import type { OrganicCardVariant } from "./shared";
+
 function isReelMedia(
   productType: string | null | undefined,
   mediaAspect: OrganicMediaAspect | undefined,
@@ -25,12 +27,14 @@ export function OrganicMediaCarousel({
   mediaAspect = "landscape",
   productType,
   platform,
+  variant = "standalone",
   className,
 }: {
   urls: string[];
   mediaAspect?: OrganicMediaAspect;
   productType?: string | null;
   platform?: OrganicPlatform;
+  variant?: OrganicCardVariant;
   className?: string;
 }) {
   const items = dedupeOrganicMediaUrls(
@@ -44,6 +48,8 @@ export function OrganicMediaCarousel({
   const safeIndex = count > 0 ? Math.min(index, count - 1) : 0;
   const current = items[safeIndex] ?? null;
   const reel = isReelMedia(productType, mediaAspect) || (current ? isVideoUrl(current) : false);
+  const isSection = variant === "section";
+  const linkedInStyle = platform === "linkedin" && !reel;
 
   const goPrev = useCallback(() => {
     if (count <= 1) return;
@@ -91,9 +97,11 @@ export function OrganicMediaCarousel({
   const bg =
     platform === "facebook"
       ? "bg-[#f0f2f5]"
-      : platform === "twitter"
-        ? "bg-black"
-        : "bg-slate-100";
+      : platform === "linkedin"
+        ? "bg-[#f3f2ef]"
+        : platform === "twitter"
+          ? "bg-black"
+          : "bg-slate-100";
 
   return (
     <div
@@ -104,7 +112,13 @@ export function OrganicMediaCarousel({
       <div
         className={cn(
           "relative flex w-full items-center justify-center",
-          reel ? "aspect-[9/16] max-h-[560px]" : "min-h-[280px] max-h-[560px]",
+          reel
+            ? cn("aspect-[9/16]", isSection ? "max-h-[420px]" : "max-h-[560px]")
+            : linkedInStyle
+              ? cn("aspect-[4/3]", isSection ? "max-h-[360px]" : "max-h-[560px]")
+              : isSection
+                ? "min-h-[200px] max-h-[360px]"
+                : "min-h-[280px] max-h-[560px]",
         )}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -112,8 +126,14 @@ export function OrganicMediaCarousel({
           src={current}
           alt=""
           className={cn(
-            "max-h-[560px] w-full",
-            reel ? "h-full object-cover" : "max-w-full object-contain",
+            "w-full",
+            reel
+              ? "h-full object-cover"
+              : linkedInStyle
+                ? "h-full object-cover"
+                : isSection
+                  ? "max-h-[360px] object-contain"
+                  : "max-h-[560px] max-w-full object-contain",
           )}
           loading="lazy"
           onError={() => setBroken((prev) => ({ ...prev, [safeIndex]: true }))}
@@ -128,10 +148,13 @@ export function OrganicMediaCarousel({
               e.stopPropagation();
               goPrev();
             }}
-            className="absolute left-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white shadow-md transition hover:bg-black/70"
+            className={cn(
+              "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white shadow-md transition hover:bg-black/70",
+              isSection ? "left-1.5 h-7 w-7" : "left-2 h-9 w-9",
+            )}
             aria-label="Previous photo"
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ChevronLeft className={isSection ? "h-4 w-4" : "h-5 w-5"} />
           </button>
           <button
             type="button"
@@ -139,12 +162,20 @@ export function OrganicMediaCarousel({
               e.stopPropagation();
               goNext();
             }}
-            className="absolute right-2 top-1/2 z-10 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white shadow-md transition hover:bg-black/70"
+            className={cn(
+              "absolute top-1/2 z-10 flex -translate-y-1/2 items-center justify-center rounded-full bg-black/50 text-white shadow-md transition hover:bg-black/70",
+              isSection ? "right-1.5 h-7 w-7" : "right-2 h-9 w-9",
+            )}
             aria-label="Next photo"
           >
-            <ChevronRight className="h-5 w-5" />
+            <ChevronRight className={isSection ? "h-4 w-4" : "h-5 w-5"} />
           </button>
-          <span className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 px-2.5 py-0.5 text-[11px] font-medium text-white">
+          <span
+            className={cn(
+              "absolute left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/55 font-medium text-white",
+              isSection ? "bottom-2 px-2 py-0.5 text-[10px]" : "bottom-3 px-2.5 py-0.5 text-[11px]",
+            )}
+          >
             {safeIndex + 1} / {count}
           </span>
         </>

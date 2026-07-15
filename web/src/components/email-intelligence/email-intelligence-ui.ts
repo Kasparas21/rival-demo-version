@@ -1,4 +1,10 @@
 import type { CompetitorEmailRow } from "@/lib/email-intelligence/types";
+import {
+  detectNonMarketingEmail,
+  getEmailBodyForDetection,
+  isNonMarketingEmailRow,
+  isSkippedTransactionalAnalysis,
+} from "@/lib/email-intelligence/detect-non-marketing-email";
 
 export type OfferChip = {
   type: string;
@@ -39,6 +45,44 @@ export type EmailTypeFilter =
 export function formatEmailType(type: string | null): string {
   if (!type) return "Email";
   return type.replace(/_/g, " ");
+}
+
+export function getEmailTypeDisplayLabel(
+  email: Pick<
+    CompetitorEmailRow,
+    "email_type" | "ai_analysis_version" | "subject" | "preview_text" | "plain_text" | "html_body"
+  >,
+): string {
+  const body = getEmailBodyForDetection(email);
+
+  if (isSkippedTransactionalAnalysis(email)) {
+    const detected = detectNonMarketingEmail({
+      subject: email.subject ?? null,
+      preview_text: email.preview_text ?? null,
+      body,
+    });
+    return detected?.label ?? "Transactional email";
+  }
+
+  if (
+    isNonMarketingEmailRow({
+      ai_analysis_version: email.ai_analysis_version,
+      email_type: email.email_type,
+      subject: email.subject,
+      preview_text: email.preview_text,
+      plain_text: email.plain_text,
+      html_body: email.html_body,
+    })
+  ) {
+    const detected = detectNonMarketingEmail({
+      subject: email.subject ?? null,
+      preview_text: email.preview_text ?? null,
+      body,
+    });
+    if (detected) return detected.label;
+  }
+
+  return formatEmailType(email.email_type);
 }
 
 export function emailMatchesTypeFilter(

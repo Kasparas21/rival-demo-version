@@ -61,6 +61,12 @@ import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dash
 import { ScrapePausedBanner } from "@/components/dashboard/scrape-paused-banner";
 import { RecentPlatformRefreshNotice } from "@/components/dashboard/recent-platform-refresh-notice";
 import { Toaster } from "sonner";
+import { DemoCompetitorYellowDot } from "@/components/dashboard/demo-hidden-competitor-sidebar-row";
+import {
+  DEMO_MARKED_COMPETITOR_TITLE,
+  shouldHideDemoMarkedSidebarCompetitor,
+  shouldShowDemoMarkedCompetitorDot,
+} from "@/lib/debug/demo-sidebar-competitors";
 
 const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
@@ -696,10 +702,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     localStorage.setItem("rival_sidebar_collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
+  const demoOwnerEmail = userProfile?.email ?? null;
   const sidebarCompetitorRows = useMemo(() => {
     const deduped = dedupeSidebarCompetitors(savedCompetitors);
-    return withoutOwnedBrandRows(deduped, brands, activeBrand.domain);
-  }, [savedCompetitors, brands, activeBrand.domain]);
+    const rows = withoutOwnedBrandRows(deduped, brands, activeBrand.domain);
+    return rows.filter((competitor) => !shouldHideDemoMarkedSidebarCompetitor(demoOwnerEmail, competitor));
+  }, [savedCompetitors, brands, activeBrand.domain, demoOwnerEmail]);
   const pathCompetitorHost = competitorHostFromDashboardPathname(pathname);
   const queryCompetitorHost = searchParams.get("url")?.trim();
   const pricingGate = searchParams.get("pricing") === "1";
@@ -1104,6 +1112,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               const urlHost = coerceSidebarCompetitorUrlHost(competitor);
               const rowSlug = urlHost || normalizeCompetitorSlug(competitor.slug);
               const rowReactKey = `${normalizeCompetitorSlug(competitor.slug)}:${competitorIdx}`;
+
+              const showDemoMarkedDot = shouldShowDemoMarkedCompetitorDot(demoOwnerEmail, competitor);
               const onCompetitorView =
                 pathname.startsWith("/dashboard/competitor/") || pathname === "/dashboard/competitor";
               const isActive =
@@ -1157,16 +1167,25 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
               if (collapsed) {
                 return (
-                  <Link
-                    key={rowReactKey}
-                    href={href}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`flex size-11 shrink-0 items-center justify-center rounded-xl outline-none ${competitorRowRing} ${activeRowStyles}`}
-                    title={competitor.name}
-                    scroll={false}
-                  >
-                    <SidebarCompetitorAvatar competitor={competitor} collapsed />
-                  </Link>
+                  <div key={rowReactKey} className="relative">
+                    <Link
+                      href={href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`flex size-11 shrink-0 items-center justify-center rounded-xl outline-none ${competitorRowRing} ${activeRowStyles}`}
+                      title={showDemoMarkedDot ? `${competitor.name} — ${DEMO_MARKED_COMPETITOR_TITLE}` : competitor.name}
+                      scroll={false}
+                    >
+                      <SidebarCompetitorAvatar competitor={competitor} collapsed />
+                    </Link>
+                    {showDemoMarkedDot ? (
+                      <span
+                        className="pointer-events-none absolute right-0 top-0"
+                        title={DEMO_MARKED_COMPETITOR_TITLE}
+                      >
+                        <DemoCompetitorYellowDot />
+                      </span>
+                    ) : null}
+                  </div>
                 );
               }
 
@@ -1175,12 +1194,20 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   key={rowReactKey}
                   className={`group/comprow relative flex min-h-[52px] w-full min-w-0 items-stretch rounded-xl ${competitorRowRing} ${activeRowStyles}`}
                 >
+                  {showDemoMarkedDot ? (
+                    <span
+                      className="pointer-events-none absolute right-9 top-2 z-20"
+                      title={DEMO_MARKED_COMPETITOR_TITLE}
+                    >
+                      <DemoCompetitorYellowDot />
+                    </span>
+                  ) : null}
                   <Link
                     href={href}
                     aria-current={isActive ? "page" : undefined}
                     aria-busy={removing ? "true" : undefined}
                     className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 pr-2 text-left text-inherit no-underline outline-none"
-                    title={competitor.name}
+                    title={showDemoMarkedDot ? `${competitor.name} — ${DEMO_MARKED_COMPETITOR_TITLE}` : competitor.name}
                     scroll={false}
                   >
                     <SidebarCompetitorAvatar competitor={competitor} collapsed={false} />

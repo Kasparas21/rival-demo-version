@@ -72,6 +72,22 @@ describe("computeEmailInsights", () => {
     expect(insights.most_common_angle).toBe("urgency");
   });
 
+  it("excludes verification and transactional emails from insights", () => {
+    const insights = computeEmailInsights([
+      row({ received_at: "2026-06-01T12:00:00.000Z", email_type: "promotional", ai_angle: "urgency" }),
+      row({
+        received_at: "2026-06-02T12:00:00.000Z",
+        subject: "Here's your one-time code",
+        email_type: "transactional",
+        ai_angle: "scarcity",
+      }),
+      row({ received_at: "2026-06-03T12:00:00.000Z", email_type: "transactional", ai_angle: "value" }),
+    ]);
+    expect(insights.total_emails).toBe(1);
+    expect(insights.angle_breakdown).toEqual({ urgency: 1 });
+    expect(insights.subject_lines).toHaveLength(1);
+  });
+
   it("includes email_id on subject lines and offers", () => {
     const insights = computeEmailInsights([
       row({

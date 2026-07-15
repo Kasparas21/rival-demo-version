@@ -86,7 +86,7 @@ describe("buildPlatformActorInput instagram", () => {
       newerThan: "2026-01-01T00:00:00.000Z",
     });
     expect(input.usernames).toEqual(["calai.app"]);
-    expect(input.postsPerProfile).toBe(20);
+    expect(input.postsPerProfile).toBe(30);
     expect(input.newerThan).toBe("2026-01-01T00:00:00.000Z");
     expect(input).not.toHaveProperty("resultsLimit");
   });

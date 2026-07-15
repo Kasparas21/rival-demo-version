@@ -520,3 +520,61 @@ export async function buildBrandBenchmarkPayload(params: {
 
   return { payload, aiModel };
 }
+
+/** Recompute hero, rankings, gaps, and summaries after narrowing the competitor set. */
+export function rebuildBenchmarkPayloadFromEntities(
+  payload: BenchmarkPayload,
+  ownBrand: BenchmarkEntityMetrics,
+  competitors: BenchmarkEntityMetrics[],
+): BenchmarkPayload {
+  const entities = [ownBrand, ...competitors];
+
+  const platformOpportunities = derivePlatformOpportunities(ownBrand, competitors);
+  const angleGaps = deriveAngleGaps(ownBrand, competitors);
+
+  const activityScores = entities.map((e) => e.activityScore).filter((s): s is number => s != null);
+  const activeAdCounts = entities.map((e) => e.activeAdCount);
+  const platformCounts = entities.map((e) => e.platformsActiveCount);
+
+  const activityRank = rankEntities(entities, (e) => e.activityScore, true);
+  const adsRank = rankEntities(entities, (e) => e.activeAdCount, true);
+  const platformRank = rankEntities(entities, (e) => e.platformsActiveCount, true);
+
+  const ownActivityRank = activityRank.find((r) => r.entityId === ownBrand.id);
+  const ownAdsRank = adsRank.find((r) => r.entityId === ownBrand.id);
+
+  const leaderScore = activityScores.length ? Math.max(...activityScores) : null;
+  const avgScore = avg(activityScores);
+  const avgAds = avg(activeAdCounts) ?? 0;
+  const avgPlatforms = avg(platformCounts) ?? 0;
+
+  const aiSummary = buildFallbackAiSummary(ownBrand, competitors, platformOpportunities, angleGaps);
+
+  return {
+    ...payload,
+    ownBrand,
+    competitors,
+    entities,
+    hero: {
+      activityScoreYou: ownBrand.activityScore,
+      activityScoreAvg: avgScore,
+      activityScoreLeader: leaderScore,
+      activityScoreRankLabel: ownActivityRank ? `#${ownActivityRank.rank} of ${ownActivityRank.of}` : "—",
+      activeAdsYou: ownBrand.activeAdCount,
+      activeAdsAvg: Math.round(avgAds * 10) / 10,
+      activeAdsRankLabel: ownAdsRank ? `#${ownAdsRank.rank} of ${ownAdsRank.of}` : "—",
+      platformsYouLabel: `${ownBrand.platformsActiveCount} of 6`,
+      platformsAvg: Math.round(avgPlatforms * 10) / 10,
+      biggestGapLine: buildBiggestGapLine(ownBrand, competitors, platformOpportunities),
+    },
+    rankings: {
+      activityScore: activityRank,
+      activeAds: adsRank,
+      platformsActive: platformRank,
+    },
+    platformOpportunities,
+    angleGaps,
+    aiSummary,
+    recommendedMoves: buildRecommendedMoves(ownBrand, competitors, platformOpportunities, angleGaps),
+  };
+}

@@ -5,6 +5,7 @@ import {
   type BenchmarkPlatformId,
 } from "@/lib/benchmark/benchmark-types";
 import { buildBrandBenchmarkPayload } from "@/lib/benchmark/build-brand-benchmark";
+import { applyDemoInsightsBenchmarkFilter } from "@/lib/debug/demo-insights-filter";
 import { parseOrganicSocials, hasAnyOrganicSocial } from "@/lib/organic-content/socials";
 import { ORGANIC_PLATFORMS } from "@/lib/organic-content/types";
 import type { Database } from "@/lib/supabase/types";
@@ -210,14 +211,16 @@ export async function buildStrategyGapsPayload(params: {
   supabase: SupabaseClient<Database>;
   userId: string;
   brandId?: string | null;
+  userEmail?: string | null;
 }): Promise<StrategyGapsPayload> {
-  const { supabase, userId, brandId } = params;
-  const { payload: benchmark } = await buildBrandBenchmarkPayload({
+  const { supabase, userId, brandId, userEmail } = params;
+  const { payload: rawBenchmark } = await buildBrandBenchmarkPayload({
     supabase,
     userId,
     brandId,
     skipLlm: true,
   });
+  const benchmark = applyDemoInsightsBenchmarkFilter(rawBenchmark, userEmail);
 
   const gaps: StrategyGapItem[] = [];
   const own = benchmark.ownBrand;

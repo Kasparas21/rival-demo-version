@@ -7,6 +7,7 @@ import { dedupeOrganicMediaUrls } from "@/lib/organic-content/normalize";
 import type { OrganicPlatform } from "@/lib/organic-content/types";
 
 import { FacebookMediaGallery } from "./facebook-media-gallery";
+import { LinkedInMediaGallery } from "./linkedin-media-gallery";
 import { OrganicMediaCarousel } from "./organic-media-carousel";
 import { MediaFrame, type OrganicCardVariant } from "./shared";
 
@@ -41,13 +42,28 @@ export function OrganicPostMedia({
   const isSection = variant === "section";
   const isReel = isReelProduct(productType) || mediaAspect === "vertical";
 
-  if (!isSection && urls.length > 1) {
+  if (platform === "linkedin" && urls.length > 0) {
+    return (
+      <LinkedInMediaGallery
+        mediaUrls={urls}
+        productType={productType}
+        mediaAspect={mediaAspect}
+        variant={variant}
+      />
+    );
+  }
+
+  const useCarousel =
+    urls.length > 1 && (platform === "instagram" || !isSection);
+
+  if (useCarousel) {
     return (
       <OrganicMediaCarousel
         urls={urls}
         mediaAspect={mediaAspect}
         productType={productType}
         platform={platform}
+        variant={variant}
         className={className}
       />
     );

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/supabase/types";
 
-import { ORGANIC_FIRST_SCRAPE_POST_LIMIT, ORGANIC_SCRAPE_INTERVAL_DAYS } from "./constants";
+import { ORGANIC_SCRAPE_INTERVAL_DAYS } from "./constants";
 import { extractAndUpsertCollaborators } from "./extract-collaborators";
 import { generateOrganicInsights } from "./generate-insights";
 import { upsertOrganicPosts } from "./persist-posts";
@@ -60,11 +60,6 @@ export async function scrapeOrganicCompetitor(
   const newerThan = !isFirstScrape && baselineDate ? baselineDate : null;
   const newPlatformSet = new Set(opts?.newPlatforms ?? []);
   const platformFilter = opts?.platforms?.length ? new Set(opts.platforms) : null;
-  const skipFirstScrapeCap =
-    Boolean(platformFilter) &&
-    platformFilter!.size === 1 &&
-    opts?.newPlatforms?.length === 1 &&
-    platformFilter!.has(opts.newPlatforms[0]!);
 
   const platformScrapeMeta: ScrapeOrganicCompetitorResult["platformScrapeMeta"] = {};
   const attemptedPlatforms: OrganicPlatform[] = [];
@@ -107,19 +102,10 @@ export async function scrapeOrganicCompetitor(
     allPosts.push(...platformPosts);
   }
 
-  if (isFirstScrape && !platformFilter) {
-    allPosts = sortPostsByDateDesc(allPosts).slice(0, ORGANIC_FIRST_SCRAPE_POST_LIMIT);
-    if (allPosts.length > 0) {
-      const oldest = allPosts[allPosts.length - 1]?.posted_at;
-      if (oldest) baselineDate = oldest;
-    }
-  } else if (isFirstScrape && platformFilter && !skipFirstScrapeCap) {
-    // First-ever scrape limited to specific new platforms only
-    allPosts = sortPostsByDateDesc(allPosts).slice(0, ORGANIC_FIRST_SCRAPE_POST_LIMIT);
-    if (allPosts.length > 0) {
-      const oldest = allPosts[allPosts.length - 1]?.posted_at;
-      if (oldest) baselineDate = oldest;
-    }
+  if (isFirstScrape && allPosts.length > 0) {
+    allPosts = sortPostsByDateDesc(allPosts);
+    const oldest = allPosts[allPosts.length - 1]?.posted_at;
+    if (oldest) baselineDate = oldest;
   }
 
   const postsUpserted = await upsertOrganicPosts(admin, {
