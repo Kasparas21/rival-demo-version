@@ -236,6 +236,11 @@ export function competitorSubTabsForView(opts: {
     visible = visible.filter((st) => !hidden.has(st.id));
   }
 
+  // Unified competitor header hub — legacy per-tab Saved views are retired.
+  if (parentTab.id === "ads library" || parentTab.id === "email-marketing") {
+    visible = visible.filter((st) => st.id !== "saved");
+  }
+
   return visible;
 }
 

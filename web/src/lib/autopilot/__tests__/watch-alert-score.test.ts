@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  alertVolumeToMinScore,
   alertWatchScore,
+  minScoreToAlertVolume,
   normalizeWatchMinScoreForUi,
   passesWatchMinScore,
   watchSensitivityForMinScore,
@@ -62,6 +64,15 @@ describe("passesWatchFilter", () => {
     expect(
       passesWatchFilter("activity_drop", "notable", { watch_min_score: null, watch_sensitivity: "balanced" }),
     ).toBe(false);
+  });
+});
+
+describe("alert volume mapping", () => {
+  it("inverts min score for the UI slider", () => {
+    expect(minScoreToAlertVolume(1)).toBe(10);
+    expect(minScoreToAlertVolume(10)).toBe(1);
+    expect(alertVolumeToMinScore(10)).toBe(1);
+    expect(alertVolumeToMinScore(1)).toBe(10);
   });
 });
 

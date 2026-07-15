@@ -56,6 +56,17 @@ export function normalizeWatchMinScoreForUi(raw: number | null | undefined): num
   return Math.min(WATCH_MIN_SCORE_MAX, Math.max(WATCH_MIN_SCORE_MIN, Math.round(raw)));
 }
 
+/** UI slider: 1 = fewest alerts, 10 = most alerts (inverse of stored min score). */
+export function minScoreToAlertVolume(minScore: number): number {
+  const s = normalizeWatchMinScoreForUi(minScore);
+  return WATCH_MIN_SCORE_MAX + WATCH_MIN_SCORE_MIN - s;
+}
+
+export function alertVolumeToMinScore(volume: number): number {
+  const v = Math.min(WATCH_MIN_SCORE_MAX, Math.max(WATCH_MIN_SCORE_MIN, Math.round(volume)));
+  return WATCH_MIN_SCORE_MAX + WATCH_MIN_SCORE_MIN - v;
+}
+
 export function watchThresholdLabel(minScore: number): string {
   const s = normalizeWatchMinScoreForUi(minScore);
   if (s <= 2) return "Catch almost everything";
@@ -66,8 +77,12 @@ export function watchThresholdLabel(minScore: number): string {
 }
 
 export function watchThresholdHint(minScore: number): string {
-  const s = normalizeWatchMinScoreForUi(minScore);
-  return `Alerts scoring ${s}+ on our 1–10 scale will trigger Autopilot. Lower = more alerts.`;
+  const volume = minScoreToAlertVolume(minScore);
+  if (volume <= 2) return "Only the biggest competitor moves will notify you.";
+  if (volume <= 4) return "Major shifts and launches — not every small tweak.";
+  if (volume <= 6) return "A balanced mix of meaningful competitor activity.";
+  if (volume <= 8) return "Most moves from your tracked competitors will alert you.";
+  return "Almost every scored alert will reach you — highest volume.";
 }
 
 export { SEVERITY_ORDER };

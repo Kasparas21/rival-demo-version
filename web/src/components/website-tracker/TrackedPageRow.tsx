@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, ChevronRight, ExternalLink, Eye, Globe, Loader2, Sparkles, Trash2 } from "lucide-react";
+import { Bookmark, BookmarkCheck, Camera, ChevronRight, ExternalLink, Eye, Globe, Loader2, Sparkles, Trash2 } from "lucide-react";
 
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,8 @@ type Props = {
   capturing?: boolean;
   removing?: boolean;
   activating?: boolean;
+  isSaved?: boolean;
+  onToggleSave?: () => void;
 };
 
 function statusBadge(status: ReturnType<typeof pageStatus>) {
@@ -62,6 +64,8 @@ export function TrackedPageRowCard({
   capturing = false,
   removing = false,
   activating = false,
+  isSaved = false,
+  onToggleSave,
 }: Props) {
   const isSpying = page.is_active;
   const fromAds = isAdLandingCandidate(page);
@@ -76,20 +80,41 @@ export function TrackedPageRowCard({
 
   return (
     <div className="relative overflow-hidden rounded-xl border border-slate-200/80 bg-white/70 shadow-sm backdrop-blur-sm">
-      {onRemove ? (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          disabled={removing}
-          aria-label={`Delete ${page.label}`}
-          className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
-        >
-          {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-        </button>
-      ) : null}
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-1">
+        {onToggleSave ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleSave();
+            }}
+            aria-label={isSaved ? "Unsave page" : "Save page"}
+            title={isSaved ? "Remove from Saved" : "Save to your collection"}
+            className={cn(
+              "rounded-lg p-1.5 transition-colors",
+              isSaved
+                ? "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                : "text-slate-400 hover:bg-slate-100 hover:text-slate-700",
+            )}
+          >
+            {isSaved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+          </button>
+        ) : null}
+        {onRemove ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            disabled={removing}
+            aria-label={`Delete ${page.label}`}
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+          >
+            {removing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          </button>
+        ) : null}
+      </div>
 
       <div
         role={isSpying && onOpenDetail ? "button" : undefined}
@@ -104,7 +129,7 @@ export function TrackedPageRowCard({
         }}
         className={cn(isSpying && onOpenDetail && "cursor-pointer transition hover:border-slate-300 hover:shadow-md")}
       >
-        <div className="flex flex-col gap-3 p-3 pr-12 sm:flex-row sm:items-stretch sm:gap-4 sm:p-4 sm:pr-14">
+        <div className="flex flex-col gap-3 p-3 pr-20 sm:flex-row sm:items-stretch sm:gap-4 sm:p-4 sm:pr-24">
           <div
             className={cn(
               "relative w-full shrink-0 overflow-hidden rounded-lg border border-slate-200/80 bg-slate-100 sm:w-44 md:w-52",

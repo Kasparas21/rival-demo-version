@@ -4,6 +4,7 @@ import { Lock } from "lucide-react";
 import { useEffect, useState, type RefObject } from "react";
 
 import { AlertUnreadCountBadge } from "@/components/competitor/alerts/alert-ui-styles";
+import { CompetitorSavedHubTrigger } from "@/components/competitor/saved-hub/competitor-saved-hub-trigger";
 import { COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import {
   competitorSubTabsForView,
@@ -87,6 +88,8 @@ type CompetitorCompactStickyNavProps = {
   alertsUnreadCount: number;
   onTabChange: (tabId: string) => void;
   onSubTabChange: (subTabId: CompetitorSubTabId) => void;
+  savedHubCount?: number;
+  onSavedHubOpen?: () => void;
 };
 
 export function CompetitorCompactStickyNav({
@@ -101,6 +104,8 @@ export function CompetitorCompactStickyNav({
   alertsUnreadCount,
   onTabChange,
   onSubTabChange,
+  savedHubCount = 0,
+  onSavedHubOpen,
 }: CompetitorCompactStickyNavProps) {
   const currentTab = findCompetitorTab(navTab);
   const visibleSubTabs: CompetitorSubTab[] = currentTab?.subTabs?.length
@@ -227,6 +232,14 @@ export function CompetitorCompactStickyNav({
               );
             })}
           </nav>
+
+          {onSavedHubOpen ? (
+            <CompetitorSavedHubTrigger
+              count={savedHubCount}
+              onClick={onSavedHubOpen}
+              className="shrink-0 !border-black !bg-black px-2.5 py-1.5 text-[12px] !text-white hover:!bg-neutral-900 sm:px-3"
+            />
+          ) : null}
         </div>
 
         {visibleSubTabs.length > 0 ? (

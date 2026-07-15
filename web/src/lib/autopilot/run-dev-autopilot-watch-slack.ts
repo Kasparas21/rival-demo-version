@@ -3,11 +3,12 @@ import { randomUUID } from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isAlertType } from "@/lib/alerts/alert-types";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 import { getCachedStrategyOverview } from "@/lib/strategy-overview/recompute-strategy-overview";
 import type { Database } from "@/lib/supabase/types";
 
-import { ensureAutopilotSettings } from "./settings-db";
+import { ensureAutopilotSettings, shouldPrefixWatchAlertsWithClientBrand } from "./settings-db";
 import type { WatchAlertBlock, WatchAlertCandidate } from "./types";
 import { generateWatchRecommendation } from "./watch-recommendation";
 import { passesWatchFilter } from "./watch-sensitivity";
@@ -111,8 +112,12 @@ export async function runDevAutopilotWatchSlack(params: {
 
   const targets = await loadBrandWatchTargets(params.admin, params.userId);
   const scope = resolveWatchScope(targets, row);
+  const billing = await getBillingEntitlement(params.admin, params.userId);
   const allowedIds = scope.allowedCompetitorIds;
-  const multiBrand = scope.enabledBrands.length > 1;
+  const labelClientBrand = shouldPrefixWatchAlertsWithClientBrand(
+    billing.planTier,
+    scope.enabledBrands.length,
+  );
 
   let filtered = alerts.filter((a) => {
     const comp = compById.get(a.competitor_id);
@@ -188,7 +193,7 @@ export async function runDevAutopilotWatchSlack(params: {
     return {
       ...c,
       ...rec,
-      clientBrandName: multiBrand && owningBrand ? owningBrand.brandName : null,
+      clientBrandName: labelClientBrand && owningBrand ? owningBrand.brandName : null,
       investigateUrl: buildWatchAlertInvestigateUrl(appOrigin, c.competitorHost, "slack", c.alert_type),
     };
   });

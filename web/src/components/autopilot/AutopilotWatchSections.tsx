@@ -1,5 +1,8 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
+import { useState } from "react";
+
 import {
   autopilotGlassCardClass,
   autopilotGlassCardActiveClass,
@@ -7,6 +10,15 @@ import {
   GlassToggle,
 } from "@/components/autopilot/autopilot-glass-ui";
 import type { AutopilotBillingMeta, AutopilotSettingsUiState, BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
+import {
+  isWatchAllCompetitors,
+  normalizeWatchCompetitorIdsFromSelection,
+  resolveExplicitWatchedCompetitorIds,
+} from "@/lib/autopilot/watch-competitor-selection";
+import {
+  formatQuietHoursTimezoneLabel,
+  quietHoursTimezoneOptions,
+} from "@/lib/autopilot/quiet-hours-timezones";
 import { cn } from "@/lib/utils";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -27,9 +39,64 @@ function brandWatchEnabled(
   return typeof explicit === "boolean" ? explicit : brand.isPrimary === true;
 }
 
+function competitorsForBrand(competitors: CompetitorOption[], brandId: string): CompetitorOption[] {
+  return competitors.filter((c) => c.brandId === brandId);
+}
+
+function watchedBrandIds(settings: AutopilotSettingsUiState, brands: BrandOption[]): Set<string> {
+  return new Set(brands.filter((b) => brandWatchEnabled(settings.watch_workspaces, b)).map((b) => b.id));
+}
+
+function competitorPool(competitors: CompetitorOption[], brandIds: Set<string>): CompetitorOption[] {
+  return competitors.filter((c) => !c.brandId || brandIds.has(c.brandId));
+}
+
+function effectiveWatchedCompetitorIds(
+  settings: AutopilotSettingsUiState,
+  competitors: CompetitorOption[],
+  brandIds: Set<string>,
+): Set<string> {
+  const pool = competitorPool(competitors, brandIds);
+  return resolveExplicitWatchedCompetitorIds(
+    settings.watch_competitor_ids,
+    pool.map((c) => c.id),
+  );
+}
+
+function normalizeWatchCompetitorIds(
+  selected: Set<string>,
+  pool: CompetitorOption[],
+): string[] | null {
+  return normalizeWatchCompetitorIdsFromSelection(
+    selected,
+    pool.map((c) => c.id),
+  );
+}
+
+function isBrandWatchingAllCompetitors(
+  settings: AutopilotSettingsUiState,
+  brandId: string,
+  competitors: CompetitorOption[],
+): boolean {
+  const brandComps = competitorsForBrand(competitors, brandId);
+  if (brandComps.length === 0) return true;
+  const selected = effectiveWatchedCompetitorIds(settings, competitors, new Set([brandId]));
+  return brandComps.every((c) => selected.has(c.id));
+}
+
+function isCompetitorWatched(
+  settings: AutopilotSettingsUiState,
+  competitorId: string,
+  competitors: CompetitorOption[],
+  brandIds: Set<string>,
+): boolean {
+  return effectiveWatchedCompetitorIds(settings, competitors, brandIds).has(competitorId);
+}
+
 type AutopilotClientBrandsSectionProps = {
   settings: AutopilotSettingsUiState;
   brands: BrandOption[];
+  competitors?: CompetitorOption[];
   saving: boolean;
   disabled?: boolean;
   onPatch: (body: Record<string, unknown>) => void | Promise<void>;
@@ -39,6 +106,7 @@ type AutopilotClientBrandsSectionProps = {
 export function AutopilotClientBrandsSection({
   settings,
   brands,
+  competitors = [],
   saving,
   disabled = false,
   onPatch,
@@ -48,10 +116,25 @@ export function AutopilotClientBrandsSection({
   const isDisabled = disabled || saving || !settings.enabled;
   const enabledCount = brands.filter((b) => brandWatchEnabled(settings.watch_workspaces, b)).length;
   const allEnabled = enabledCount === brands.length;
+  const activeBrandIds = watchedBrandIds(settings, brands);
+  const pool = competitorPool(competitors, activeBrandIds);
+
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(brands.filter((b) => brandWatchEnabled(settings.watch_workspaces, b)).map((b) => b.id)),
+  );
+
+  const patchCompetitorSelection = (nextSelected: Set<string>) => {
+    void onPatch({ watch_competitor_ids: normalizeWatchCompetitorIds(nextSelected, pool) });
+  };
 
   const patchAll = (on: boolean) => {
     const watch_workspaces = Object.fromEntries(brands.map((b) => [b.id, on]));
     void onPatch({ watch_workspaces });
+    if (!on) {
+      setExpanded(new Set());
+    } else {
+      setExpanded(new Set(brands.map((b) => b.id)));
+    }
   };
 
   const patchOne = (brandId: string, on: boolean) => {
@@ -62,6 +145,42 @@ export function AutopilotClientBrandsSection({
       [brandId]: on,
     };
     void onPatch({ watch_workspaces });
+    if (on) {
+      setExpanded((prev) => new Set([...prev, brandId]));
+    } else {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(brandId);
+        return next;
+      });
+    }
+  };
+
+  const toggleExpanded = (brandId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(brandId)) next.delete(brandId);
+      else next.add(brandId);
+      return next;
+    });
+  };
+
+  const patchBrandAllCompetitors = (brandId: string, watchAll: boolean) => {
+    const brandComps = competitorsForBrand(competitors, brandId);
+    const selected = effectiveWatchedCompetitorIds(settings, competitors, activeBrandIds);
+    if (watchAll) {
+      for (const c of brandComps) selected.add(c.id);
+    } else {
+      for (const c of brandComps) selected.delete(c.id);
+    }
+    patchCompetitorSelection(selected);
+  };
+
+  const patchOneCompetitor = (competitorId: string, watched: boolean) => {
+    const selected = effectiveWatchedCompetitorIds(settings, competitors, activeBrandIds);
+    if (watched) selected.add(competitorId);
+    else selected.delete(competitorId);
+    patchCompetitorSelection(selected);
   };
 
   return (
@@ -75,6 +194,8 @@ export function AutopilotClientBrandsSection({
               : allEnabled
                 ? `Watching all ${brands.length} brands`
                 : `Watching ${enabledCount} of ${brands.length} brands`}
+            {" · "}
+            Expand a brand to pick competitors.
           </p>
         </div>
         <label className="flex shrink-0 items-center gap-2 text-[11px] font-medium text-[#52525b]">
@@ -91,35 +212,89 @@ export function AutopilotClientBrandsSection({
       <div className="mt-2 space-y-1.5">
         {brands.map((b) => {
           const on = brandWatchEnabled(settings.watch_workspaces, b);
+          const isOpen = expanded.has(b.id);
+          const brandComps = competitorsForBrand(competitors, b.id);
+          const brandWatchAll = isBrandWatchingAllCompetitors(settings, b.id, competitors);
+
           return (
             <div
               key={b.id}
               className={cn(
-                "flex items-center justify-between gap-2 rounded-xl border px-2.5 py-2 backdrop-blur-sm transition",
+                "rounded-xl border backdrop-blur-sm transition",
                 on
                   ? "border-emerald-200/70 bg-emerald-50/45"
                   : "border-white/50 bg-white/30",
               )}
             >
-              <div className="min-w-0">
-                <span className={cn("block truncate text-[12px] font-medium", on ? "text-[#1a1a2e]" : "text-[#71717a]")}>
-                  {b.name}
-                  {b.isPrimary ? (
-                    <span className="ml-1.5 rounded-full bg-indigo-100/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-600">
-                      Primary
-                    </span>
-                  ) : null}
-                </span>
-                <span className="block text-[10px] text-[#a1a1aa]">
-                  {on ? "Autopilot watching" : "Not watched"}
-                </span>
+              <div className="flex items-center gap-1.5 px-2.5 py-2">
+                <button
+                  type="button"
+                  disabled={isDisabled || !on || brandComps.length === 0}
+                  onClick={() => toggleExpanded(b.id)}
+                  className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#71717a] transition hover:bg-white/60 disabled:cursor-default disabled:opacity-40",
+                  )}
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? `Collapse ${b.name} competitors` : `Expand ${b.name} competitors`}
+                >
+                  <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", isOpen && "rotate-90")} />
+                </button>
+                <div className="min-w-0 flex-1">
+                  <span className={cn("block truncate text-[12px] font-medium", on ? "text-[#1a1a2e]" : "text-[#71717a]")}>
+                    {b.name}
+                    {b.isPrimary ? (
+                      <span className="ml-1.5 rounded-full bg-indigo-100/80 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-600">
+                        Primary
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="block text-[10px] text-[#a1a1aa]">
+                    {!on
+                      ? "Not watched"
+                      : brandComps.length === 0
+                        ? "No competitors in sidebar"
+                        : brandWatchAll
+                          ? `Watching all ${brandComps.length} competitors`
+                          : `Watching ${brandComps.filter((c) => isCompetitorWatched(settings, c.id, competitors, activeBrandIds)).length} of ${brandComps.length} competitors`}
+                  </span>
+                </div>
+                <GlassToggle
+                  size="sm"
+                  enabled={on}
+                  disabled={isDisabled}
+                  onChange={(v) => patchOne(b.id, v)}
+                />
               </div>
-              <GlassToggle
-                size="sm"
-                enabled={on}
-                disabled={isDisabled}
-                onChange={(v) => patchOne(b.id, v)}
-              />
+              {on && isOpen && brandComps.length > 0 ? (
+                <div className="border-t border-emerald-200/50 px-2.5 py-2">
+                  <label className="flex items-center gap-2 text-[11px] font-medium text-[#3f3f46]">
+                    <input
+                      type="checkbox"
+                      checked={brandWatchAll}
+                      disabled={isDisabled}
+                      onChange={(e) => patchBrandAllCompetitors(b.id, e.target.checked)}
+                      className="h-3.5 w-3.5 rounded border-[#d4d4d8] accent-emerald-500"
+                    />
+                    All competitors in sidebar
+                  </label>
+                  {!brandWatchAll ? (
+                    <div className="mt-1.5 max-h-32 space-y-0.5 overflow-y-auto pl-0.5">
+                      {brandComps.map((c) => (
+                        <label key={c.id} className="flex items-center gap-2 text-[12px] text-[#3f3f46]">
+                          <input
+                            type="checkbox"
+                            checked={isCompetitorWatched(settings, c.id, competitors, activeBrandIds)}
+                            disabled={isDisabled}
+                            onChange={(e) => patchOneCompetitor(c.id, e.target.checked)}
+                            className="h-3.5 w-3.5 rounded border-[#d4d4d8] accent-emerald-500"
+                          />
+                          {c.name}
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -148,7 +323,7 @@ export function AutopilotCompetitorsSection({
   onPatch,
 }: AutopilotCompetitorsSectionProps) {
   const isDisabled = disabled || saving || !settings.enabled;
-  const watchAll = !settings.watch_competitor_ids || settings.watch_competitor_ids.length === 0;
+  const watchAll = isWatchAllCompetitors(settings.watch_competitor_ids);
   const labelClass = variant === "page" ? "text-xs font-medium text-[#6B7280] uppercase tracking-wide" : "text-[12px] font-semibold text-[#1a1a2e]";
   const textClass = variant === "page" ? "text-sm" : "text-[11px] text-[#71717a]";
 
@@ -174,13 +349,24 @@ export function AutopilotCompetitorsSection({
     <label key={c.id} className={`flex items-center gap-2 ${variant === "page" ? textClass : "text-[12px] text-[#3f3f46]"}`}>
       <input
         type="checkbox"
-        checked={settings.watch_competitor_ids?.includes(c.id) ?? false}
+        checked={
+          isWatchAllCompetitors(settings.watch_competitor_ids) ||
+          (settings.watch_competitor_ids?.includes(c.id) ?? false)
+        }
         disabled={isDisabled}
         onChange={(e) => {
-          const set = new Set(settings.watch_competitor_ids ?? []);
-          if (e.target.checked) set.add(c.id);
-          else set.delete(c.id);
-          void onPatch({ watch_competitor_ids: [...set] });
+          const selected = resolveExplicitWatchedCompetitorIds(
+            settings.watch_competitor_ids,
+            visibleCompetitors.map((x) => x.id),
+          );
+          if (e.target.checked) selected.add(c.id);
+          else selected.delete(c.id);
+          void onPatch({
+            watch_competitor_ids: normalizeWatchCompetitorIdsFromSelection(
+              selected,
+              visibleCompetitors.map((x) => x.id),
+            ),
+          });
         }}
         className="h-3.5 w-3.5 rounded border-[#d4d4d8] accent-emerald-500"
       />
@@ -258,6 +444,12 @@ export function AutopilotQuietHoursSection({
   onPatch,
 }: AutopilotQuietHoursSectionProps) {
   const isDisabled = disabled || saving || !settings.enabled;
+  const deviceTimezone = browserTimezone();
+  const timezoneValue = settings.watch_quiet_hours.timezone || deviceTimezone;
+  const timezoneOptions = quietHoursTimezoneOptions({
+    current: timezoneValue,
+    browserTimezone: deviceTimezone,
+  });
   const labelClass = variant === "page" ? "text-xs text-[#6B7280]" : "text-[11px] font-medium text-[#52525b]";
   const selectClass =
     variant === "page"
@@ -270,7 +462,7 @@ export function AutopilotQuietHoursSection({
       <p className={variant === "page" ? "text-xs text-[#6B7280] mt-1" : "mt-0.5 text-[10px] leading-snug text-[#71717a]"}>
         Alerts during quiet hours are delivered after they end.
       </p>
-      <div className={variant === "page" ? "grid grid-cols-3 gap-2 mt-2" : "mt-2 grid grid-cols-3 gap-2"}>
+      <div className={variant === "page" ? "grid grid-cols-2 gap-2 mt-2" : "mt-2 grid grid-cols-2 gap-2"}>
         <div>
           <label className={labelClass}>Start</label>
           <select
@@ -307,18 +499,24 @@ export function AutopilotQuietHoursSection({
             ))}
           </select>
         </div>
-        <div>
-          <label className={labelClass}>Timezone</label>
-          <input
-            className={selectClass}
-            value={settings.watch_quiet_hours.timezone || browserTimezone()}
-            disabled={isDisabled}
-            onChange={(e) => {
-              const watch_quiet_hours = { ...settings.watch_quiet_hours, timezone: e.target.value };
-              void onPatch({ watch_quiet_hours });
-            }}
-          />
-        </div>
+      </div>
+      <div className={variant === "page" ? "mt-2" : "mt-2"}>
+        <label className={labelClass}>Timezone</label>
+        <select
+          className={cn(selectClass, variant === "page" ? "" : "mt-1")}
+          value={timezoneValue}
+          disabled={isDisabled}
+          onChange={(e) => {
+            const watch_quiet_hours = { ...settings.watch_quiet_hours, timezone: e.target.value };
+            void onPatch({ watch_quiet_hours });
+          }}
+        >
+          {timezoneOptions.map((tz) => (
+            <option key={tz} value={tz}>
+              {formatQuietHoursTimezoneLabel(tz, deviceTimezone)}
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );

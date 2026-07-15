@@ -22,6 +22,7 @@ type AutopilotChannelsSectionProps = {
   slackInput: string;
   onSlackInputChange: (value: string) => void;
   onPatch: (body: Record<string, unknown>) => void | Promise<void>;
+  onPersistPartial?: (body: Record<string, unknown>) => Promise<boolean>;
   onError?: (message: string) => void;
   onRefresh?: () => void | Promise<void>;
 };
@@ -50,6 +51,7 @@ export function AutopilotChannelsSection({
   slackInput,
   onSlackInputChange,
   onPatch,
+  onPersistPartial,
   onError,
   onRefresh,
 }: AutopilotChannelsSectionProps) {
@@ -112,7 +114,9 @@ export function AutopilotChannelsSection({
     setTestingSlack(true);
     setTestMessage(null);
     try {
-      if (slackInput.trim()) await onPatch({ slack_webhook_url: slackInput.trim() });
+      if (slackInput.trim()) {
+        await onPersistPartial?.({ slack_webhook_url: slackInput.trim() });
+      }
       const res = await fetch("/api/autopilot/test-slack", { method: "POST", credentials: "include" });
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Test failed");
@@ -225,7 +229,7 @@ export function AutopilotChannelsSection({
               onChange={(e) => onSlackInputChange(e.target.value)}
               onBlur={() => {
                 const val = slackInput.trim();
-                if (val) void onPatch({ slack_webhook_url: val });
+                if (val) onPatch({ slack_webhook_url: val });
               }}
             />
           ) : null}
@@ -356,7 +360,7 @@ export function AutopilotChannelsSection({
                         onChange={(e) => onSlackInputChange(e.target.value)}
                         onBlur={() => {
                           const val = slackInput.trim();
-                          if (val) void onPatch({ slack_webhook_url: val });
+                          if (val) onPatch({ slack_webhook_url: val });
                         }}
                         className={cn(autopilotGlassInputClass, "flex-1 text-[12px]")}
                       />

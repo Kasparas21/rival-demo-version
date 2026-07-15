@@ -236,3 +236,15 @@ export function canEnableReports(planTier: PlanTier): boolean {
 export function canEnableBrief(planTier: PlanTier): boolean {
   return planTier === "pro" || planTier === "agency" || planTier === "admin";
 }
+
+export function isAgencyPlanTier(planTier: PlanTier): boolean {
+  return planTier === "agency" || planTier === "admin";
+}
+
+/** Agency accounts (and any multi-brand watch scope) label alerts with the client brand. */
+export function shouldPrefixWatchAlertsWithClientBrand(
+  planTier: PlanTier,
+  enabledBrandCount: number,
+): boolean {
+  return isAgencyPlanTier(planTier) || enabledBrandCount > 1;
+}

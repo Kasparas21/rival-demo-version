@@ -2,7 +2,7 @@
 
 import { Loader2, X } from "lucide-react";
 import type { ComponentType } from "react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
@@ -15,7 +15,7 @@ import {
 } from "@/components/platform-logos";
 import { ORGANIC_FEED_PAGE_SIZE, ORGANIC_PLATFORM_LABELS } from "@/lib/organic-content/constants";
 import type { OrganicPlatform, OrganicPostSort, OrganicSocials } from "@/lib/organic-content/types";
-import { cn } from "@/lib/utils";
+import { useSavedOrganicPosts } from "@/lib/saved-organic/use-saved-organic-posts";
 
 import { OrganicPostCard, type OrganicPostCardData } from "./OrganicPostCard";
 import { OrganicPostSkeleton } from "./OrganicPostSkeleton";
@@ -63,6 +63,9 @@ export function OrganicPostsAllModal({
 
   const label = ORGANIC_PLATFORM_LABELS[platform];
   const Logo = PLATFORM_LOGOS[platform];
+
+  const postIds = useMemo(() => posts.map((p) => p.id), [posts]);
+  const { isSaved, toggleSave, savedMap } = useSavedOrganicPosts(open ? competitorId : "", postIds);
 
   useEffect(() => {
     setMounted(true);
@@ -221,6 +224,10 @@ export function OrganicPostsAllModal({
                     socials={socials}
                     variant="section"
                     onPostClick={onPostClick}
+                    save={{
+                      isSaved: isSaved(post.id) || Boolean(savedMap[post.id]),
+                      onToggle: () => void toggleSave(post.id),
+                    }}
                   />
                 ))}
               </div>

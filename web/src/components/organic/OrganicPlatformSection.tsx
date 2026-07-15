@@ -2,7 +2,7 @@
 
 import { RefreshCw } from "lucide-react";
 import type { ComponentType } from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   FacebookLogo,
@@ -14,6 +14,7 @@ import {
 } from "@/components/platform-logos";
 import { ORGANIC_PLATFORM_LABELS, ORGANIC_POSTS_INLINE_PREVIEW } from "@/lib/organic-content/constants";
 import type { OrganicPlatform, OrganicSocials } from "@/lib/organic-content/types";
+import { useSavedOrganicPosts } from "@/lib/saved-organic/use-saved-organic-posts";
 import { cn } from "@/lib/utils";
 
 import { OrganicEmptyWithPlaceholders } from "./OrganicEmptyWithPlaceholders";
@@ -71,6 +72,9 @@ export function OrganicPlatformSection({
   const label = ORGANIC_PLATFORM_LABELS[platform];
   const Logo = PLATFORM_LOGOS[platform];
   const sectionBusy = loading || refreshing;
+
+  const postIds = useMemo(() => (posts ?? []).map((p) => p.id), [posts]);
+  const { isSaved, toggleSave, savedMap } = useSavedOrganicPosts(competitorId, postIds);
 
   const loadPosts = useCallback(async () => {
     setLoading(true);
@@ -226,6 +230,10 @@ export function OrganicPlatformSection({
                   socials={socials}
                   variant="section"
                   onPostClick={onPostClick}
+                  save={{
+                    isSaved: isSaved(post.id) || Boolean(savedMap[post.id]),
+                    onToggle: () => void toggleSave(post.id),
+                  }}
                 />
               ))}
             </div>

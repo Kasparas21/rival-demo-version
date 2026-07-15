@@ -84,7 +84,7 @@ export type WatchAlertCandidate = {
 
 export type WatchAlertBlock = WatchAlertCandidate & WatchRecommendation & {
   investigateUrl: string;
-  /** Client brand this alert belongs to — set only for multi-brand (agency) sends. */
+  /** Client brand this alert belongs to — set for agency accounts and multi-brand watch scopes. */
   clientBrandName?: string | null;
 };
 

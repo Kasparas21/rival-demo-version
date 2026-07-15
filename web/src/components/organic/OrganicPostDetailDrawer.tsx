@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ExternalLink, X } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, X } from "lucide-react";
 
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { AdDetailDrawerSkeleton } from "@/components/ui/feature-skeleton";
@@ -20,6 +20,7 @@ import { readOrganicPostDisplaySnapshot } from "@/lib/organic-content/organic-po
 import type { OrganicPostDetailData } from "@/lib/organic-content/organic-post-detail-types";
 import { ORGANIC_PLATFORM_LABELS } from "@/lib/organic-content/constants";
 import type { OrganicPlatform, OrganicSocials } from "@/lib/organic-content/types";
+import { useSavedOrganicPosts } from "@/lib/saved-organic/use-saved-organic-posts";
 
 import { OrganicPostAnalysisPanel, type OrganicPostAnalysisQuota } from "./OrganicPostAnalysisPanel";
 import { OrganicPostCard } from "./OrganicPostCard";
@@ -148,6 +149,19 @@ export function OrganicPostDetailDrawer({
   const dismissedRef = useRef(false);
   const isOpen = Boolean(postId || openSeed);
   const showDrawer = isOpen || closing;
+
+  const savedCheckIds = useMemo(() => {
+    const id = data?.post.id ?? postId;
+    return id ? [id] : [];
+  }, [data?.post.id, postId]);
+  const { isSaved, toggleSave, savedMap } = useSavedOrganicPosts(
+    isOpen ? competitorId : "",
+    savedCheckIds,
+  );
+  const drawerPostId = data?.post.id ?? postId ?? null;
+  const drawerPostSaved = drawerPostId
+    ? isSaved(drawerPostId) || Boolean(savedMap[drawerPostId])
+    : false;
 
   useLayoutEffect(() => {
     if (isOpen) {
@@ -367,18 +381,59 @@ export function OrganicPostDetailDrawer({
                 ) : null}
 
                 {data.post.post_url ? (
-                  <div className="border-b border-slate-100 p-4">
+                  <div className="flex gap-2 border-b border-slate-100 p-4">
                     <a
                       href={data.post.post_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#343434] px-3 py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#1f1f1f]"
+                      className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-[#343434] px-3 py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#1f1f1f]"
                     >
                       <ExternalLink className="h-4 w-4" />
                       View on {platformLabel}
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (drawerPostId) void toggleSave(drawerPostId);
+                      }}
+                      aria-label={drawerPostSaved ? "Unsave post" : "Save post"}
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2.5 text-[13px] font-semibold transition ${
+                        drawerPostSaved
+                          ? "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      {drawerPostSaved ? (
+                        <BookmarkCheck className="h-4 w-4" />
+                      ) : (
+                        <Bookmark className="h-4 w-4" />
+                      )}
+                      {drawerPostSaved ? "Saved" : "Save"}
+                    </button>
                   </div>
-                ) : null}
+                ) : (
+                  <div className="border-b border-slate-100 p-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (drawerPostId) void toggleSave(drawerPostId);
+                      }}
+                      aria-label={drawerPostSaved ? "Unsave post" : "Save post"}
+                      className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-[13px] font-semibold transition ${
+                        drawerPostSaved
+                          ? "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      {drawerPostSaved ? (
+                        <BookmarkCheck className="h-4 w-4" />
+                      ) : (
+                        <Bookmark className="h-4 w-4" />
+                      )}
+                      {drawerPostSaved ? "Saved" : "Save post"}
+                    </button>
+                  </div>
+                )}
 
                 <div className="flex border-b border-slate-100 px-4">
                   <button

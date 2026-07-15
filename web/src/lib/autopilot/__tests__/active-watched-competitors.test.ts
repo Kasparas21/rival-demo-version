@@ -95,4 +95,12 @@ describe("resolveWatchScope", () => {
     });
     expect(scope.allowedCompetitorIds.size).toBe(0);
   });
+
+  it("treats an empty explicit list as watch none", () => {
+    const scope = resolveWatchScope(targets, {
+      watch_workspaces: {},
+      watch_competitor_ids: [],
+    });
+    expect(scope.allowedCompetitorIds.size).toBe(0);
+  });
 });

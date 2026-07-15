@@ -1,5 +1,13 @@
 import type { WatchAlertBlock } from "./types";
 
+/** Slack mrkdwn for one autopilot alert block. Agency alerts lead with the client brand. */
+export function formatWatchSlackBlockMrkdwn(block: WatchAlertBlock): string {
+  if (block.clientBrandName) {
+    return `*${block.clientBrandName}*\n*${block.competitorName}* — ${block.headline}\n\n_${block.context}_\n\n*Your move:* ${block.recommendation}`;
+  }
+  return `*${block.competitorName}*\n${block.headline}\n\n_${block.context}_\n\n*Your move:* ${block.recommendation}`;
+}
+
 export async function sendWatchSlackWebhook(params: {
   webhookUrl: string;
   blocks: WatchAlertBlock[];
@@ -10,12 +18,11 @@ export async function sendWatchSlackWebhook(params: {
   if (!url) return { ok: false, error: "no webhook" };
 
   const sections = params.blocks.map((b) => {
-    const brandTag = b.clientBrandName ? ` · for ${b.clientBrandName}` : "";
     return {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*${b.competitorName}*${brandTag}\n${b.headline}\n\n_${b.context}_\n\n*Your move:* ${b.recommendation}`,
+        text: formatWatchSlackBlockMrkdwn(b),
       },
       accessory: {
         type: "button",

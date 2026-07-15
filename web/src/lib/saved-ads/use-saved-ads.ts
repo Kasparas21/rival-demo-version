@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 export type SavedMap = Record<string, string>;
 
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
+import { emitSavedItemsChanged } from "@/lib/saved-items/saved-items-events";
 
 /** Placeholder row id while POST /api/saved-ads is in flight — UI treats as saved */
 export const PENDING_SAVED_AD_ID = "__pending__";
@@ -333,6 +334,7 @@ export function useSavedAdsStatus(
   );
 
   const bumpSavedAdsListCache = useCallback(() => {
+    emitSavedItemsChanged();
     const dom = cacheDomainNorm?.trim().toLowerCase();
     const cid = competitorId.trim();
     if (!dom || !cid) return;

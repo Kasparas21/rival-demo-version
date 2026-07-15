@@ -31,6 +31,31 @@ export function uiMinScore(settings: AutopilotSettingsUiState): number {
   return 6;
 }
 
+/** Fields persisted from the Autopilot customization modal. */
+export function autopilotSettingsSavePayload(
+  settings: AutopilotSettingsUiState,
+): Record<string, unknown> {
+  return {
+    enabled: settings.enabled,
+    watch_channels: settings.watch_channels,
+    watch_min_score: settings.watch_min_score,
+    watch_sensitivity: settings.watch_sensitivity,
+    watch_competitor_ids: settings.watch_competitor_ids,
+    watch_quiet_hours: settings.watch_quiet_hours,
+    watch_workspaces: settings.watch_workspaces,
+    report_enabled: settings.report_enabled,
+    report_day_of_month: settings.report_day_of_month,
+    report_workspaces: settings.report_workspaces,
+  };
+}
+
+export function autopilotSettingsDirty(
+  draft: AutopilotSettingsUiState,
+  baseline: AutopilotSettingsUiState,
+): boolean {
+  return JSON.stringify(autopilotSettingsSavePayload(draft)) !== JSON.stringify(autopilotSettingsSavePayload(baseline));
+}
+
 type SettingsGetResponse = {
   ok?: boolean;
   error?: string;

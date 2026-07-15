@@ -3,6 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Database } from "@/lib/supabase/types";
 
+import { isWatchAllCompetitors } from "./watch-competitor-selection";
+
 type ServerSupabase = SupabaseClient<Database>;
 
 export type BrandWatchTarget = {
@@ -129,9 +131,9 @@ export function resolveWatchScope(
   }
 
   let allowedCompetitorIds = new Set(brandByCompetitorId.keys());
-  if (settings.watch_competitor_ids?.length) {
+  if (!isWatchAllCompetitors(settings.watch_competitor_ids)) {
     allowedCompetitorIds = new Set(
-      settings.watch_competitor_ids.filter((id) => allowedCompetitorIds.has(id)),
+      (settings.watch_competitor_ids ?? []).filter((id) => allowedCompetitorIds.has(id)),
     );
   }
 

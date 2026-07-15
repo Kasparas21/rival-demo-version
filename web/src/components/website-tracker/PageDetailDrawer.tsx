@@ -9,6 +9,7 @@ import {
   GitCompareArrows,
   History,
   Loader2,
+  Maximize2,
   Trash2,
   X,
 } from "lucide-react";
@@ -311,18 +312,43 @@ export function PageDetailDrawer({
 
               {tab === "overview" && snapshots[0] ? (
                 <div className="space-y-4">
-                  <button
-                    type="button"
-                    onClick={() => setFullViewUrl(snapshots[0]!.screenshot_url)}
-                    className="block w-full overflow-hidden rounded-xl border border-slate-200"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={snapshotPreviewUrl(snapshots[0]) ?? snapshots[0]!.screenshot_url}
-                      alt="Latest"
-                      className="w-full object-cover object-top"
-                    />
-                  </button>
+                  <div className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-white px-3 py-2.5">
+                      <p className="text-xs font-medium text-slate-600">Latest screenshot</p>
+                      <button
+                        type="button"
+                        onClick={() => setFullViewUrl(snapshots[0]!.screenshot_url)}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        View full page
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFullViewUrl(snapshots[0]!.screenshot_url)}
+                      className="group relative block w-full cursor-zoom-in text-left"
+                      aria-label="Open full page screenshot"
+                    >
+                      <div className="max-h-[min(70vh,880px)] overflow-y-auto overscroll-contain bg-slate-100">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={snapshots[0]!.screenshot_url}
+                          alt="Full page screenshot"
+                          className="block w-full"
+                        />
+                      </div>
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-black/60 via-black/30 to-transparent px-4 pb-4 pt-10">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 shadow-md ring-1 ring-black/5 transition group-hover:scale-[1.02]">
+                          <Maximize2 className="h-3.5 w-3.5" />
+                          Click to expand
+                        </span>
+                      </div>
+                    </button>
+                    <p className="border-t border-slate-100 bg-white px-3 py-2 text-center text-[11px] text-slate-500">
+                      Scroll inside the preview for more of the page
+                    </p>
+                  </div>
                   {(() => {
                     const text = pageTextFields(snapshots[0]!.page_text);
                     const fields = [
@@ -373,7 +399,8 @@ export function PageDetailDrawer({
                             <button
                               type="button"
                               onClick={() => setFullViewUrl(snap.screenshot_url)}
-                              className="shrink-0 overflow-hidden rounded-lg border border-slate-100"
+                              className="group relative shrink-0 overflow-hidden rounded-lg border border-slate-100"
+                              aria-label="Open full page screenshot"
                             >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
@@ -381,6 +408,9 @@ export function PageDetailDrawer({
                                 alt=""
                                 className="h-20 w-32 object-cover object-top"
                               />
+                              <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition group-hover:bg-black/35">
+                                <Maximize2 className="h-4 w-4 text-white opacity-0 drop-shadow group-hover:opacity-100" />
+                              </span>
                             </button>
                             <div className="min-w-0 flex-1">
                               <p className="text-xs font-medium text-slate-900">{formatDate(snap.taken_at)}</p>
@@ -537,6 +567,9 @@ export function PageDetailDrawer({
               afterUrl={fullViewUrl}
               beforeLabel="Full page"
               afterLabel={formatDate(snapshots[0]?.taken_at ?? new Date().toISOString())}
+              heroBeforeUrl={snapshots[0]?.hero_screenshot_url ?? null}
+              heroAfterUrl={snapshots[0]?.hero_screenshot_url ?? null}
+              defaultMode="full"
             />
           ) : null}
         </motion.div>

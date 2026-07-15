@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { AutopilotDeliveryStatusBanner } from "@/components/autopilot/AutopilotDeliveryStatusBanner";
 import {
@@ -18,6 +18,75 @@ import { uiMinScore } from "@/components/autopilot/use-autopilot-settings";
 import type { AutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
 import { cn } from "@/lib/utils";
 
+const SAVE_FOOTER_HEIGHT_CLASS = "h-14";
+
+type AutopilotStickySaveFooterProps = {
+  scrollRootRef?: RefObject<HTMLDivElement | null>;
+  saving: boolean;
+  hasUnsavedChanges: boolean;
+  savedFlash: boolean;
+  onSave: () => void;
+};
+
+function AutopilotStickySaveFooter({
+  scrollRootRef,
+  saving,
+  hasUnsavedChanges,
+  savedFlash,
+  onSave,
+}: AutopilotStickySaveFooterProps) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const [docked, setDocked] = useState(false);
+
+  useEffect(() => {
+    const root = scrollRootRef?.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => setDocked(entry.isIntersecting),
+      { root, threshold: 0, rootMargin: "0px 0px -1px 0px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [scrollRootRef]);
+
+  return (
+    <>
+      <div ref={sentinelRef} className="pointer-events-none h-px w-full shrink-0" aria-hidden />
+      <div className={SAVE_FOOTER_HEIGHT_CLASS} aria-hidden />
+      <div
+        className={cn(
+          "sticky bottom-0 z-10 -mt-14",
+          SAVE_FOOTER_HEIGHT_CLASS,
+          "motion-safe:transition-[box-shadow,background-color,backdrop-filter] motion-safe:duration-300 motion-safe:ease-out",
+          docked
+            ? "bg-transparent shadow-none backdrop-blur-none"
+            : "bg-gradient-to-t from-white/98 via-white/88 to-white/0 shadow-[0_-12px_32px_-16px_rgba(15,23,42,0.2)] backdrop-blur-xl",
+        )}
+      >
+        <div className="flex h-full items-center gap-3">
+          <button
+            type="button"
+            disabled={saving || !hasUnsavedChanges}
+            onClick={onSave}
+            className="flex-1 rounded-2xl bg-gradient-to-b from-[#1a1a2e] to-[#2d2d44] px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(26,26,46,0.5)] transition hover:shadow-[0_12px_28px_-8px_rgba(26,26,46,0.55)] disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save settings"}
+          </button>
+          {savedFlash ? (
+            <span className="text-[12px] font-medium text-emerald-600 motion-safe:animate-in motion-safe:fade-in">
+              Saved
+            </span>
+          ) : hasUnsavedChanges ? (
+            <span className="text-[12px] font-medium text-amber-600">Unsaved changes</span>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+}
+
 type AgentSettingsFormProps = {
   settings: AutopilotSettingsUiState;
   billing: AutopilotBillingMeta | null;
@@ -25,13 +94,16 @@ type AgentSettingsFormProps = {
   brands: BrandOption[];
   saving: boolean;
   savedFlash: boolean;
+  hasUnsavedChanges?: boolean;
   error: string | null;
   onSettingsChange: (next: AutopilotSettingsUiState) => void;
-  onPatch: (patch: Record<string, unknown>) => void | Promise<void>;
+  /** Immediate server write (e.g. Slack webhook before test). */
+  onPersistPartial?: (patch: Record<string, unknown>) => Promise<boolean>;
   onSave: () => void;
   onRefresh?: () => void | Promise<void>;
   onViewHistory?: () => void;
   deliveryStatus?: AutopilotDeliveryStatus | null;
+  scrollRootRef?: RefObject<HTMLDivElement | null>;
 };
 
 export function AgentSettingsForm({
@@ -41,13 +113,15 @@ export function AgentSettingsForm({
   brands,
   saving,
   savedFlash,
+  hasUnsavedChanges = false,
   error,
   onSettingsChange,
-  onPatch,
+  onPersistPartial,
   onSave,
   onRefresh,
   onViewHistory,
   deliveryStatus,
+  scrollRootRef,
 }: AgentSettingsFormProps) {
   const [slackInput, setSlackInput] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -58,13 +132,10 @@ export function AgentSettingsForm({
 
   const applyPatch = (partial: Partial<AutopilotSettingsUiState>) => {
     onSettingsChange({ ...settings, ...partial });
-    void onPatch(partial as Record<string, unknown>);
   };
 
-  const handlePatch = async (body: Record<string, unknown>) => {
+  const applyRecordPatch = (body: Record<string, unknown>) => {
     onSettingsChange({ ...settings, ...body } as AutopilotSettingsUiState);
-    await onPatch(body);
-    if (body.slack_webhook_url) setSlackInput("");
   };
 
   const thresholdDisabled = saving || !settings.enabled || !settings.watch_enabled;
@@ -101,23 +172,22 @@ export function AgentSettingsForm({
         variant="modal"
         slackInput={slackInput}
         onSlackInputChange={setSlackInput}
-        onPatch={handlePatch}
+        onPatch={applyRecordPatch}
+        onPersistPartial={onPersistPartial}
         onError={setLocalError}
         onRefresh={onRefresh}
       />
 
-      <GlassSection title="Alert threshold" subtitle="How sensitive alerts should be.">
+      <GlassSection title="Alert threshold" subtitle="Slide right for more alerts, left for fewer.">
         <AutopilotThresholdSlider
           variant="modal"
           value={uiMinScore(settings)}
           disabled={thresholdDisabled}
           onChange={(_minScore, patch) => {
-            onSettingsChange({
-              ...settings,
+            applyPatch({
               watch_min_score: patch.watch_min_score,
               watch_sensitivity: patch.watch_sensitivity as AutopilotSettingsUiState["watch_sensitivity"],
             });
-            void onPatch(patch);
           }}
         />
       </GlassSection>
@@ -126,34 +196,24 @@ export function AgentSettingsForm({
         <AutopilotClientBrandsSection
           settings={settings}
           brands={brands}
-          saving={saving}
-          onPatch={(body) => {
-            if (body.watch_workspaces) {
-              onSettingsChange({
-                ...settings,
-                watch_workspaces: body.watch_workspaces as Record<string, boolean>,
-              });
-            }
-            void onPatch(body);
-          }}
-        />
-        {brands.length > 1 ? <div className="border-t border-white/50 pt-3" /> : null}
-        <AutopilotCompetitorsSection
-          settings={settings}
           competitors={competitors}
-          brands={brands}
           saving={saving}
-          variant="modal"
-          onPatch={(body) => {
-            if (body.watch_competitor_ids !== undefined) {
-              onSettingsChange({
-                ...settings,
-                watch_competitor_ids: body.watch_competitor_ids as string[] | null,
-              });
-            }
-            void onPatch(body);
-          }}
+          onPatch={applyRecordPatch}
         />
+        {brands.length <= 1 ? (
+          <AutopilotCompetitorsSection
+            settings={settings}
+            competitors={competitors}
+            brands={brands}
+            saving={saving}
+            variant="modal"
+            onPatch={(body) => {
+              if (body.watch_competitor_ids !== undefined) {
+                applyPatch({ watch_competitor_ids: body.watch_competitor_ids as string[] | null });
+              }
+            }}
+          />
+        ) : null}
         <div className="border-t border-white/50 pt-3">
           <AutopilotQuietHoursSection
             settings={settings}
@@ -161,12 +221,10 @@ export function AgentSettingsForm({
             variant="modal"
             onPatch={(body) => {
               if (body.watch_quiet_hours) {
-                onSettingsChange({
-                  ...settings,
+                applyPatch({
                   watch_quiet_hours: body.watch_quiet_hours as AutopilotSettingsUiState["watch_quiet_hours"],
                 });
               }
-              void onPatch(body);
             }}
           />
         </div>
@@ -179,26 +237,17 @@ export function AgentSettingsForm({
         saving={saving}
         variant="modal"
         onPatch={(body) => {
-          onSettingsChange({ ...settings, ...body } as AutopilotSettingsUiState);
-          void onPatch(body);
+          applyRecordPatch(body);
         }}
       />
 
-      <div className="flex items-center gap-3 pt-0.5">
-        <button
-          type="button"
-          disabled={saving}
-          onClick={onSave}
-          className="flex-1 rounded-2xl bg-gradient-to-b from-[#1a1a2e] to-[#2d2d44] px-4 py-2.5 text-[13px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(26,26,46,0.5)] transition hover:shadow-[0_12px_28px_-8px_rgba(26,26,46,0.55)] disabled:opacity-60"
-        >
-          {saving ? "Saving…" : "Save settings"}
-        </button>
-        {savedFlash ? (
-          <span className="text-[12px] font-medium text-emerald-600 motion-safe:animate-in motion-safe:fade-in">
-            Saved
-          </span>
-        ) : null}
-      </div>
+      <AutopilotStickySaveFooter
+        scrollRootRef={scrollRootRef}
+        saving={saving}
+        hasUnsavedChanges={hasUnsavedChanges}
+        savedFlash={savedFlash}
+        onSave={onSave}
+      />
 
       <button
         type="button"

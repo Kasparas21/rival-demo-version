@@ -1,16 +1,22 @@
 "use client";
 
 import { Bot, Sparkles, X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { glassModalShellClass } from "@/components/ui/glass-styles";
 import { AutopilotHistoryModal } from "@/components/autopilot/AutopilotHistoryModal";
+import {
+  autopilotSettingsDirty,
+  autopilotSettingsSavePayload,
+  type AutopilotSettingsController,
+  type AutopilotSettingsUiState,
+  type BrandOption,
+  type CompetitorOption,
+} from "@/components/autopilot/use-autopilot-settings";
 import { fetchSavedCompetitorsFromAccount } from "@/lib/account/client";
 import { AgentSettingsForm } from "./AgentSettingsForm";
 import { AgentSettingsFormSkeleton } from "./AgentSettingsSkeleton";
-import type { AutopilotSettingsController } from "@/components/autopilot/use-autopilot-settings";
-import type { BrandOption, CompetitorOption } from "@/components/autopilot/use-autopilot-settings";
 
 type AgentSettingsModalProps = {
   open: boolean;
@@ -42,10 +48,49 @@ export function AgentSettingsModal({
     settings,
     billing,
     deliveryStatus,
-    setSettings,
     saveSettings,
     loadSettings,
   } = controller;
+
+  const [draftSettings, setDraftSettings] = useState<AutopilotSettingsUiState | null>(null);
+  const baselineRef = useRef<AutopilotSettingsUiState | null>(null);
+  const wasOpenRef = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open && !wasOpenRef.current && settings) {
+      setDraftSettings(settings);
+      baselineRef.current = settings;
+    }
+    if (!open) {
+      setDraftSettings(null);
+      baselineRef.current = null;
+    }
+    wasOpenRef.current = open;
+  }, [open, settings]);
+
+  const hasUnsavedChanges =
+    draftSettings && baselineRef.current
+      ? autopilotSettingsDirty(draftSettings, baselineRef.current)
+      : false;
+
+  const persistDraft = useCallback(async () => {
+    if (!draftSettings) return false;
+    const ok = await saveSettings(autopilotSettingsSavePayload(draftSettings));
+    if (ok) baselineRef.current = draftSettings;
+    return ok;
+  }, [draftSettings, saveSettings]);
+
+  const requestClose = useCallback(async () => {
+    if (hasUnsavedChanges) {
+      await persistDraft();
+    }
+    onClose();
+  }, [hasUnsavedChanges, onClose, persistDraft]);
+
+  const handleSave = useCallback(async () => {
+    await persistDraft();
+  }, [persistDraft]);
 
   useEffect(() => {
     setMounted(true);
@@ -62,11 +107,11 @@ export function AgentSettingsModal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (historyOpen) setHistoryOpen(false);
-      else onClose();
+      else void requestClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose, historyOpen]);
+  }, [open, historyOpen, requestClose, setHistoryOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -121,22 +166,8 @@ export function AgentSettingsModal({
 
   if (!mounted || !open) return null;
 
-  const handleSave = () => {
-    if (!settings) return;
-    void saveSettings({
-      watch_channels: settings.watch_channels,
-      watch_min_score: settings.watch_min_score,
-      watch_sensitivity: settings.watch_sensitivity,
-      watch_competitor_ids: settings.watch_competitor_ids,
-      watch_quiet_hours: settings.watch_quiet_hours,
-      watch_workspaces: settings.watch_workspaces,
-      report_enabled: settings.report_enabled,
-      report_day_of_month: settings.report_day_of_month,
-      report_workspaces: settings.report_workspaces,
-    });
-  };
-
   const showFormSkeleton = settingsLoading && !settings;
+  const formSettings = draftSettings ?? settings;
 
   return (
     <>
@@ -146,7 +177,7 @@ export function AgentSettingsModal({
         type="button"
         className="absolute inset-0 bg-gradient-to-br from-[#1a1a2e]/50 via-indigo-950/30 to-emerald-950/20 backdrop-blur-md motion-reduce:backdrop-blur-none"
         aria-label="Close"
-        onClick={onClose}
+        onClick={() => void requestClose()}
       />
 
       <div
@@ -178,7 +209,7 @@ export function AgentSettingsModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => void requestClose()}
             className="rounded-xl border border-white/60 bg-white/50 p-2 text-[#71717a] shadow-sm backdrop-blur-sm transition hover:bg-white/80 hover:text-[#1a1a2e]"
             aria-label="Close settings"
           >
@@ -186,28 +217,28 @@ export function AgentSettingsModal({
           </button>
         </div>
 
-        <div className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
           {showFormSkeleton ? (
             <AgentSettingsFormSkeleton />
-          ) : !settings ? (
+          ) : !formSettings ? (
             <p className="text-[13px] text-red-700">{error ?? "Could not load settings."}</p>
           ) : (
             <AgentSettingsForm
-              settings={settings!}
+              settings={formSettings}
               billing={billing}
               competitors={competitors}
               brands={brands}
               saving={saving}
               savedFlash={savedFlash}
+              hasUnsavedChanges={hasUnsavedChanges}
               error={error}
-              onSettingsChange={setSettings}
-              onPatch={async (body) => {
-                await saveSettings(body);
-              }}
-              onSave={handleSave}
+              onSettingsChange={setDraftSettings}
+              onPersistPartial={saveSettings}
+              onSave={() => void handleSave()}
               onRefresh={loadSettings}
               onViewHistory={() => setHistoryOpen(true)}
               deliveryStatus={deliveryStatus}
+              scrollRootRef={scrollRef}
             />
           )}
         </div>

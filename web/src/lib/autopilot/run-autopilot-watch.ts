@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { isAlertType, type AlertSeverity } from "@/lib/alerts/alert-types";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { digestListUnsubscribeHeaders } from "@/lib/digest/send-weekly-digest-batch";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 import { getResendApiKey, getResendFromEmail } from "@/lib/email/resend-config";
@@ -11,6 +12,7 @@ import { getCachedStrategyOverview } from "@/lib/strategy-overview/recompute-str
 import type { Database } from "@/lib/supabase/types";
 
 import { acquireAutopilotCronLock, releaseAutopilotCronLock } from "./cron-lock";
+import { shouldPrefixWatchAlertsWithClientBrand } from "./settings-db";
 import { buildAutopilotSettingsUrl, buildWatchAlertInvestigateUrl } from "./watch-deep-links";
 import { buildAutopilotUnsubscribeUrl } from "./unsubscribe-token";
 import { parseWatchQuietHours, isInQuietHours } from "./watch-quiet-hours";
@@ -495,11 +497,16 @@ export async function runAutopilotWatch(params: {
     const compById = new Map((comps ?? []).map((c) => [c.id, c]));
 
     const scopeByUser = new Map<string, ResolvedWatchScope>();
+    const planTierByUser = new Map<string, Awaited<ReturnType<typeof getBillingEntitlement>>["planTier"]>();
     await Promise.all(
       userIds.map(async (userId) => {
         const settings = settingsByUser.get(userId)!;
-        const targets = await loadBrandWatchTargets(params.admin, userId);
+        const [targets, billing] = await Promise.all([
+          loadBrandWatchTargets(params.admin, userId),
+          getBillingEntitlement(params.admin, userId),
+        ]);
         scopeByUser.set(userId, resolveWatchScope(targets, settings));
+        planTierByUser.set(userId, billing.planTier);
       }),
     );
 
@@ -569,7 +576,10 @@ export async function runAutopilotWatch(params: {
       });
 
       const scope = scopeByUser.get(userId);
-      const multiBrand = (scope?.enabledBrands.length ?? 0) > 1;
+      const labelClientBrand = shouldPrefixWatchAlertsWithClientBrand(
+        planTierByUser.get(userId) ?? "free_trial",
+        scope?.enabledBrands.length ?? 0,
+      );
 
       const blocks = await mapLimit(candidates, 5, async (c) => {
         const strategyPayload = await getCachedStrategyOverview(
@@ -597,7 +607,7 @@ export async function runAutopilotWatch(params: {
         return {
           ...c,
           ...rec,
-          clientBrandName: multiBrand && owningBrand ? owningBrand.brandName : null,
+          clientBrandName: labelClientBrand && owningBrand ? owningBrand.brandName : null,
           investigateUrl: buildWatchAlertInvestigateUrl(
             appOrigin,
             c.competitorHost,

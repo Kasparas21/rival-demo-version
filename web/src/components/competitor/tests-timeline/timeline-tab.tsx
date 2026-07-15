@@ -361,6 +361,12 @@ export function TimelineTab({
         }
       />
 
+      <TimelineStatsCards stats={stats} />
+
+      {brandFiltered.length >= 5 && heatBuckets.length >= 2 ? (
+        <TimelineActivityHeatmap buckets={heatBuckets} selectedWeekStart={heatmapWeek} onSelectWeek={setHeatmapWeek} />
+      ) : null}
+
       <TimelineToolbar
         platforms={platformChips}
         state={toolbar}
@@ -369,12 +375,6 @@ export function TimelineTab({
         dateRangeLatest={dateRangeLatest}
         hiddenBrandBidCount={!toolbar.showBrandBids ? brandBidCount : 0}
       />
-
-      <TimelineStatsCards stats={stats} />
-
-      {brandFiltered.length >= 5 && heatBuckets.length >= 2 ? (
-        <TimelineActivityHeatmap buckets={heatBuckets} selectedWeekStart={heatmapWeek} onSelectWeek={setHeatmapWeek} />
-      ) : null}
 
       {onlyBrandBidsFiltered ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">

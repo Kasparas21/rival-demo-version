@@ -8,6 +8,7 @@ import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-bad
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { hostKeyFromUrl } from "@/lib/landing-pages/blocked-inheritance";
+import { useSavedLandingPages } from "@/lib/saved-landing-pages/use-saved-landing-pages";
 import { useScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
 
 import { DeleteTrackedPageDialog } from "./DeleteTrackedPageDialog";
@@ -71,6 +72,13 @@ export function TrackedPagesPanel({
   });
 
   const pages = (pagesCache.data?.pages ?? []).filter((p) => !removedPageIds.has(p.id));
+
+  const pageIds = useMemo(() => pages.map((p) => p.id), [pages]);
+  const {
+    isSaved: isPageSaved,
+    toggleSave: togglePageSave,
+    savedMap: savedPagesMap,
+  } = useSavedLandingPages(competitorId, pageIds);
 
   const filteredPages = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -362,6 +370,8 @@ export function TrackedPagesPanel({
               onCaptureNow={page.is_active ? () => void runCapture(page.id) : undefined}
               onActivateSpying={isAdLandingCandidate(page) ? () => void activateSpying(page.id) : undefined}
               onRemove={() => requestDeletePage(page)}
+              isSaved={isPageSaved(page.id) || Boolean(savedPagesMap[page.id])}
+              onToggleSave={() => void togglePageSave(page.id)}
             />
           ))}
         </div>

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { emitSavedItemsChanged } from "@/lib/saved-items/saved-items-events";
+
 export const PENDING_SAVED_EMAIL_ID = "__pending_saved_email__";
 
 export function isEmailSaved(savedMap: Record<string, string>, emailId: string): boolean {
@@ -76,6 +78,7 @@ export function useSavedEmailsStatus(competitorId: string, emailIds: readonly st
         if (json.ok && json.savedEmail) {
           const sourceId = json.savedEmail.source_competitor_email_id ?? emailId;
           setSavedMap((prev) => ({ ...prev, [sourceId]: json.savedEmail!.id }));
+          emitSavedItemsChanged();
           return json.savedEmail.id;
         }
         setSavedMap((prev) => {
@@ -111,6 +114,7 @@ export function useSavedEmailsStatus(competitorId: string, emailIds: readonly st
         delete next[emailId];
         return next;
       });
+      emitSavedItemsChanged();
       return true;
     }
     return false;
