@@ -124,10 +124,11 @@ function DemoGauge({
               strokeWidth={hovered === platform ? strokeWidth + 2 : strokeWidth}
               className="cursor-pointer transition-all duration-300"
               style={{ opacity: hovered && hovered !== platform ? 0.25 : 1 }}
-              title={`${count} ${label}`}
               onMouseEnter={() => setHovered(platform)}
               onMouseLeave={() => setHovered(null)}
-            />
+            >
+              <title>{`${count} ${label}`}</title>
+            </path>
             );
           })}
         </svg>
