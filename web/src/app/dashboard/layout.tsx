@@ -61,9 +61,11 @@ import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dash
 import { ScrapePausedBanner } from "@/components/dashboard/scrape-paused-banner";
 import { RecentPlatformRefreshNotice } from "@/components/dashboard/recent-platform-refresh-notice";
 import { Toaster } from "sonner";
-import { DemoCompetitorYellowDot } from "@/components/dashboard/demo-hidden-competitor-sidebar-row";
 import {
+  DemoCompetitorYellowDot,
   DEMO_MARKED_COMPETITOR_TITLE,
+} from "@/components/dashboard/demo-hidden-competitor-sidebar-row";
+import {
   shouldHideDemoMarkedSidebarCompetitor,
   shouldShowDemoMarkedCompetitorDot,
 } from "@/lib/debug/demo-sidebar-competitors";
