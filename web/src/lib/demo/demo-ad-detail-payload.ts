@@ -3,6 +3,7 @@ import { putAdDetailSeed, setCachedAdDetail, type AdDetailOpenSeed } from "@/lib
 import type { AdDetailDrawerPayload } from "@/lib/ad-detail/ad-detail-types";
 import type { DemoAd } from "@/lib/demo/dashboard-demo-data";
 import { DEMO_COMPETITOR, DEMO_OWN_BRAND } from "@/lib/demo/dashboard-demo-config";
+import type { Json } from "@/lib/supabase/types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEMO_NOW = new Date("2026-07-15T12:00:00.000Z");
@@ -467,7 +468,7 @@ export function buildDemoAdDetailPayload(ad: DemoAd): AdDetailDrawerPayload {
       last_seen_at: lastSeen,
       is_killed: false,
       lifespan_days: lifespan,
-      raw_payload: buildDemoRawPayload(ad, firstSeenMs),
+      raw_payload: buildDemoRawPayload(ad, firstSeenMs) as Json,
     },
     competitor: {
       ...demoCompetitorForAd(ad),
