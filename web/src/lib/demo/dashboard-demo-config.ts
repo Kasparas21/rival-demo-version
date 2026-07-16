@@ -29,6 +29,13 @@ export function isDashboardDemoPath(pathname: string | null | undefined): boolea
   return pathname?.startsWith(DASHBOARD_DEMO_ROUTE_PREFIX) ?? false;
 }
 
+/** Frozen Adidas/Nike sales demo — enabled on rival-demo-version deploys or via env. */
+export function isDemoWorkspaceEnabled(): boolean {
+  if (process.env.NEXT_PUBLIC_DEMO_WORKSPACE_ENABLED === "true") return true;
+  if (process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true") return true;
+  return false;
+}
+
 export function isDashboardDemoDomain(domain: string): boolean {
   const d = domain.trim().toLowerCase();
   return d === DEMO_OWN_BRAND.domain || d === DEMO_COMPETITOR.domain;

@@ -4,18 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Presentation } from "lucide-react";
 
-import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import {
   DASHBOARD_DEMO_DEFAULT_PATH,
   isDashboardDemoPath,
+  isDemoWorkspaceEnabled,
 } from "@/lib/demo/dashboard-demo-config";
 
-const DEMO_BUTTON_TITLE =
-  "Sales demo — static data only, visible with NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION";
+const DEMO_BUTTON_TITLE = "Sales demo — static Adidas/Nike data";
 
 export function DemoSidebarLink({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname();
-  if (!isDebugPlatformClassificationEnabled()) return null;
+  if (!isDemoWorkspaceEnabled()) return null;
 
   const active = isDashboardDemoPath(pathname);
 

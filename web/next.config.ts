@@ -19,7 +19,14 @@ const securityHeaders = [
   { key: "X-Frame-Options", value: "SAMEORIGIN" },
 ];
 
+const demoWorkspaceEnabled =
+  process.env.NEXT_PUBLIC_DEMO_WORKSPACE_ENABLED === "true" ||
+  process.env.VERCEL_GIT_REPO_SLUG === "rival-demo-version";
+
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_DEMO_WORKSPACE_ENABLED: demoWorkspaceEnabled ? "true" : "false",
+  },
   outputFileTracingRoot: repoRoot,
   skipTrailingSlashRedirect: true,
   webpack: (config, { dev }) => {
