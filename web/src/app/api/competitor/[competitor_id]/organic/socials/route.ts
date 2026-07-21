@@ -5,6 +5,7 @@ import { parseOrganicSocials, hasAnyOrganicSocial, findNewlyAddedPlatforms } fro
 import { organicSocialsSchema } from "@/lib/organic-content/types";
 import { assertCanMutate } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,9 +114,10 @@ export async function GET(
   if (!workspace) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("saved_competitors")
     .select("socials, organic_next_scrape_at, organic_last_scraped_at, organic_baseline_date")
     .eq("id", competitorId)

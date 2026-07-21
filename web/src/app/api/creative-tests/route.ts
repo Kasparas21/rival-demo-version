@@ -8,7 +8,8 @@ import { filterCreativeTestsWithExpiredPreviews } from "@/lib/creative-tests/fil
 import { enrichCreativeTestAdForDisplay } from "@/lib/creative-tests/resolve-creative-test-preview";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { isDemoSettingsCompetitor } from "@/lib/demo/sales-demo-settings";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { isGuestRead, workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 type ScrapedAdRow = {
   id: string;
@@ -63,26 +64,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
-  const userId = user.id;
+  const db = workspaceReadClient(workspace);
+  const userId = workspace.dataUserId;
 
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
-  const force = searchParams.get("force") === "1";
+  const force = searchParams.get("force") === "1" && !isGuestRead(workspace);
 
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id, brand_name, brand_domain, name")
     .eq("id", competitorId)
@@ -95,12 +92,12 @@ export async function GET(request: Request) {
 
   async function loadTestsAndAds() {
     const [{ data: tests, error: testsErr }, { data: allAds, error: adsErr }] = await Promise.all([
-      supabase
+      db
         .from("creative_tests")
         .select("*")
         .eq("competitor_id", competitorId)
         .order("launch_date", { ascending: false }),
-      supabase
+      db
         .from("scraped_ads")
         .select(
           "id, platform, ad_creative_url, archived_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, ai_extracted_launch_date, raw_payload"
@@ -123,7 +120,7 @@ export async function GET(request: Request) {
 
   if (force) {
     const recomputeResult = await computeCreativeTestsForCompetitor({
-      supabase,
+      supabase: db,
       userId,
       competitorId,
     });
@@ -139,9 +136,9 @@ export async function GET(request: Request) {
 
   let { tests, allAds, adsById } = loaded;
 
-  if (!force && tests.length > 0 && testsNeedRecompute(tests, adsById, allAds)) {
+  if (!force && tests.length > 0 && testsNeedRecompute(tests, adsById, allAds) && !isGuestRead(workspace)) {
     const recomputeResult = await computeCreativeTestsForCompetitor({
-      supabase,
+      supabase: db,
       userId,
       competitorId,
     });

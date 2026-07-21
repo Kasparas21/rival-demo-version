@@ -6,6 +6,7 @@ import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
@@ -359,7 +360,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = session;
+  const { supabase, ctx, dataUserId } = session;
+  const db = workspaceReadClient(session);
 
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
@@ -368,7 +370,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  const wsRow = await loadWorkspaceBrandRow(supabase, dataUserId, brandId);
+  const wsRow = await loadWorkspaceBrandRow(db, dataUserId, brandId);
   if (!wsRow) {
     return NextResponse.json(
       { ok: false, error: "Workspace brand not configured. Complete onboarding or link a workspace competitor." },
@@ -382,21 +384,21 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!ctx.isViewer) {
     await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, competitorDomain);
   }
-  const rivalMeta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
+  const rivalMeta = await loadSavedCompetitorForUser(db, dataUserId, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
   const [activeWsAds, wsResolved, rivalResolved] = await Promise.all([
-    countActiveAdsForCompetitor(supabase, dataUserId, wsRow.id),
+    countActiveAdsForCompetitor(db, dataUserId, wsRow.id),
     resolveSidePayload({
-      supabase,
+      supabase: db,
       userId: dataUserId,
       competitorId: wsRow.id,
       domainHint: wsDomainHint || wsMeta.domain,
     }),
     resolveSidePayload({
-      supabase,
+      supabase: db,
       userId: dataUserId,
       competitorId: rivalMeta.competitorId,
       domainHint: rivalMeta.brandDomain ?? rivalMeta.cacheDomain,
@@ -432,14 +434,14 @@ export async function GET(req: Request): Promise<NextResponse> {
     wsAudienceHistory,
     rivalAudienceHistory,
   ] = await Promise.all([
-    loadRecentMoves(supabase, dataUserId, wsRow.id),
-    loadRecentMoves(supabase, dataUserId, rivalMeta.competitorId),
-    countStrategySnapshots(supabase, dataUserId, wsRow.id),
-    countStrategySnapshots(supabase, dataUserId, rivalMeta.competitorId),
-    resolveDerivedStats(supabase, dataUserId, wsRow.id, wsResolved.payload),
-    resolveDerivedStats(supabase, dataUserId, rivalMeta.competitorId, rivalResolved.payload),
-    loadAudienceHistory(supabase, dataUserId, wsRow.id),
-    loadAudienceHistory(supabase, dataUserId, rivalMeta.competitorId),
+    loadRecentMoves(db, dataUserId, wsRow.id),
+    loadRecentMoves(db, dataUserId, rivalMeta.competitorId),
+    countStrategySnapshots(db, dataUserId, wsRow.id),
+    countStrategySnapshots(db, dataUserId, rivalMeta.competitorId),
+    resolveDerivedStats(db, dataUserId, wsRow.id, wsResolved.payload),
+    resolveDerivedStats(db, dataUserId, rivalMeta.competitorId, rivalResolved.payload),
+    loadAudienceHistory(db, dataUserId, wsRow.id),
+    loadAudienceHistory(db, dataUserId, rivalMeta.competitorId),
   ]);
 
   const workspace: ComparisonSideResponse = {

@@ -3,8 +3,7 @@ import { NextResponse } from "next/server";
 import { ORGANIC_FEED_PAGE_SIZE, ORGANIC_SCRAPE_MAX_ITEMS } from "@/lib/organic-content/constants";
 import { toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import type { OrganicPlatform, OrganicPostSort } from "@/lib/organic-content/types";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requireCompetitorAccess } from "@/lib/team/competitor-access";
+import { requireCompetitorReadAccess } from "@/lib/team/competitor-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,20 +53,11 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Invalid competitor_id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const access = await requireCompetitorAccess(supabase, user.id, competitorId);
+  const access = await requireCompetitorReadAccess(competitorId);
   if (access instanceof NextResponse) return access;
-  const { dataUserId } = access;
+  const { supabase: db, dataUserId } = access;
 
-  let query = supabase
+  let query = db
     .from("organic_posts")
     .select("*", { count: "exact" })
     .eq("competitor_id", competitorId)
@@ -97,7 +87,7 @@ export async function GET(
 
   let lastScrapedAt: string | null = null;
   if (platformRaw && platformRaw !== "all" && VALID_PLATFORMS.has(platformRaw)) {
-    const { data: scrapeRow } = await supabase
+    const { data: scrapeRow } = await db
       .from("organic_posts")
       .select("scraped_at")
       .eq("competitor_id", competitorId)
@@ -109,7 +99,7 @@ export async function GET(
     lastScrapedAt = scrapeRow?.scraped_at ?? null;
   }
 
-  const { data: platformRows } = await supabase
+  const { data: platformRows } = await db
     .from("organic_posts")
     .select("platform")
     .eq("competitor_id", competitorId)

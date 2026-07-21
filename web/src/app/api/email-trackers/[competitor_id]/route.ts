@@ -16,6 +16,7 @@ import {
 import { EMAIL_ANALYZE_BATCH_SIZE, EMAIL_INBOX_PAGE_SIZE } from "@/lib/email-intelligence/constants";
 import { syncCompetitorEmailsFromResend } from "@/lib/email-intelligence/sync-from-resend";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { isGuestRead, workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,9 +54,11 @@ export async function GET(
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
+  const guestRead = isGuestRead(workspace);
 
-  const { data: tracker, error: trackerErr } = await supabase
+  const { data: tracker, error: trackerErr } = await db
     .from("competitor_email_trackers")
     .select("id, tracking_address, tracking_code, is_active, created_at, competitor_id")
     .eq("user_id", dataUserId)
@@ -66,17 +69,19 @@ export async function GET(
     return NextResponse.json({ error: trackerErr.message }, { status: 500 });
   }
 
-  if (syncFromResend && tracker?.id && tracker.tracking_address) {
-    await syncCompetitorEmailsFromResend({
-      trackerId: tracker.id,
-      trackingAddress: tracker.tracking_address,
-    });
-  } else if (analyzePending) {
-    await analyzePendingCompetitorEmails({
-      competitorId,
-      userId: dataUserId,
-      limit: EMAIL_ANALYZE_BATCH_SIZE,
-    });
+  if (!guestRead) {
+    if (syncFromResend && tracker?.id && tracker.tracking_address) {
+      await syncCompetitorEmailsFromResend({
+        trackerId: tracker.id,
+        trackingAddress: tracker.tracking_address,
+      });
+    } else if (analyzePending) {
+      await analyzePendingCompetitorEmails({
+        competitorId,
+        userId: dataUserId,
+        limit: EMAIL_ANALYZE_BATCH_SIZE,
+      });
+    }
   }
 
   if (emailId) {
@@ -84,11 +89,11 @@ export async function GET(
       return NextResponse.json({ error: "Invalid email_id" }, { status: 400 });
     }
     try {
-      let email = await fetchCompetitorEmailById(supabase, dataUserId, competitorId, emailId);
+      let email = await fetchCompetitorEmailById(db, dataUserId, competitorId, emailId);
       if (!email) {
         return NextResponse.json({ error: "Email not found" }, { status: 404 });
       }
-      if (emailNeedsDeepAnalysis(email)) {
+      if (emailNeedsDeepAnalysis(email) && !guestRead) {
         after(async () => {
           await analyzeCompetitorEmail(emailId);
         });
@@ -104,7 +109,7 @@ export async function GET(
 
   let emailCount: number;
   try {
-    emailCount = await countCompetitorEmails(supabase, dataUserId, competitorId, searchQuery);
+    emailCount = await countCompetitorEmails(db, dataUserId, competitorId, searchQuery);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to count emails" },
@@ -126,7 +131,7 @@ export async function GET(
   if (viewInsights) {
     try {
       const { rows, truncated } = await fetchCompetitorEmailsForInsights(
-        supabase,
+        db,
         dataUserId,
         competitorId,
       );
@@ -144,7 +149,7 @@ export async function GET(
 
   try {
     const { emails, nextCursor } = await fetchCompetitorEmailPage({
-      supabase,
+      supabase: db,
       userId: dataUserId,
       competitorId,
       before,

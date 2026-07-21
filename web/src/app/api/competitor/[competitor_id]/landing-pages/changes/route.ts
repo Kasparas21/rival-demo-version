@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,9 +31,10 @@ export async function GET(
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const { data: competitor } = await supabase
+  const { data: competitor } = await db
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
@@ -43,7 +45,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  const { data: snapshots, error } = await supabase
+  const { data: snapshots, error } = await db
     .from("landing_page_snapshots")
     .select("*, landing_pages(id, label, url, page_type)")
     .eq("competitor_id", competitorId)
@@ -58,7 +60,7 @@ export async function GET(
 
   const enriched = [];
   for (const snap of snapshots ?? []) {
-    const { data: prev } = await supabase
+    const { data: prev } = await db
       .from("landing_page_snapshots")
       .select("screenshot_url, hero_screenshot_url, page_text, taken_at")
       .eq("landing_page_id", snap.landing_page_id)

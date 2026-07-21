@@ -9,6 +9,7 @@ import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview
 import { libraryItemIdFromRawPayload, libraryItemKey, savedRowMatchesLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { isWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,10 +47,11 @@ function winnerLibraryKeysFromScrapedRow(
 
 export async function POST(request: Request): Promise<NextResponse> {
   const workspace = await getRequestWorkspace();
-  if (!workspace?.user) {
+  if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
+  const { user, ctx, dataUserId } = workspace;
   let parsed: z.infer<typeof bodySchema>;
   try {
     parsed = bodySchema.parse(await request.json());
@@ -58,7 +60,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const competitorId = parsed.competitorId;
-  const savedAdsBlocked = await isWorkspaceBrandSavedAdsBlocked(supabase, dataUserId, competitorId);
+  const savedAdsBlocked = await isWorkspaceBrandSavedAdsBlocked(db, dataUserId, competitorId);
 
   const scrapedAdIds = [...new Set(parsed.scrapedAdIds ?? [])];
   const libraryItems = parsed.libraryItems ?? [];
@@ -69,7 +71,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   let lastScrapedAt: string | null = null;
   if (libraryItems.length > 0) {
-    const { data: compRow } = await supabase
+    const { data: compRow } = await db
       .from("saved_competitors")
       .select("last_scraped_at")
       .eq("id", competitorId)
@@ -89,7 +91,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (platformSet.size > 0) {
-      const { data: candidates, error: candErr } = await supabase
+      const { data: candidates, error: candErr } = await db
         .from("scraped_ads")
         .select("id, platform, raw_payload, stable_ad_key, last_seen_at, is_active, ad_creative_url")
         .eq("user_id", dataUserId)
@@ -191,7 +193,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (!savedAdsBlocked) {
     if (allScrapedIds.length > 0) {
-      const { data: rows, error } = await supabase
+      const { data: rows, error } = await db
         .from("saved_ads")
         .select("id, source_scraped_ad_id")
         .eq("user_id", dataUserId)
@@ -209,7 +211,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (libraryItems.length > 0) {
-      const { data: savedRows, error: savedErr } = await supabase
+      const { data: savedRows, error: savedErr } = await db
         .from("saved_ads")
         .select("id, source_scraped_ad_id, platform, raw_payload")
         .eq("user_id", dataUserId)
@@ -239,7 +241,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const winnerScrapedAdIds: string[] = [];
   const winnerLibraryKeysSet = new Set<string>();
 
-  const { data: winnerTests, error: winnerTestsErr } = await supabase
+  const { data: winnerTests, error: winnerTestsErr } = await db
     .from("creative_tests")
     .select("winner_ad_id")
     .eq("user_id", dataUserId)
@@ -259,7 +261,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   ];
 
   if (winnerIds.length > 0) {
-    const { data: winnerRows, error: winnerRowsErr } = await supabase
+    const { data: winnerRows, error: winnerRowsErr } = await db
       .from("scraped_ads")
       .select("id, platform, raw_payload, stable_ad_key")
       .eq("user_id", dataUserId)

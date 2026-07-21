@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import {
   getCachedStrategyOverview,
@@ -95,6 +96,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
@@ -103,7 +105,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  const wsRow = await loadWorkspaceBrandRow(supabase, dataUserId, brandId);
+  const wsRow = await loadWorkspaceBrandRow(db, dataUserId, brandId);
   if (!wsRow) {
     return NextResponse.json(
       { ok: false, error: "Workspace brand not configured. Complete onboarding or link a workspace competitor." },
@@ -111,7 +113,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  const rivalMeta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
+  const rivalMeta = await loadSavedCompetitorForUser(db, dataUserId, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -119,15 +121,15 @@ export async function GET(req: Request): Promise<NextResponse> {
   const wsDomainHint = (wsRow.brand_domain?.trim() || wsRow.slug || "").toLowerCase();
 
   const [wsPayload, compPayload, audienceHistory, recomputing] = await Promise.all([
-    resolveCachedPayload(supabase, dataUserId, wsRow.id, wsDomainHint),
+    resolveCachedPayload(db, dataUserId, wsRow.id, wsDomainHint),
     resolveCachedPayload(
-      supabase,
+      db,
       dataUserId,
       rivalMeta.competitorId,
       rivalMeta.brandDomain ?? rivalMeta.cacheDomain
     ),
-    loadAudienceHistory(supabase, dataUserId, rivalMeta.competitorId),
-    isStrategyRecomputeRunning(supabase, rivalMeta.competitorId),
+    loadAudienceHistory(db, dataUserId, rivalMeta.competitorId),
+    isStrategyRecomputeRunning(db, rivalMeta.competitorId),
   ]);
 
   return NextResponse.json(

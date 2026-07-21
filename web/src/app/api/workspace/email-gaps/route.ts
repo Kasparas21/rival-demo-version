@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { buildStrategyGapsPayload } from "@/lib/workspace/build-strategy-gaps";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,14 +12,15 @@ export async function GET(req: Request) {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { user, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const brandId = url.searchParams.get("brandId")?.trim() || null;
 
   try {
     const payload = await buildStrategyGapsPayload({
-      supabase,
+      supabase: db,
       userId: dataUserId,
       brandId,
       userEmail: user?.email ?? null,

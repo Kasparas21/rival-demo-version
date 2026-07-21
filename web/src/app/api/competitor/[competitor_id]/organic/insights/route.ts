@@ -9,8 +9,7 @@ import {
 import { sanitizeInsightItem } from "@/lib/organic-content/insight-utils";
 import { toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import { parseOrganicSocials } from "@/lib/organic-content/socials";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { requireCompetitorAccess } from "@/lib/team/competitor-access";
+import { requireCompetitorReadAccess } from "@/lib/team/competitor-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,20 +102,11 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Invalid competitor_id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const access = await requireCompetitorAccess(supabase, user.id, competitorId);
+  const access = await requireCompetitorReadAccess(competitorId);
   if (access instanceof NextResponse) return access;
-  const { dataUserId } = access;
+  const { supabase: db, dataUserId } = access;
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id, socials, organic_next_scrape_at, organic_last_scraped_at")
     .eq("id", competitorId)
@@ -130,7 +120,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  let postsQuery = supabase
+  let postsQuery = db
     .from("organic_posts")
     .select(
       "id, post_id, platform, content, media_urls, likes, comments, shares, views, posted_at, raw_data",
@@ -153,7 +143,7 @@ export async function GET(
   const metricRows = toMetricRows(posts);
   const computedMetrics = computeOrganicMetricsOverview(metricRows);
 
-  const { data: insight, error: insightErr } = await supabase
+  const { data: insight, error: insightErr } = await db
     .from("organic_insights")
     .select("*")
     .eq("competitor_id", competitorId)
@@ -184,7 +174,7 @@ export async function GET(
       asArray(resolvedInsight.whats_flopping).length === 0);
 
   if (platform === "all" && aiSectionsEmpty) {
-    const { data: platformInsights } = await supabase
+    const { data: platformInsights } = await db
       .from("organic_insights")
       .select("*")
       .eq("competitor_id", competitorId)
@@ -224,7 +214,7 @@ export async function GET(
     };
   }
 
-  const { data: platformRows } = await supabase
+  const { data: platformRows } = await db
     .from("organic_posts")
     .select("platform")
     .eq("competitor_id", competitorId)
@@ -253,7 +243,7 @@ export async function GET(
 
   let linkedPosts: ReturnType<typeof toOrganicPostClientPayload>[] = [];
   if (postIds.size > 0) {
-    const { data: linkedRaw } = await supabase
+    const { data: linkedRaw } = await db
       .from("organic_posts")
       .select("id, post_id, platform, content, media_urls, likes, comments, shares, views, posted_at, raw_data")
       .eq("competitor_id", competitorId)

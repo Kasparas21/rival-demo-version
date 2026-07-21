@@ -1391,13 +1391,14 @@ function CompetitorDashboardBody({
 
   const showBrandDebugTabs =
     process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
+  const effectiveShowDebugTabs = showBrandDebugTabs || isPreviewMode;
 
   const ownBrandSavedAdsEnabled =
     (!isOwnWorkspace || showBrandDebugTabs) && !isWorkspaceViewer;
 
   const pageTabs = useMemo(
-    () => competitorPageTabsForView({ isOwnWorkspace, showDebugTabs: showBrandDebugTabs }),
-    [isOwnWorkspace, showBrandDebugTabs]
+    () => competitorPageTabsForView({ isOwnWorkspace, showDebugTabs: effectiveShowDebugTabs }),
+    [isOwnWorkspace, effectiveShowDebugTabs]
   );
 
   const router = useRouter();
@@ -1415,7 +1416,7 @@ function CompetitorDashboardBody({
       params.set(
         "sub",
         isOwnWorkspace
-          ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+          ? ownBrandInsightsDefaultSubTab(effectiveShowDebugTabs)
           : "activity-feed",
       );
       params.delete("view");
@@ -1424,7 +1425,7 @@ function CompetitorDashboardBody({
       params.set("tab", "insights");
       params.set(
         "sub",
-        isOwnWorkspace && !showBrandDebugTabs
+        isOwnWorkspace && !effectiveShowDebugTabs
           ? "benchmark"
           : "strategy-map",
       );
@@ -1456,7 +1457,7 @@ function CompetitorDashboardBody({
     if (fix) {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-  }, [searchParams, pathname, router, isOwnWorkspace, showBrandDebugTabs]);
+  }, [searchParams, pathname, router, isOwnWorkspace, effectiveShowDebugTabs]);
 
   useEffect(() => {
     const sub = (searchParams.get("sub") ?? "").trim();
@@ -1465,12 +1466,12 @@ function CompetitorDashboardBody({
     params.set(
       "sub",
       isOwnWorkspace
-        ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+        ? ownBrandInsightsDefaultSubTab(effectiveShowDebugTabs)
         : "activity-feed",
     );
     params.delete("view");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs]);
+  }, [pathname, router, searchParams, isOwnWorkspace, effectiveShowDebugTabs]);
 
   const deriveTabFromParams = useCallback(
     (params: URLSearchParams) => {
@@ -1489,9 +1490,9 @@ function CompetitorDashboardBody({
     (params: URLSearchParams, tab: string) =>
       resolveSubTabFromParams(params, tab, {
         isOwnWorkspace,
-        showDebugTabs: showBrandDebugTabs,
+        showDebugTabs: effectiveShowDebugTabs,
       }),
-    [isOwnWorkspace, showBrandDebugTabs],
+    [isOwnWorkspace, effectiveShowDebugTabs],
   );
 
   const [navTab, setNavTab] = useState(() => deriveTabFromParams(searchParams));
@@ -1574,17 +1575,17 @@ function CompetitorDashboardBody({
     const subs = competitorSubTabsForView({
       parentTab: def,
       isOwnWorkspace,
-      showDebugTabs: showBrandDebugTabs,
+      showDebugTabs: effectiveShowDebugTabs,
     });
     if (subs.length === 0) return;
     const fallback =
       navTab === "insights" && isOwnWorkspace
-        ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+        ? ownBrandInsightsDefaultSubTab(effectiveShowDebugTabs)
         : (def.defaultSubTab ?? subs[0]?.id ?? null);
     if (!fallback) return;
     if (navSub && subs.some((s) => s.id === navSub)) return;
     setNavSub(fallback);
-  }, [navTab, navSub, isOwnWorkspace, showBrandDebugTabs]);
+  }, [navTab, navSub, isOwnWorkspace, effectiveShowDebugTabs]);
 
   useEffect(() => {
     if (!isOwnWorkspace || (navTab !== "comparison" && navTab !== "alerts")) return;
@@ -1595,12 +1596,12 @@ function CompetitorDashboardBody({
   }, [isOwnWorkspace, navTab, searchParams, deriveSubFromParams, syncNavToUrl]);
 
   useEffect(() => {
-    if (!isOwnWorkspace || showBrandDebugTabs) return;
+    if (!isOwnWorkspace || effectiveShowDebugTabs) return;
     if (navTab !== "ads library" || !navSub) return;
     if (!isOwnBrandDebugOnlySubTab(navTab, navSub)) return;
     setNavSub("all");
     syncNavToUrl(navTab, "all");
-  }, [isOwnWorkspace, showBrandDebugTabs, navTab, navSub, syncNavToUrl]);
+  }, [isOwnWorkspace, effectiveShowDebugTabs, navTab, navSub, syncNavToUrl]);
 
   useEffect(() => {
     if (!isOwnWorkspace) {
@@ -1622,26 +1623,26 @@ function CompetitorDashboardBody({
       syncNavToUrl("insights", "benchmark");
     } else if (navTab === "workspace-marketing-improvements") {
       setNavTab("insights");
-      if (showBrandDebugTabs) {
+      if (effectiveShowDebugTabs) {
         setNavSub("improve-marketing");
         syncNavToUrl("insights", "improve-marketing");
       } else {
-        const sub = ownBrandInsightsDefaultSubTab(showBrandDebugTabs);
+        const sub = ownBrandInsightsDefaultSubTab(effectiveShowDebugTabs);
         setNavSub(sub);
         syncNavToUrl("insights", sub);
       }
     } else if (navTab === "insights" && navSub === "activity-feed") {
-      const sub = ownBrandInsightsDefaultSubTab(showBrandDebugTabs);
+      const sub = ownBrandInsightsDefaultSubTab(effectiveShowDebugTabs);
       setNavSub(sub);
       syncNavToUrl("insights", sub);
-    } else if (navTab === "insights" && navSub === "improve-marketing" && !showBrandDebugTabs) {
+    } else if (navTab === "insights" && navSub === "improve-marketing" && !effectiveShowDebugTabs) {
       setNavSub("benchmark");
       syncNavToUrl("insights", "benchmark");
-    } else if (navTab === "insights" && navSub === "strategy-map" && !showBrandDebugTabs) {
+    } else if (navTab === "insights" && navSub === "strategy-map" && !effectiveShowDebugTabs) {
       setNavSub("benchmark");
       syncNavToUrl("insights", "benchmark");
     }
-  }, [isOwnWorkspace, navTab, navSub, showBrandDebugTabs, searchParams, deriveSubFromParams, syncNavToUrl]);
+  }, [isOwnWorkspace, navTab, navSub, effectiveShowDebugTabs, searchParams, deriveSubFromParams, syncNavToUrl]);
 
   const handleTabChange = useCallback(
     (tabId: string) => {
@@ -1649,7 +1650,7 @@ function CompetitorDashboardBody({
       const tab = findCompetitorTab(tabId);
       const sub =
         tabId === "insights" && isOwnWorkspace
-          ? ownBrandInsightsDefaultSubTab(showBrandDebugTabs)
+          ? ownBrandInsightsDefaultSubTab(effectiveShowDebugTabs)
           : (tab?.defaultSubTab ?? null);
       userNavIntentRef.current = { tab: tabId, sub };
       setNavTab(tabId);
@@ -1671,7 +1672,7 @@ function CompetitorDashboardBody({
         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
       });
     },
-    [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs],
+    [pathname, router, searchParams, isOwnWorkspace, effectiveShowDebugTabs],
   );
 
   const handleSubTabChange = useCallback(
@@ -3765,8 +3766,11 @@ function CompetitorDashboardBody({
             const visibleSubTabs = competitorSubTabsForView({
               parentTab: currentTab,
               isOwnWorkspace,
-              showDebugTabs: showBrandDebugTabs,
-            });
+              showDebugTabs: effectiveShowDebugTabs,
+            }).filter(
+              (st) =>
+                !isPreviewMode || (st.id !== "paid-media-settings" && st.id !== "organic-settings"),
+            );
             if (visibleSubTabs.length === 0) return null;
             return (
               <div className="w-full border-b border-slate-200 bg-slate-50/50">
@@ -4877,7 +4881,7 @@ function CompetitorDashboardBody({
             }
           >
             <KeepMountedTab
-              active={navSub === "strategy-map" && (!isOwnWorkspace || showBrandDebugTabs)}
+              active={navSub === "strategy-map" && (!isOwnWorkspace || effectiveShowDebugTabs)}
               className="!flex-none flex-col"
             >
               <StrategyOverviewApp

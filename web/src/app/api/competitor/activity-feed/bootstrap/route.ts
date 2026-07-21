@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import {
   getCachedStrategyOverview,
   getStaleStrategyOverviewPayload,
@@ -49,7 +50,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
@@ -57,7 +59,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  const rivalMeta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
+  const rivalMeta = await loadSavedCompetitorForUser(db, dataUserId, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -65,11 +67,11 @@ export async function GET(req: Request): Promise<NextResponse> {
   const domainHint = rivalMeta.brandDomain ?? rivalMeta.cacheDomain;
 
   const [freshPayload, stalePayload, snapshotCount, recentMoves, recomputing] = await Promise.all([
-    getCachedStrategyOverview(supabase, dataUserId, rivalMeta.competitorId, domainHint),
-    getStaleStrategyOverviewPayload(supabase, dataUserId, rivalMeta.competitorId),
-    countStrategySnapshots(supabase, dataUserId, rivalMeta.competitorId),
-    loadRecentMoves(supabase, dataUserId, rivalMeta.competitorId),
-    isStrategyRecomputeRunning(supabase, rivalMeta.competitorId),
+    getCachedStrategyOverview(db, dataUserId, rivalMeta.competitorId, domainHint),
+    getStaleStrategyOverviewPayload(db, dataUserId, rivalMeta.competitorId),
+    countStrategySnapshots(db, dataUserId, rivalMeta.competitorId),
+    loadRecentMoves(db, dataUserId, rivalMeta.competitorId),
+    isStrategyRecomputeRunning(db, rivalMeta.competitorId),
   ]);
 
   const payload = freshPayload ?? stalePayload;

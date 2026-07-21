@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 
@@ -12,7 +13,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { supabase, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
@@ -26,12 +28,12 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!ctx.isViewer) {
     await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, competitorDomain);
   }
-  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
+  const meta = await loadSavedCompetitorForUser(db, dataUserId, competitorDomain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("competitor_moves")
     .select("id, event_type, significance, detected_at, platform, before_state, after_state, narrative")
     .eq("user_id", dataUserId)

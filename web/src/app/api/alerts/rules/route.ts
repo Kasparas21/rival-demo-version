@@ -5,6 +5,8 @@ import { isAlertType } from "@/lib/alerts/alert-types";
 import { seedDefaultAlertRulesIfEmpty } from "@/lib/alerts/seed-default-rules";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { isGuestRead, workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -19,19 +21,24 @@ const putBodySchema = z.object({
 });
 
 export async function GET(): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
+  const { supabase, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const billing = await getBillingEntitlement(db, dataUserId);
 
   try {
-    const rules = await seedDefaultAlertRulesIfEmpty(supabase, user.id);
+    let rules;
+    if (isGuestRead(workspace)) {
+      const { data, error } = await db.from("alert_rules").select("*").eq("user_id", dataUserId);
+      if (error) throw new Error(error.message);
+      rules = data ?? [];
+    } else {
+      rules = await seedDefaultAlertRulesIfEmpty(supabase, dataUserId);
+    }
     return NextResponse.json({
       ok: true,
       rules,

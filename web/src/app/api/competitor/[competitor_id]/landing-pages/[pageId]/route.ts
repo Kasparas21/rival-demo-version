@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { normalizeLandingPageUrl } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { Database } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -17,8 +18,9 @@ async function authorizePage(competitorId: string, pageId: string) {
     return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const { data: page, error } = await supabase
+  const { data: page, error } = await db
     .from("landing_pages")
     .select("*")
     .eq("id", pageId)
@@ -34,7 +36,7 @@ async function authorizePage(competitorId: string, pageId: string) {
     return { error: NextResponse.json({ ok: false, error: "Page not found" }, { status: 404 }) };
   }
 
-  return { supabase, user, page, dataUserId, ctx };
+  return { supabase, db, user, page, dataUserId, ctx };
 }
 
 export async function GET(
@@ -51,11 +53,11 @@ export async function GET(
 
   const auth = await authorizePage(competitorId, pageId);
   if ("error" in auth && auth.error) return auth.error;
-  const { supabase, page } = auth as NonNullable<Awaited<ReturnType<typeof authorizePage>>> & {
+  const { db, page } = auth as NonNullable<Awaited<ReturnType<typeof authorizePage>>> & {
     page: NonNullable<Awaited<ReturnType<typeof authorizePage>>["page"]>;
   };
 
-  const { data: snapshots, error: snapErr } = await supabase
+  const { data: snapshots, error: snapErr } = await db
     .from("landing_page_snapshots")
     .select("*")
     .eq("landing_page_id", pageId)

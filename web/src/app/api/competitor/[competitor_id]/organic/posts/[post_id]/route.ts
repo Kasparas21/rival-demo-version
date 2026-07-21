@@ -11,6 +11,7 @@ import {
 } from "@/lib/organic-content/organic-post-ai-analysis-types";
 import { enrichOrganicPostForApi, toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { Database, Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -38,9 +39,10 @@ export async function GET(
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const billing = await getBillingEntitlement(supabase, dataUserId);
+  const billing = await getBillingEntitlement(db, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Subscription required for organic post details."),
@@ -48,7 +50,7 @@ export async function GET(
     );
   }
 
-  const { data: competitor } = await supabase
+  const { data: competitor } = await db
     .from("saved_competitors")
     .select("id, name, brand_domain, logo_url, brand_logo_url")
     .eq("id", competitorId)
@@ -59,7 +61,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  const { data: row, error: postErr } = await supabase
+  const { data: row, error: postErr } = await db
     .from("organic_posts")
     .select("*")
     .eq("id", postId)
@@ -77,10 +79,10 @@ export async function GET(
     scraped_at: row.scraped_at,
   };
 
-  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
+  const usedThisMonth = await loadAdPreviewAnalysisUsage(db, dataUserId);
   const quotaCheck = canRunAdPreviewAnalysis(billing, usedThisMonth);
 
-  const { data: analysisCache } = await supabase
+  const { data: analysisCache } = await db
     .from("organic_post_preview_analysis_cache")
     .select("analysis, computed_at")
     .eq("organic_post_id", postId)

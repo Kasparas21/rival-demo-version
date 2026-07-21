@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { isGuestRead, workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { getRecomputeLockRow, healStaleStrategyRecomputeLockIfNeeded, loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 
@@ -9,7 +10,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { supabase, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const domain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
@@ -22,14 +24,16 @@ export async function GET(req: Request): Promise<NextResponse> {
     await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, domain);
   }
 
-  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, domain);
+  const meta = await loadSavedCompetitorForUser(db, dataUserId, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  await healStaleStrategyRecomputeLockIfNeeded(supabase, meta.competitorId);
+  if (!isGuestRead(workspace)) {
+    await healStaleStrategyRecomputeLockIfNeeded(supabase, meta.competitorId);
+  }
 
-  const row = await getRecomputeLockRow(supabase, meta.competitorId);
+  const row = await getRecomputeLockRow(db, meta.competitorId);
 
   let status: "idle" | "running" | "failed" = "idle";
   if (row?.status === "running") {

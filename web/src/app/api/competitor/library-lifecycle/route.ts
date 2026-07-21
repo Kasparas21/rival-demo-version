@@ -6,6 +6,7 @@ import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/res
 import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,19 +18,20 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const competitorId = new URL(request.url).searchParams.get("competitorId")?.trim() ?? "";
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
   const [{ data: compRow }, { data: rows, error }] = await Promise.all([
-    supabase
+    db
       .from("saved_competitors")
       .select("last_scraped_at")
       .eq("id", competitorId)
       .eq("user_id", dataUserId)
       .maybeSingle(),
-    supabase
+    db
       .from("scraped_ads")
       .select("platform, raw_payload, last_seen_at, is_active, archived_creative_url")
       .eq("user_id", dataUserId)

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAlertType } from "@/lib/alerts/alert-types";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorId = (url.searchParams.get("competitorId") ?? "").trim();
@@ -20,7 +22,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "40") || 40));
   const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0") || 0);
 
-  let query = supabase
+  let query = db
     .from("competitor_alerts")
     .select(
       "id, user_id, competitor_id, alert_type, severity, title, body, metadata, detected_at, source_scrape_batch_id, is_read, notified_at, dedupe_key, created_at",
@@ -43,7 +45,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const nameById = new Map<string, string>();
 
   if (competitorIds.length > 0) {
-    const { data: comps } = await supabase
+    const { data: comps } = await db
       .from("saved_competitors")
       .select("id, name, brand_name")
       .eq("user_id", dataUserId)

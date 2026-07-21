@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { libraryItemIdFromRawPayload } from "@/lib/saved-ads/resolve-scraped-ad";
 import { resolveCellAdLifecycle } from "@/lib/strategy-overview/cell-ad-lifecycle";
 import { bucketAdsByFunnelStage } from "@/lib/strategy-overview/strategyDerivation";
@@ -48,7 +49,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorId = (url.searchParams.get("competitorId") ?? "").trim();
@@ -68,7 +70,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  const { data: owned } = await supabase
+  const { data: owned } = await db
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
@@ -80,7 +82,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   const base = () =>
-    supabase
+    db
       .from("scraped_ads")
       .select(
         "id, platform, format, ad_text, ad_creative_url, ai_extracted_angle, funnel_stage, first_seen_at, last_seen_at, is_active, raw_payload"

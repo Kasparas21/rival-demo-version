@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,7 +12,8 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   const summaryOnly = searchParams.get("summary") === "1";
@@ -19,7 +21,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const adsBlocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, dataUserId, competitorId);
+  const adsBlocked = await denyIfWorkspaceBrandSavedAdsBlocked(db, dataUserId, competitorId);
   const adsBlockedResponse = adsBlocked !== null;
 
   const capabilities = {
@@ -33,22 +35,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     const [adsCountRes, emailsCountRes, organicCountRes, landingsCountRes] = await Promise.all([
       adsBlockedResponse
         ? Promise.resolve({ count: 0, error: null })
-        : supabase
+        : db
             .from("saved_ads")
             .select("id", { count: "exact", head: true })
             .eq("user_id", dataUserId)
             .eq("competitor_id", competitorId),
-      supabase
+      db
         .from("saved_emails")
         .select("id", { count: "exact", head: true })
         .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId),
-      supabase
+      db
         .from("saved_organic_posts")
         .select("id", { count: "exact", head: true })
         .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId),
-      supabase
+      db
         .from("saved_landing_pages")
         .select("id", { count: "exact", head: true })
         .eq("user_id", dataUserId)
@@ -75,7 +77,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const [adsRes, emailsRes, organicRes, landingsRes] = await Promise.all([
     adsBlockedResponse
       ? Promise.resolve({ data: [] as never[], error: null })
-      : supabase
+      : db
           .from("saved_ads")
           .select(
             "id, source_scraped_ad_id, platform, ad_text, ad_creative_url, format, ai_extracted_angle, notes, saved_at, raw_payload",
@@ -83,7 +85,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           .eq("user_id", dataUserId)
           .eq("competitor_id", competitorId)
           .order("saved_at", { ascending: false }),
-    supabase
+    db
       .from("saved_emails")
       .select(
         "id, source_competitor_email_id, from_email, from_name, subject, preview_text, email_type, ai_summary, received_at, saved_at",
@@ -91,7 +93,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .order("saved_at", { ascending: false }),
-    supabase
+    db
       .from("saved_organic_posts")
       .select(
         "id, source_organic_post_id, platform, post_id, content, media_urls, likes, comments, shares, views, posted_at, post_url, product_type, author_username, author_display_name, author_avatar_url, saved_at",
@@ -99,7 +101,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .order("saved_at", { ascending: false }),
-    supabase
+    db
       .from("saved_landing_pages")
       .select(
         "id, source_landing_page_id, url, label, page_type, screenshot_url, hero_screenshot_url, saved_at",

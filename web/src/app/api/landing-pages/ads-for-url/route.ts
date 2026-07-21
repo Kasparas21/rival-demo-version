@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { Json } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,8 @@ export async function GET(request: Request) {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   const urlRaw = searchParams.get("url");
@@ -63,7 +65,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "invalid url" }, { status: 400 });
   }
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
@@ -74,7 +76,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
 
-  const { data: ads, error: adsErr } = await supabase
+  const { data: ads, error: adsErr } = await db
     .from("scraped_ads")
     .select("id, platform, format, ad_text, ad_creative_url, first_seen_at, ai_extracted_angle, raw_payload")
     .eq("user_id", dataUserId)

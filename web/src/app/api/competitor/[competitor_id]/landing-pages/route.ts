@@ -13,6 +13,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { isGuestRead, workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +27,9 @@ async function authorizeCompetitor(competitorId: string) {
     return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const { data: competitor } = await supabase
+  const { data: competitor } = await db
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
@@ -38,7 +40,7 @@ async function authorizeCompetitor(competitorId: string) {
     return { error: NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 }) };
   }
 
-  return { supabase, user, ctx, dataUserId };
+  return { supabase, db, user, ctx, dataUserId, guestRead: isGuestRead(workspace) };
 }
 
 type LatestSnapshot = {
@@ -65,14 +67,15 @@ export async function GET(
 
   const auth = await authorizeCompetitor(competitorId);
   if ("error" in auth && auth.error) return auth.error;
-  const { supabase, ctx, dataUserId } = auth as {
-    supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  const { db, ctx, dataUserId, guestRead } = auth as {
+    db: ReturnType<typeof workspaceReadClient>;
     ctx: import("@/lib/team/workspace-context").WorkspaceContext;
     dataUserId: string;
+    guestRead: boolean;
   };
 
   const admin = createSupabaseAdminClient();
-  if (!ctx.isViewer) {
+  if (!ctx.isViewer && !guestRead) {
     await ensureDefaultLandingPagesForCompetitor(admin, competitorId, dataUserId);
 
     const { data: competitorRow } = await admin
@@ -91,7 +94,7 @@ export async function GET(
     }
   }
 
-  const { data: pages, error: pagesError } = await supabase
+  const { data: pages, error: pagesError } = await db
     .from("landing_pages")
     .select("*")
     .eq("competitor_id", competitorId)
@@ -106,7 +109,7 @@ export async function GET(
   const latestByPage = new Map<string, LatestSnapshot>();
 
   if (pageIds.length > 0) {
-    const { data: snapshots } = await supabase
+    const { data: snapshots } = await db
       .from("landing_page_snapshots")
       .select(
         "id, landing_page_id, screenshot_url, hero_screenshot_url, page_text, pixel_diff_pct, has_meaningful_change, change_analysis, taken_at, status",
@@ -121,7 +124,7 @@ export async function GET(
     }
   }
 
-  const snapshotByGroupKey = await loadSnapshotMapForCompetitor(supabase, competitorId, dataUserId);
+  const snapshotByGroupKey = await loadSnapshotMapForCompetitor(db, competitorId, dataUserId);
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
 
   const trackedPages = (pages ?? [])

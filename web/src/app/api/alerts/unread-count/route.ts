@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,12 +11,13 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorId = (url.searchParams.get("competitorId") ?? "").trim();
 
-  let query = supabase
+  let query = db
     .from("competitor_alerts")
     .select("id", { count: "exact", head: true })
     .eq("user_id", dataUserId)

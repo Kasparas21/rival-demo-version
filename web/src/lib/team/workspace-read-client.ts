@@ -11,3 +11,7 @@ export function workspaceReadClient(workspace: SessionWorkspace): SupabaseClient
   }
   return workspace.supabase;
 }
+
+export function isGuestRead(workspace: SessionWorkspace): boolean {
+  return workspace.isGuest || workspace.ctx.isGuest;
+}

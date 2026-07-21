@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
@@ -68,6 +69,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const domain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
@@ -89,7 +91,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, domain);
   }
 
-  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, domain);
+  const meta = await loadSavedCompetitorForUser(db, dataUserId, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -100,7 +102,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   ): Promise<CompetitorStrategyOverviewPayload> => {
     try {
       const { channelSignals, journeyGoal } = await buildStrategyRuntimeLayers(
-        supabase,
+        db,
         dataUserId,
         meta.competitorId,
         p.map,
@@ -114,7 +116,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   };
 
   if (!force) {
-    const cached = await getCachedStrategyOverview(supabase, dataUserId, meta.competitorId, domain);
+    const cached = await getCachedStrategyOverview(db, dataUserId, meta.competitorId, domain);
     if (cached) {
       return NextResponse.json(
         {
@@ -132,10 +134,10 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   const staleEarly = !force
-    ? await getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId)
+    ? await getStaleStrategyOverviewPayload(db, dataUserId, meta.competitorId)
     : null;
   if (staleEarly) {
-    const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
+    const running = await isStrategyRecomputeRunning(db, meta.competitorId);
     return NextResponse.json(
       {
         ok: true,
@@ -166,9 +168,9 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   if (force) {
-    const stale = await getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId);
+    const stale = await getStaleStrategyOverviewPayload(db, dataUserId, meta.competitorId);
     if (stale) {
-      const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
+      const running = await isStrategyRecomputeRunning(db, meta.competitorId);
       if (!running && !ctx.isViewer) {
         scheduleBackgroundRecompute({
           competitorDomain: domain,
@@ -194,7 +196,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     }
   }
 
-  const { data: adsRows, error: adsErr } = await supabase
+  const { data: adsRows, error: adsErr } = await db
     .from("scraped_ads")
     .select(SCRAPED_ADS_DERIVATION_SELECT)
     .eq("competitor_id", meta.competitorId)
@@ -209,8 +211,8 @@ export async function GET(req: Request): Promise<NextResponse> {
   const rows = adsRows ?? [];
   if (rows.length === 0) {
     const [stale, running] = await Promise.all([
-      getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId),
-      isStrategyRecomputeRunning(supabase, meta.competitorId),
+      getStaleStrategyOverviewPayload(db, dataUserId, meta.competitorId),
+      isStrategyRecomputeRunning(db, meta.competitorId),
     ]);
     const empty = buildNoAdsFoundPayload({
       name: meta.name,
@@ -259,12 +261,12 @@ export async function GET(req: Request): Promise<NextResponse> {
   });
 
   const [scrapeIsNewer, running] = await Promise.all([
-    scrapeIsNewerThanOverview(supabase, meta.competitorId),
-    isStrategyRecomputeRunning(supabase, meta.competitorId),
+    scrapeIsNewerThanOverview(db, meta.competitorId),
+    isStrategyRecomputeRunning(db, meta.competitorId),
   ]);
 
   if (!quickPayload) {
-    const stale = await getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId);
+    const stale = await getStaleStrategyOverviewPayload(db, dataUserId, meta.competitorId);
     if (stale) {
       quickPayload = normalizeCompetitorStrategyOverviewPayload(stale);
     } else {

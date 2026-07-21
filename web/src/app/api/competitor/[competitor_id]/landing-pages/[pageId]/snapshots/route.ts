@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,9 +36,10 @@ export async function GET(
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
-  const { data: landingPage } = await supabase
+  const { data: landingPage } = await db
     .from("landing_pages")
     .select("id")
     .eq("id", pageId)
@@ -49,7 +51,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Page not found" }, { status: 404 });
   }
 
-  const { data, error, count } = await supabase
+  const { data, error, count } = await db
     .from("landing_page_snapshots")
     .select("*", { count: "exact" })
     .eq("landing_page_id", pageId)
