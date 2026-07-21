@@ -43,6 +43,7 @@ import {
 import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -254,6 +255,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
   const skipCache = body.skipCache === true;
   const workspace = await getRequestWorkspace();
+  const readDb = workspace ? workspaceReadClient(workspace) : supabase;
   let userId: string | null = null;
   if (workspace) {
     userId = workspace.dataUserId;
@@ -292,17 +294,20 @@ export async function POST(req: Request): Promise<NextResponse> {
     const libraryChannels = Array.isArray(body.libraryChannels)
       ? body.libraryChannels.filter((c): c is string => typeof c === "string" && c.trim() !== "")
       : undefined;
-    const syncedId = await syncSavedCompetitorLibraryContext(supabase, {
-      userId,
-      domainHint: domainNorm,
-      ids,
-      channels: libraryChannels,
-      confirmed: true,
-    });
-    const resolved = await resolveAdsCacheDomainForUser(supabase, userId, domainNorm);
+    if (!cacheOnly && workspace && !workspace.isGuest) {
+      const syncedId = await syncSavedCompetitorLibraryContext(supabase, {
+        userId,
+        domainHint: domainNorm,
+        ids,
+        channels: libraryChannels,
+        confirmed: true,
+      });
+      resolvedCompetitorId = syncedId;
+    }
+    const resolved = await resolveAdsCacheDomainForUser(readDb, userId, domainNorm);
     adsCacheDomain = resolved.cacheDomain;
     adsCacheReadDomains = resolved.readDomains;
-    resolvedCompetitorId = syncedId ?? resolved.competitorId;
+    resolvedCompetitorId = resolvedCompetitorId ?? resolved.competitorId;
   }
 
   const platformCacheHits = new Map<CacheablePlatform, unknown>();
@@ -313,7 +318,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       if (platformsToCheck.length > 0 && adsCacheReadDomains.length > 0) {
         const nowIso = new Date().toISOString();
         const selectCacheRows = (domains: string[]) =>
-          supabase
+          readDb
             .from("ads_cache")
             .select("platform, ads_data, competitor_domain, scraped_at, expires_at")
             .eq("user_id", userId)

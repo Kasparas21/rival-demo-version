@@ -90,6 +90,7 @@ export async function saveCompetitorToAccount(
     const response = await fetch("/api/account/saved-competitors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ competitor: normalizeForAccountApi(hoisted), ...(brandId ? { brandId } : {}) }),
     });
     const payload = await safeJson(response);
@@ -116,6 +117,7 @@ export async function syncCompetitorsToAccount(competitors: SavedCompetitorPaylo
     const response = await fetch("/api/account/saved-competitors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ competitors: hoisted, ...(brandId ? { brandId } : {}) }),
     });
     const payload = await safeJson(response);
@@ -131,6 +133,7 @@ export async function fetchSavedCompetitorsFromAccount(brandId?: string) {
     const response = await fetch(`/api/account/saved-competitors${qs}`, {
       method: "GET",
       cache: "no-store",
+      credentials: "include",
     });
     if (!response.ok) return [];
     const payload = await safeJson(response);

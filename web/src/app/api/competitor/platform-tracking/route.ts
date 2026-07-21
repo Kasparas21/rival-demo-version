@@ -5,6 +5,7 @@ import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-
 import { buildPlatformScheduleDebug } from "@/lib/ad-library/platform-tracking-schedule";
 import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const runtime = "nodejs";
 
@@ -14,12 +15,13 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const url = new URL(req.url);
   const competitorId = url.searchParams.get("competitorId") ?? undefined;
   const domain = url.searchParams.get("domain") ?? undefined;
 
-  const competitor = await resolveCompetitorForUser(supabase, dataUserId, {
+  const competitor = await resolveCompetitorForUser(db, dataUserId, {
     competitorId,
     domain,
   });
@@ -28,7 +30,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
-  const { data: rows, error } = await supabase
+  const { data: rows, error } = await db
     .from("competitor_platform_tracking")
     .select(
       "platform, classification, active_ad_count, high_coverage_demoted, classified_at, next_scrape_at, last_scrape_at"
@@ -43,9 +45,9 @@ export async function GET(req: Request): Promise<NextResponse> {
   const cacheScrapedAtByPlatform = new Map<string, string>();
   const domainHint = competitor.brand_domain?.trim() ?? domain?.trim() ?? "";
   if (domainHint) {
-    const { readDomains } = await resolveAdsCacheDomainForUser(supabase, dataUserId, domainHint);
+    const { readDomains } = await resolveAdsCacheDomainForUser(db, dataUserId, domainHint);
     if (readDomains.length > 0) {
-      const { data: cacheRows } = await supabase
+      const { data: cacheRows } = await db
         .from("ads_cache")
         .select("platform, scraped_at")
         .eq("user_id", dataUserId)

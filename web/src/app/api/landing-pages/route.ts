@@ -9,6 +9,7 @@ import { syncLandingPagesFromCompetitorAds } from "@/lib/landing-page-tracker/sy
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { Json } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +76,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   const limit = parseLimit(searchParams.get("limit"), 100, 500);
@@ -83,7 +85,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id, brand_name, name, last_scraped_at, brand_domain, slug")
     .eq("id", competitorId)
@@ -107,7 +109,7 @@ export async function GET(request: Request) {
     }
   }
 
-  const { data: ads, error: adsErr } = await supabase
+  const { data: ads, error: adsErr } = await db
     .from("scraped_ads")
     .select(
       "id, platform, ad_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, is_active, raw_payload",
@@ -222,7 +224,7 @@ export async function GET(request: Request) {
   const landingPagesAll = Array.from(groups.values()).sort((a, b) => b.totalAds - a.totalAds);
   const landingPagesSlice = landingPagesAll.slice(0, limit);
 
-  const snapshotByGroupKey = await loadSnapshotsByGroupKey(supabase, competitorId, dataUserId);
+  const snapshotByGroupKey = await loadSnapshotsByGroupKey(db, competitorId, dataUserId);
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
   for (const group of landingPagesSlice) {
     group.snapshot = resolveSnapshotWithBlockedInheritance(group.groupId, snapshotByGroupKey, blockedHosts);

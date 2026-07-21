@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
 
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id, brand_name, name, brand_domain, last_scraped_at")
     .eq("id", competitorId)
@@ -44,7 +46,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
 
-  const { data: ads, error: adsErr } = await supabase
+  const { data: ads, error: adsErr } = await db
     .from("scraped_ads")
     .select(
       "id, platform, ad_creative_url, archived_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, is_active, raw_payload",
@@ -58,7 +60,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: adsErr.message }, { status: 500 });
   }
 
-  const { data: tests } = await supabase
+  const { data: tests } = await db
     .from("creative_tests")
     .select("winner_ad_id")
     .eq("competitor_id", competitorId)

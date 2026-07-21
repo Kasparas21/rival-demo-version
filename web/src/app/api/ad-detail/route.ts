@@ -14,6 +14,7 @@ import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
 import type { Json } from "@/lib/supabase/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -146,6 +147,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const { searchParams } = new URL(request.url);
   const adIdRaw = (searchParams.get("adId") ?? "").trim();
   const adParam = (searchParams.get("ad") ?? "").trim();
@@ -157,7 +159,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
   let ad: AdRow | null = null;
 
   if (adUuid && isScrapedAdsUuid(adUuid)) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("scraped_ads")
       .select(scrapedAdSelect)
       .eq("id", adUuid)
@@ -170,7 +172,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
   } else if (competitorIdParam && platformParam && libraryItemId) {
     try {
       ad = await lookupLibraryScrapedAd(
-        supabase,
+        db,
         dataUserId,
         competitorIdParam,
         platformParam,
@@ -181,8 +183,8 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
       return NextResponse.json({ ok: false, error: message }, { status: 500 });
     }
 
-    if (!ad) {
-      const { data: compHint } = await supabase
+    if (!ad && !workspace.isGuest) {
+      const { data: compHint } = await db
         .from("saved_competitors")
         .select("brand_domain, slug")
         .eq("id", competitorIdParam)
@@ -197,7 +199,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
             competitorId: competitorIdParam,
           });
           ad = await lookupLibraryScrapedAd(
-            supabase,
+            db,
             dataUserId,
             competitorIdParam,
             platformParam,
@@ -219,7 +221,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     return NextResponse.json({ ok: false, error: "ad not found" }, { status: 404 });
   }
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id, brand_name, name, brand_domain, logo_url, brand_logo_url, last_scraped_at")
     .eq("id", ad.competitor_id)
@@ -265,19 +267,19 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
   const lpUrl = extractLandingPageUrl(ad.platform, ad.raw_payload);
 
   const [{ data: winnerTest }, { data: copyCache }, { data: analysisCache }] = await Promise.all([
-    supabase
+    db
       .from("creative_tests")
       .select("launch_date, ad_count, test_status")
       .eq("winner_ad_id", ad.id)
       .eq("user_id", dataUserId)
       .maybeSingle(),
-    supabase
+    db
       .from("ad_copy_structure_cache")
       .select("structure")
       .eq("ad_id", ad.id)
       .eq("user_id", dataUserId)
       .maybeSingle(),
-    supabase
+    db
       .from("ad_preview_analysis_cache")
       .select("analysis, computed_at")
       .eq("ad_id", ad.id)
@@ -300,8 +302,8 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     }
   }
 
-  const billing = await getBillingEntitlement(supabase, dataUserId);
-  const usedAnalyses = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
+  const billing = await getBillingEntitlement(db, dataUserId);
+  const usedAnalyses = await loadAdPreviewAnalysisUsage(db, dataUserId);
   const quotaCheck = canRunAdPreviewAnalysis(billing, usedAnalyses);
   const previewAnalysisQuota = quotaCheck.ok
     ? { used: usedAnalyses, limit: quotaCheck.limit, remaining: quotaCheck.remaining }

@@ -1270,7 +1270,8 @@ function CompetitorDashboardBody({
   confirmedParam,
 }: CompetitorDashboardBodyProps) {
   const myBrand = useActiveBrand();
-  const { state: workspaceState } = useWorkspaceContext();
+  const { isPreviewMode } = useDashboardShell();
+  const { state: workspaceState } = useWorkspaceContext({ previewMode: isPreviewMode });
   const isWorkspaceViewer = workspaceState?.isViewer ?? false;
   const [sidebarSnapshot, setSidebarSnapshot] = useState<SidebarCompetitor[] | undefined>(undefined);
   const [sidebarSnapshotBrandId, setSidebarSnapshotBrandId] = useState<string | null>(null);
@@ -2360,8 +2361,9 @@ function CompetitorDashboardBody({
       saveSidebarCompetitors(mergeAccountSidebarRowsWithLocalLibraryContext(visible, localPrev));
       return;
     }
+    if (isPreviewMode || localPrev.length > 0) return;
     saveSidebarCompetitors([]);
-  }, [myBrand.domain, myBrand.id]);
+  }, [isPreviewMode, myBrand.domain, myBrand.id]);
 
   const fetchMeta = adsPlatforms.includes("meta");
   const fetchGoogle = adsPlatforms.includes("google");

@@ -720,12 +720,11 @@ export function DashboardLayoutInner({
     const syncAccountCompetitors = async () => {
       if (!brandsLoaded || brands.length === 0) return;
       if (!activeBrand.id || activeBrand.id === "default" || activeBrand.id === "_workspace") return;
-      const { data: authData } = await supabase.auth.getUser();
-      const uid = authData.user?.id;
-      if (!uid) return;
+      const dataUserId = workspaceState?.dataUserId?.trim();
+      if (!dataUserId) return;
 
       localStorage.setItem("rival_active_brand", activeBrand.id);
-      ensureSidebarStorageBelongsToUser(uid);
+      ensureSidebarStorageBelongsToUser(dataUserId);
 
       const workspaceDomain = activeBrand.domain?.trim() || null;
       purgeExcludedSidebarCompetitorRows(workspaceDomain);
@@ -751,6 +750,12 @@ export function DashboardLayoutInner({
         return;
       }
 
+      if (localCompetitors.length > 0) {
+        refreshSavedCompetitors();
+        refreshBillingUsage();
+        return;
+      }
+
       saveSidebarCompetitors([]);
       refreshSavedCompetitors();
       refreshBillingUsage();
@@ -761,7 +766,15 @@ export function DashboardLayoutInner({
     return () => {
       cancelled = true;
     };
-  }, [refreshSavedCompetitors, refreshBillingUsage, activeBrand.domain, activeBrand.id, brands, brandsLoaded, supabase]);
+  }, [
+    refreshSavedCompetitors,
+    refreshBillingUsage,
+    activeBrand.domain,
+    activeBrand.id,
+    brands,
+    brandsLoaded,
+    workspaceState?.dataUserId,
+  ]);
 
   useEffect(() => {
     if (!brandsLoaded || brands.length === 0) return;

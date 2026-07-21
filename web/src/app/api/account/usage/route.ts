@@ -6,6 +6,7 @@ import {
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import type { WorkspaceContext } from "@/lib/team/workspace-context";
 
 export async function GET() {
@@ -14,24 +15,25 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const sessionUserId = user?.id ?? dataUserId;
   const yearMonthUtc = utcYearMonth();
 
   const [scrapedAdsRes, cacheRowsRes, overviewRes, billing, monthlyUsage, slotCount] = await Promise.all([
-    supabase
+    db
       .from("scraped_ads")
       .select("id", { count: "exact", head: true })
       .eq("user_id", dataUserId)
       .eq("is_active", true),
-    supabase.from("ads_cache").select("id", { count: "exact", head: true }).eq("user_id", dataUserId),
-    supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", dataUserId),
-    getBillingEntitlement(supabase, sessionUserId),
-    loadMonthlyUsageSnapshot(supabase, sessionUserId, yearMonthUtc),
-    countWatchedCompetitorSlotsForUser(supabase, dataUserId),
+    db.from("ads_cache").select("id", { count: "exact", head: true }).eq("user_id", dataUserId),
+    db.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", dataUserId),
+    getBillingEntitlement(db, sessionUserId),
+    loadMonthlyUsageSnapshot(db, sessionUserId, yearMonthUtc),
+    countWatchedCompetitorSlotsForUser(db, dataUserId),
   ]);
 
   const ownerBilling = ctx.isViewer
-    ? await getBillingEntitlement(supabase, dataUserId)
+    ? await getBillingEntitlement(db, dataUserId)
     : billing;
 
   const competitorsWatched = slotCount.count;

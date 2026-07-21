@@ -12,6 +12,7 @@ import { createDefaultLandingPages } from "@/lib/landing-page-tracker/create-def
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -228,6 +229,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   if (user) {
     await ensureUserProfile(supabase, user);
   }
@@ -239,7 +241,7 @@ export async function GET(request: Request) {
   );
   let brandId: string | null = null;
   try {
-    brandId = await resolveBrandId(supabase, dataUserId, requestedBrandId);
+    brandId = await resolveBrandId(db, dataUserId, requestedBrandId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not resolve brand";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -249,7 +251,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ competitors: [] });
   }
 
-  const mapped = await loadMappedCompetitorIds(supabase, dataUserId, brandId);
+  const mapped = await loadMappedCompetitorIds(db, dataUserId, brandId);
   if (hasScopedBrandRequest && !mapped.supported) {
     return NextResponse.json(
       { error: "Brand competitor mappings are not available. Run the multi-brand workspace migration." },
@@ -257,13 +259,13 @@ export async function GET(request: Request) {
     );
   }
   if (hasScopedBrandRequest && mapped.supported && mapped.ids.length === 0) {
-    await ensurePrimaryBrandBackfillIfNeeded(supabase, dataUserId, brandId);
+    await ensurePrimaryBrandBackfillIfNeeded(db, dataUserId, brandId);
   }
   const mappedAfterBackfill =
     hasScopedBrandRequest && mapped.supported && mapped.ids.length === 0
-      ? await loadMappedCompetitorIds(supabase, dataUserId, brandId)
+      ? await loadMappedCompetitorIds(db, dataUserId, brandId)
       : mapped;
-  const baseQuery = supabase
+  const baseQuery = db
     .from("saved_competitors")
     .select("*")
     .eq("user_id", dataUserId)
@@ -280,7 +282,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const brandDomainQuery = supabase
+  const brandDomainQuery = db
     .from("brands")
     .select("domain")
     .eq("user_id", dataUserId);
@@ -300,7 +302,7 @@ export async function GET(request: Request) {
   const weeklyLatestStartByCompetitor = new Map<string, string>();
 
   if (competitorIdsForWeekly.length > 0) {
-    const { data: weeklyRows, error: weeklyErr } = await supabase
+    const { data: weeklyRows, error: weeklyErr } = await db
       .from("weekly_scrape_jobs")
       .select("competitor_id, week_start")
       .eq("user_id", dataUserId)

@@ -8,6 +8,7 @@ import {
 } from "@/lib/ad-library/competitor-cache-domain";
 import { probeSavedCompetitorsColumns } from "@/lib/account/saved-competitors-schema";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 /** Primary brand Ads Library scrape time — sidebar API omits workspace rows. Optional `brandId` = active dashboard brand. */
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { supabase, user, ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
 
   const brandId = req.nextUrl.searchParams.get("brandId")?.trim();
   const domainParam = req.nextUrl.searchParams.get("domain")?.trim();
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
     | null = null;
 
   if (brandId && brandId !== "default" && brandId !== "_workspace") {
-    const scoped = await supabase
+    const scoped = await db
       .from("brands")
       .select("domain, name")
       .eq("user_id", dataUserId)
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (!primary?.domain?.trim()) {
-    const fb = await supabase
+    const fb = await db
       .from("brands")
       .select("domain, name")
       .eq("user_id", dataUserId)
@@ -107,7 +109,7 @@ export async function GET(req: NextRequest) {
 
   const slug = normalizeCompetitorSlug(workspaceDomainGuess).toLowerCase();
   const orFilter = savedCompetitorDomainOrFilter(workspaceDomainGuess);
-  const columnProbe = await probeSavedCompetitorsColumns(supabase, dataUserId);
+  const columnProbe = await probeSavedCompetitorsColumns(db, dataUserId);
   const savedSelect = [
     "id",
     "last_scraped_at",
@@ -117,14 +119,14 @@ export async function GET(req: NextRequest) {
   ].join(", ");
 
   const fallback = orFilter
-    ? await supabase
+    ? await db
         .from("saved_competitors")
         .select(savedSelect)
         .eq("user_id", dataUserId)
         .or(orFilter)
         .order("last_scraped_at", { ascending: false, nullsFirst: false })
         .limit(8)
-    : await supabase
+    : await db
         .from("saved_competitors")
         .select(savedSelect)
         .eq("user_id", dataUserId)
