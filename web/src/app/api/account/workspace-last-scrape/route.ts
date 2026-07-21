@@ -7,22 +7,16 @@ import {
   savedCompetitorDomainOrFilter,
 } from "@/lib/ad-library/competitor-cache-domain";
 import { probeSavedCompetitorsColumns } from "@/lib/account/saved-competitors-schema";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 /** Primary brand Ads Library scrape time — sidebar API omits workspace rows. Optional `brandId` = active dashboard brand. */
 export async function GET(req: NextRequest) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ lastScrapedAt: null }, { status: 401 });
+    const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const brandId = req.nextUrl.searchParams.get("brandId")?.trim();
   const domainParam = req.nextUrl.searchParams.get("domain")?.trim();

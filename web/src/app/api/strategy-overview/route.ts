@@ -3,7 +3,7 @@ import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billin
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { llmFast } from "@/lib/llm/anthropic";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import {
   parseStrategyCardsFromUnknown,
   type StrategyOverviewRequestBody,
@@ -79,23 +79,16 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const domainNorm = body.competitorDomain.trim().toLowerCase();
-  const force = body.force === true;
-
-  if (!user) {
+  const session = await getRequestWorkspace();
+  if (!session) {
     return NextResponse.json(
       billingRequiredResponseBody("Sign in and start your subscription to generate strategy overviews."),
-      { status: 401 }
+      { status: 401 },
     );
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, dataUserId } = session;
+  const domainNorm = body.competitorDomain.trim().toLowerCase();
+  const force = body.force === true;
 
   if (!force) {
     const { data: cached, error: cacheError } = await supabase
@@ -183,21 +176,19 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  if (user) {
-    const { error: upsertError } = await supabase.from("strategy_overview_cache").upsert(
-      {
-        user_id: dataUserId,
-        competitor_domain: domainNorm,
-        competitor_name: body.competitorName.trim(),
-        cards: cards as unknown as Json,
-        snapshot: "",
-        ads_hash: body.adsHash,
-      },
-      { onConflict: "user_id,competitor_domain" }
-    );
-    if (upsertError) {
-      console.error("strategy_overview_cache upsert:", upsertError.message);
-    }
+  const { error: upsertError } = await supabase.from("strategy_overview_cache").upsert(
+    {
+      user_id: dataUserId,
+      competitor_domain: domainNorm,
+      competitor_name: body.competitorName.trim(),
+      cards: cards as unknown as Json,
+      snapshot: "",
+      ads_hash: body.adsHash,
+    },
+    { onConflict: "user_id,competitor_domain" },
+  );
+  if (upsertError) {
+    console.error("strategy_overview_cache upsert:", upsertError.message);
   }
 
   return NextResponse.json({ ok: true, cards, cached: false });

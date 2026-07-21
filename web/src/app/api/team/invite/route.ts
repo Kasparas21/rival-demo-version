@@ -71,7 +71,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   try {
-    await assertCanInviteTeamViewer(supabase, ctx.sessionUserId);
+    await assertCanInviteTeamViewer(supabase, user.id);
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : "Invite not allowed" },
@@ -79,13 +79,13 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  const owner = await loadOwnerForEmail(supabase, ctx.sessionUserId);
+  const owner = await loadOwnerForEmail(supabase, user.id);
   const appOrigin = getAppUrl() || process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://spy-rival.com";
 
   const { data: existingRow } = await supabase
     .from("team_memberships")
     .select("id, status, invite_token")
-    .eq("owner_user_id", ctx.sessionUserId)
+    .eq("owner_user_id", user.id)
     .eq("invited_email", invitedEmail)
     .maybeSingle();
 
@@ -96,7 +96,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       .from("team_memberships")
       .delete()
       .eq("id", existing.id)
-      .eq("owner_user_id", ctx.sessionUserId);
+      .eq("owner_user_id", user.id);
     existing = null;
   }
 
@@ -126,7 +126,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { data: inserted, error: insertErr } = await supabase
       .from("team_memberships")
       .insert({
-        owner_user_id: ctx.sessionUserId,
+        owner_user_id: user.id,
         invited_email: invitedEmail,
         role: "viewer",
         status: "pending",
@@ -163,7 +163,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
-  const billing = await getBillingEntitlement(supabase, ctx.sessionUserId);
+  const billing = await getBillingEntitlement(supabase, user.id);
 
   return NextResponse.json({
     ok: true,

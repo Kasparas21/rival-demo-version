@@ -29,7 +29,7 @@ export async function GET(): Promise<NextResponse> {
   const { data: rows, error } = await supabase
     .from("team_memberships")
     .select("id, invited_email, member_user_id, role, status, created_at, accepted_at")
-    .eq("owner_user_id", ctx.sessionUserId)
+    .eq("owner_user_id", user.id)
     .neq("status", "revoked")
     .order("created_at", { ascending: false });
 
@@ -49,8 +49,8 @@ export async function GET(): Promise<NextResponse> {
     }
   }
 
-  const billing = await getBillingEntitlement(supabase, ctx.sessionUserId);
-  const used = await countTeamViewerSlotsUsed(supabase, ctx.sessionUserId);
+  const billing = await getBillingEntitlement(supabase, user.id);
+  const used = await countTeamViewerSlotsUsed(supabase, user.id);
 
   return NextResponse.json({
     ok: true,

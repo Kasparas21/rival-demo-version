@@ -5,10 +5,9 @@ import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billin
 import { llmFast } from "@/lib/llm/anthropic";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
 import { assertCanRunSharedAi } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -34,17 +33,12 @@ function stripJsonFences(text: string): string {
 type Body = { adId?: string };
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   assertCanRunSharedAi(ctx);
-  const dataUserId = ctx.dataUserId;
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {

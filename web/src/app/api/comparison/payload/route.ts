@@ -5,7 +5,7 @@ import { maybeDetectMoves } from "@/lib/comparison/maybe-detect-moves";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
@@ -355,17 +355,11 @@ async function resolveDerivedStats(
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    const session = await getRequestWorkspace();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = session;
 
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();

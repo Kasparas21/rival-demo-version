@@ -12,10 +12,13 @@ export type WorkspaceOwnerInfo = {
 };
 
 export type WorkspaceContext = {
-  sessionUserId: string;
+  sessionUserId: string | null;
   dataUserId: string;
   role: WorkspaceRole;
   isViewer: boolean;
+  isGuest: boolean;
+  guestInviteToken?: string;
+  guestExpiresAt?: string | null;
   owner?: WorkspaceOwnerInfo;
   sharedWorkspaces: WorkspaceOwnerInfo[];
 };
@@ -76,6 +79,7 @@ export async function resolveWorkspaceContext(
       dataUserId: activeOwnerId,
       role: "viewer",
       isViewer: true,
+      isGuest: false,
       owner: shared,
       sharedWorkspaces,
     };
@@ -86,7 +90,44 @@ export async function resolveWorkspaceContext(
     dataUserId: sessionUserId,
     role: "owner",
     isViewer: false,
+    isGuest: false,
     sharedWorkspaces,
+  };
+}
+
+async function loadOwnerInfo(ownerUserId: string): Promise<WorkspaceOwnerInfo> {
+  const admin = createSupabaseAdminClient();
+  const { data: owner } = await admin
+    .from("profiles")
+    .select("id, email, full_name")
+    .eq("id", ownerUserId)
+    .maybeSingle();
+
+  return {
+    ownerUserId,
+    ownerEmail: owner?.email ?? null,
+    ownerName: owner?.full_name ?? null,
+  };
+}
+
+export async function resolveGuestWorkspaceContext(
+  inviteToken: string,
+  row?: { owner_user_id: string; invite_token_expires_at?: string | null },
+): Promise<WorkspaceContext | null> {
+  const ownerUserId = row?.owner_user_id;
+  if (!ownerUserId) return null;
+
+  const owner = await loadOwnerInfo(ownerUserId);
+  return {
+    sessionUserId: null,
+    dataUserId: ownerUserId,
+    role: "viewer",
+    isViewer: true,
+    isGuest: true,
+    guestInviteToken: inviteToken,
+    guestExpiresAt: row.invite_token_expires_at ?? null,
+    owner,
+    sharedWorkspaces: [owner],
   };
 }
 

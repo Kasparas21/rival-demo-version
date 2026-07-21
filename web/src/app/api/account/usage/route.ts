@@ -4,22 +4,17 @@ import {
   remainingMonthlyAdsProcessed,
 } from "@/lib/billing/entitlements";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import type { WorkspaceContext } from "@/lib/team/workspace-context";
 
 export async function GET() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const sessionUserId = user.id;
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
+  const sessionUserId = user?.id ?? dataUserId;
   const yearMonthUtc = utcYearMonth();
 
   const [scrapedAdsRes, cacheRowsRes, overviewRes, billing, monthlyUsage, slotCount] = await Promise.all([

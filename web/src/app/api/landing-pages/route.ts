@@ -8,7 +8,7 @@ import { ensureDefaultLandingPagesForCompetitor } from "@/lib/landing-page-track
 import { syncLandingPagesFromCompetitorAds } from "@/lib/landing-page-tracker/sync-landing-pages-from-ads";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import type { Json } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -70,19 +70,11 @@ function parseLimit(raw: string | null, fallback: number, max: number): number {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   const limit = parseLimit(searchParams.get("limit"), 100, 500);
@@ -103,13 +95,15 @@ export async function GET(request: Request) {
   }
 
   const admin = createSupabaseAdminClient();
-  await ensureDefaultLandingPagesForCompetitor(admin, competitorId, user.id);
-  const website = competitor.brand_domain?.trim() || competitor.slug?.trim();
-  if (website) {
-    try {
-      await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
-    } catch (syncErr) {
-      console.error("[landing-pages] sync from ads failed", syncErr);
+  if (!ctx.isViewer) {
+    await ensureDefaultLandingPagesForCompetitor(admin, competitorId, dataUserId);
+    const website = competitor.brand_domain?.trim() || competitor.slug?.trim();
+    if (website) {
+      try {
+        await syncLandingPagesFromCompetitorAds(admin, competitorId, dataUserId, website);
+      } catch (syncErr) {
+        console.error("[landing-pages] sync from ads failed", syncErr);
+      }
     }
   }
 
@@ -228,7 +222,7 @@ export async function GET(request: Request) {
   const landingPagesAll = Array.from(groups.values()).sort((a, b) => b.totalAds - a.totalAds);
   const landingPagesSlice = landingPagesAll.slice(0, limit);
 
-  const snapshotByGroupKey = await loadSnapshotsByGroupKey(supabase, competitorId, user.id);
+  const snapshotByGroupKey = await loadSnapshotsByGroupKey(supabase, competitorId, dataUserId);
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
   for (const group of landingPagesSlice) {
     group.snapshot = resolveSnapshotWithBlockedInheritance(group.groupId, snapshotByGroupKey, blockedHosts);

@@ -5,26 +5,18 @@ import { metaCardForLifecycle } from "@/lib/ad-library/meta-payload-lifecycle";
 import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/resolve-scraped-ad";
 import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** Bulk lifecycle for ads-library cards (key = `platform:libraryItemId`). */
 export async function GET(request: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const competitorId = new URL(request.url).searchParams.get("competitorId")?.trim() ?? "";
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });

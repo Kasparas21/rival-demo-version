@@ -3,9 +3,8 @@ import { NextResponse } from "next/server";
 import { resolveCompetitorForUser } from "@/lib/ad-library/classify-competitor-platforms";
 import { parseOrganicSocials, hasAnyOrganicSocial, findNewlyAddedPlatforms } from "@/lib/organic-content/socials";
 import { organicSocialsSchema } from "@/lib/organic-content/types";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assertCanMutate } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,24 +23,17 @@ export async function PATCH(
     return NextResponse.json({ ok: false, error: "Invalid competitor_id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-
-  if (authErr || !user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Forbidden";
     return NextResponse.json({ ok: false, error: message }, { status: 403 });
   }
-  const dataUserId = ctx.dataUserId;
 
   const competitor = await resolveCompetitorForUser(supabase, dataUserId, { competitorId });
   if (!competitor) {
@@ -117,17 +109,11 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Invalid competitor_id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, dataUserId } = workspace;
 
   const { data, error } = await supabase
     .from("saved_competitors")

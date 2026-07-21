@@ -5,10 +5,9 @@ import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-re
 import type { ActivityScoreResult, ActivitySignalName } from "@/lib/activity-score/types";
 import { SIGNAL_WEIGHTS as W } from "@/lib/activity-score/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -74,18 +73,11 @@ export type ActivityScoreApiBody = ActivityScoreResult & {
 export async function GET(
   request: Request
 ): Promise<NextResponse<{ ok: boolean; error?: string } & Partial<ActivityScoreApiBody>>> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   if (!competitorId) {
@@ -156,16 +148,11 @@ export async function GET(
 export async function POST(
   request: Request
 ): Promise<NextResponse<{ ok: boolean; error?: string } & Partial<ActivityScoreApiBody>>> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
@@ -173,7 +160,6 @@ export async function POST(
       { ok: boolean; error?: string } & Partial<ActivityScoreApiBody>
     >;
   }
-  const dataUserId = ctx.dataUserId;
 
   let competitorId: string | null = null;
   try {

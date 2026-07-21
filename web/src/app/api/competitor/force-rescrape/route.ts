@@ -29,10 +29,9 @@ import {
   canPerformManualRefresh,
   loadManualRefreshUsageForCompetitor,
 } from "@/lib/billing/usage-quotas";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -129,22 +128,16 @@ function buildAdsLibraryForceBody(params: {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanScrape(ctx);
   } catch (err) {
     return permissionDeniedResponse(err);
   }
-  const dataUserId = ctx.dataUserId;
 
   let competitorId: string;
   let requestedPlatforms: AdsLibraryPlatform[] | undefined;

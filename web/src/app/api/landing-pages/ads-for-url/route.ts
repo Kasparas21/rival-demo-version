@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import type { Json } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -34,19 +33,11 @@ function landingKeyForAd(platform: string, rawPayload: Json): string | null {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   const urlRaw = searchParams.get("url");

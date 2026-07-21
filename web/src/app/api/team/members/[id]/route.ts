@@ -31,7 +31,7 @@ export async function DELETE(_req: Request, { params }: RouteParams): Promise<Ne
     .from("team_memberships")
     .select("id, member_user_id, invited_email")
     .eq("id", id)
-    .eq("owner_user_id", ctx.sessionUserId)
+    .eq("owner_user_id", user.id)
     .maybeSingle();
 
   if (fetchErr) {
@@ -46,14 +46,14 @@ export async function DELETE(_req: Request, { params }: RouteParams): Promise<Ne
       .from("profiles")
       .update({ active_workspace_owner_id: null, updated_at: new Date().toISOString() })
       .eq("id", row.member_user_id)
-      .eq("active_workspace_owner_id", ctx.sessionUserId);
+      .eq("active_workspace_owner_id", user.id);
   }
 
   const { error: deleteErr } = await supabase
     .from("team_memberships")
     .delete()
     .eq("id", id)
-    .eq("owner_user_id", ctx.sessionUserId);
+    .eq("owner_user_id", user.id);
 
   if (deleteErr) {
     return NextResponse.json({ ok: false, error: deleteErr.message }, { status: 500 });

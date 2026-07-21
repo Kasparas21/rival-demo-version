@@ -11,7 +11,7 @@ import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competit
 import { createDefaultLandingPages } from "@/lib/landing-page-tracker/create-defaults";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -223,13 +223,14 @@ async function insertBrandCompetitorMappings(
 }
 
 export async function GET(request: Request) {
-  const { supabase, user } = await getAuthenticatedUser();
-  if (!user) {
-    return NextResponse.json({ competitors: [] });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
+  if (user) {
+    await ensureUserProfile(supabase, user);
+  }
 
   const url = new URL(request.url);
   const requestedBrandId = url.searchParams.get("brandId");
@@ -351,6 +352,7 @@ export async function GET(request: Request) {
     competitors,
     workspace: {
       isViewer: ctx.isViewer,
+      isGuest: ctx.isGuest,
       role: ctx.role,
       dataUserId: ctx.dataUserId,
       owner: ctx.owner ?? null,
@@ -533,12 +535,11 @@ async function selectSavedCompetitorIdsBySlug(
 }
 
 export async function POST(request: Request) {
-  const { supabase, user } = await getAuthenticatedUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ ok: false }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
@@ -577,7 +578,7 @@ export async function POST(request: Request) {
   try {
     brandId = await resolveBrandId(
       supabase,
-      user.id,
+      dataUserId,
       requestedBrandId,
     );
   } catch (err) {
@@ -772,12 +773,11 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const { supabase, user } = await getAuthenticatedUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
@@ -804,7 +804,7 @@ export async function DELETE(request: Request) {
   try {
     brandId = await resolveBrandId(
       supabase,
-      user.id,
+      dataUserId,
       requestedBrandId,
     );
   } catch (err) {

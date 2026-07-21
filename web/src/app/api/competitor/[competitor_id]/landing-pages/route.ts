@@ -12,7 +12,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,14 +21,11 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function authorizeCompetitor(competitorId: string) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
+  }
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const { data: competitor } = await supabase
     .from("saved_competitors")
@@ -70,7 +67,7 @@ export async function GET(
   if ("error" in auth && auth.error) return auth.error;
   const { supabase, ctx, dataUserId } = auth as {
     supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
-    ctx: Awaited<ReturnType<typeof resolveWorkspaceContext>>;
+    ctx: import("@/lib/team/workspace-context").WorkspaceContext;
     dataUserId: string;
   };
 

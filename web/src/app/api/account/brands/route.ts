@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { adsProfileSetupV1, parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { syncWorkspaceBrandLibraryContextFromSetup } from "@/lib/account/sync-workspace-brand-library-context";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Json } from "@/lib/supabase/types";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { tierAllowsMultipleBrandWorkspaces } from "@/lib/billing/plan-limits";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import type { WorkspaceContext } from "@/lib/team/workspace-context";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
 
 const MISSING_ADS_PROFILE_SETUP_HELP =
@@ -24,16 +24,11 @@ function brandsDbErrorResponse(message: string | undefined): NextResponse {
 }
 
 export async function GET() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
@@ -51,15 +46,11 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
@@ -114,12 +105,15 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { user, ctx } = workspace;
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
   }
 
   let body: {
@@ -270,12 +264,15 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { user, ctx } = workspace;
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
   }
 
   let body: { id?: unknown };

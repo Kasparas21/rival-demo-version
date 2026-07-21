@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { savedEmailToCompetitorRow } from "@/lib/saved-emails/snapshot";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,18 +13,11 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   let parsed: z.infer<typeof bodySchema>;
   try {
     parsed = bodySchema.parse(await request.json());

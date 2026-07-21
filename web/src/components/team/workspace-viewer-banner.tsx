@@ -1,8 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { Eye } from "lucide-react";
 
 import { useWorkspaceContext } from "@/lib/team/use-workspace-context";
+
+function formatGuestExpiry(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 
 export function WorkspaceViewerBanner() {
   const { state, loading, switchWorkspace } = useWorkspaceContext();
@@ -10,6 +18,30 @@ export function WorkspaceViewerBanner() {
   if (loading || !state?.isViewer) return null;
 
   const label = state.owner?.displayLabel ?? "shared workspace";
+
+  if (state.isGuest) {
+    const expiryLabel = formatGuestExpiry(state.guestExpiresAt);
+    const signupNext = encodeURIComponent("/dashboard/spy");
+
+    return (
+      <div className="border-b border-amber-200/80 bg-amber-50/95 px-4 py-2.5 text-[13px] text-amber-950">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
+          <p className="inline-flex items-center gap-2 font-medium">
+            <Eye className="h-4 w-4 shrink-0" aria-hidden />
+            Temporary link access · read-only
+            {expiryLabel ? ` · expires ${expiryLabel}` : null}
+            {` · viewing ${label}'s workspace`}
+          </p>
+          <Link
+            href={`/signup?next=${signupNext}`}
+            className="rounded-full border border-amber-300/80 bg-white/80 px-3 py-1 text-[12px] font-semibold text-amber-950 hover:bg-white"
+          >
+            Create account to keep access
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="border-b border-amber-200/80 bg-amber-50/95 px-4 py-2.5 text-[13px] text-amber-950">
@@ -33,7 +65,7 @@ export function WorkspaceViewerBanner() {
 export function WorkspaceSwitcher() {
   const { state, loading, switchWorkspace } = useWorkspaceContext();
 
-  if (loading || !state || state.sharedWorkspaces.length === 0) return null;
+  if (loading || !state || state.isGuest || state.sharedWorkspaces.length === 0) return null;
 
   const value = state.isViewer ? state.dataUserId : "";
 

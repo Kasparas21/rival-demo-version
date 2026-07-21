@@ -6,8 +6,7 @@ import {
   quotaExceededResponseBody,
 } from "@/lib/billing/entitlements";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 function csvEscape(value: unknown): string {
   const s = value == null ? "" : String(value);
@@ -18,18 +17,11 @@ function csvEscape(value: unknown): string {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.limits.allowCsvExport && !billing.isUnlimited) {
     return NextResponse.json(featureNotAvailableResponseBody("CSV export"), { status: 403 });

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { normalizeLandingPageUrl } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import type { Database } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -12,16 +12,11 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function authorizePage(competitorId: string, pageId: string) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const { data: page, error } = await supabase
     .from("landing_pages")
@@ -165,16 +160,11 @@ export async function DELETE(
     return NextResponse.json({ ok: false, error: "Invalid id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const { data, error } = await supabase
     .from("landing_pages")

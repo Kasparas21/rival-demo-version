@@ -8,9 +8,9 @@ import {
   type BrandComparisonLlmResult,
 } from "@/lib/brand-comparison/run-brand-comparison-llm";
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import type { Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -84,16 +84,11 @@ async function resolveComparisonIds(params: {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {

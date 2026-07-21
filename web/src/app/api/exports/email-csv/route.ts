@@ -8,8 +8,7 @@ import {
 } from "@/lib/billing/entitlements";
 import { EMAIL_INSIGHTS_MAX_ROWS } from "@/lib/email-intelligence/constants";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -34,18 +33,11 @@ function parseOffers(raw: unknown): Array<{ type: string; value: string; code: s
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.limits.allowCsvExport && !billing.isUnlimited) {
     return NextResponse.json(featureNotAvailableResponseBody("CSV export"), { status: 403 });

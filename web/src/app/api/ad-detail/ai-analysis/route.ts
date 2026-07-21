@@ -11,10 +11,9 @@ import {
 } from "@/lib/billing/usage-quotas";
 import { llmFast } from "@/lib/llm/anthropic";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
 import { assertCanRunSharedAi } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -32,17 +31,12 @@ function stripJsonFences(text: string): string {
 type Body = { adId?: string };
 
 export async function POST(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   assertCanRunSharedAi(ctx);
-  const dataUserId = ctx.dataUserId;
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
@@ -224,16 +218,11 @@ Ad text:
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
   const adId = new URL(req.url).searchParams.get("adId")?.trim() ?? "";

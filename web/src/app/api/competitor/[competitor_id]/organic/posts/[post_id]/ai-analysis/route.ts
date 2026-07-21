@@ -15,10 +15,9 @@ import {
 } from "@/lib/organic-content/organic-post-ai-analysis-types";
 import { enrichOrganicPostForApi } from "@/lib/organic-content/post-display";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
 import { assertCanRunSharedAi } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -42,18 +41,12 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Invalid post_id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   assertCanRunSharedAi(ctx);
-  const dataUserId = ctx.dataUserId;
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {

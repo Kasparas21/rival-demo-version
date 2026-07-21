@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { savedEmailToCompetitorRow } from "@/lib/saved-emails/snapshot";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assertCanMutate } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -13,18 +12,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { data, error } = await supabase
     .from("saved_emails")
     .select("*")
@@ -51,23 +43,17 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Forbidden";
     return NextResponse.json({ ok: false, error: message }, { status: 403 });
   }
-  const dataUserId = ctx.dataUserId;
 
   const { error } = await supabase.from("saved_emails").delete().eq("id", id).eq("user_id", dataUserId);
 
@@ -83,23 +69,17 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await params;
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Forbidden";
     return NextResponse.json({ ok: false, error: message }, { status: 403 });
   }
-  const dataUserId = ctx.dataUserId;
 
   let body: unknown;
   try {

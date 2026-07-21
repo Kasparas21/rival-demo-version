@@ -42,7 +42,7 @@ import {
 } from "@/lib/ad-library/ads-cache-pick";
 import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
 import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -252,18 +252,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     typeof ids.snapchat === "string" && ids.snapchat.trim() ? ids.snapchat.trim() : undefined;
 
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const sessionUserId = user?.id ?? null;
   const skipCache = body.skipCache === true;
-  let userId = sessionUserId;
-  if (sessionUserId) {
-    const ctx = await resolveWorkspaceContext(supabase, sessionUserId);
-    userId = ctx.dataUserId;
+  const workspace = await getRequestWorkspace();
+  let userId: string | null = null;
+  if (workspace) {
+    userId = workspace.dataUserId;
     if (skipCache) {
       try {
-        assertCanScrape(ctx);
+        assertCanScrape(workspace.ctx);
       } catch (err) {
         return NextResponse.json(
           {

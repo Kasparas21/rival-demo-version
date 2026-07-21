@@ -15,6 +15,10 @@ import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { AWAITING_QUOTE_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { hasPrePaymentSetup, POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM } from "@/lib/ad-library/workspace-brand-initial-scrape";
+import {
+  readGuestSessionFromCookies,
+  validateGuestInviteAccess,
+} from "@/lib/team/guest-session";
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
 
@@ -38,6 +42,15 @@ function clearTesterInviteCookie(response: NextResponse): void {
     path: "/",
     maxAge: 0,
   });
+}
+
+async function hasValidGuestDashboardAccess(request: NextRequest): Promise<boolean> {
+  const payload = readGuestSessionFromCookies((name) => request.cookies.get(name)?.value);
+  if (!payload) return false;
+
+  const validation = await validateGuestInviteAccess(payload.inviteToken);
+  if (!validation.ok) return false;
+  return validation.row.owner_user_id === payload.ownerUserId;
 }
 
 export async function updateSession(request: NextRequest) {
@@ -78,6 +91,9 @@ export async function updateSession(request: NextRequest) {
     }
     /** Guest trial funnel: allow /onboarding before signup. */
     if (pathname === "/onboarding" || pathname.startsWith("/onboarding/")) {
+      return response;
+    }
+    if (pathname.startsWith("/dashboard") && (await hasValidGuestDashboardAccess(request))) {
       return response;
     }
     const redirectUrl = request.nextUrl.clone();

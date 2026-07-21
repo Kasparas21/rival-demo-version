@@ -8,8 +8,7 @@ import type { MetaAdCard, TikTokAdCard } from "@/lib/ad-library/normalize";
 import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview-url";
 import { libraryItemIdFromRawPayload, libraryItemKey, savedRowMatchesLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { isWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,18 +45,11 @@ function winnerLibraryKeysFromScrapedRow(
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   let parsed: z.infer<typeof bodySchema>;
   try {
     parsed = bodySchema.parse(await request.json());

@@ -11,9 +11,9 @@ import { canRunAdPreviewAnalysis, loadAdPreviewAnalysisUsage } from "@/lib/billi
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
 import { extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -141,19 +141,11 @@ async function lookupLibraryScrapedAd(
 }
 
 export async function GET(request: Request): Promise<NextResponse<AdDetailResponse>> {
-  const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { searchParams } = new URL(request.url);
   const adIdRaw = (searchParams.get("adId") ?? "").trim();
   const adParam = (searchParams.get("ad") ?? "").trim();

@@ -24,9 +24,21 @@ export function permissionDeniedResponse(err: unknown): NextResponse {
 }
 
 export function assertCanMutate(ctx: WorkspaceContext): void {
+  if (ctx.isGuest) {
+    throw new WorkspacePermissionError(
+      "Temporary link access is read-only. Create an account to make changes.",
+    );
+  }
   if (ctx.isViewer) {
     throw new WorkspacePermissionError("Read-only team viewer — this action is not allowed.");
   }
+}
+
+export function assertCanManageTeam(ctx: WorkspaceContext): void {
+  if (ctx.isGuest) {
+    throw new WorkspacePermissionError("Sign in to manage team members.");
+  }
+  assertCanMutate(ctx);
 }
 
 export function assertCanScrape(ctx: WorkspaceContext): void {
@@ -35,8 +47,4 @@ export function assertCanScrape(ctx: WorkspaceContext): void {
 
 export function assertCanRunSharedAi(_ctx: WorkspaceContext): void {
   // Viewers may trigger shared AI analysis on the owner's workspace.
-}
-
-export function assertCanManageTeam(ctx: WorkspaceContext): void {
-  assertCanMutate(ctx);
 }

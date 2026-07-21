@@ -7,9 +7,8 @@ import { scrapeOrganicCompetitor } from "@/lib/organic-content/scrape-competitor
 import { parseOrganicSocials, hasAnyOrganicSocial } from "@/lib/organic-content/socials";
 import { ORGANIC_PLATFORMS, type OrganicPlatform } from "@/lib/organic-content/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -46,17 +45,11 @@ export async function POST(
   const platforms = parsePlatforms((body as { platforms?: unknown } | null)?.platforms);
   const newPlatforms = parsePlatforms((body as { newPlatforms?: unknown } | null)?.newPlatforms);
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-
-  if (authErr || !user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx } = workspace;
   try {
     assertCanScrape(ctx);
   } catch (err) {

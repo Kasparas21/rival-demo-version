@@ -13,25 +13,18 @@ import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billin
 import { applyDemoInsightsBenchmarkFilter } from "@/lib/debug/demo-insights-filter";
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 /** GET — brand vs all competitors benchmark (cached by combined ads fingerprint). */
 export async function GET(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
@@ -62,7 +55,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       ) {
         const p = cached.payload as BenchmarkPayload;
         if (p.ok === true && p.aiSummary) {
-          console.log("[benchmark cache HIT]", { userId: user.id, fingerprint });
+          console.log("[benchmark cache HIT]", { userId: dataUserId, fingerprint });
           return NextResponse.json(
             applyDemoInsightsBenchmarkFilter(
               {
@@ -70,15 +63,15 @@ export async function GET(req: Request): Promise<NextResponse> {
                 fromCache: true,
                 computedAt: cached.computed_at ?? p.computedAt,
               },
-              user.email,
+              user?.email,
             ),
           );
         }
       } else {
-        console.log("[benchmark cache MISS]", { userId: user.id, fingerprint, hadRow: Boolean(cached) });
+        console.log("[benchmark cache MISS]", { userId: dataUserId, fingerprint, hadRow: Boolean(cached) });
       }
     } else {
-      console.log("[benchmark cache MISS]", { userId: user.id, reason: "force" });
+      console.log("[benchmark cache MISS]", { userId: dataUserId, reason: "force" });
     }
 
     const { payload, aiModel } = await buildBrandBenchmarkPayload({
@@ -104,7 +97,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       computedAt: payload.computedAt,
     });
 
-    return NextResponse.json(applyDemoInsightsBenchmarkFilter(payload, user.email));
+    return NextResponse.json(applyDemoInsightsBenchmarkFilter(payload, user?.email));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Benchmark failed";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });

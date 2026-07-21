@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import { clearSidebarCompetitorsForWorkspaceSwitch } from "@/lib/sidebar-competitors";
 
 export type WorkspaceContextState = {
-  sessionUserId: string;
+  sessionUserId: string | null;
   dataUserId: string;
   role: "owner" | "viewer";
   isViewer: boolean;
+  isGuest: boolean;
+  guestExpiresAt: string | null;
   owner: {
     ownerUserId: string;
     ownerEmail: string | null;
@@ -39,10 +41,12 @@ export function useWorkspaceContext() {
         throw new Error(json.error ?? "Failed to load workspace context");
       }
       setState({
-        sessionUserId: json.sessionUserId,
+        sessionUserId: json.sessionUserId ?? null,
         dataUserId: json.dataUserId,
         role: json.role,
         isViewer: json.isViewer,
+        isGuest: json.isGuest ?? false,
+        guestExpiresAt: json.guestExpiresAt ?? null,
         owner: json.owner ?? null,
         sharedWorkspaces: json.sharedWorkspaces ?? [],
       });

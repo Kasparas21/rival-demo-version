@@ -23,10 +23,12 @@ export function TeamChooseWorkspaceClient() {
         throw new Error(json.error ?? "Could not load workspaces");
       }
       setState({
-        sessionUserId: json.sessionUserId,
+        sessionUserId: json.sessionUserId ?? null,
         dataUserId: json.dataUserId,
         role: json.role,
         isViewer: json.isViewer,
+        isGuest: json.isGuest ?? false,
+        guestExpiresAt: json.guestExpiresAt ?? null,
         owner: json.owner ?? null,
         sharedWorkspaces: json.sharedWorkspaces ?? [],
       });

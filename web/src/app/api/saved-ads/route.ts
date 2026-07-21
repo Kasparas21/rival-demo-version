@@ -4,9 +4,8 @@ import { z } from "zod";
 import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { resolveScrapedAdIdForLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 import type { Database } from "@/lib/supabase/types";
 
@@ -22,18 +21,11 @@ const postBodySchema = z.object({
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   if (!competitorId) {
@@ -58,22 +50,16 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const { supabase, user, ctx, dataUserId } = workspace;
   try {
     assertCanMutate(ctx);
   } catch (err) {
     return permissionDeniedResponse(err);
   }
-  const dataUserId = ctx.dataUserId;
 
   let body: z.infer<typeof postBodySchema>;
   try {

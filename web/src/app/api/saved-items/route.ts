@@ -1,25 +1,17 @@
 import { NextResponse } from "next/server";
 
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
-
+  const { supabase, user, ctx, dataUserId } = workspace;
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   const summaryOnly = searchParams.get("summary") === "1";
@@ -27,7 +19,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const adsBlocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, competitorId);
+  const adsBlocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, dataUserId, competitorId);
   const adsBlockedResponse = adsBlocked !== null;
 
   const capabilities = {

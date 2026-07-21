@@ -4,24 +4,16 @@ import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import { buildPlatformScheduleDebug } from "@/lib/ad-library/platform-tracking-schedule";
 import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    const workspace = await getRequestWorkspace();
+  if (!workspace) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const url = new URL(req.url);
   const competitorId = url.searchParams.get("competitorId") ?? undefined;

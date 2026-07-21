@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Eye, Loader2 } from "lucide-react";
+import { ChevronDown, Eye, Loader2 } from "lucide-react";
 
 import { LoginForm } from "@/components/auth/login-form";
 import { RivalLogoImg } from "@/components/rival-logo";
@@ -26,15 +26,18 @@ function emailsMatch(sessionEmail: string | null | undefined, invitedEmail: stri
   return normalizeInviteEmail(sessionEmail) === normalizeInviteEmail(invitedEmail);
 }
 
-type AuthState = "pending" | "guest" | "matched" | "mismatch";
+type AuthState = "pending" | "guest-enter" | "matched" | "mismatch";
 
 export function TeamAcceptInviteClient({ token }: { token: string }) {
   const acceptPath = `/team/accept/${token}`;
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [entering, setEntering] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authState, setAuthState] = useState<AuthState>("pending");
+  const [showOptionalLogin, setShowOptionalLogin] = useState(false);
+  const autoEnteredRef = useRef(false);
   const autoAcceptedRef = useRef(false);
 
   const loadPreview = useCallback(async () => {
@@ -51,6 +54,28 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
       setError(err instanceof Error ? err.message : "Could not load invite");
     } finally {
       setLoading(false);
+    }
+  }, [token]);
+
+  const enterGuestWorkspace = useCallback(async () => {
+    setEntering(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/team/invite/${encodeURIComponent(token)}/enter`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.error ?? "Could not open workspace");
+      }
+      clearSidebarCompetitorsForWorkspaceSwitch();
+      window.location.href = "/dashboard/spy";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not open workspace";
+      setError(message);
+      setShowOptionalLogin(true);
+      setEntering(false);
     }
   }, [token]);
 
@@ -103,20 +128,29 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
   }, [loadPreview]);
 
   useEffect(() => {
-    if (loading || !preview?.invitedEmail) return;
+    if (loading || !preview) return;
 
     const supabase = createSupabaseBrowserClient();
     void supabase.auth
       .getUser()
       .then(({ data: { user } }) => {
-        if (!user) {
-          setAuthState("guest");
+        if (user) {
+          void tryAcceptForUser(user.email);
           return;
         }
-        void tryAcceptForUser(user.email);
+
+        if (autoEnteredRef.current) return;
+        autoEnteredRef.current = true;
+        setAuthState("guest-enter");
+        void enterGuestWorkspace();
       })
-      .catch(() => setAuthState("guest"));
-  }, [loading, preview?.invitedEmail, tryAcceptForUser]);
+      .catch(() => {
+        if (autoEnteredRef.current) return;
+        autoEnteredRef.current = true;
+        setAuthState("guest-enter");
+        void enterGuestWorkspace();
+      });
+  }, [enterGuestWorkspace, loading, preview, tryAcceptForUser]);
 
   const handleSignedIn = useCallback(async () => {
     const supabase = createSupabaseBrowserClient();
@@ -124,6 +158,7 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
       data: { user },
     } = await supabase.auth.getUser();
     setError(null);
+    setShowOptionalLogin(false);
     await tryAcceptForUser(user?.email);
   }, [tryAcceptForUser]);
 
@@ -131,10 +166,13 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
     const supabase = createSupabaseBrowserClient();
     await supabase.auth.signOut();
     autoAcceptedRef.current = false;
-    setAuthState("guest");
+    autoEnteredRef.current = false;
+    setAuthState("guest-enter");
     setError(null);
     setAccepting(false);
-  }, []);
+    setShowOptionalLogin(false);
+    void enterGuestWorkspace();
+  }, [enterGuestWorkspace]);
 
   const ownerLabel = preview?.owner?.displayLabel ?? "A teammate";
   const invitedEmail = preview?.invitedEmail?.trim() ?? "";
@@ -151,6 +189,14 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
     return (
       <InviteShell>
         <ErrorPanel message={error} />
+      </InviteShell>
+    );
+  }
+
+  if (entering || authState === "guest-enter") {
+    return (
+      <InviteShell>
+        <LoadingState message={`Opening ${ownerLabel}'s workspace…`} />
       </InviteShell>
     );
   }
@@ -186,26 +232,40 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
     );
   }
 
+  if (showOptionalLogin) {
+    return (
+      <InviteShell>
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/40 px-3 py-1.5 text-[12px] font-semibold text-amber-900 shadow-sm backdrop-blur-sm">
+          <Eye className="h-3.5 w-3.5" />
+          Team invite · read-only access
+        </div>
+        <div className={`w-full max-w-[440px] ${glassPanelClass} mb-4 text-center`}>
+          <p className="text-[15px] font-medium text-[#b42318]">{error ?? "This invite link is no longer valid."}</p>
+        </div>
+        <details className="w-full max-w-[440px]">
+          <summary className="flex cursor-pointer list-none items-center justify-center gap-1 text-[14px] font-semibold text-gray-800 [&::-webkit-details-marker]:hidden">
+            Sign in to save access to this workspace
+            <ChevronDown className="h-4 w-4" />
+          </summary>
+          <div className="mt-4">
+            <LoginForm
+              embedded
+              nextPath={acceptPath}
+              initialEmail={invitedEmail}
+              lockEmail={Boolean(invitedEmail)}
+              heading="Sign in to accept invite"
+              description={`${ownerLabel} invited you. Sign in with ${invitedEmail || "the invited email"} for persistent access.`}
+              onSignedIn={handleSignedIn}
+            />
+          </div>
+        </details>
+      </InviteShell>
+    );
+  }
+
   return (
     <InviteShell>
-      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/40 px-3 py-1.5 text-[12px] font-semibold text-amber-900 shadow-sm backdrop-blur-sm">
-        <Eye className="h-3.5 w-3.5" />
-        Team invite · read-only access
-      </div>
-      <LoginForm
-        embedded
-        nextPath={acceptPath}
-        initialEmail={invitedEmail}
-        lockEmail={Boolean(invitedEmail)}
-        heading="Accept workspace invite"
-        description={`${ownerLabel} invited you. Sign in with ${invitedEmail || "the invited email"} to join their workspace.`}
-        onSignedIn={handleSignedIn}
-      />
-      {error ? (
-        <p className="mt-4 max-w-[440px] rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-center text-[13px] font-medium text-[#b42318]">
-          {error}
-        </p>
-      ) : null}
+      <LoadingState message={`Opening ${ownerLabel}'s workspace…`} />
     </InviteShell>
   );
 }

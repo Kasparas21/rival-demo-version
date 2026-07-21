@@ -15,8 +15,7 @@ import {
 } from "@/lib/email-intelligence/api-queries";
 import { EMAIL_ANALYZE_BATCH_SIZE, EMAIL_INBOX_PAGE_SIZE } from "@/lib/email-intelligence/constants";
 import { syncCompetitorEmailsFromResend } from "@/lib/email-intelligence/sync-from-resend";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { getRequestWorkspace } from "@/lib/team/session-workspace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,17 +49,11 @@ export async function GET(
     return NextResponse.json({ error: "Invalid competitor_id" }, { status: 400 });
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  const workspace = await getRequestWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  const ctx = await resolveWorkspaceContext(supabase, user.id);
-  const dataUserId = ctx.dataUserId;
+  const { supabase, user, ctx, dataUserId } = workspace;
 
   const { data: tracker, error: trackerErr } = await supabase
     .from("competitor_email_trackers")
