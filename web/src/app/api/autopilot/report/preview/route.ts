@@ -7,6 +7,7 @@ import { buildReportPublicUrl } from "@/lib/autopilot/watch-deep-links";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,7 +23,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!canEnableReports(billing.planTier)) {
     return NextResponse.json({ ok: false, error: "Auto-report requires Pro or Agency" }, { status: 403 });
   }
@@ -43,7 +47,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { data: recent } = await supabase
     .from("autopilot_outputs")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("output_type", "monthly_report")
     .like("dedupe_key", `report_preview:${user.id}:%`)
     .gte("created_at", `${today}T00:00:00.000Z`)
@@ -65,7 +69,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { data: output } = await admin
     .from("autopilot_outputs")
     .select("id")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .like("dedupe_key", `report_preview:${user.id}:${parsed.data.brandId}:${today}`)
     .maybeSingle();
 

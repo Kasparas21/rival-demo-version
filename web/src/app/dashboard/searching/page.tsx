@@ -67,13 +67,13 @@ import {
 import { inferAdLibraryRegionDefaults } from "@/lib/ad-library/infer-ad-library-regions-from-domain";
 import { regionsToPersistedPayload } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import {
-  applyInitialScrapeLimits,
+  buildInitialDiscoveryScrapeFields,
+  INITIAL_DISCOVERY_META_STATUS,
   mergeScrapeFieldsWithWorkspaceMarkets,
   primaryWorkspaceAdMarketIso2,
   readScrapeRequestFieldsFromStorage,
 } from "@/lib/ad-library/scrape-request-fields";
 import {
-  buildWorkspaceBrandInitialScrapeFields,
   loadWorkspaceBrandScrapeContext,
   platformIdentifierFromScrapeIds,
   WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM,
@@ -572,9 +572,7 @@ function SearchingContent() {
         readScrapeRequestFieldsFromStorage(),
         options?.adMarketCountryCodes ?? null,
       );
-      const scrape = isWorkspaceInitial
-        ? buildWorkspaceBrandInitialScrapeFields(baseScrapeFields)
-        : applyInitialScrapeLimits(baseScrapeFields);
+      const scrape = buildInitialDiscoveryScrapeFields(baseScrapeFields);
       const tiktokRegion = normalizeTikTokAdsRegion(adLibraryRegions.tiktokRegion);
       const googleRegion = normalizeGoogleAdsRegion(adLibraryRegions.googleRegion);
       const googleResultsLimit = getInitialAdsCount("google");
@@ -588,7 +586,7 @@ function SearchingContent() {
         }),
         ids: mergedIds,
         libraryChannels: channelsForScan,
-        metaStatus: "ACTIVE" as const,
+        metaStatus: INITIAL_DISCOVERY_META_STATUS,
         googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
         metaMaxAds: scrape.metaMaxAds,
         metaCountry: adLibraryRegions.metaCountry.trim().toUpperCase() || "ALL",
@@ -614,7 +612,6 @@ function SearchingContent() {
         ...(adsPlatforms.includes("tiktok") ? { tiktokRegion } : {}),
         ...(adsPlatforms.includes("google") ? { googleRegion, googleResultsLimit } : {}),
         ...(adsPlatforms.includes("pinterest") ? { pinterestCountry } : {}),
-        ...(isWorkspaceInitial ? { metaWorkspaceBrandInitialScrape: true } : {}),
       };
       const payloadKey = stableAdsLibraryPayloadKey(payload);
       const scanDomain = payload.brand.domain;
@@ -692,7 +689,7 @@ function SearchingContent() {
           setIsFinalizingLibrary(true);
           setScanProgress(100);
 
-          const clientScrapeFields = buildWorkspaceBrandInitialScrapeFields(
+          const clientScrapeFields = buildInitialDiscoveryScrapeFields(
             mergeScrapeFieldsWithWorkspaceMarkets(
               readScrapeRequestFieldsFromStorage(),
               options?.adMarketCountryCodes ?? null,
@@ -722,6 +719,7 @@ function SearchingContent() {
             tiktokRegion,
             googleRegion,
             pinterestCountry,
+            metaStatus: INITIAL_DISCOVERY_META_STATUS,
           });
 
           const readiness = await finalizeWorkspaceBrandAdsLibraryForNavigation({

@@ -11,6 +11,8 @@ import { syncLandingPagesFromCompetitorAds } from "@/lib/landing-page-tracker/sy
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
+import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,18 +27,21 @@ async function authorizeCompetitor(competitorId: string) {
   } = await supabase.auth.getUser();
   if (!user) return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data: competitor } = await supabase
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!competitor) {
     return { error: NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 }) };
   }
 
-  return { supabase, user };
+  return { supabase, user, ctx, dataUserId };
 }
 
 type LatestSnapshot = {
@@ -63,23 +68,29 @@ export async function GET(
 
   const auth = await authorizeCompetitor(competitorId);
   if ("error" in auth && auth.error) return auth.error;
-  const { supabase, user } = auth as { supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>; user: { id: string } };
+  const { supabase, ctx, dataUserId } = auth as {
+    supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+    ctx: Awaited<ReturnType<typeof resolveWorkspaceContext>>;
+    dataUserId: string;
+  };
 
   const admin = createSupabaseAdminClient();
-  await ensureDefaultLandingPagesForCompetitor(admin, competitorId, user.id);
+  if (!ctx.isViewer) {
+    await ensureDefaultLandingPagesForCompetitor(admin, competitorId, dataUserId);
 
-  const { data: competitorRow } = await admin
-    .from("saved_competitors")
-    .select("brand_domain, slug")
-    .eq("id", competitorId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  const website = competitorRow?.brand_domain?.trim() || competitorRow?.slug?.trim();
-  if (website) {
-    try {
-      await syncLandingPagesFromCompetitorAds(admin, competitorId, user.id, website);
-    } catch (syncErr) {
-      console.error("[landing-pages] sync from ads failed", syncErr);
+    const { data: competitorRow } = await admin
+      .from("saved_competitors")
+      .select("brand_domain, slug")
+      .eq("id", competitorId)
+      .eq("user_id", dataUserId)
+      .maybeSingle();
+    const website = competitorRow?.brand_domain?.trim() || competitorRow?.slug?.trim();
+    if (website) {
+      try {
+        await syncLandingPagesFromCompetitorAds(admin, competitorId, dataUserId, website);
+      } catch (e) {
+        console.warn("[landing-pages] sync from ads failed", e);
+      }
     }
   }
 
@@ -87,7 +98,7 @@ export async function GET(
     .from("landing_pages")
     .select("*")
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("added_at", { ascending: true });
 
   if (pagesError) {
@@ -113,7 +124,7 @@ export async function GET(
     }
   }
 
-  const snapshotByGroupKey = await loadSnapshotMapForCompetitor(supabase, competitorId, user.id);
+  const snapshotByGroupKey = await loadSnapshotMapForCompetitor(supabase, competitorId, dataUserId);
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
 
   const trackedPages = (pages ?? [])

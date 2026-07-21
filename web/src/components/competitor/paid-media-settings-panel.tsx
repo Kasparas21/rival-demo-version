@@ -47,7 +47,8 @@ import {
   resolveScheduledScrapeRegions,
 } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import {
-  applyInitialScrapeLimits,
+  buildInitialDiscoveryScrapeFields,
+  INITIAL_DISCOVERY_META_STATUS,
   readScrapeRequestFieldsFromStorage,
 } from "@/lib/ad-library/scrape-request-fields";
 import { LINKEDIN_COUNTRY_OPTIONS, META_COUNTRY_OPTIONS } from "@/lib/ad-library/scrape-settings-options";
@@ -314,7 +315,7 @@ export function CompetitorPaidMediaSettingsPanel({
     if (platformsToScrape.length === 0) return true;
 
     const allPlatforms = channelsQueryToAdsPlatforms(channels);
-    const scrapeFields = applyInitialScrapeLimits({
+    const scrapeFields = buildInitialDiscoveryScrapeFields({
       ...readScrapeRequestFieldsFromStorage(),
       metaCountry: regions.metaCountry.trim().toUpperCase() || "ALL",
       linkedinCountryCode: regions.linkedinCountryCode.trim(),
@@ -333,6 +334,7 @@ export function CompetitorPaidMediaSettingsPanel({
       tiktokRegion: regions.tiktokRegion,
       googleRegion: regions.googleRegion,
       pinterestCountry: regions.pinterestCountry,
+      metaStatus: INITIAL_DISCOVERY_META_STATUS,
     });
 
     const apiPayload = {

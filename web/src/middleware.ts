@@ -169,8 +169,11 @@ export const config = {
     "/admin",
     "/admin/:path*",
     "/invite/:path*",
+    "/team",
+    "/team/:path*",
     "/dashboard",
     "/dashboard/:path*",
     "/api/account/:path*",
+    "/api/team/:path*",
   ],
 };

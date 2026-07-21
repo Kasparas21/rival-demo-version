@@ -5,6 +5,7 @@ import { maybeDetectMoves } from "@/lib/comparison/maybe-detect-moves";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
@@ -363,6 +364,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
   const brandId = url.searchParams.get("brandId");
@@ -370,7 +374,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  const wsRow = await loadWorkspaceBrandRow(supabase, user.id, brandId);
+  const wsRow = await loadWorkspaceBrandRow(supabase, dataUserId, brandId);
   if (!wsRow) {
     return NextResponse.json(
       { ok: false, error: "Workspace brand not configured. Complete onboarding or link a workspace competitor." },
@@ -381,23 +385,25 @@ export async function GET(req: Request): Promise<NextResponse> {
   const wsDomainHint = (wsRow.brand_domain?.trim() || wsRow.slug || "").toLowerCase();
   const wsMeta = metaFromSavedRow(wsRow, wsDomainHint || "workspace");
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, competitorDomain);
-  const rivalMeta = await loadSavedCompetitorForUser(supabase, user.id, competitorDomain);
+  if (!ctx.isViewer) {
+    await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, competitorDomain);
+  }
+  const rivalMeta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
   const [activeWsAds, wsResolved, rivalResolved] = await Promise.all([
-    countActiveAdsForCompetitor(supabase, user.id, wsRow.id),
+    countActiveAdsForCompetitor(supabase, dataUserId, wsRow.id),
     resolveSidePayload({
       supabase,
-      userId: user.id,
+      userId: dataUserId,
       competitorId: wsRow.id,
       domainHint: wsDomainHint || wsMeta.domain,
     }),
     resolveSidePayload({
       supabase,
-      userId: user.id,
+      userId: dataUserId,
       competitorId: rivalMeta.competitorId,
       domainHint: rivalMeta.brandDomain ?? rivalMeta.cacheDomain,
     }),
@@ -414,11 +420,13 @@ export async function GET(req: Request): Promise<NextResponse> {
     lastMoveDetectionAt: rivalMeta.lastMoveDetectionAt,
   };
 
-  scheduleMoveDetection({
-    userId: user.id,
-    workspaceId: wsRow.id,
-    rivalId: rivalMeta.competitorId,
-  });
+  if (!ctx.isViewer) {
+    scheduleMoveDetection({
+      userId: dataUserId,
+      workspaceId: wsRow.id,
+      rivalId: rivalMeta.competitorId,
+    });
+  }
 
   const [
     wsMoves,
@@ -430,14 +438,14 @@ export async function GET(req: Request): Promise<NextResponse> {
     wsAudienceHistory,
     rivalAudienceHistory,
   ] = await Promise.all([
-    loadRecentMoves(supabase, user.id, wsRow.id),
-    loadRecentMoves(supabase, user.id, rivalMeta.competitorId),
-    countStrategySnapshots(supabase, user.id, wsRow.id),
-    countStrategySnapshots(supabase, user.id, rivalMeta.competitorId),
-    resolveDerivedStats(supabase, user.id, wsRow.id, wsResolved.payload),
-    resolveDerivedStats(supabase, user.id, rivalMeta.competitorId, rivalResolved.payload),
-    loadAudienceHistory(supabase, user.id, wsRow.id),
-    loadAudienceHistory(supabase, user.id, rivalMeta.competitorId),
+    loadRecentMoves(supabase, dataUserId, wsRow.id),
+    loadRecentMoves(supabase, dataUserId, rivalMeta.competitorId),
+    countStrategySnapshots(supabase, dataUserId, wsRow.id),
+    countStrategySnapshots(supabase, dataUserId, rivalMeta.competitorId),
+    resolveDerivedStats(supabase, dataUserId, wsRow.id, wsResolved.payload),
+    resolveDerivedStats(supabase, dataUserId, rivalMeta.competitorId, rivalResolved.payload),
+    loadAudienceHistory(supabase, dataUserId, wsRow.id),
+    loadAudienceHistory(supabase, dataUserId, rivalMeta.competitorId),
   ]);
 
   const workspace: ComparisonSideResponse = {

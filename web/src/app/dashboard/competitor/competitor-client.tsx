@@ -21,6 +21,7 @@ import { setupGlobalCacheInvalidator } from "@/lib/cache/cache-invalidator";
 import { evictBulkyLocalStorageCaches } from "@/lib/cache/storage-quota";
 import { findSidebarRowForHost, resolveCompetitorViewFromSidebar } from "@/lib/competitor-view-resolve";
 import { useActiveBrand } from "../brand-context";
+import { useWorkspaceContext } from "@/lib/team/use-workspace-context";
 import { RivalLoadingBlock, RivalLogoVideo } from "@/components/ui/rival-loading";
 import {
   MetaLogo,
@@ -1268,6 +1269,8 @@ function CompetitorDashboardBody({
   confirmedParam,
 }: CompetitorDashboardBodyProps) {
   const myBrand = useActiveBrand();
+  const { state: workspaceState } = useWorkspaceContext();
+  const isWorkspaceViewer = workspaceState?.isViewer ?? false;
   const [sidebarSnapshot, setSidebarSnapshot] = useState<SidebarCompetitor[] | undefined>(undefined);
   const [sidebarSnapshotBrandId, setSidebarSnapshotBrandId] = useState<string | null>(null);
   useEffect(() => {
@@ -1387,7 +1390,8 @@ function CompetitorDashboardBody({
   const showBrandDebugTabs =
     process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
 
-  const ownBrandSavedAdsEnabled = !isOwnWorkspace || showBrandDebugTabs;
+  const ownBrandSavedAdsEnabled =
+    (!isOwnWorkspace || showBrandDebugTabs) && !isWorkspaceViewer;
 
   const pageTabs = useMemo(
     () => competitorPageTabsForView({ isOwnWorkspace, showDebugTabs: showBrandDebugTabs }),
@@ -3028,7 +3032,10 @@ function CompetitorDashboardBody({
   );
 
   const manualRefreshDisabled =
-    !canManualRefresh || !manualRefreshStatus?.canRefreshNow || manualRefreshBusyPlatform != null;
+    isWorkspaceViewer ||
+    !canManualRefresh ||
+    !manualRefreshStatus?.canRefreshNow ||
+    manualRefreshBusyPlatform != null;
 
   const savedAdsLibraryItems = useMemo(() => {
     if (navTab !== "ads library") return [];
@@ -3814,7 +3821,7 @@ function CompetitorDashboardBody({
         onSavedHubOpen={() => setSavedHubOpen(true)}
       />
 
-      {isOwnWorkspace ? (
+      {isOwnWorkspace && !isWorkspaceViewer ? (
         <div className={`${COMPETITOR_PAGE_X} pt-4`}>
           <WorkspaceSetupChecklist
             hasAdsSetup={Boolean(myBrand.adsSetup?.channels?.length)}
@@ -3852,7 +3859,7 @@ function CompetitorDashboardBody({
           </div>
         </KeepMountedTab>
         <KeepMountedTab
-          active={navSub === "paid-media-settings" && isOwnWorkspace}
+          active={navSub === "paid-media-settings" && isOwnWorkspace && !isWorkspaceViewer}
           className="!flex-none flex-col"
         >
           <div className="bg-transparent">

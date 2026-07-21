@@ -14,6 +14,7 @@ import { applyDemoInsightsBenchmarkFilter } from "@/lib/debug/demo-insights-filt
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -29,7 +30,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Start your subscription to view your brand benchmark."),
@@ -42,13 +46,13 @@ export async function GET(req: Request): Promise<NextResponse> {
   const brandId = url.searchParams.get("brandId");
 
   try {
-    const fingerprint = await computeBenchmarkCombinedFingerprint(supabase, user.id, brandId);
+    const fingerprint = await computeBenchmarkCombinedFingerprint(supabase, dataUserId, brandId);
     if (!fingerprint) {
       return NextResponse.json({ ok: false, error: "Workspace brand not found" }, { status: 404 });
     }
 
     if (!force) {
-      const cached = await readBrandBenchmarkCache(supabase, user.id);
+      const cached = await readBrandBenchmarkCache(supabase, dataUserId);
 
       if (
         cached?.payload &&
@@ -79,7 +83,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
     const { payload, aiModel } = await buildBrandBenchmarkPayload({
       supabase,
-      userId: user.id,
+      userId: dataUserId,
       brandId,
       skipLlm: false,
     });
@@ -93,7 +97,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
     const admin = createSupabaseAdminClient();
     await writeBrandBenchmarkCache(admin, {
-      userId: user.id,
+      userId: dataUserId,
       combinedFingerprint: payload.combinedFingerprint,
       payload: sanitizeJsonForPostgres({ ...payload, fromCache: false }) as BenchmarkPayload,
       aiModel,

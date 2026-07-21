@@ -31,6 +31,8 @@ import {
 } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
+import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -136,6 +138,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanScrape(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
+  }
+  const dataUserId = ctx.dataUserId;
+
   let competitorId: string;
   let requestedPlatforms: AdsLibraryPlatform[] | undefined;
   try {
@@ -161,7 +171,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     .from("saved_competitors")
     .select("id, slug, brand_domain, brand_name, name, ads_library_context")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (compErr || !row) {

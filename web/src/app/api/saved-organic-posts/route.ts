@@ -4,6 +4,8 @@ import { z } from "zod";
 import { organicPostDisplayFields } from "@/lib/organic-content/post-display";
 import type { OrganicPlatform } from "@/lib/organic-content/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanMutate } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 import type { Database, Json } from "@/lib/supabase/types";
 
@@ -25,6 +27,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   if (!competitorId) {
@@ -34,7 +39,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { data, error } = await supabase
     .from("saved_organic_posts")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .order("saved_at", { ascending: false });
 
@@ -55,6 +60,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Forbidden";
+    return NextResponse.json({ ok: false, error: message }, { status: 403 });
+  }
+  const dataUserId = ctx.dataUserId;
+
   let body: z.infer<typeof postBodySchema>;
   try {
     body = postBodySchema.parse(await request.json());
@@ -66,7 +80,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .from("organic_posts")
     .select("*")
     .eq("id", body.organicPostId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (srcErr || !srcPost) {
@@ -76,7 +90,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: existing } = await supabase
     .from("saved_organic_posts")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", srcPost.competitor_id)
     .eq("source_organic_post_id", srcPost.id)
     .maybeSingle();
@@ -88,7 +102,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const display = organicPostDisplayFields(srcPost.raw_data, srcPost.platform as OrganicPlatform);
 
   const insert: Database["public"]["Tables"]["saved_organic_posts"]["Insert"] = {
-    user_id: user.id,
+    user_id: dataUserId,
     competitor_id: srcPost.competitor_id,
     source_organic_post_id: srcPost.id,
     platform: srcPost.platform,

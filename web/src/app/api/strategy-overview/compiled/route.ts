@@ -2,6 +2,8 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
@@ -70,17 +72,30 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const domain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
   const force = url.searchParams.get("force") === "1" || url.searchParams.get("force") === "true";
+
+  if (force) {
+    try {
+      assertCanMutate(ctx);
+    } catch (err) {
+      return permissionDeniedResponse(err);
+    }
+  }
 
   if (!domain) {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, domain);
+  if (!ctx.isViewer) {
+    await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, domain);
+  }
 
-  const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
+  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -92,7 +107,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     try {
       const { channelSignals, journeyGoal } = await buildStrategyRuntimeLayers(
         supabase,
-        user.id,
+        dataUserId,
         meta.competitorId,
         p.map,
         meta.brandDomain ?? meta.cacheDomain ?? null,
@@ -105,7 +120,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   };
 
   if (!force) {
-    const cached = await getCachedStrategyOverview(supabase, user.id, meta.competitorId, domain);
+    const cached = await getCachedStrategyOverview(supabase, dataUserId, meta.competitorId, domain);
     if (cached) {
       return NextResponse.json(
         {
@@ -123,7 +138,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   }
 
   const staleEarly = !force
-    ? await getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId)
+    ? await getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId)
     : null;
   if (staleEarly) {
     const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
@@ -145,23 +160,25 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  const hydrateResult = await tryHydrateScrapedAdsFromAdsCache(supabase, {
-    userId: user.id,
-    competitorId: meta.competitorId,
-    domainHint: domain,
-  });
-  if (!hydrateResult.ok) {
-    console.error("[compiled] hydrate_from_ads_cache", hydrateResult);
+  if (!ctx.isViewer) {
+    const hydrateResult = await tryHydrateScrapedAdsFromAdsCache(supabase, {
+      userId: dataUserId,
+      competitorId: meta.competitorId,
+      domainHint: domain,
+    });
+    if (!hydrateResult.ok) {
+      console.error("[compiled] hydrate_from_ads_cache", hydrateResult);
+    }
   }
 
   if (force) {
-    const stale = await getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId);
+    const stale = await getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId);
     if (stale) {
       const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
-      if (!running) {
+      if (!running && !ctx.isViewer) {
         scheduleBackgroundRecompute({
           competitorDomain: domain,
-          userId: user.id,
+          userId: dataUserId,
           competitorId: meta.competitorId,
           stealLock: true,
           refreshAdEnrichment: true,
@@ -187,7 +204,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     .from("scraped_ads")
     .select(SCRAPED_ADS_DERIVATION_SELECT)
     .eq("competitor_id", meta.competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("is_active", true)
     .limit(1000);
 
@@ -198,7 +215,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const rows = adsRows ?? [];
   if (rows.length === 0) {
     const [stale, running] = await Promise.all([
-      getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId),
+      getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId),
       isStrategyRecomputeRunning(supabase, meta.competitorId),
     ]);
     const empty = buildNoAdsFoundPayload({
@@ -208,10 +225,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     });
     const outPayload = normalizeCompetitorStrategyOverviewPayload(stale ?? empty);
 
-    if (!running) {
+    if (!running && !ctx.isViewer) {
       scheduleBackgroundRecompute({
         competitorDomain: domain,
-        userId: user.id,
+        userId: dataUserId,
         competitorId: meta.competitorId,
         stealLock: force,
         refreshAdEnrichment: force,
@@ -240,7 +257,7 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   let quickPayload = await deriveAndPersistFastPathStrategyOverview({
     supabase,
-    userId: user.id,
+    userId: dataUserId,
     competitorId: meta.competitorId,
     domainHint: domain,
     meta,
@@ -253,7 +270,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   ]);
 
   if (!quickPayload) {
-    const stale = await getStaleStrategyOverviewPayload(supabase, user.id, meta.competitorId);
+    const stale = await getStaleStrategyOverviewPayload(supabase, dataUserId, meta.competitorId);
     if (stale) {
       quickPayload = normalizeCompetitorStrategyOverviewPayload(stale);
     } else {
@@ -264,10 +281,10 @@ export async function GET(req: Request): Promise<NextResponse> {
       });
       quickPayload = normalizeCompetitorStrategyOverviewPayload(empty);
     }
-    if (!running) {
+    if (!running && !ctx.isViewer) {
       scheduleBackgroundRecompute({
         competitorDomain: domain,
-        userId: user.id,
+        userId: dataUserId,
         competitorId: meta.competitorId,
         stealLock: force,
         refreshAdEnrichment: force,
@@ -289,10 +306,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     );
   }
 
-  if (scrapeIsNewer && !running) {
+  if (scrapeIsNewer && !running && !ctx.isViewer) {
     scheduleBackgroundRecompute({
       competitorDomain: domain,
-      userId: user.id,
+      userId: dataUserId,
       competitorId: meta.competitorId,
       stealLock: false,
       refreshAdEnrichment: force,

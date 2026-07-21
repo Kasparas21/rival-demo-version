@@ -10,6 +10,7 @@ import { sanitizeInsightItem } from "@/lib/organic-content/insight-utils";
 import { toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import { parseOrganicSocials } from "@/lib/organic-content/socials";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireCompetitorAccess } from "@/lib/team/competitor-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -111,11 +112,15 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const access = await requireCompetitorAccess(supabase, user.id, competitorId);
+  if (access instanceof NextResponse) return access;
+  const { dataUserId } = access;
+
   const { data: competitor, error: compErr } = await supabase
     .from("saved_competitors")
     .select("id, socials, organic_next_scrape_at, organic_last_scraped_at")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (compErr) {
@@ -131,7 +136,7 @@ export async function GET(
       "id, post_id, platform, content, media_urls, likes, comments, shares, views, posted_at, raw_data",
     )
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("posted_at", { ascending: false })
     .limit(100);
 
@@ -152,7 +157,7 @@ export async function GET(
     .from("organic_insights")
     .select("*")
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("platform", platform)
     .order("generated_at", { ascending: false })
     .limit(1)
@@ -183,7 +188,7 @@ export async function GET(
       .from("organic_insights")
       .select("*")
       .eq("competitor_id", competitorId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .neq("platform", "all");
 
     const merged = mergePlatformInsights((platformInsights ?? []) as InsightRow[]);
@@ -223,7 +228,7 @@ export async function GET(
     .from("organic_posts")
     .select("platform")
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id);
+    .eq("user_id", dataUserId);
 
   const platformsWithPosts = [...new Set((platformRows ?? []).map((r) => r.platform))];
 
@@ -252,7 +257,7 @@ export async function GET(
       .from("organic_posts")
       .select("id, post_id, platform, content, media_urls, likes, comments, shares, views, posted_at, raw_data")
       .eq("competitor_id", competitorId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .in("post_id", [...postIds]);
     linkedPosts = (linkedRaw ?? []).map((post) => toOrganicPostClientPayload(post));
   }

@@ -8,6 +8,8 @@ import { parseOrganicSocials, hasAnyOrganicSocial } from "@/lib/organic-content/
 import { ORGANIC_PLATFORMS, type OrganicPlatform } from "@/lib/organic-content/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -54,7 +56,15 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const competitor = await resolveCompetitorForUser(supabase, user.id, { competitorId });
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanScrape(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
+  }
+  const dataUserId = ctx.dataUserId;
+
+  const competitor = await resolveCompetitorForUser(supabase, dataUserId, { competitorId });
   if (!competitor) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -63,7 +73,7 @@ export async function POST(
     .from("saved_competitors")
     .select("id, user_id, socials, organic_baseline_date, name")
     .eq("id", competitor.id)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (rowErr) {

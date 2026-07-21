@@ -4,6 +4,8 @@ import { z } from "zod";
 import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
 import { buildSavedEmailInsert } from "@/lib/saved-emails/snapshot";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanMutate } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 import type { Database } from "@/lib/supabase/types";
 
@@ -25,6 +27,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   if (!competitorId) {
@@ -34,7 +39,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { data, error } = await supabase
     .from("saved_emails")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .order("saved_at", { ascending: false });
 
@@ -55,6 +60,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Forbidden";
+    return NextResponse.json({ ok: false, error: message }, { status: 403 });
+  }
+  const dataUserId = ctx.dataUserId;
+
   let body: z.infer<typeof postBodySchema>;
   try {
     body = postBodySchema.parse(await request.json());
@@ -68,7 +82,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .from("competitor_emails")
     .select("*")
     .eq("id", emailId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (srcErr || !srcEmail) {
@@ -78,7 +92,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: existing } = await supabase
     .from("saved_emails")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", srcEmail.competitor_id)
     .eq("source_competitor_email_id", srcEmail.id)
     .maybeSingle();
@@ -89,7 +103,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         .from("saved_emails")
         .update({ notes: body.notes.slice(0, 500) })
         .eq("id", existing.id)
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .select()
         .single();
       if (updErr) {
@@ -102,7 +116,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const insert: Database["public"]["Tables"]["saved_emails"]["Insert"] = buildSavedEmailInsert(
     srcEmail,
-    user.id,
+    dataUserId,
     body.notes,
   );
 

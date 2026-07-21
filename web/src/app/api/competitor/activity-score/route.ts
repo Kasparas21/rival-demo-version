@@ -7,6 +7,8 @@ import { SIGNAL_WEIGHTS as W } from "@/lib/activity-score/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -81,6 +83,9 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   if (!competitorId) {
@@ -91,7 +96,7 @@ export async function GET(
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .single();
 
   if (compErr || !competitor) {
@@ -101,7 +106,7 @@ export async function GET(
   const { data: row, error: rowErr } = await supabase
     .from("competitor_activity_scores")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .maybeSingle();
 
@@ -113,12 +118,14 @@ export async function GET(
     const calculatedAt = row.calculated_at;
     const age = Date.now() - new Date(calculatedAt).getTime();
     if (age > CACHE_MS) {
-      scheduleActivityScoreRecompute(user.id, competitorId);
+      if (!ctx.isViewer) {
+        scheduleActivityScoreRecompute(dataUserId, competitorId);
+      }
       return NextResponse.json({
         ok: true,
         ...rowToResult(row),
         calculatedAt,
-        staleRefreshing: true,
+        staleRefreshing: !ctx.isViewer,
       });
     }
     return NextResponse.json({
@@ -128,9 +135,13 @@ export async function GET(
     });
   }
 
+  if (ctx.isViewer) {
+    return NextResponse.json({ ok: false, error: "Activity score not available yet" }, { status: 404 });
+  }
+
   const admin = createSupabaseAdminClient();
   const fresh = await computeActivityScore({
-    userId: user.id,
+    userId: dataUserId,
     competitorId,
     supabaseAdmin: admin,
   });
@@ -154,6 +165,16 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err) as NextResponse<
+      { ok: boolean; error?: string } & Partial<ActivityScoreApiBody>
+    >;
+  }
+  const dataUserId = ctx.dataUserId;
+
   let competitorId: string | null = null;
   try {
     const body = (await request.json()) as { competitorId?: string };
@@ -173,7 +194,7 @@ export async function POST(
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .single();
 
   if (compErr || !competitor) {
@@ -182,7 +203,7 @@ export async function POST(
 
   const admin = createSupabaseAdminClient();
   const fresh = await computeActivityScore({
-    userId: user.id,
+    userId: dataUserId,
     competitorId,
     supabaseAdmin: admin,
   });

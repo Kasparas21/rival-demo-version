@@ -10,6 +10,8 @@ import {
   loadManualRefreshUsageForCompetitor,
 } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +26,14 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (authErr || !user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanScrape(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
+  }
+  const dataUserId = ctx.dataUserId;
 
   let competitorId = "";
   try {
@@ -41,14 +51,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!row) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Start your subscription to refresh competitor ads.", "pro"),
@@ -59,7 +69,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json(featureNotAvailableResponseBody("Manual refresh"), { status: 403 });
   }
 
-  const manualUsage = await loadManualRefreshUsageForCompetitor(supabase, user.id, competitorId);
+  const manualUsage = await loadManualRefreshUsageForCompetitor(supabase, dataUserId, competitorId);
   const manualCheck = canPerformManualRefresh(billing, manualUsage);
   if (!manualCheck.ok) {
     return NextResponse.json({ ok: false, error: manualCheck.error }, { status: manualCheck.status });

@@ -70,6 +70,21 @@ export function clearSidebarCompetitorsStorageForSignOut(): void {
   }
 }
 
+const ACTIVE_WORKSPACE_STORAGE_KEY = "rival_active_workspace";
+
+/** Clear brand/sidebar cache when switching between own workspace and a shared owner workspace. */
+export function clearSidebarCompetitorsForWorkspaceSwitch(): void {
+  if (typeof window === "undefined") return;
+  try {
+    removeAllSidebarCompetitorStorage();
+    localStorage.removeItem(ACTIVE_BRAND_STORAGE_KEY);
+    localStorage.removeItem(ACTIVE_WORKSPACE_STORAGE_KEY);
+    window.dispatchEvent(new Event(SIDEBAR_COMPETITORS_EVENT));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function clearSidebarCompetitorsForBrand(brandId: string): void {
   if (typeof window === "undefined" || !brandId.trim()) return;
   try {

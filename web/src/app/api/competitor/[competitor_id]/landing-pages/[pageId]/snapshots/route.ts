@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,12 +40,15 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data: landingPage } = await supabase
     .from("landing_pages")
     .select("id")
     .eq("id", pageId)
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!landingPage) {
@@ -55,7 +59,7 @@ export async function GET(
     .from("landing_page_snapshots")
     .select("*", { count: "exact" })
     .eq("landing_page_id", pageId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("taken_at", { ascending: false })
     .range(from, to);
 

@@ -23,6 +23,7 @@ export type Database = {
           last_weekly_digest_sent_at: string | null;
           last_active_date: string | null;
           app_streak_days: number;
+          active_workspace_owner_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -39,6 +40,7 @@ export type Database = {
           last_weekly_digest_sent_at?: string | null;
           last_active_date?: string | null;
           app_streak_days?: number;
+          active_workspace_owner_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -55,6 +57,7 @@ export type Database = {
           last_weekly_digest_sent_at?: string | null;
           last_active_date?: string | null;
           app_streak_days?: number;
+          active_workspace_owner_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -2530,6 +2533,45 @@ export type Database = {
           event_name?: string;
           sent_at?: string;
           meta_response?: Json | null;
+        };
+        Relationships: [];
+      };
+      team_memberships: {
+        Row: {
+          id: string;
+          owner_user_id: string;
+          member_user_id: string | null;
+          invited_email: string;
+          role: string;
+          status: string;
+          created_at: string;
+          accepted_at: string | null;
+          invite_token: string;
+          invite_token_expires_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          owner_user_id: string;
+          member_user_id?: string | null;
+          invited_email: string;
+          role?: string;
+          status?: string;
+          created_at?: string;
+          accepted_at?: string | null;
+          invite_token?: string;
+          invite_token_expires_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          owner_user_id?: string;
+          member_user_id?: string | null;
+          invited_email?: string;
+          role?: string;
+          status?: string;
+          created_at?: string;
+          accepted_at?: string | null;
+          invite_token?: string;
+          invite_token_expires_at?: string | null;
         };
         Relationships: [];
       };

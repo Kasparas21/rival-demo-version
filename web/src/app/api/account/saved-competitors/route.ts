@@ -10,6 +10,8 @@ import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-lim
 import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
 import { createDefaultLandingPages } from "@/lib/landing-page-tracker/create-defaults";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
@@ -226,6 +228,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ competitors: [] });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(request.url);
   const requestedBrandId = url.searchParams.get("brandId");
   const hasScopedBrandRequest = Boolean(
@@ -233,7 +238,7 @@ export async function GET(request: Request) {
   );
   let brandId: string | null = null;
   try {
-    brandId = await resolveBrandId(supabase, user.id, requestedBrandId);
+    brandId = await resolveBrandId(supabase, dataUserId, requestedBrandId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not resolve brand";
     return NextResponse.json({ error: message }, { status: 500 });
@@ -243,7 +248,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ competitors: [] });
   }
 
-  const mapped = await loadMappedCompetitorIds(supabase, user.id, brandId);
+  const mapped = await loadMappedCompetitorIds(supabase, dataUserId, brandId);
   if (hasScopedBrandRequest && !mapped.supported) {
     return NextResponse.json(
       { error: "Brand competitor mappings are not available. Run the multi-brand workspace migration." },
@@ -251,16 +256,16 @@ export async function GET(request: Request) {
     );
   }
   if (hasScopedBrandRequest && mapped.supported && mapped.ids.length === 0) {
-    await ensurePrimaryBrandBackfillIfNeeded(supabase, user.id, brandId);
+    await ensurePrimaryBrandBackfillIfNeeded(supabase, dataUserId, brandId);
   }
   const mappedAfterBackfill =
     hasScopedBrandRequest && mapped.supported && mapped.ids.length === 0
-      ? await loadMappedCompetitorIds(supabase, user.id, brandId)
+      ? await loadMappedCompetitorIds(supabase, dataUserId, brandId)
       : mapped;
   const baseQuery = supabase
     .from("saved_competitors")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("updated_at", { ascending: false })
     .limit(MAX_WATCHED_COMPETITORS + 4);
 
@@ -277,7 +282,7 @@ export async function GET(request: Request) {
   const brandDomainQuery = supabase
     .from("brands")
     .select("domain")
-    .eq("user_id", user.id);
+    .eq("user_id", dataUserId);
 
   const { data: activeBrand } = brandId
     ? await brandDomainQuery.eq("id", brandId).maybeSingle()
@@ -297,7 +302,7 @@ export async function GET(request: Request) {
     const { data: weeklyRows, error: weeklyErr } = await supabase
       .from("weekly_scrape_jobs")
       .select("competitor_id, week_start")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("status", "done")
       .in("competitor_id", competitorIdsForWeekly)
       .order("week_start", { ascending: false });
@@ -342,7 +347,15 @@ export async function GET(request: Request) {
     })
     .filter((row) => !isSidebarRowLikelyWorkspaceBrand(row as SidebarCompetitor, workspaceDomain));
 
-  return NextResponse.json({ competitors });
+  return NextResponse.json({
+    competitors,
+    workspace: {
+      isViewer: ctx.isViewer,
+      role: ctx.role,
+      dataUserId: ctx.dataUserId,
+      owner: ctx.owner ?? null,
+    },
+  });
 }
 
 type ExistingRowMeta = {
@@ -523,6 +536,13 @@ export async function POST(request: Request) {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ ok: false }, { status: 401 });
+  }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
   }
 
   const body = (await request.json()) as {
@@ -755,6 +775,13 @@ export async function DELETE(request: Request) {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
   }
 
   let body: { slug?: unknown; cacheDomain?: unknown; brandId?: unknown };

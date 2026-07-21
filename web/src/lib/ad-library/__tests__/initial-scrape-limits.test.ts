@@ -8,7 +8,9 @@ import {
 import {
   applyInitialScrapeLimits,
   applyWorkspaceRescrapeLimits,
+  buildInitialDiscoveryScrapeFields,
   defaultScrapeRequestFields,
+  INITIAL_DISCOVERY_META_STATUS,
 } from "@/lib/ad-library/scrape-request-fields";
 
 describe("INITIAL_ADS_PER_PLATFORM", () => {
@@ -54,6 +56,49 @@ describe("applyInitialScrapeLimits", () => {
     const base = { ...defaultScrapeRequestFields(), microsoftMaxSearchResults: 24 };
     const applied = applyInitialScrapeLimits(base);
     expect(applied.microsoftMaxSearchResults).toBe(24);
+  });
+});
+
+describe("INITIAL_DISCOVERY_META_STATUS", () => {
+  it("is ALL for first discovery scrape", () => {
+    expect(INITIAL_DISCOVERY_META_STATUS).toBe("ALL");
+  });
+});
+
+describe("buildInitialDiscoveryScrapeFields", () => {
+  it("applies initial caps and widens date filters for historical ads", () => {
+    const base = {
+      ...defaultScrapeRequestFields(),
+      metaCountry: "DE",
+      linkedinDateRange: "past-month",
+      tiktokStartDate: "2024-01-01",
+      metaStartDate: "2025-01-01",
+      metaEndDate: "2025-06-01",
+      pinterestStartDate: "2025-01-01",
+      pinterestEndDate: "2025-06-01",
+      snapchatStartDate: "2025-01-01",
+      snapchatEndDate: "2025-06-01",
+      microsoftStartDate: "2025-01-01",
+      microsoftEndDate: "2025-06-01",
+    };
+    const applied = buildInitialDiscoveryScrapeFields(base);
+
+    expect(applied.metaMaxAds).toBe(2000);
+    expect(applied.linkedinMaxAds).toBe(300);
+    expect(applied.tiktokMaxAds).toBe(500);
+
+    expect(applied.metaCountry).toBe("DE");
+    expect(applied.linkedinDateRange).toBe("all-time");
+    expect(applied.metaStartDate).toBe("");
+    expect(applied.metaEndDate).toBe("");
+    expect(applied.pinterestStartDate).toBe("");
+    expect(applied.pinterestEndDate).toBe("");
+    expect(applied.snapchatStartDate).toBe("");
+    expect(applied.snapchatEndDate).toBe("");
+    expect(applied.microsoftStartDate).toBe("");
+    expect(applied.microsoftEndDate).toBe("");
+    expect(applied.tiktokStartDate).not.toBe("2024-01-01");
+    expect(applied.tiktokEndDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 

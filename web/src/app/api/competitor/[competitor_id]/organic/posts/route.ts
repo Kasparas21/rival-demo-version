@@ -4,6 +4,7 @@ import { ORGANIC_FEED_PAGE_SIZE, ORGANIC_SCRAPE_MAX_ITEMS } from "@/lib/organic-
 import { toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import type { OrganicPlatform, OrganicPostSort } from "@/lib/organic-content/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { requireCompetitorAccess } from "@/lib/team/competitor-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,22 +63,15 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: competitor } = await supabase
-    .from("saved_competitors")
-    .select("id")
-    .eq("id", competitorId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!competitor) {
-    return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
-  }
+  const access = await requireCompetitorAccess(supabase, user.id, competitorId);
+  if (access instanceof NextResponse) return access;
+  const { dataUserId } = access;
 
   let query = supabase
     .from("organic_posts")
     .select("*", { count: "exact" })
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id);
+      .eq("user_id", dataUserId);
 
   if (platformRaw && platformRaw !== "all" && VALID_PLATFORMS.has(platformRaw)) {
     query = query.eq("platform", platformRaw as OrganicPlatform);
@@ -107,7 +101,7 @@ export async function GET(
       .from("organic_posts")
       .select("scraped_at")
       .eq("competitor_id", competitorId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("platform", platformRaw)
       .order("scraped_at", { ascending: false })
       .limit(1)
@@ -119,7 +113,7 @@ export async function GET(
     .from("organic_posts")
     .select("platform")
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id);
+    .eq("user_id", dataUserId);
 
   const platformsWithPosts = [...new Set((platformRows ?? []).map((r) => r.platform))];
 

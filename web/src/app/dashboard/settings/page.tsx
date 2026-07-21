@@ -9,6 +9,7 @@ import { RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { CheckoutNavigationAnchor } from "@/components/analytics/checkout-navigation-link";
 import { McpKeysSection } from "@/components/settings/McpKeysSection";
 import { SettingsAutopilotSection } from "@/components/settings/SettingsAutopilotSection";
+import { SettingsTeamSection } from "@/components/settings/SettingsTeamSection";
 import {
   SettingsFieldHint,
   SettingsFieldLabel,
@@ -34,6 +35,7 @@ import {
   subscriptionStatusBadgeClassName,
 } from "@/lib/billing/entitlements";
 import type { PlanTier } from "@/lib/billing/plan-limits";
+import { useWorkspaceContext } from "@/lib/team/use-workspace-context";
 
 type ProfileState = {
   company_name: string;
@@ -200,6 +202,8 @@ const POLAR_BILLING_PORTAL = POLAR_BILLING_PORTAL_HREF;
 export default function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { state: workspaceState } = useWorkspaceContext();
+  const isViewer = workspaceState?.isViewer ?? false;
   const [profile, setProfile] = useState<ProfileState>({
     company_name: "",
     company_url: "",
@@ -572,7 +576,11 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-[720px] px-6 py-10 pb-16">
       <header className="mb-8">
         <h1 className="text-[26px] font-bold tracking-tight text-[#1a1a2e]">Account settings</h1>
-        <p className="mt-1.5 text-[15px] text-[#71717a]">Profile, workspace usage, and subscription.</p>
+        <p className="mt-1.5 text-[15px] text-[#71717a]">
+          {isViewer
+            ? "Your profile and sign-in. Billing and workspace settings are managed by the workspace owner."
+            : "Profile, workspace usage, and subscription."}
+        </p>
       </header>
 
       {loadError ? (
@@ -682,6 +690,10 @@ export default function SettingsPage() {
           </div>
         </SettingsGlassSection>
 
+        {!isViewer ? <SettingsTeamSection /> : null}
+
+        {!isViewer ? (
+          <>
         <SettingsAutopilotSection />
 
         <McpKeysSection />
@@ -905,6 +917,9 @@ export default function SettingsPage() {
           </div>
         </SettingsGlassSection>
 
+        </>
+        ) : null}
+
         <SettingsGlassSection
           icon={LogOut}
           accent="danger"
@@ -916,6 +931,7 @@ export default function SettingsPage() {
           </SettingsGlassButton>
         </SettingsGlassSection>
 
+        {!isViewer ? (
         <SettingsGlassSection
           icon={Trash2}
           accent="danger"
@@ -926,6 +942,7 @@ export default function SettingsPage() {
             Delete my account permanently
           </SettingsGlassButton>
         </SettingsGlassSection>
+        ) : null}
       </div>
 
       {deleteModalOpen ? (

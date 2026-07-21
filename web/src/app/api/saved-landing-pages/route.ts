@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanMutate } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 import type { Database } from "@/lib/supabase/types";
 
@@ -23,6 +25,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   if (!competitorId) {
@@ -32,7 +37,7 @@ export async function GET(request: Request): Promise<NextResponse> {
   const { data, error } = await supabase
     .from("saved_landing_pages")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .order("saved_at", { ascending: false });
 
@@ -53,6 +58,15 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Forbidden";
+    return NextResponse.json({ ok: false, error: message }, { status: 403 });
+  }
+  const dataUserId = ctx.dataUserId;
+
   let body: z.infer<typeof postBodySchema>;
   try {
     body = postBodySchema.parse(await request.json());
@@ -64,7 +78,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     .from("landing_pages")
     .select("*")
     .eq("id", body.landingPageId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (srcErr || !srcPage) {
@@ -74,7 +88,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: existing } = await supabase
     .from("saved_landing_pages")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", srcPage.competitor_id)
     .eq("source_landing_page_id", srcPage.id)
     .maybeSingle();
@@ -87,13 +101,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     .from("landing_page_snapshots")
     .select("screenshot_url, hero_screenshot_url")
     .eq("landing_page_id", srcPage.id)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("taken_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 
   const insert: Database["public"]["Tables"]["saved_landing_pages"]["Insert"] = {
-    user_id: user.id,
+    user_id: dataUserId,
     competitor_id: srcPage.competitor_id,
     source_landing_page_id: srcPage.id,
     url: srcPage.url,

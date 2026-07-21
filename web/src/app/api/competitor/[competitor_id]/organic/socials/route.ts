@@ -4,6 +4,8 @@ import { resolveCompetitorForUser } from "@/lib/ad-library/classify-competitor-p
 import { parseOrganicSocials, hasAnyOrganicSocial, findNewlyAddedPlatforms } from "@/lib/organic-content/socials";
 import { organicSocialsSchema } from "@/lib/organic-content/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanMutate } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +34,16 @@ export async function PATCH(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const competitor = await resolveCompetitorForUser(supabase, user.id, { competitorId });
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Forbidden";
+    return NextResponse.json({ ok: false, error: message }, { status: 403 });
+  }
+  const dataUserId = ctx.dataUserId;
+
+  const competitor = await resolveCompetitorForUser(supabase, dataUserId, { competitorId });
   if (!competitor) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -56,7 +67,7 @@ export async function PATCH(
     .from("saved_competitors")
     .select("socials, organic_next_scrape_at")
     .eq("id", competitor.id)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   const prevSocials = parseOrganicSocials(existing?.socials);
@@ -77,7 +88,7 @@ export async function PATCH(
     .from("saved_competitors")
     .update(updatePayload)
     .eq("id", competitor.id)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .select("socials, organic_next_scrape_at, organic_last_scraped_at, organic_baseline_date")
     .maybeSingle();
 
@@ -115,11 +126,14 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data, error } = await supabase
     .from("saved_competitors")
     .select("socials, organic_next_scrape_at, organic_last_scraped_at, organic_baseline_date")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (error) {

@@ -60,6 +60,8 @@ import { PostOnboardingPricingOverlay } from "@/components/billing/post-onboardi
 import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dashboard-mock";
 import { ScrapePausedBanner } from "@/components/dashboard/scrape-paused-banner";
 import { RecentPlatformRefreshNotice } from "@/components/dashboard/recent-platform-refresh-notice";
+import { WorkspaceViewerBanner, WorkspaceSwitcher } from "@/components/team/workspace-viewer-banner";
+import { useWorkspaceContext } from "@/lib/team/use-workspace-context";
 import { Toaster } from "sonner";
 import {
   DemoCompetitorYellowDot,
@@ -277,6 +279,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const { state: workspaceState } = useWorkspaceContext();
+  const isViewer = workspaceState?.isViewer ?? false;
+  const viewerOwnerLabel = workspaceState?.owner?.displayLabel ?? "shared workspace";
+  const brandSectionLabel = isViewer ? "Viewing access" : "Your brand";
+  const brandWorkspaceSubtitle = isViewer
+    ? `Read-only · ${viewerOwnerLabel}'s workspace`
+    : "Your brand workspace";
+  const brandsMenuLabel = isViewer ? `${viewerOwnerLabel}'s brands` : "Your brands";
   const [brands, setBrands] = useState<Brand[]>([]);
   const [brandsLoaded, setBrandsLoaded] = useState(false);
   const [activeBrandId, setActiveBrandId] = useState("");
@@ -416,7 +426,13 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             ads_profile_setup?: unknown | null;
           }[];
         }) => {
-          if (!d.ok || !d.brands?.length) {
+          if (!d.ok) {
+            setBrands([]);
+            setBrandsLoaded(true);
+            return;
+          }
+          if (!d.brands?.length) {
+            setBrands([]);
             setBrandsLoaded(true);
             return;
           }
@@ -509,6 +525,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, [activeBrand, isOnDemoPath]);
 
   const previousActiveBrandIdRef = useRef<string | null>(null);
+  const previousWorkspaceDataUserIdRef = useRef<string | null>(null);
 
   const openBrandWorkspaceLimitDialog = useCallback(() => {
     if (tierAllowsMultipleBrandWorkspaces(billingPlanTier)) {
@@ -609,6 +626,30 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refreshBrands();
   }, [refreshBrands]);
+
+  useEffect(() => {
+    const dataUserId = workspaceState?.dataUserId;
+    if (!dataUserId) return;
+
+    if (previousWorkspaceDataUserIdRef.current === null) {
+      previousWorkspaceDataUserIdRef.current = dataUserId;
+      return;
+    }
+
+    if (previousWorkspaceDataUserIdRef.current === dataUserId) return;
+
+    previousWorkspaceDataUserIdRef.current = dataUserId;
+    setBrands([]);
+    setBrandsLoaded(false);
+    setActiveBrandId("");
+    try {
+      window.localStorage.removeItem("rival_active_brand");
+      window.localStorage.removeItem("rival_active_workspace");
+    } catch {
+      /* ignore */
+    }
+    refreshBrands();
+  }, [workspaceState?.dataUserId, refreshBrands]);
 
   useEffect(() => {
     const sync = () => {
@@ -817,6 +858,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     removing: boolean,
     options?: { alwaysVisible?: boolean; strictHoverOnly?: boolean },
   ) => {
+    if (isViewer) return null;
+
     const alwaysVisible = options?.alwaysVisible ?? false;
     const strictHoverOnly = options?.strictHoverOnly ?? false;
 
@@ -885,7 +928,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         <div className={`shrink-0 relative ${collapsed ? "px-3 pt-5 pb-2" : "px-4 pt-5 pb-2"}`}>
           {!collapsed && (
             <p className="text-[10px] font-semibold uppercase tracking-[0.06em] mb-2 px-2.5 text-[color:var(--rival-muted)]">
-              Your brand
+              {brandSectionLabel}
             </p>
           )}
           {collapsed ? (
@@ -939,7 +982,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 )}
                 <div className="min-w-0 flex-1">
                   <span className="block text-[14px] font-semibold text-[#343434] truncate">{effectiveBrand.name}</span>
-                  <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
+                  <span className="block text-[11px] text-[#808080] truncate">{brandWorkspaceSubtitle}</span>
                 </div>
               </button>
               <button
@@ -978,7 +1021,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               )}
               <div className="min-w-0 flex-1">
                 <span className="block text-[14px] font-semibold text-[#343434] truncate">{effectiveBrand.name}</span>
-                <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
+                <span className="block text-[11px] text-[#808080] truncate">{brandWorkspaceSubtitle}</span>
               </div>
             </button>
           )}
@@ -991,7 +1034,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             >
               <div className="px-2 pb-1 shrink-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.06em] px-2 py-1 truncate text-[color:var(--rival-muted)]">
-                  Your brands
+                  {brandsMenuLabel}
                 </p>
               </div>
               <div className="max-h-[min(40vh,200px)] overflow-y-auto overflow-x-hidden overscroll-contain">
@@ -1033,6 +1076,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                       )}
                       <span className="text-[13px] font-medium truncate flex-1 min-w-0">{b.name}</span>
                     </button>
+                    {!isViewer ? (
                     <button
                       type="button"
                       disabled={brands.length <= 1 || removingBrandId === b.id}
@@ -1051,6 +1095,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                         <Trash2 className="size-3.5" strokeWidth={2} />
                       )}
                     </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -1062,8 +1107,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                   type="button"
                   onClick={handleAddBrand}
                   disabled={
-                    tierAllowsMultipleBrandWorkspaces(billingPlanTier) &&
-                    brands.length >= maxOwnBrandWorkspaces
+                    isViewer ||
+                    (tierAllowsMultipleBrandWorkspaces(billingPlanTier) &&
+                    brands.length >= maxOwnBrandWorkspaces)
                   }
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] font-semibold text-[#343434] transition-colors hover:bg-[#DDF1FD]/25 disabled:cursor-not-allowed disabled:opacity-45"
                 >
@@ -1073,6 +1119,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           )}
+          {!collapsed ? (
+            <div className="px-4 pb-2">
+              <WorkspaceSwitcher />
+            </div>
+          ) : null}
         </div>
 
         {/* Divider */}
@@ -1088,6 +1139,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         {/* Find competitor + competitors header + filter — fixed under brand */}
         <div className={`shrink-0 ${collapsed ? "px-3" : "px-4"} pt-2 pb-2`}>
           <div className={collapsed ? "flex flex-col items-center gap-2" : "space-y-1"}>
+            {!isViewer ? (
             <Link
               href="/dashboard/spy"
               scroll={false}
@@ -1103,6 +1155,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <Search className={`shrink-0 ${collapsed ? "w-[18px] h-[18px]" : "w-[18px] h-[18px]"}`} />
               {!collapsed && <span className="text-[14px] font-medium">Find competitor</span>}
             </Link>
+            ) : null}
           </div>
 
           {!collapsed && (
@@ -1343,6 +1396,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <main className="rival-subtle-scroll relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-auto bg-slate-50">
         <ScrapePausedBanner />
+        <WorkspaceViewerBanner />
         <div
           className="relative z-10 flex h-full min-h-0 w-full flex-1 flex-col"
           onClick={() => setIsBrandMenuOpen(false)}

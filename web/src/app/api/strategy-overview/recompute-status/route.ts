@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { getRecomputeLockRow, healStaleStrategyRecomputeLockIfNeeded, loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 
@@ -14,6 +15,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const domain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
 
@@ -21,9 +25,11 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, domain);
+  if (!ctx.isViewer) {
+    await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, domain);
+  }
 
-  const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
+  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }

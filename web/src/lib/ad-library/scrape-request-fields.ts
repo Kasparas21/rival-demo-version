@@ -69,6 +69,15 @@ function yMinusOneYearIso(): string {
   return d.toISOString().slice(0, 10);
 }
 
+function yMinusYearsIso(years: number): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - years);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Meta status for first competitor / workspace brand discovery scrape (active + inactive ads). */
+export const INITIAL_DISCOVERY_META_STATUS = "ALL" as const;
+
 /** Override max-ad fields for the first discovery scrape; keeps region/date/sort settings. */
 export function applyInitialScrapeLimits(fields: ScrapeRequestFields): ScrapeRequestFields {
   return {
@@ -78,6 +87,28 @@ export function applyInitialScrapeLimits(fields: ScrapeRequestFields): ScrapeReq
     tiktokMaxAds: getInitialAdsCount("tiktok"),
     pinterestMaxResults: getInitialAdsCount("pinterest"),
     snapchatMaxItems: getInitialAdsCount("snapchat"),
+  };
+}
+
+/**
+ * First discovery scrape — high caps plus wide date windows so inactive / historical ads are included.
+ * Preserves region, country, and sort settings from `base`.
+ */
+export function buildInitialDiscoveryScrapeFields(base: ScrapeRequestFields): ScrapeRequestFields {
+  const limits = applyInitialScrapeLimits(base);
+  return {
+    ...limits,
+    metaStartDate: "",
+    metaEndDate: "",
+    linkedinDateRange: "all-time",
+    tiktokStartDate: yMinusYearsIso(10),
+    tiktokEndDate: todayIso(),
+    microsoftStartDate: "",
+    microsoftEndDate: "",
+    pinterestStartDate: "",
+    pinterestEndDate: "",
+    snapchatStartDate: "",
+    snapchatEndDate: "",
   };
 }
 

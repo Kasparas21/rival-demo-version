@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
@@ -23,6 +24,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const domain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
   const platform = (url.searchParams.get("platform") ?? "").trim().toLowerCase();
@@ -31,7 +35,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain and platform required" }, { status: 400 });
   }
 
-  const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
+  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -40,7 +44,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     .from("scraped_ads")
     .select("id, ad_text, ad_creative_url, format, first_seen_at, funnel_stage, ai_extracted_angle")
     .eq("competitor_id", meta.competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("is_active", true)
     .eq("platform", platform)
     .order("last_seen_at", { ascending: false })

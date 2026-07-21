@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { normalizeLandingPageUrl } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import type { Database } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -19,12 +20,15 @@ async function authorizePage(competitorId: string, pageId: string) {
     return { error: NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 }) };
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data: page, error } = await supabase
     .from("landing_pages")
     .select("*")
     .eq("id", pageId)
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("is_active", true)
     .maybeSingle();
 
@@ -35,7 +39,7 @@ async function authorizePage(competitorId: string, pageId: string) {
     return { error: NextResponse.json({ ok: false, error: "Page not found" }, { status: 404 }) };
   }
 
-  return { supabase, user, page };
+  return { supabase, user, page, dataUserId, ctx };
 }
 
 export async function GET(
@@ -97,10 +101,11 @@ export async function PATCH(
 
   const auth = await authorizePage(competitorId, pageId);
   if ("error" in auth && auth.error) return auth.error;
-  const { supabase, user, page } = auth as {
+  const { supabase, page, dataUserId } = auth as {
     supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
     user: { id: string };
     page: { url: string; label: string };
+    dataUserId: string;
   };
 
   let body: { url?: string; label?: string };
@@ -137,7 +142,7 @@ export async function PATCH(
     .update(updates)
     .eq("id", pageId)
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .select("*")
     .single();
 
@@ -168,12 +173,15 @@ export async function DELETE(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data, error } = await supabase
     .from("landing_pages")
     .delete()
     .eq("id", pageId)
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .select("id")
     .maybeSingle();
 

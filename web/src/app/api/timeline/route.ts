@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,6 +32,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
 
@@ -42,7 +46,7 @@ export async function GET(request: Request) {
     .from("saved_competitors")
     .select("id, brand_name, name, brand_domain, last_scraped_at")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (compErr || !competitor) {
@@ -54,7 +58,7 @@ export async function GET(request: Request) {
     .select(
       "id, platform, ad_creative_url, archived_creative_url, ad_text, ai_extracted_angle, first_seen_at, last_seen_at, format, is_active, raw_payload",
     )
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .order("first_seen_at", { ascending: false })
     .limit(2500);

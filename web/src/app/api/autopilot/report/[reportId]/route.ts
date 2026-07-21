@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,11 +26,14 @@ export async function DELETE(_req: Request, context: RouteContext): Promise<Next
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data: owned } = await supabase
     .from("autopilot_outputs")
     .select("id")
     .eq("id", id)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("output_type", "monthly_report")
     .maybeSingle();
 
@@ -38,7 +42,7 @@ export async function DELETE(_req: Request, context: RouteContext): Promise<Next
   }
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.from("autopilot_outputs").delete().eq("id", id).eq("user_id", user.id);
+  const { error } = await admin.from("autopilot_outputs").delete().eq("id", id).eq("user_id", dataUserId);
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });

@@ -7,6 +7,8 @@ import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Json } from "@/lib/supabase/types";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { tierAllowsMultipleBrandWorkspaces } from "@/lib/billing/plan-limits";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
+import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
 
 const MISSING_ADS_PROFILE_SETUP_HELP =
   "The database is missing column brands.ads_profile_setup. In the Supabase dashboard open SQL Editor and run: alter table public.brands add column if not exists ads_profile_setup jsonb; Wait a few seconds for the API schema cache to refresh (or reload the project). Full migration: supabase/migrations/20260511120000_brands_ads_workspace_competitor.sql";
@@ -30,11 +32,14 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("brands")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("is_primary", { ascending: false })
     .order("created_at", { ascending: true });
 
@@ -52,6 +57,13 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
   }
 
   const admin = createSupabaseAdminClient();

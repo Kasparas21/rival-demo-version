@@ -4,8 +4,11 @@ import { z } from "zod";
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { llmFast } from "@/lib/llm/anthropic";
 import type { CopyStructureResult } from "@/lib/comparison/copy-structure-types";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
+import { assertCanRunSharedAi } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -39,7 +42,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  assertCanRunSharedAi(ctx);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(billingRequiredResponseBody("Subscription required for copy structure."), { status: 402 });
   }
@@ -60,7 +67,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     .from("ad_copy_structure_cache")
     .select("structure, ai_model_version, computed_at")
     .eq("ad_id", adId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (cached?.structure) {
@@ -80,7 +87,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     .from("scraped_ads")
     .select("id, platform, format, ad_text, user_id")
     .eq("id", adId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (adErr || !ad) {
@@ -127,12 +134,13 @@ Ad text: """${adText}"""`;
 
   const upsertRow: Database["public"]["Tables"]["ad_copy_structure_cache"]["Insert"] = {
     ad_id: adId,
-    user_id: user.id,
+    user_id: dataUserId,
     structure: structure as unknown as Json,
     ai_model_version: COPY_STRUCTURE_MODEL,
   };
 
-  const { error: upErr } = await supabase.from("ad_copy_structure_cache").upsert(upsertRow, {
+  const admin = createSupabaseAdminClient();
+  const { error: upErr } = await admin.from("ad_copy_structure_cache").upsert(upsertRow, {
     onConflict: "ad_id",
   });
   if (upErr) {

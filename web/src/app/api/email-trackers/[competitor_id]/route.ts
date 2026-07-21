@@ -16,6 +16,7 @@ import {
 import { EMAIL_ANALYZE_BATCH_SIZE, EMAIL_INBOX_PAGE_SIZE } from "@/lib/email-intelligence/constants";
 import { syncCompetitorEmailsFromResend } from "@/lib/email-intelligence/sync-from-resend";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,10 +59,13 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data: tracker, error: trackerErr } = await supabase
     .from("competitor_email_trackers")
     .select("id, tracking_address, tracking_code, is_active, created_at, competitor_id")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .maybeSingle();
 
@@ -77,7 +81,7 @@ export async function GET(
   } else if (analyzePending) {
     await analyzePendingCompetitorEmails({
       competitorId,
-      userId: user.id,
+      userId: dataUserId,
       limit: EMAIL_ANALYZE_BATCH_SIZE,
     });
   }
@@ -87,7 +91,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid email_id" }, { status: 400 });
     }
     try {
-      let email = await fetchCompetitorEmailById(supabase, user.id, competitorId, emailId);
+      let email = await fetchCompetitorEmailById(supabase, dataUserId, competitorId, emailId);
       if (!email) {
         return NextResponse.json({ error: "Email not found" }, { status: 404 });
       }
@@ -107,7 +111,7 @@ export async function GET(
 
   let emailCount: number;
   try {
-    emailCount = await countCompetitorEmails(supabase, user.id, competitorId, searchQuery);
+    emailCount = await countCompetitorEmails(supabase, dataUserId, competitorId, searchQuery);
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to count emails" },
@@ -130,7 +134,7 @@ export async function GET(
     try {
       const { rows, truncated } = await fetchCompetitorEmailsForInsights(
         supabase,
-        user.id,
+        dataUserId,
         competitorId,
       );
       return NextResponse.json({
@@ -148,7 +152,7 @@ export async function GET(
   try {
     const { emails, nextCursor } = await fetchCompetitorEmailPage({
       supabase,
-      userId: user.id,
+      userId: dataUserId,
       competitorId,
       before,
       limit,

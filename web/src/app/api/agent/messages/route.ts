@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { friendlyAgentApiError, isAgentSchemaMissingError } from "@/lib/agent/api-errors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,9 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
+    const ctx = await resolveWorkspaceContext(supabase, user.id);
+    const dataUserId = ctx.dataUserId;
+
     const url = new URL(req.url);
     const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
     const from = (page - 1) * PAGE_SIZE;
@@ -28,7 +32,7 @@ export async function GET(req: Request) {
     const { data: messages, error, count } = await supabase
       .from("agent_messages")
       .select("id, competitor_id, signal_ids, channels_delivered, subject, sent_at, status", { count: "exact" })
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .order("sent_at", { ascending: false })
       .range(from, to);
 

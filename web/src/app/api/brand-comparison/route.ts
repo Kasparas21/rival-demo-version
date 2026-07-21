@@ -10,6 +10,7 @@ import {
 import { sanitizeJsonForPostgres } from "@/lib/json/sanitize-json-for-db";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import type { Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -90,7 +91,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!user) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  const billing = await getBillingEntitlement(supabase, user.id);
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Start your subscription to run brand comparisons."),
@@ -117,7 +122,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const pair = await resolveComparisonIds({
     supabase,
-    userId: user.id,
+    userId: dataUserId,
     competitorDomain,
     bodyYourBrandId: body.yourBrandId,
     bodyCompetitorId: body.competitorId,
@@ -135,13 +140,13 @@ export async function POST(req: Request): Promise<NextResponse> {
       .from("saved_competitors")
       .select("last_scraped_at")
       .eq("id", pair.yourBrandId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle(),
     supabase
       .from("saved_competitors")
       .select("last_scraped_at")
       .eq("id", pair.competitorId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle(),
   ]);
 
@@ -155,7 +160,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { data: cached, error: cacheReadErr } = await supabase
     .from("brand_comparison_results")
     .select("result_payload, computed_at")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("your_brand_id", pair.yourBrandId)
     .eq("competitor_id", pair.competitorId)
     .eq("your_brand_scraped_at", yourBrandScrapedAt)
@@ -218,7 +223,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const admin = createSupabaseAdminClient();
   const { error: upsertErr } = await admin.from("brand_comparison_results").upsert(
     {
-      user_id: user.id,
+      user_id: dataUserId,
       your_brand_id: pair.yourBrandId,
       competitor_id: pair.competitorId,
       your_brand_scraped_at: yourBrandScrapedAt,

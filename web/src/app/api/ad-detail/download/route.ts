@@ -6,6 +6,7 @@ import {
   type AdDetailDownloadKind,
 } from "@/lib/ad-detail/resolve-creative-media";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 
@@ -40,6 +41,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const adId = url.searchParams.get("adId")?.trim() ?? "";
   const kindRaw = url.searchParams.get("kind")?.trim() ?? "";
@@ -53,7 +57,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     .from("scraped_ads")
     .select("id, platform, format, ad_creative_url, raw_payload, user_id")
     .eq("id", adId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (adErr || !ad) {

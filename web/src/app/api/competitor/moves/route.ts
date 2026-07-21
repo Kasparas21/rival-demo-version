@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 
@@ -17,6 +18,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? "40") || 40));
@@ -26,8 +30,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, competitorDomain);
-  const meta = await loadSavedCompetitorForUser(supabase, user.id, competitorDomain);
+  if (!ctx.isViewer) {
+    await ensureSavedCompetitorForStrategyOverview(supabase, dataUserId, competitorDomain);
+  }
+  const meta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -35,7 +41,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   const { data, error } = await supabase
     .from("competitor_moves")
     .select("id, event_type, significance, detected_at, platform, before_state, after_state, narrative")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", meta.competitorId)
     .order("detected_at", { ascending: false })
     .range(offset, offset + limit - 1);

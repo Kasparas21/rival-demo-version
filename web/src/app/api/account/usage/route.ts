@@ -6,6 +6,7 @@ import {
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export async function GET() {
   const supabase = await createSupabaseServerClient();
@@ -16,27 +17,35 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const userId = user.id;
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const sessionUserId = user.id;
+  const dataUserId = ctx.dataUserId;
   const yearMonthUtc = utcYearMonth();
 
   const [scrapedAdsRes, cacheRowsRes, overviewRes, billing, monthlyUsage, slotCount] = await Promise.all([
     supabase
       .from("scraped_ads")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
+      .eq("user_id", dataUserId)
       .eq("is_active", true),
-    supabase.from("ads_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
-    supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", userId),
-    getBillingEntitlement(supabase, userId),
-    loadMonthlyUsageSnapshot(supabase, userId, yearMonthUtc),
-    countWatchedCompetitorSlotsForUser(supabase, userId),
+    supabase.from("ads_cache").select("id", { count: "exact", head: true }).eq("user_id", dataUserId),
+    supabase.from("strategy_overview_cache").select("id", { count: "exact", head: true }).eq("user_id", dataUserId),
+    getBillingEntitlement(supabase, sessionUserId),
+    loadMonthlyUsageSnapshot(supabase, sessionUserId, yearMonthUtc),
+    countWatchedCompetitorSlotsForUser(supabase, dataUserId),
   ]);
+
+  const ownerBilling = ctx.isViewer
+    ? await getBillingEntitlement(supabase, dataUserId)
+    : billing;
 
   const competitorsWatched = slotCount.count;
   const scrapedAdsTotal = scrapedAdsRes.count ?? 0;
   const adLibraryRefreshes = cacheRowsRes.count ?? 0;
 
   const aiStrategyOverviews = overviewRes.count ?? 0;
+
+  const competitorLimits = ownerBilling.limits;
 
   return NextResponse.json({
     ok: true,
@@ -49,14 +58,14 @@ export async function GET() {
       adLibraryRefreshes,
       swapsThisMonth: monthlyUsage.swapCount,
       csvExportsThisMonth: monthlyUsage.csvExportCount,
-      limits: billing.limits,
+      limits: competitorLimits,
       remaining: {
         adsProcessedThisMonth: remainingMonthlyAdsProcessed(
           monthlyUsage.adsScraped,
           0,
           billing.limits.maxAdsProcessedPerMonth,
         ),
-        competitorsWatched: Math.max(0, billing.limits.maxWatchedCompetitors - competitorsWatched),
+        competitorsWatched: Math.max(0, competitorLimits.maxWatchedCompetitors - competitorsWatched),
         swapsThisMonth: Math.max(0, billing.limits.maxSwapsPerMonth - monthlyUsage.swapCount),
         csvExportsThisMonth: Math.max(
           0,
@@ -85,7 +94,7 @@ export async function GET() {
           0,
           billing.limits.maxAdsProcessedPerMonth,
         ),
-        competitorsWatched: Math.max(0, billing.limits.maxWatchedCompetitors - competitorsWatched),
+        competitorsWatched: Math.max(0, competitorLimits.maxWatchedCompetitors - competitorsWatched),
         swapsThisMonth: Math.max(0, billing.limits.maxSwapsPerMonth - monthlyUsage.swapCount),
         csvExportsThisMonth: Math.max(
           0,

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import type { Json } from "@/lib/supabase/types";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   const urlRaw = searchParams.get("url");
@@ -72,7 +76,7 @@ export async function GET(request: Request) {
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .single();
 
   if (compErr || !competitor) {
@@ -82,7 +86,7 @@ export async function GET(request: Request) {
   const { data: ads, error: adsErr } = await supabase
     .from("scraped_ads")
     .select("id, platform, format, ad_text, ad_creative_url, first_seen_at, ai_extracted_angle, raw_payload")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .eq("is_active", true)
     .order("first_seen_at", { ascending: false })

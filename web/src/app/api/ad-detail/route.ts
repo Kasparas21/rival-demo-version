@@ -13,6 +13,7 @@ import { extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import { displayUrlShort } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -150,6 +151,9 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const adIdRaw = (searchParams.get("adId") ?? "").trim();
   const adParam = (searchParams.get("ad") ?? "").trim();
@@ -165,7 +169,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
       .from("scraped_ads")
       .select(scrapedAdSelect)
       .eq("id", adUuid)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle();
     if (error) {
       return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
@@ -175,7 +179,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     try {
       ad = await lookupLibraryScrapedAd(
         supabase,
-        user.id,
+        dataUserId,
         competitorIdParam,
         platformParam,
         libraryItemId,
@@ -190,19 +194,19 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
         .from("saved_competitors")
         .select("brand_domain, slug")
         .eq("id", competitorIdParam)
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .maybeSingle();
       const domainHint = compHint?.brand_domain?.trim() || compHint?.slug?.trim() || "";
       if (domainHint) {
         try {
           await ensureCompetitorAdsPersisted(supabase, {
-            userId: user.id,
+            userId: dataUserId,
             domainHint,
             competitorId: competitorIdParam,
           });
           ad = await lookupLibraryScrapedAd(
             supabase,
-            user.id,
+            dataUserId,
             competitorIdParam,
             platformParam,
             libraryItemId,
@@ -227,7 +231,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     .from("saved_competitors")
     .select("id, brand_name, name, brand_domain, logo_url, brand_logo_url, last_scraped_at")
     .eq("id", ad.competitor_id)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (compErr || !competitor) {
@@ -273,19 +277,19 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
       .from("creative_tests")
       .select("launch_date, ad_count, test_status")
       .eq("winner_ad_id", ad.id)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle(),
     supabase
       .from("ad_copy_structure_cache")
       .select("structure")
       .eq("ad_id", ad.id)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle(),
     supabase
       .from("ad_preview_analysis_cache")
       .select("analysis, computed_at")
       .eq("ad_id", ad.id)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle(),
   ]);
 
@@ -304,8 +308,8 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     }
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
-  const usedAnalyses = await loadAdPreviewAnalysisUsage(supabase, user.id);
+  const billing = await getBillingEntitlement(supabase, dataUserId);
+  const usedAnalyses = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
   const quotaCheck = canRunAdPreviewAnalysis(billing, usedAnalyses);
   const previewAnalysisQuota = quotaCheck.ok
     ? { used: usedAnalyses, limit: quotaCheck.limit, remaining: quotaCheck.remaining }

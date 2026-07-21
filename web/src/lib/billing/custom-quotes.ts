@@ -69,6 +69,7 @@ export function parsePlanLimitsFromJson(value: Json | null | undefined): PlanLim
     maxEmailTrackers: numOrNull("maxEmailTrackers", defaults.maxEmailTrackers),
     maxEmailAiAnalysesPerMonth: numOrNull("maxEmailAiAnalysesPerMonth", defaults.maxEmailAiAnalysesPerMonth),
     initialScrapeAdsPerPlatform: numOrNull("initialScrapeAdsPerPlatform", defaults.initialScrapeAdsPerPlatform),
+    maxTeamViewers: num("maxTeamViewers", defaults.maxTeamViewers),
   };
 }
 

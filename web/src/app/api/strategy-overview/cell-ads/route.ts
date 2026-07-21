@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { libraryItemIdFromRawPayload } from "@/lib/saved-ads/resolve-scraped-ad";
 import { resolveCellAdLifecycle } from "@/lib/strategy-overview/cell-ad-lifecycle";
 import { bucketAdsByFunnelStage } from "@/lib/strategy-overview/strategyDerivation";
@@ -53,6 +54,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorId = (url.searchParams.get("competitorId") ?? "").trim();
   const platform = (url.searchParams.get("platform") ?? "").trim().toLowerCase();
@@ -75,7 +79,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!owned) {
@@ -88,7 +92,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       .select(
         "id, platform, format, ad_text, ad_creative_url, ai_extracted_angle, funnel_stage, first_seen_at, last_seen_at, is_active, raw_payload"
       )
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .eq("platform", platform)
       .eq("is_active", true)

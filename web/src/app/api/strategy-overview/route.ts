@@ -3,6 +3,7 @@ import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billin
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Json } from "@/lib/supabase/types";
 import { llmFast } from "@/lib/llm/anthropic";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import {
   parseStrategyCardsFromUnknown,
   type StrategyOverviewRequestBody,
@@ -86,11 +87,21 @@ export async function POST(req: Request): Promise<NextResponse> {
   const domainNorm = body.competitorDomain.trim().toLowerCase();
   const force = body.force === true;
 
-  if (user && !force) {
+  if (!user) {
+    return NextResponse.json(
+      billingRequiredResponseBody("Sign in and start your subscription to generate strategy overviews."),
+      { status: 401 }
+    );
+  }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  if (!force) {
     const { data: cached, error: cacheError } = await supabase
       .from("strategy_overview_cache")
       .select("cards, ads_hash")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_domain", domainNorm)
       .maybeSingle();
 
@@ -102,14 +113,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
-  if (!user) {
-    return NextResponse.json(
-      billingRequiredResponseBody("Sign in and start your subscription to generate strategy overviews."),
-      { status: 401 }
-    );
-  }
-
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Start your subscription to generate strategy overviews."),
@@ -125,7 +129,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { count } = await supabase
       .from("strategy_overview_cache")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id);
+      .eq("user_id", dataUserId);
     if ((count ?? 0) >= billing.limits.maxAiStrategyOverviews) {
       return NextResponse.json(
         {
@@ -182,7 +186,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (user) {
     const { error: upsertError } = await supabase.from("strategy_overview_cache").upsert(
       {
-        user_id: user.id,
+        user_id: dataUserId,
         competitor_domain: domainNorm,
         competitor_name: body.competitorName.trim(),
         cards: cards as unknown as Json,

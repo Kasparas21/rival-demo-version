@@ -11,6 +11,7 @@ import {
 } from "@/lib/organic-content/organic-post-ai-analysis-types";
 import { enrichOrganicPostForApi, toOrganicPostClientPayload } from "@/lib/organic-content/post-display";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import type { Database, Json } from "@/lib/supabase/types";
 
 export const runtime = "nodejs";
@@ -43,7 +44,10 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Subscription required for organic post details."),
@@ -55,7 +59,7 @@ export async function GET(
     .from("saved_competitors")
     .select("id, name, brand_domain, logo_url, brand_logo_url")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!competitor) {
@@ -67,7 +71,7 @@ export async function GET(
     .select("*")
     .eq("id", postId)
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (postErr || !row) {
@@ -80,14 +84,14 @@ export async function GET(
     scraped_at: row.scraped_at,
   };
 
-  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, user.id);
+  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
   const quotaCheck = canRunAdPreviewAnalysis(billing, usedThisMonth);
 
   const { data: analysisCache } = await supabase
     .from("organic_post_preview_analysis_cache")
     .select("analysis, computed_at")
     .eq("organic_post_id", postId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   let previewAnalysis: OrganicPostPreviewAnalysis | undefined;

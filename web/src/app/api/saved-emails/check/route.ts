@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { savedEmailToCompetitorRow } from "@/lib/saved-emails/snapshot";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   let parsed: z.infer<typeof bodySchema>;
   try {
     parsed = bodySchema.parse(await request.json());
@@ -39,7 +43,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data, error } = await supabase
     .from("saved_emails")
     .select("id, source_competitor_email_id")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", parsed.competitorId)
     .in("source_competitor_email_id", emailIds);
 

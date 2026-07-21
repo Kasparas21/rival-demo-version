@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { computePlatformVelocitiesFromScrapedRows } from "@/lib/competitor/ad-library-velocity";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,6 +23,9 @@ export async function GET(request: Request): Promise<NextResponse<Response>> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   if (!competitorId) {
@@ -32,7 +36,7 @@ export async function GET(request: Request): Promise<NextResponse<Response>> {
     .from("saved_competitors")
     .select("id, last_scraped_at")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .single();
 
   if (compErr || !competitor) {
@@ -42,7 +46,7 @@ export async function GET(request: Request): Promise<NextResponse<Response>> {
   const { data: ads, error: adsErr } = await supabase
     .from("scraped_ads")
     .select("platform, first_seen_at, last_seen_at")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId);
 
   if (adsErr) {

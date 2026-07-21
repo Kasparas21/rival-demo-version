@@ -3,6 +3,7 @@ import { resolveCompetitorForUser } from "@/lib/ad-library/classify-competitor-p
 import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
 import { isRecentlyScrapedAt } from "@/lib/ad-library/recent-platform-refresh-copy";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 
@@ -25,6 +26,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorIdParam = url.searchParams.get("competitorId")?.trim() || undefined;
   const domainParam = url.searchParams.get("domain")?.trim() || undefined;
@@ -33,7 +37,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   let competitorNameById = new Map<string, string>();
 
   if (competitorIdParam || domainParam) {
-    const competitor = await resolveCompetitorForUser(supabase, user.id, {
+    const competitor = await resolveCompetitorForUser(supabase, dataUserId, {
       competitorId: competitorIdParam,
       domain: domainParam,
     });
@@ -49,7 +53,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const { data: rows, error } = await supabase
       .from("saved_competitors")
       .select("id, name, brand_name, is_workspace_brand")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .order("is_workspace_brand", { ascending: false });
 
     if (error) {

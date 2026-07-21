@@ -77,7 +77,7 @@ function buildInputUrls(
 ): Array<{ url: string }> {
   const urls = new Set<string>();
 
-  if (metaWorkspaceBrandInitialScrape) {
+  if (metaWorkspaceBrandInitialScrape && activeStatus === "ACTIVE") {
     const pageId =
       extractMetaAdsLibraryPageId(ids.metaPageUrl ?? "") ??
       extractMetaAdsLibraryPageId(ids.meta ?? "");

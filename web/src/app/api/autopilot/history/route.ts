@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,10 +16,13 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data, error } = await supabase
     .from("autopilot_outputs")
     .select("id, output_type, status, channels_sent, created_at, sent_at, payload, dedupe_key")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("created_at", { ascending: false })
     .limit(20);
 

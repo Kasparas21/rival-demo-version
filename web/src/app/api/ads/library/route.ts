@@ -41,6 +41,8 @@ import {
   type AdsCachePickRow,
 } from "@/lib/ad-library/ads-cache-pick";
 import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
+import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -253,8 +255,34 @@ export async function POST(req: Request): Promise<NextResponse> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const userId = user?.id ?? null;
+  const sessionUserId = user?.id ?? null;
   const skipCache = body.skipCache === true;
+  let userId = sessionUserId;
+  if (sessionUserId) {
+    const ctx = await resolveWorkspaceContext(supabase, sessionUserId);
+    userId = ctx.dataUserId;
+    if (skipCache) {
+      try {
+        assertCanScrape(ctx);
+      } catch (err) {
+        return NextResponse.json(
+          {
+            ok: false,
+            configured: true,
+            error: err instanceof Error ? err.message : "Forbidden",
+            meta: { ads: [], error: err instanceof Error ? err.message : "Forbidden" },
+            google: { rows: [], error: null },
+            linkedin: { ads: [], error: null },
+            tiktok: { ads: [], error: null },
+            microsoft: { ads: [], error: null },
+            pinterest: { ads: [], error: null },
+            snapchat: { ads: [], error: null },
+          },
+          { status: 403 },
+        );
+      }
+    }
+  }
   const scrapeIntent = body.intent === "manual" ? "manual" : "discovery";
   const filterGoogleActiveToday = body.filterGoogleActiveToday === true;
   const metaWorkspaceBrandInitialScrape = body.metaWorkspaceBrandInitialScrape === true;

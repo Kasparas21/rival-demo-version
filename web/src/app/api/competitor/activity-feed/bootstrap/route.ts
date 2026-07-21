@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import {
   getCachedStrategyOverview,
   getStaleStrategyOverviewPayload,
@@ -53,13 +54,16 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorDomain = (url.searchParams.get("competitorDomain") ?? url.searchParams.get("domain") ?? "").trim();
   if (!competitorDomain) {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  const rivalMeta = await loadSavedCompetitorForUser(supabase, user.id, competitorDomain);
+  const rivalMeta = await loadSavedCompetitorForUser(supabase, dataUserId, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
@@ -67,10 +71,10 @@ export async function GET(req: Request): Promise<NextResponse> {
   const domainHint = rivalMeta.brandDomain ?? rivalMeta.cacheDomain;
 
   const [freshPayload, stalePayload, snapshotCount, recentMoves, recomputing] = await Promise.all([
-    getCachedStrategyOverview(supabase, user.id, rivalMeta.competitorId, domainHint),
-    getStaleStrategyOverviewPayload(supabase, user.id, rivalMeta.competitorId),
-    countStrategySnapshots(supabase, user.id, rivalMeta.competitorId),
-    loadRecentMoves(supabase, user.id, rivalMeta.competitorId),
+    getCachedStrategyOverview(supabase, dataUserId, rivalMeta.competitorId, domainHint),
+    getStaleStrategyOverviewPayload(supabase, dataUserId, rivalMeta.competitorId),
+    countStrategySnapshots(supabase, dataUserId, rivalMeta.competitorId),
+    loadRecentMoves(supabase, dataUserId, rivalMeta.competitorId),
     isStrategyRecomputeRunning(supabase, rivalMeta.competitorId),
   ]);
 

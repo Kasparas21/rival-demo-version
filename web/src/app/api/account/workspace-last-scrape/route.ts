@@ -8,6 +8,7 @@ import {
 } from "@/lib/ad-library/competitor-cache-domain";
 import { probeSavedCompetitorsColumns } from "@/lib/account/saved-competitors-schema";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
 /** Primary brand Ads Library scrape time — sidebar API omits workspace rows. Optional `brandId` = active dashboard brand. */
@@ -19,6 +20,9 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ lastScrapedAt: null }, { status: 401 });
   }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
 
   const brandId = req.nextUrl.searchParams.get("brandId")?.trim();
   const domainParam = req.nextUrl.searchParams.get("domain")?.trim();
@@ -33,7 +37,7 @@ export async function GET(req: NextRequest) {
     const scoped = await supabase
       .from("brands")
       .select("domain, name")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("id", brandId)
       .maybeSingle();
     if (scoped.error) {
@@ -46,7 +50,7 @@ export async function GET(req: NextRequest) {
     const fb = await supabase
       .from("brands")
       .select("domain, name")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .order("is_primary", { ascending: false })
       .order("created_at", { ascending: true })
       .limit(1)
@@ -85,84 +89,86 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  try {
-    const ensured = await ensureWorkspaceBrandSavedCompetitor(
-      supabase,
-      user.id,
-      workspaceDomainGuess,
-      primary?.name,
-      { persistAds: false, brandId },
-    );
-    return NextResponse.json({
-      lastScrapedAt: ensured?.lastScrapedAt ?? null,
-      competitorId: ensured?.id ?? null,
-      libraryContext: ensured?.libraryContext ?? null,
-      persistOk: ensured?.persistOk ?? null,
-      persistErrors: ensured?.persistErrors ?? null,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "workspace_brand_ensure_failed";
-    console.error("[workspace-last-scrape]", message);
-
-    const slug = normalizeCompetitorSlug(workspaceDomainGuess).toLowerCase();
-    const orFilter = savedCompetitorDomainOrFilter(workspaceDomainGuess);
-    const columnProbe = await probeSavedCompetitorsColumns(supabase, user.id);
-    const savedSelect = [
-      "id",
-      "last_scraped_at",
-      "brand_domain",
-      "slug",
-      ...(columnProbe.adsLibraryContext ? (["ads_library_context"] as const) : []),
-    ].join(", ");
-
-    const fallback = orFilter
-      ? await supabase
-          .from("saved_competitors")
-          .select(savedSelect)
-          .eq("user_id", user.id)
-          .or(orFilter)
-          .order("last_scraped_at", { ascending: false, nullsFirst: false })
-          .limit(8)
-      : await supabase
-          .from("saved_competitors")
-          .select(savedSelect)
-          .eq("user_id", user.id)
-          .eq("slug", slug)
-          .order("last_scraped_at", { ascending: false, nullsFirst: false })
-          .limit(1);
-
-    if (fallback.error) {
-      return NextResponse.json(
-        { error: friendlySavedCompetitorsSchemaError(fallback.error.message) },
-        { status: 500 },
+  if (!ctx.isViewer) {
+    try {
+      const ensured = await ensureWorkspaceBrandSavedCompetitor(
+        supabase,
+        dataUserId,
+        workspaceDomainGuess,
+        primary?.name,
+        { persistAds: false, brandId },
       );
+      return NextResponse.json({
+        lastScrapedAt: ensured?.lastScrapedAt ?? null,
+        competitorId: ensured?.id ?? null,
+        libraryContext: ensured?.libraryContext ?? null,
+        persistOk: ensured?.persistOk ?? null,
+        persistErrors: ensured?.persistErrors ?? null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "workspace_brand_ensure_failed";
+      console.error("[workspace-last-scrape]", message);
     }
-
-    type FallbackSavedRow = {
-      id: string;
-      last_scraped_at: string | null;
-      brand_domain: string | null;
-      slug: string;
-      ads_library_context?: unknown;
-    };
-    const fallbackRows = (fallback.data ?? []) as unknown as FallbackSavedRow[];
-
-    const row = (() => {
-      const picked = pickSavedCompetitorForDomainHint(fallbackRows, slug);
-      if (picked?.id) return fallbackRows.find((r) => r.id === picked.id) ?? null;
-      return fallbackRows[0] ?? null;
-    })();
-
-    return NextResponse.json({
-      lastScrapedAt: row?.last_scraped_at ? String(row.last_scraped_at) : null,
-      competitorId: row?.id ?? null,
-      libraryContext: columnProbe.adsLibraryContext
-        ? parseAdsLibraryContext(row?.ads_library_context)
-        : null,
-      persistOk: null,
-      persistErrors: null,
-    });
   }
+
+  const slug = normalizeCompetitorSlug(workspaceDomainGuess).toLowerCase();
+  const orFilter = savedCompetitorDomainOrFilter(workspaceDomainGuess);
+  const columnProbe = await probeSavedCompetitorsColumns(supabase, dataUserId);
+  const savedSelect = [
+    "id",
+    "last_scraped_at",
+    "brand_domain",
+    "slug",
+    ...(columnProbe.adsLibraryContext ? (["ads_library_context"] as const) : []),
+  ].join(", ");
+
+  const fallback = orFilter
+    ? await supabase
+        .from("saved_competitors")
+        .select(savedSelect)
+        .eq("user_id", dataUserId)
+        .or(orFilter)
+        .order("last_scraped_at", { ascending: false, nullsFirst: false })
+        .limit(8)
+    : await supabase
+        .from("saved_competitors")
+        .select(savedSelect)
+        .eq("user_id", dataUserId)
+        .eq("slug", slug)
+        .order("last_scraped_at", { ascending: false, nullsFirst: false })
+        .limit(1);
+
+  if (fallback.error) {
+    return NextResponse.json(
+      { error: friendlySavedCompetitorsSchemaError(fallback.error.message) },
+      { status: 500 },
+    );
+  }
+
+  type FallbackSavedRow = {
+    id: string;
+    last_scraped_at: string | null;
+    brand_domain: string | null;
+    slug: string;
+    ads_library_context?: unknown;
+  };
+  const fallbackRows = (fallback.data ?? []) as unknown as FallbackSavedRow[];
+
+  const row = (() => {
+    const picked = pickSavedCompetitorForDomainHint(fallbackRows, slug);
+    if (picked?.id) return fallbackRows.find((r) => r.id === picked.id) ?? null;
+    return fallbackRows[0] ?? null;
+  })();
+
+  return NextResponse.json({
+    lastScrapedAt: row?.last_scraped_at ? String(row.last_scraped_at) : null,
+    competitorId: row?.id ?? null,
+    libraryContext: columnProbe.adsLibraryContext
+      ? parseAdsLibraryContext(row?.ads_library_context)
+      : null,
+    persistOk: null,
+    persistErrors: null,
+  });
 }
 
 function parseAdsLibraryContext(raw: unknown): { channels?: string[]; ids?: Record<string, string> } | null {

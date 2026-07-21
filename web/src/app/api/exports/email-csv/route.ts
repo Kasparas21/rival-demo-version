@@ -9,6 +9,7 @@ import {
 import { EMAIL_INSIGHTS_MAX_ROWS } from "@/lib/email-intelligence/constants";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -42,7 +43,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.limits.allowCsvExport && !billing.isUnlimited) {
     return NextResponse.json(featureNotAvailableResponseBody("CSV export"), { status: 403 });
   }
@@ -77,7 +81,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     .select(
       "received_at, subject, from_name, from_email, email_type, esp_detected, ai_angle, ai_summary, ai_offers, ai_cta",
     )
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .order("received_at", { ascending: false })
     .limit(EMAIL_INSIGHTS_MAX_ROWS);

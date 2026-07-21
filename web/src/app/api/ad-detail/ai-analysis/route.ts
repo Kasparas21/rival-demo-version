@@ -10,8 +10,11 @@ import {
   loadAdPreviewAnalysisUsage,
 } from "@/lib/billing/usage-quotas";
 import { llmFast } from "@/lib/llm/anthropic";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
+import { assertCanRunSharedAi } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -37,7 +40,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  assertCanRunSharedAi(ctx);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Subscription required for ad preview AI analysis."),
@@ -57,13 +64,13 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "adId required" }, { status: 400 });
   }
 
-  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, user.id);
+  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
 
   const { data: cached } = await supabase
     .from("ad_preview_analysis_cache")
     .select("analysis, ai_model_version, computed_at")
     .eq("ad_id", adId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (cached?.analysis) {
@@ -94,7 +101,7 @@ export async function POST(req: Request): Promise<NextResponse> {
       "id, platform, format, ad_text, ad_creative_url, ai_extracted_angle, funnel_stage, ai_extracted_voice_tone, user_id",
     )
     .eq("id", adId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (adErr || !ad) {
@@ -171,12 +178,13 @@ Ad text:
 
   const upsertRow: Database["public"]["Tables"]["ad_preview_analysis_cache"]["Insert"] = {
     ad_id: adId,
-    user_id: user.id,
+    user_id: dataUserId,
     analysis: analysis as unknown as Json,
     ai_model_version: PREVIEW_ANALYSIS_MODEL,
   };
 
-  const { error: upErr } = await supabase.from("ad_preview_analysis_cache").upsert(upsertRow, {
+  const admin = createSupabaseAdminClient();
+  const { error: upErr } = await admin.from("ad_preview_analysis_cache").upsert(upsertRow, {
     onConflict: "ad_id",
   });
   if (upErr) {
@@ -198,11 +206,11 @@ Ad text:
   // Mirror copy structure into legacy cache for comparison vault compatibility.
   const copyUpsert: Database["public"]["Tables"]["ad_copy_structure_cache"]["Insert"] = {
     ad_id: adId,
-    user_id: user.id,
+    user_id: dataUserId,
     structure: analysis.copy_structure as unknown as Json,
     ai_model_version: PREVIEW_ANALYSIS_MODEL,
   };
-  void supabase.from("ad_copy_structure_cache").upsert(copyUpsert, { onConflict: "ad_id" });
+  void admin.from("ad_copy_structure_cache").upsert(copyUpsert, { onConflict: "ad_id" });
 
   return NextResponse.json({
     ok: true,
@@ -224,20 +232,23 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   const adId = new URL(req.url).searchParams.get("adId")?.trim() ?? "";
   if (!adId) {
     return NextResponse.json({ ok: false, error: "adId required" }, { status: 400 });
   }
 
-  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, user.id);
+  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
   const quota = canRunAdPreviewAnalysis(billing, usedThisMonth);
 
   const { data: cached } = await supabase
     .from("ad_preview_analysis_cache")
     .select("analysis, computed_at, ai_model_version")
     .eq("ad_id", adId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   let analysis: AdPreviewAnalysis | null = null;

@@ -1,5 +1,10 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
+import { acceptPendingTeamInvites } from "@/lib/team/workspace-context";
+
+export type EnsureUserProfileResult = {
+  teamInvitesAccepted: number;
+};
 
 /**
  * Uses the authenticated Supabase client (user JWT) so RLS policies
@@ -10,7 +15,10 @@ function nonEmptyTrimmed(value: string | null | undefined): boolean {
   return (value?.trim() ?? "").length > 0;
 }
 
-export async function ensureUserProfile(supabase: SupabaseClient<Database>, user: User) {
+export async function ensureUserProfile(
+  supabase: SupabaseClient<Database>,
+  user: User,
+): Promise<EnsureUserProfileResult> {
   const meta = user.user_metadata ?? {};
   const metaFullName =
     typeof meta.full_name === "string"
@@ -50,6 +58,8 @@ export async function ensureUserProfile(supabase: SupabaseClient<Database>, user
     throw error;
   }
 
+  const inviteResult = await acceptPendingTeamInvites(supabase, user.id, user.email);
+
   const { data: existingBrands, error: brandsReadError } = await supabase
     .from("brands")
     .select("id")
@@ -71,4 +81,6 @@ export async function ensureUserProfile(supabase: SupabaseClient<Database>, user
       throw insertError;
     }
   }
+
+  return { teamInvitesAccepted: inviteResult.accepted };
 }

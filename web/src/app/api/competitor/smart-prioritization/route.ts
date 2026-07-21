@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { featureNotAvailableResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export async function PATCH(req: Request): Promise<NextResponse> {
   const supabase = await createSupabaseServerClient();
@@ -12,7 +13,10 @@ export async function PATCH(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.limits.canDisableSmartPrioritization && !billing.isUnlimited) {
     return NextResponse.json(
       featureNotAvailableResponseBody("Disabling Smart Prioritization"),
@@ -38,7 +42,7 @@ export async function PATCH(req: Request): Promise<NextResponse> {
     .from("saved_competitors")
     .update({ smart_prioritization_disabled: disabled, updated_at: new Date().toISOString() })
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .select("id, smart_prioritization_disabled")
     .maybeSingle();
 

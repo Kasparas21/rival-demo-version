@@ -7,6 +7,7 @@ import {
 } from "@/lib/billing/entitlements";
 import { loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 function csvEscape(value: unknown): string {
   const s = value == null ? "" : String(value);
@@ -26,7 +27,10 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.limits.allowCsvExport && !billing.isUnlimited) {
     return NextResponse.json(featureNotAvailableResponseBody("CSV export"), { status: 403 });
   }
@@ -60,7 +64,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   let query = supabase
     .from("scraped_ads")
     .select("platform, stable_ad_key, first_seen_at, last_seen_at, ad_text, format")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .is("archived_at", null)
     .order("last_seen_at", { ascending: false })
     .limit(billing.limits.csvMaxAdsPerExport);
@@ -71,7 +75,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { data: comp } = await supabase
       .from("saved_competitors")
       .select("id")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .or(`slug.eq.${domain},brand_domain.eq.${domain}`)
       .limit(1)
       .maybeSingle();

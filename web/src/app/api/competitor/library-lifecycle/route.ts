@@ -6,6 +6,7 @@ import { libraryItemIdFromRawPayload, libraryItemKey } from "@/lib/saved-ads/res
 import { isScrapedAdRunning } from "@/lib/ad-library/scraped-ad-lifecycle";
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +22,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const competitorId = new URL(request.url).searchParams.get("competitorId")?.trim() ?? "";
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
@@ -31,12 +35,12 @@ export async function GET(request: Request): Promise<NextResponse> {
       .from("saved_competitors")
       .select("last_scraped_at")
       .eq("id", competitorId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle(),
     supabase
       .from("scraped_ads")
       .select("platform, raw_payload, last_seen_at, is_active, archived_creative_url")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId),
   ]);
 

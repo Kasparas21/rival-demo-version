@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,11 +35,14 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { data: competitor } = await supabase
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!competitor) {
@@ -49,7 +53,7 @@ export async function GET(
     .from("landing_page_snapshots")
     .select("*, landing_pages(id, label, url, page_type)")
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("has_meaningful_change", true)
     .order("taken_at", { ascending: false })
     .limit(limit);
@@ -64,7 +68,7 @@ export async function GET(
       .from("landing_page_snapshots")
       .select("screenshot_url, hero_screenshot_url, page_text, taken_at")
       .eq("landing_page_id", snap.landing_page_id)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .lt("taken_at", snap.taken_at)
       .order("taken_at", { ascending: false })
       .limit(1)

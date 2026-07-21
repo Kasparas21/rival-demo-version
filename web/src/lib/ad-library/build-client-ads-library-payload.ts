@@ -21,6 +21,7 @@ export function buildClientAdsLibraryPayload(params: {
   tiktokRegion?: string;
   googleRegion?: string;
   pinterestCountry?: string;
+  metaStatus?: "ACTIVE" | "ALL";
 }): Record<string, unknown> {
   const platformsSorted = ALL_ADS_API_PLATFORMS.filter((p) => params.adsPlatforms.includes(p));
   const googleRegionNorm = normalizeGoogleAdsRegion(params.googleRegion ?? DEFAULT_GOOGLE_ADS_REGION);
@@ -36,7 +37,7 @@ export function buildClientAdsLibraryPayload(params: {
       logoUrl: params.brand.logoUrl,
     }),
     ids: params.ids ?? {},
-    metaStatus: "ACTIVE" as const,
+    metaStatus: params.metaStatus === "ALL" ? ("ALL" as const) : ("ACTIVE" as const),
     googleGetAdDetails: readGoogleAdDetailsPublicFlag(),
     platforms: platformsSorted,
     ...(platformsSorted.includes("tiktok") ? { tiktokRegion } : {}),

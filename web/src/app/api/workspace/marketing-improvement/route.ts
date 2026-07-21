@@ -8,6 +8,7 @@ import {
   type SidebarCompetitor,
 } from "@/lib/sidebar-competitors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 import { buildCrossChannelEvidenceText } from "@/lib/workspace/build-cross-channel-evidence";
 import { runMarketingImprovementLlm } from "@/lib/workspace/run-marketing-improvement-llm";
 
@@ -25,11 +26,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   if (!isDebugPlatformClassificationEnabled()) {
     return NextResponse.json({ ok: false, error: "Not available" }, { status: 404 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Start your subscription to run marketing improvement coaching."),
@@ -58,7 +62,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const { data: savedRows, error: savedErr } = await supabase
     .from("saved_competitors")
     .select("id, slug, name, brand_name, brand_domain, is_workspace_brand")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("updated_at", { ascending: false })
     .limit(MAX_WATCHED_COMPETITORS + 4);
 
@@ -93,7 +97,7 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   const { text: evidenceText, hasCompetitorEvidence } = await buildCrossChannelEvidenceText({
     supabase,
-    userId: user.id,
+    userId: dataUserId,
     rivals: rivals.map((r) => ({
       id: r.id,
       slug: r.slug,

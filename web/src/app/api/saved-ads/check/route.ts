@@ -9,6 +9,7 @@ import { libraryPreviewUrlFromScrapedRow } from "@/lib/saved-ads/library-preview
 import { libraryItemIdFromRawPayload, libraryItemKey, savedRowMatchesLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { isWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -54,6 +55,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   let parsed: z.infer<typeof bodySchema>;
   try {
     parsed = bodySchema.parse(await request.json());
@@ -62,7 +66,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const competitorId = parsed.competitorId;
-  const savedAdsBlocked = await isWorkspaceBrandSavedAdsBlocked(supabase, user.id, competitorId);
+  const savedAdsBlocked = await isWorkspaceBrandSavedAdsBlocked(supabase, dataUserId, competitorId);
 
   const scrapedAdIds = [...new Set(parsed.scrapedAdIds ?? [])];
   const libraryItems = parsed.libraryItems ?? [];
@@ -77,7 +81,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       .from("saved_competitors")
       .select("last_scraped_at")
       .eq("id", competitorId)
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .maybeSingle();
     lastScrapedAt = compRow?.last_scraped_at ?? null;
   }
@@ -96,7 +100,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const { data: candidates, error: candErr } = await supabase
         .from("scraped_ads")
         .select("id, platform, raw_payload, stable_ad_key, last_seen_at, is_active, ad_creative_url")
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId)
         .in("platform", [...platformSet]);
 
@@ -198,7 +202,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const { data: rows, error } = await supabase
         .from("saved_ads")
         .select("id, source_scraped_ad_id")
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .in("source_scraped_ad_id", allScrapedIds);
 
       if (error) {
@@ -216,7 +220,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const { data: savedRows, error: savedErr } = await supabase
         .from("saved_ads")
         .select("id, source_scraped_ad_id, platform, raw_payload")
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId);
 
       if (savedErr) {
@@ -246,7 +250,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const { data: winnerTests, error: winnerTestsErr } = await supabase
     .from("creative_tests")
     .select("winner_ad_id")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .not("winner_ad_id", "is", null);
 
@@ -266,7 +270,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const { data: winnerRows, error: winnerRowsErr } = await supabase
       .from("scraped_ads")
       .select("id, platform, raw_payload, stable_ad_key")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .in("id", winnerIds);
 

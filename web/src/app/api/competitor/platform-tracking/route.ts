@@ -5,6 +5,7 @@ import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-
 import { buildPlatformScheduleDebug } from "@/lib/ad-library/platform-tracking-schedule";
 import type { PlatformClassification } from "@/lib/ad-library/platform-prioritization";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 
@@ -19,11 +20,14 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorId = url.searchParams.get("competitorId") ?? undefined;
   const domain = url.searchParams.get("domain") ?? undefined;
 
-  const competitor = await resolveCompetitorForUser(supabase, user.id, {
+  const competitor = await resolveCompetitorForUser(supabase, dataUserId, {
     competitorId,
     domain,
   });
@@ -47,12 +51,12 @@ export async function GET(req: Request): Promise<NextResponse> {
   const cacheScrapedAtByPlatform = new Map<string, string>();
   const domainHint = competitor.brand_domain?.trim() ?? domain?.trim() ?? "";
   if (domainHint) {
-    const { readDomains } = await resolveAdsCacheDomainForUser(supabase, user.id, domainHint);
+    const { readDomains } = await resolveAdsCacheDomainForUser(supabase, dataUserId, domainHint);
     if (readDomains.length > 0) {
       const { data: cacheRows } = await supabase
         .from("ads_cache")
         .select("platform, scraped_at")
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .in("competitor_domain", readDomains);
       for (const row of cacheRows ?? []) {
         const platform = String(row.platform ?? "").trim();

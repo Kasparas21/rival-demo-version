@@ -14,8 +14,11 @@ import {
   type OrganicPostPreviewAnalysis,
 } from "@/lib/organic-content/organic-post-ai-analysis-types";
 import { enrichOrganicPostForApi } from "@/lib/organic-content/post-display";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/types";
+import { assertCanRunSharedAi } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -48,7 +51,11 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  assertCanRunSharedAi(ctx);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Subscription required for organic post AI analysis."),
@@ -56,13 +63,13 @@ export async function POST(
     );
   }
 
-  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, user.id);
+  const usedThisMonth = await loadAdPreviewAnalysisUsage(supabase, dataUserId);
 
   const { data: cached } = await supabase
     .from("organic_post_preview_analysis_cache")
     .select("analysis, ai_model_version, computed_at")
     .eq("organic_post_id", postId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (cached?.analysis) {
@@ -91,7 +98,7 @@ export async function POST(
     .from("saved_competitors")
     .select("id, name")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (!competitor) {
@@ -103,7 +110,7 @@ export async function POST(
     .select("id, platform, content, likes, comments, shares, views, media_urls, raw_data")
     .eq("id", postId)
     .eq("competitor_id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (postErr || !post) {
@@ -132,12 +139,13 @@ export async function POST(
 
   const upsertRow: Database["public"]["Tables"]["organic_post_preview_analysis_cache"]["Insert"] = {
     organic_post_id: postId,
-    user_id: user.id,
+    user_id: dataUserId,
     analysis: analysis as unknown as Json,
     ai_model_version: PREVIEW_ANALYSIS_MODEL,
   };
 
-  const { error: upErr } = await supabase
+  const admin = createSupabaseAdminClient();
+  const { error: upErr } = await admin
     .from("organic_post_preview_analysis_cache")
     .upsert(upsertRow, { onConflict: "organic_post_id,user_id" });
 

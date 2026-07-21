@@ -38,6 +38,8 @@ export type PlanLimits = {
   /** Competitor email AI analyses per UTC month (null = unlimited). */
   maxEmailAiAnalysesPerMonth: number | null;
   initialScrapeAdsPerPlatform: number | null;
+  /** Team viewer seats the owner can invite (view-only shared workspace). */
+  maxTeamViewers: number;
 };
 
 /** Three competitors, one initial discovery scrape, then upgrade. */
@@ -64,6 +66,7 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
   maxEmailTrackers: 1,
   maxEmailAiAnalysesPerMonth: 5,
   initialScrapeAdsPerPlatform: 200,
+  maxTeamViewers: 0,
 };
 
 const STARTER_LIMITS: PlanLimits = {
@@ -89,6 +92,7 @@ const STARTER_LIMITS: PlanLimits = {
   maxEmailTrackers: 5,
   maxEmailAiAnalysesPerMonth: 10,
   initialScrapeAdsPerPlatform: null,
+  maxTeamViewers: 0,
 };
 
 const PRO_LIMITS: PlanLimits = {
@@ -114,6 +118,7 @@ const PRO_LIMITS: PlanLimits = {
   maxEmailTrackers: 15,
   maxEmailAiAnalysesPerMonth: 20,
   initialScrapeAdsPerPlatform: null,
+  maxTeamViewers: 0,
 };
 
 /** Pro limits × 5 — multi-brand workspaces for agencies (up to 5 client brands). */
@@ -140,6 +145,7 @@ const AGENCY_LIMITS: PlanLimits = {
   maxEmailTrackers: 75,
   maxEmailAiAnalysesPerMonth: 100,
   initialScrapeAdsPerPlatform: null,
+  maxTeamViewers: 5,
 };
 
 const ADMIN_LIMITS: PlanLimits = {
@@ -165,6 +171,7 @@ const ADMIN_LIMITS: PlanLimits = {
   maxEmailTrackers: null,
   maxEmailAiAnalysesPerMonth: null,
   initialScrapeAdsPerPlatform: null,
+  maxTeamViewers: 50,
 };
 
 export const PLAN_LIMITS_BY_TIER: Record<PlanTier, PlanLimits> = {

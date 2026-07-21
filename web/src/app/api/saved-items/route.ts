@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,6 +16,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   if (authErr || !user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
+
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
 
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
@@ -40,22 +44,22 @@ export async function GET(request: Request): Promise<NextResponse> {
         : supabase
             .from("saved_ads")
             .select("id", { count: "exact", head: true })
-            .eq("user_id", user.id)
+            .eq("user_id", dataUserId)
             .eq("competitor_id", competitorId),
       supabase
         .from("saved_emails")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId),
       supabase
         .from("saved_organic_posts")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId),
       supabase
         .from("saved_landing_pages")
         .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .eq("competitor_id", competitorId),
     ]);
 
@@ -84,7 +88,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           .select(
             "id, source_scraped_ad_id, platform, ad_text, ad_creative_url, format, ai_extracted_angle, notes, saved_at, raw_payload",
           )
-          .eq("user_id", user.id)
+          .eq("user_id", dataUserId)
           .eq("competitor_id", competitorId)
           .order("saved_at", { ascending: false }),
     supabase
@@ -92,7 +96,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .select(
         "id, source_competitor_email_id, from_email, from_name, subject, preview_text, email_type, ai_summary, received_at, saved_at",
       )
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .order("saved_at", { ascending: false }),
     supabase
@@ -100,7 +104,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .select(
         "id, source_organic_post_id, platform, post_id, content, media_urls, likes, comments, shares, views, posted_at, post_url, product_type, author_username, author_display_name, author_avatar_url, saved_at",
       )
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .order("saved_at", { ascending: false }),
     supabase
@@ -108,7 +112,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       .select(
         "id, source_landing_page_id, url, label, page_type, screenshot_url, hero_screenshot_url, saved_at",
       )
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .eq("competitor_id", competitorId)
       .order("saved_at", { ascending: false }),
   ]);

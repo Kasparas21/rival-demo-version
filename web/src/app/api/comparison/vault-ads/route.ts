@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -221,7 +222,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const billing = await getBillingEntitlement(supabase, user.id);
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
+  const billing = await getBillingEntitlement(supabase, dataUserId);
   if (!billing.hasAccess) {
     return NextResponse.json(billingRequiredResponseBody("Subscription required for Copy Vault."), { status: 402 });
   }
@@ -242,15 +246,15 @@ export async function GET(req: Request): Promise<NextResponse> {
       );
     }
     const [ownsThem, ownsYou] = await Promise.all([
-      assertOwnsCompetitor(supabase, user.id, themId),
-      assertOwnsCompetitor(supabase, user.id, youId),
+      assertOwnsCompetitor(supabase, dataUserId, themId),
+      assertOwnsCompetitor(supabase, dataUserId, youId),
     ]);
     if (!ownsThem || !ownsYou) {
       return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
     }
     const [them, you] = await Promise.all([
-      loadFunnelBuckets(supabase, user.id, themId, perStage),
-      loadFunnelBuckets(supabase, user.id, youId, perStage),
+      loadFunnelBuckets(supabase, dataUserId, themId, perStage),
+      loadFunnelBuckets(supabase, dataUserId, youId, perStage),
     ]);
     return NextResponse.json({ ok: true, them, you });
   }
@@ -264,20 +268,20 @@ export async function GET(req: Request): Promise<NextResponse> {
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
   if (ownErr || !row) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
   }
 
   if (byFunnel && !angleFilter) {
-    const grouped = await loadFunnelBuckets(supabase, user.id, competitorId, perStage);
+    const grouped = await loadFunnelBuckets(supabase, dataUserId, competitorId, perStage);
     return NextResponse.json({ ok: true, ...grouped });
   }
 
   const vaultMode = url.searchParams.get("vault") === "1";
   if (vaultMode) {
-    return vaultListing({ supabase, userId: user.id, competitorId, url });
+    return vaultListing({ supabase, userId: dataUserId, competitorId, url });
   }
 
   let q = supabase
@@ -285,7 +289,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     .select(
       "id, platform, format, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, ad_creative_url, funnel_stage"
     )
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .eq("is_active", true);
 

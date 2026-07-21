@@ -7,6 +7,9 @@ export const TRIAL_PENDING_COOKIE = "rival_trial_pending";
 /** Short-lived client cookie carrying tester invite through Google OAuth. */
 export const OAUTH_TESTER_INVITE_COOKIE = "rival_oauth_tester";
 
+/** Short-lived client cookie carrying team invite token through Google OAuth. */
+export const OAUTH_TEAM_INVITE_TOKEN_COOKIE = "rival_oauth_team_invite";
+
 const OAUTH_BRIDGE_MAX_AGE_SEC = 900;
 
 function setClientCookie(name: string, value: string): void {
@@ -23,6 +26,12 @@ export function rememberOAuthTesterInvite(inviteCode: string | null | undefined)
   const code = inviteCode?.trim().toLowerCase();
   if (!code) return;
   setClientCookie(OAUTH_TESTER_INVITE_COOKIE, code);
+}
+
+export function rememberOAuthTeamInviteToken(token: string | null | undefined): void {
+  const trimmed = token?.trim() ?? "";
+  if (!trimmed) return;
+  setClientCookie(OAUTH_TEAM_INVITE_TOKEN_COOKIE, trimmed);
 }
 
 export function rememberTrialPending(): void {

@@ -10,11 +10,12 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Google } from "@/components/icons/google-logo";
 import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
 import { buildAuthCallbackPath } from "@/lib/auth/build-email-token-callback-url";
-import { rememberOAuthNext, rememberOAuthTesterInvite } from "@/lib/auth/oauth-bridge-cookies";
+import { rememberOAuthNext, rememberOAuthTeamInviteToken, rememberOAuthTesterInvite } from "@/lib/auth/oauth-bridge-cookies";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
 import { CHOOSE_PLAN_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { hasOnboardingDraft } from "@/lib/onboarding/draft";
 import { TESTER_INVITE_METADATA_KEY } from "@/lib/billing/tester-invite-user";
+import { parseTeamInviteTokenFromPath } from "@/lib/team/team-invite-by-token";
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
 import type { SignupCopy } from "@/lib/i18n/auth/types";
 import { localizeSignupApiError } from "@/lib/i18n/auth/signup-api-errors";
@@ -126,6 +127,13 @@ export function SignupForm({
     setFormError(null);
     rememberOAuthNext(next);
     rememberOAuthTesterInvite(testerInviteCode);
+    const teamInviteToken = parseTeamInviteTokenFromPath(next);
+    if (teamInviteToken) {
+      rememberOAuthTeamInviteToken(teamInviteToken);
+    }
+
+    const invitedEmail = searchParams.get("email")?.trim();
+    const loginHint = invitedEmail || undefined;
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -133,6 +141,7 @@ export function SignupForm({
         redirectTo: buildRedirectTo(buildAuthCallbackPath(next, testerInviteCode)),
         queryParams: {
           prompt: "select_account",
+          ...(loginHint ? { login_hint: loginHint } : {}),
         },
         ...(testerInviteCode
           ? {

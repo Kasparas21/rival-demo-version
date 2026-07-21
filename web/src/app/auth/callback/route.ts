@@ -9,7 +9,7 @@ import {
   resolveAuthCallbackNext,
   shouldRedirectToTrialComplete,
 } from "@/lib/auth/trial-flow";
-import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
+import { TRIAL_PENDING_COOKIE, OAUTH_TEAM_INVITE_TOKEN_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { adminSkipCheckoutDestination, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { persistTesterInviteToUserMetadata, readTesterInviteFromUserMetadata } from "@/lib/billing/tester-invite-user";
@@ -23,6 +23,11 @@ import {
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPublicSupabaseEnv } from "@/lib/supabase/env";
 import type { Database } from "@/lib/supabase/types";
+import {
+  acceptTeamInviteByToken,
+  parseInviteToken,
+  parseTeamInviteTokenFromPath,
+} from "@/lib/team/team-invite-by-token";
 
 const OTP_TYPES = new Set<EmailOtpType>([
   "email",
@@ -123,8 +128,11 @@ export async function GET(request: NextRequest) {
     return fail("no_user");
   }
 
+  let teamInvitesAccepted = 0;
+
   try {
-    await ensureUserProfile(supabase, user);
+    const profileResult = await ensureUserProfile(supabase, user);
+    teamInvitesAccepted = profileResult.teamInvitesAccepted;
   } catch (e) {
     const message =
       e instanceof Error
@@ -144,6 +152,40 @@ export async function GET(request: NextRequest) {
   const onboardingDone = profile?.onboarding_completed === true;
   const safeRequested = resolveAuthCallbackNext(url.searchParams.get("next"), request.cookies);
   const safePostOnboardingPath = safeRequested ? postOnboardingPath(safeRequested) : null;
+
+  const teamInviteFromNext = parseTeamInviteTokenFromPath(safeRequested);
+  const teamInviteFromCookie = parseInviteToken(
+    request.cookies.get(OAUTH_TEAM_INVITE_TOKEN_COOKIE)?.value ?? null,
+  );
+  const teamInviteToken = teamInviteFromNext ?? teamInviteFromCookie;
+
+  let teamInviteDest: { pathname: string; search: string | null } | null = null;
+
+  if (teamInviteToken) {
+    const inviteResult = await acceptTeamInviteByToken(
+      supabase,
+      teamInviteToken,
+      user.id,
+      user.email,
+    );
+
+    if ("status" in inviteResult) {
+      const acceptPath = `/team/accept/${teamInviteToken}`;
+      if (inviteResult.status === 403) {
+        teamInviteDest = { pathname: acceptPath, search: null };
+      } else {
+        teamInviteDest = {
+          pathname: acceptPath,
+          search: `?error=${encodeURIComponent(inviteResult.error)}`,
+        };
+      }
+    } else {
+      teamInviteDest = { pathname: "/dashboard/spy", search: null };
+      if (inviteResult.accepted) {
+        teamInvitesAccepted = Math.max(teamInvitesAccepted, 1);
+      }
+    }
+  }
 
   const inviteFromMetadata = readTesterInviteFromUserMetadata(user.user_metadata);
   const oauthBridgeRaw = request.cookies.get(OAUTH_TESTER_INVITE_COOKIE)?.value;
@@ -193,7 +235,12 @@ export async function GET(request: NextRequest) {
 
   let pathname: string;
   let searchFromIncomplete: string | null = null;
-  if (safePostOnboardingPath === RESET_PASSWORD_PATH) {
+  if (teamInviteDest) {
+    pathname = teamInviteDest.pathname;
+    searchFromIncomplete = teamInviteDest.search;
+  } else if (safePostOnboardingPath?.startsWith("/team/")) {
+    pathname = safePostOnboardingPath;
+  } else if (safePostOnboardingPath === RESET_PASSWORD_PATH) {
     pathname = RESET_PASSWORD_PATH;
   } else if (!onboardingDone && trialFunnel) {
     if (claimedTesterAccess || billing.isUnlimited) {
@@ -220,6 +267,16 @@ export async function GET(request: NextRequest) {
     pathname = "/dashboard/spy";
   }
 
+  if (
+    teamInvitesAccepted > 0 &&
+    !pathname.startsWith("/team/") &&
+    pathname !== RESET_PASSWORD_PATH &&
+    !safePostOnboardingPath?.startsWith("/team/")
+  ) {
+    pathname = "/dashboard/spy";
+    searchFromIncomplete = null;
+  }
+
   const finalDest = request.nextUrl.clone();
   finalDest.pathname = pathname;
   finalDest.search = searchFromIncomplete ?? "";
@@ -239,6 +296,7 @@ export async function GET(request: NextRequest) {
   });
   out.cookies.set("rival_oauth_next", "", { maxAge: 0, path: "/" });
   out.cookies.set(OAUTH_TESTER_INVITE_COOKIE, "", { maxAge: 0, path: "/" });
+  out.cookies.set(OAUTH_TEAM_INVITE_TOKEN_COOKIE, "", { maxAge: 0, path: "/" });
 
   if (inviteCode) {
     setTesterInviteCookie(out, inviteCode);

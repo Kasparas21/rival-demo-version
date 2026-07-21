@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { OAUTH_NEXT_COOKIE, TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
+import { OAUTH_NEXT_COOKIE, OAUTH_TEAM_INVITE_TOKEN_COOKIE, TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function clearAuthBridgeCookies(response: NextResponse): void {
@@ -12,6 +12,7 @@ function clearAuthBridgeCookies(response: NextResponse): void {
   };
   response.cookies.set(TRIAL_PENDING_COOKIE, "", opts);
   response.cookies.set(OAUTH_NEXT_COOKIE, "", opts);
+  response.cookies.set(OAUTH_TEAM_INVITE_TOKEN_COOKIE, "", opts);
 }
 
 async function signOutSession(): Promise<void> {

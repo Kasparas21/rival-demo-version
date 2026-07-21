@@ -5,6 +5,8 @@ import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/po
 import { resolveScrapedAdIdForLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 import type { Database } from "@/lib/supabase/types";
 
@@ -29,19 +31,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const { searchParams } = new URL(request.url);
   const competitorId = (searchParams.get("competitorId") ?? "").trim();
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, competitorId);
+  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, dataUserId, competitorId);
   if (blocked) return blocked;
 
   const { data, error } = await supabase
     .from("saved_ads")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", competitorId)
     .order("saved_at", { ascending: false });
 
@@ -62,6 +67,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  try {
+    assertCanMutate(ctx);
+  } catch (err) {
+    return permissionDeniedResponse(err);
+  }
+  const dataUserId = ctx.dataUserId;
+
   let body: z.infer<typeof postBodySchema>;
   try {
     body = postBodySchema.parse(await request.json());
@@ -74,7 +87,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!scrapedAdId && body.competitorId && body.platform && body.libraryItemId) {
     const resolved = await resolveScrapedAdIdForLibraryItem(
       supabase,
-      user.id,
+      dataUserId,
       body.competitorId.trim(),
       body.platform,
       body.libraryItemId,
@@ -90,20 +103,20 @@ export async function POST(request: Request): Promise<NextResponse> {
     .from("scraped_ads")
     .select("*")
     .eq("id", scrapedAdId)
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .maybeSingle();
 
   if (srcErr || !srcAd) {
     return NextResponse.json({ ok: false, error: "ad not found" }, { status: 404 });
   }
 
-  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, srcAd.competitor_id);
+  const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, dataUserId, srcAd.competitor_id);
   if (blocked) return blocked;
 
   const { data: existing } = await supabase
     .from("saved_ads")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .eq("competitor_id", srcAd.competitor_id)
     .eq("source_scraped_ad_id", srcAd.id)
     .maybeSingle();
@@ -114,7 +127,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         .from("saved_ads")
         .update({ notes: body.notes.slice(0, 500) })
         .eq("id", existing.id)
-        .eq("user_id", user.id)
+        .eq("user_id", dataUserId)
         .select()
         .single();
       if (updErr) {
@@ -126,7 +139,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const insert: Database["public"]["Tables"]["saved_ads"]["Insert"] = {
-    user_id: user.id,
+    user_id: dataUserId,
     competitor_id: srcAd.competitor_id,
     source_scraped_ad_id: srcAd.id,
     platform: srcAd.platform,
@@ -155,7 +168,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       distinctId,
       event: "ad_saved",
       properties: {
-        user_id: user.id,
+        user_id: dataUserId,
         platform: srcAd.platform,
         format: srcAd.format,
         competitor_id: srcAd.competitor_id,

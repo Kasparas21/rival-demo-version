@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAlertType } from "@/lib/alerts/alert-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { resolveWorkspaceContext } from "@/lib/team/workspace-context";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,9 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const ctx = await resolveWorkspaceContext(supabase, user.id);
+  const dataUserId = ctx.dataUserId;
+
   const url = new URL(req.url);
   const competitorId = (url.searchParams.get("competitorId") ?? "").trim();
   const alertType = (url.searchParams.get("type") ?? "").trim();
@@ -29,7 +33,7 @@ export async function GET(req: Request): Promise<NextResponse> {
       "id, user_id, competitor_id, alert_type, severity, title, body, metadata, detected_at, source_scrape_batch_id, is_read, notified_at, dedupe_key, created_at",
       { count: "exact" }
     )
-    .eq("user_id", user.id)
+    .eq("user_id", dataUserId)
     .order("detected_at", { ascending: false });
 
   if (competitorId) query = query.eq("competitor_id", competitorId);
@@ -49,7 +53,7 @@ export async function GET(req: Request): Promise<NextResponse> {
     const { data: comps } = await supabase
       .from("saved_competitors")
       .select("id, name, brand_name")
-      .eq("user_id", user.id)
+      .eq("user_id", dataUserId)
       .in("id", competitorIds);
 
     for (const c of comps ?? []) {
