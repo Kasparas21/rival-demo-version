@@ -7,7 +7,7 @@ export const ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM = 10;
  * Upper bound for Meta, LinkedIn, TikTok, Pinterest, Snapchat, and Google Transparency `resultsLimit`
  * in `app/api/ads/library/route.ts`.
  */
-export const ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM = 1000;
+export const ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM = 2000;
 
 /**
  * Full active-ads sweep cap for meta/google/tiktok refreshes. A sweep that returns fewer ads than
@@ -26,7 +26,7 @@ export type InitialScrapePlatform = Exclude<AdsLibraryPlatform, "microsoft">;
 
 /** Per-platform ad count for the first discovery scrape when a competitor profile is added. */
 export const INITIAL_ADS_PER_PLATFORM = {
-  meta: 500,
+  meta: 2000,
   google: 500,
   tiktok: 500,
   pinterest: 400,

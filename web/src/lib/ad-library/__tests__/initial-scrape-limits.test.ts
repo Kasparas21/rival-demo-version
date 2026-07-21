@@ -13,7 +13,7 @@ import {
 
 describe("INITIAL_ADS_PER_PLATFORM", () => {
   it("matches launch table for each platform", () => {
-    expect(INITIAL_ADS_PER_PLATFORM.meta).toBe(500);
+    expect(INITIAL_ADS_PER_PLATFORM.meta).toBe(2000);
     expect(INITIAL_ADS_PER_PLATFORM.google).toBe(500);
     expect(INITIAL_ADS_PER_PLATFORM.tiktok).toBe(500);
     expect(INITIAL_ADS_PER_PLATFORM.pinterest).toBe(400);
@@ -22,7 +22,7 @@ describe("INITIAL_ADS_PER_PLATFORM", () => {
   });
 
   it("getInitialAdsCount returns map values", () => {
-    expect(getInitialAdsCount("meta")).toBe(500);
+    expect(getInitialAdsCount("meta")).toBe(2000);
     expect(getInitialAdsCount("google")).toBe(500);
     expect(getInitialAdsCount("pinterest")).toBe(400);
     expect(getInitialAdsCount("linkedin")).toBe(300);
@@ -39,7 +39,7 @@ describe("applyInitialScrapeLimits", () => {
     };
     const applied = applyInitialScrapeLimits(base);
 
-    expect(applied.metaMaxAds).toBe(500);
+    expect(applied.metaMaxAds).toBe(2000);
     expect(applied.linkedinMaxAds).toBe(300);
     expect(applied.tiktokMaxAds).toBe(500);
     expect(applied.pinterestMaxResults).toBe(400);

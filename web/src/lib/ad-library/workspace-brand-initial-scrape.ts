@@ -32,7 +32,7 @@ function normalizeWorkspaceDomain(raw: string): string {
     .split("/")[0] ?? "";
 }
 
-/** Load onboarding workspace brand + platform identifiers for the initial 500-ad discovery scrape. */
+/** Load onboarding workspace brand + platform identifiers for the initial discovery scrape. */
 export async function loadWorkspaceBrandScrapeContext(
   brandId?: string | null,
 ): Promise<WorkspaceBrandScrapeContext | null> {
