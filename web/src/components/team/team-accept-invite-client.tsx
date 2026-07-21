@@ -8,9 +8,7 @@ import { LoginForm } from "@/components/auth/login-form";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { glassPanelClass } from "@/components/ui/glass-styles";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { clearSidebarCompetitorsForWorkspaceSwitch } from "@/lib/sidebar-competitors";
-import { normalizeInviteEmail } from "@/lib/team/invite-limits";
 
 type InvitePreview = {
   ok: boolean;
@@ -21,24 +19,14 @@ type InvitePreview = {
   error?: string;
 };
 
-function emailsMatch(sessionEmail: string | null | undefined, invitedEmail: string): boolean {
-  if (!sessionEmail?.trim()) return false;
-  return normalizeInviteEmail(sessionEmail) === normalizeInviteEmail(invitedEmail);
-}
-
-type AuthState = "pending" | "guest-enter" | "matched" | "mismatch";
-
 export function TeamAcceptInviteClient({ token }: { token: string }) {
   const acceptPath = `/team/accept/${token}`;
   const [preview, setPreview] = useState<InvitePreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [entering, setEntering] = useState(false);
-  const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [authState, setAuthState] = useState<AuthState>("pending");
   const [showOptionalLogin, setShowOptionalLogin] = useState(false);
   const autoEnteredRef = useRef(false);
-  const autoAcceptedRef = useRef(false);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -70,7 +58,7 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
         throw new Error(json.error ?? "Could not open workspace");
       }
       clearSidebarCompetitorsForWorkspaceSwitch();
-      window.location.href = "/dashboard/spy";
+      window.location.href = "/preview/spy";
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not open workspace";
       setError(message);
@@ -79,105 +67,21 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
     }
   }, [token]);
 
-  const acceptInvite = useCallback(async () => {
-    setAccepting(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/team/invite/${encodeURIComponent(token)}`, {
-        method: "POST",
-        credentials: "include",
-      });
-      const json = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || json.ok === false) {
-        throw new Error(json.error ?? "Could not accept invite");
-      }
-      clearSidebarCompetitorsForWorkspaceSwitch();
-      window.location.href = "/dashboard/spy";
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not accept invite";
-      setError(message);
-      if (message.toLowerCase().includes("sign in as")) {
-        setAuthState("mismatch");
-      }
-      setAccepting(false);
-    }
-  }, [token]);
-
-  const tryAcceptForUser = useCallback(
-    async (userEmail: string | null | undefined) => {
-      const invitedEmail = preview?.invitedEmail?.trim();
-      if (!invitedEmail) return;
-
-      if (!emailsMatch(userEmail, invitedEmail)) {
-        setAuthState("mismatch");
-        setError(`This invite was sent to ${invitedEmail}. Sign out and sign in with that email.`);
-        return;
-      }
-
-      if (autoAcceptedRef.current) return;
-      autoAcceptedRef.current = true;
-      setAuthState("matched");
-      setAccepting(true);
-      await acceptInvite();
-    },
-    [acceptInvite, preview?.invitedEmail],
-  );
-
   useEffect(() => {
     void loadPreview();
   }, [loadPreview]);
 
   useEffect(() => {
     if (loading || !preview) return;
-
-    const supabase = createSupabaseBrowserClient();
-    void supabase.auth
-      .getUser()
-      .then(({ data: { user } }) => {
-        if (user) {
-          void tryAcceptForUser(user.email);
-          return;
-        }
-
-        if (autoEnteredRef.current) return;
-        autoEnteredRef.current = true;
-        setAuthState("guest-enter");
-        void enterGuestWorkspace();
-      })
-      .catch(() => {
-        if (autoEnteredRef.current) return;
-        autoEnteredRef.current = true;
-        setAuthState("guest-enter");
-        void enterGuestWorkspace();
-      });
-  }, [enterGuestWorkspace, loading, preview, tryAcceptForUser]);
-
-  const handleSignedIn = useCallback(async () => {
-    const supabase = createSupabaseBrowserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    setError(null);
-    setShowOptionalLogin(false);
-    await tryAcceptForUser(user?.email);
-  }, [tryAcceptForUser]);
-
-  const handleSignOut = useCallback(async () => {
-    const supabase = createSupabaseBrowserClient();
-    await supabase.auth.signOut();
-    autoAcceptedRef.current = false;
-    autoEnteredRef.current = false;
-    setAuthState("guest-enter");
-    setError(null);
-    setAccepting(false);
-    setShowOptionalLogin(false);
+    if (autoEnteredRef.current) return;
+    autoEnteredRef.current = true;
     void enterGuestWorkspace();
-  }, [enterGuestWorkspace]);
+  }, [enterGuestWorkspace, loading, preview]);
 
   const ownerLabel = preview?.owner?.displayLabel ?? "A teammate";
   const invitedEmail = preview?.invitedEmail?.trim() ?? "";
 
-  if (loading || authState === "pending") {
+  if (loading) {
     return (
       <InviteShell>
         <LoadingState message="Loading invite…" />
@@ -193,41 +97,10 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
     );
   }
 
-  if (entering || authState === "guest-enter") {
+  if (entering) {
     return (
       <InviteShell>
         <LoadingState message={`Opening ${ownerLabel}'s workspace…`} />
-      </InviteShell>
-    );
-  }
-
-  if (accepting || authState === "matched") {
-    return (
-      <InviteShell>
-        <LoadingState message="Accepting invite…" />
-      </InviteShell>
-    );
-  }
-
-  if (authState === "mismatch") {
-    return (
-      <InviteShell>
-        <div className={`w-full max-w-[440px] ${glassPanelClass} text-center`}>
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-[12px] font-semibold text-amber-900">
-            <Eye className="h-3.5 w-3.5" />
-            Wrong account
-          </div>
-          <p className="text-[15px] font-medium leading-relaxed text-gray-900">
-            {error ?? `This invite was sent to ${invitedEmail}. Sign out and sign in with that email.`}
-          </p>
-          <button
-            type="button"
-            onClick={() => void handleSignOut()}
-            className="mt-6 w-full rounded-full bg-gray-900 px-5 py-3.5 text-[14px] font-semibold text-white hover:bg-black"
-          >
-            Sign out and try again
-          </button>
-        </div>
       </InviteShell>
     );
   }
@@ -255,7 +128,6 @@ export function TeamAcceptInviteClient({ token }: { token: string }) {
               lockEmail={Boolean(invitedEmail)}
               heading="Sign in to accept invite"
               description={`${ownerLabel} invited you. Sign in with ${invitedEmail || "the invited email"} for persistent access.`}
-              onSignedIn={handleSignedIn}
             />
           </div>
         </details>

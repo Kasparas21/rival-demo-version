@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import {
   buildGuestSessionCookie,
   guestSessionCookieOptions,
+  previewActiveCookieOptions,
   validateGuestInviteAccess,
 } from "@/lib/team/guest-session";
 import { getTeamInvitePreview, parseInviteToken } from "@/lib/team/team-invite-by-token";
@@ -38,5 +39,6 @@ export async function POST(_req: Request, context: RouteContext): Promise<NextRe
   });
 
   response.cookies.set("rival_team_guest", value, guestSessionCookieOptions(expiresAtMs));
+  response.cookies.set("rival_preview_active", "1", previewActiveCookieOptions(expiresAtMs));
   return response;
 }

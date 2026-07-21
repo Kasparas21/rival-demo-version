@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { getPreviewWorkspace, getRequestWorkspace } from "@/lib/team/session-workspace";
 import {
   acceptPendingTeamInvites,
   ownerDisplayLabel,
@@ -31,14 +31,17 @@ function serializeContext(ctx: Awaited<ReturnType<typeof resolveWorkspaceContext
   };
 }
 
-export async function GET(): Promise<NextResponse> {
-  const workspace = await getRequestWorkspace();
+export async function GET(req: Request): Promise<NextResponse> {
+  const url = new URL(req.url);
+  const previewMode = url.searchParams.get("mode") === "preview";
+  const workspace = previewMode ? await getPreviewWorkspace() : await getRequestWorkspace();
   if (!workspace) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
 
   return NextResponse.json({
     ok: true,
+    hasAuthenticatedSession: Boolean(workspace.user),
     ...serializeContext(workspace.ctx),
   });
 }

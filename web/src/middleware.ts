@@ -173,6 +173,8 @@ export const config = {
     "/team/:path*",
     "/dashboard",
     "/dashboard/:path*",
+    "/preview",
+    "/preview/:path*",
     "/api/account/:path*",
     "/api/team/:path*",
   ],

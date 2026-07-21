@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   readGuestSessionFromCookies,
+  readPreviewActiveFromCookies,
   validateGuestInviteAccess,
 } from "@/lib/team/guest-session";
 import {
@@ -23,20 +24,13 @@ export type SessionWorkspace = {
   isGuest: boolean;
 };
 
-export async function getRequestWorkspace(): Promise<SessionWorkspace | null> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (!error && user) {
-    const ctx = await resolveWorkspaceContext(supabase, user.id);
-    return { supabase, user, ctx, dataUserId: ctx.dataUserId, isGuest: false };
-  }
-
+async function resolveGuestSessionWorkspace(
+  supabase: SupabaseClient<Database>,
+  user: User | null,
+): Promise<SessionWorkspace | null> {
   const cookieStore = await cookies();
-  const guestPayload = readGuestSessionFromCookies((name) => cookieStore.get(name)?.value);
+  const getCookie = (name: string) => cookieStore.get(name)?.value;
+  const guestPayload = readGuestSessionFromCookies(getCookie);
   if (!guestPayload) return null;
 
   const validation = await validateGuestInviteAccess(guestPayload.inviteToken);
@@ -46,7 +40,40 @@ export async function getRequestWorkspace(): Promise<SessionWorkspace | null> {
   const ctx = await resolveGuestWorkspaceContext(guestPayload.inviteToken, validation.row);
   if (!ctx) return null;
 
-  return { supabase, user: null, ctx, dataUserId: ctx.dataUserId, isGuest: true };
+  return { supabase, user, ctx, dataUserId: ctx.dataUserId, isGuest: true };
+}
+
+/** Guest invite preview only — ignores Supabase auth. */
+export async function getPreviewWorkspace(): Promise<SessionWorkspace | null> {
+  const supabase = await createSupabaseServerClient();
+  return resolveGuestSessionWorkspace(supabase, null);
+}
+
+export async function getRequestWorkspace(): Promise<SessionWorkspace | null> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  const cookieStore = await cookies();
+  const previewActive = readPreviewActiveFromCookies((name) => cookieStore.get(name)?.value);
+
+  if (previewActive) {
+    const guestSession = await resolveGuestSessionWorkspace(supabase, user ?? null);
+    if (guestSession) return guestSession;
+  }
+
+  if (!error && user) {
+    const ctx = await resolveWorkspaceContext(supabase, user.id);
+    return { supabase, user, ctx, dataUserId: ctx.dataUserId, isGuest: false };
+  }
+
+  if (previewActive) {
+    return resolveGuestSessionWorkspace(supabase, null);
+  }
+
+  return null;
 }
 
 /** @deprecated Use getRequestWorkspace */

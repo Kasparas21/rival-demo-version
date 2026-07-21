@@ -21,21 +21,38 @@ export function decodeCompetitorDomainSegment(encoded: string): string {
   }
 }
 
-export function buildCompetitorDashboardPath(canonicalHost: string): string {
+export function buildCompetitorDashboardPath(
+  canonicalHost: string,
+  basePath: "/dashboard" | "/preview" = "/dashboard",
+): string {
   const h = normalizeCompetitorSlug(canonicalHost);
-  return `/dashboard/competitor/${encodeURIComponent(h)}`;
+  return `${basePath}/competitor/${encodeURIComponent(h)}`;
 }
 
 /** Path prefix for dashboard competitor routes (no trailing slash). */
 export const DASHBOARD_COMPETITOR_ROUTE_PREFIX = "/dashboard/competitor";
+export const PREVIEW_COMPETITOR_ROUTE_PREFIX = "/preview/competitor";
+
+export function competitorRoutePrefix(basePath: "/dashboard" | "/preview"): string {
+  return basePath === "/preview" ? PREVIEW_COMPETITOR_ROUTE_PREFIX : DASHBOARD_COMPETITOR_ROUTE_PREFIX;
+}
 
 /**
- * Extract normalized host from pathname `/dashboard/competitor/<segment>` or legacy `/dashboard/competitor`.
+ * Extract normalized host from pathname `/…/competitor/<segment>`.
  */
-export function competitorHostFromDashboardPathname(pathname: string | null): string {
-  if (!pathname?.startsWith(`${DASHBOARD_COMPETITOR_ROUTE_PREFIX}/`)) return "";
-  const rest = pathname.slice(DASHBOARD_COMPETITOR_ROUTE_PREFIX.length + 1);
+export function competitorHostFromShellPathname(
+  pathname: string | null,
+  basePath: "/dashboard" | "/preview" = "/dashboard",
+): string {
+  const prefix = competitorRoutePrefix(basePath);
+  if (!pathname?.startsWith(`${prefix}/`)) return "";
+  const rest = pathname.slice(prefix.length + 1);
   const segment = rest.split("/")[0] ?? "";
   if (!segment) return "";
   return decodeCompetitorDomainSegment(segment);
+}
+
+/** @deprecated Use competitorHostFromShellPathname */
+export function competitorHostFromDashboardPathname(pathname: string | null): string {
+  return competitorHostFromShellPathname(pathname, "/dashboard");
 }

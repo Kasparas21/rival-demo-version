@@ -77,6 +77,16 @@ export async function updateSession(request: NextRequest) {
   const isProtected = matchesPrefix(pathname, PROTECTED_PATHS);
   const isAuthPage = matchesPrefix(pathname, AUTH_PAGES);
 
+  if (pathname.startsWith("/preview")) {
+    if (await hasValidGuestDashboardAccess(request)) {
+      return response;
+    }
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/login";
+    redirectUrl.searchParams.set("next", `${pathname}${search}`);
+    return NextResponse.redirect(redirectUrl);
+  }
+
   if (!user && isProtected) {
     if (pathname.startsWith("/api/")) {
       return response;

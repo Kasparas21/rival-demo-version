@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { buildCompetitorDashboardPath } from "@/lib/competitor-dashboard-url";
+import { useDashboardShell } from "@/lib/dashboard/dashboard-shell-context";
 import { friendlySavedCompetitorsSchemaError } from "@/lib/account/saved-competitors-schema";
 import { isLibraryItemSaved, useSavedAdsStatus } from "@/lib/saved-ads/use-saved-ads";
 import { setupGlobalCacheInvalidator } from "@/lib/cache/cache-invalidator";
@@ -5181,6 +5182,7 @@ function CompetitorDashboardBody({
 export function CompetitorContent({ pathDomainCanonical }: { pathDomainCanonical: string | null }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { basePath } = useDashboardShell();
   const [sidebarEpoch, setSidebarEpoch] = useState(0);
 
   useEffect(() => {
@@ -5215,9 +5217,9 @@ export function CompetitorContent({ pathDomainCanonical }: { pathDomainCanonical
     params.delete("ids");
     params.delete("url");
     const qs = params.toString();
-    const base = buildCompetitorDashboardPath(canonicalHost);
+    const base = buildCompetitorDashboardPath(canonicalHost, basePath);
     router.replace(qs ? `${base}?${qs}` : base, { scroll: false });
-  }, [pathDomainCanonical, canonicalHost, router, searchParams]);
+  }, [pathDomainCanonical, canonicalHost, router, searchParams, basePath]);
 
   return (
     <CompetitorDashboardBody

@@ -728,10 +728,11 @@ export function sidebarCompetitorImageSrc(c: SidebarCompetitor): string | undefi
 }
 
 export function buildCompetitorSidebarHref(
-  c: Pick<SidebarCompetitor, "slug" | "brand" | "logoUrl" | "libraryContext">
+  c: Pick<SidebarCompetitor, "slug" | "brand" | "logoUrl" | "libraryContext">,
+  basePath: "/dashboard" | "/preview" = "/dashboard",
 ): string {
   const urlHost = coerceSidebarCompetitorUrlHost(c);
-  return `/dashboard/competitor/${encodeURIComponent(urlHost)}`;
+  return `${basePath}/competitor/${encodeURIComponent(urlHost)}`;
 }
 
 const SIDEBAR_LETTER_PALETTE = [

@@ -11,6 +11,7 @@ export type WorkspaceContextState = {
   isViewer: boolean;
   isGuest: boolean;
   guestExpiresAt: string | null;
+  hasAuthenticatedSession?: boolean;
   owner: {
     ownerUserId: string;
     ownerEmail: string | null;
@@ -27,7 +28,8 @@ export type WorkspaceContextState = {
 
 type ApiResponse = WorkspaceContextState & { ok?: boolean; error?: string };
 
-export function useWorkspaceContext() {
+export function useWorkspaceContext(options?: { previewMode?: boolean }) {
+  const previewMode = options?.previewMode ?? false;
   const [state, setState] = useState<WorkspaceContextState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,8 @@ export function useWorkspaceContext() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/team/context", { credentials: "include" });
+      const contextUrl = previewMode ? "/api/team/context?mode=preview" : "/api/team/context";
+      const res = await fetch(contextUrl, { credentials: "include" });
       const json = (await res.json()) as ApiResponse;
       if (!res.ok || json.ok === false) {
         throw new Error(json.error ?? "Failed to load workspace context");
@@ -47,6 +50,7 @@ export function useWorkspaceContext() {
         isViewer: json.isViewer,
         isGuest: json.isGuest ?? false,
         guestExpiresAt: json.guestExpiresAt ?? null,
+        hasAuthenticatedSession: json.hasAuthenticatedSession ?? false,
         owner: json.owner ?? null,
         sharedWorkspaces: json.sharedWorkspaces ?? [],
       });
@@ -56,7 +60,7 @@ export function useWorkspaceContext() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [previewMode]);
 
   useEffect(() => {
     void refresh();

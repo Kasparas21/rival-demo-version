@@ -7,6 +7,7 @@ import {
 } from "@/lib/team/team-invite-by-token";
 
 export const TEAM_GUEST_COOKIE = "rival_team_guest";
+export const RIVAL_PREVIEW_ACTIVE_COOKIE = "rival_preview_active";
 
 export type GuestSessionPayload = {
   inviteToken: string;
@@ -129,4 +130,18 @@ export function clearGuestSessionCookieOptions() {
     path: "/",
     maxAge: 0,
   };
+}
+
+export function previewActiveCookieOptions(expiresAtMs: number) {
+  return guestSessionCookieOptions(expiresAtMs);
+}
+
+export function clearPreviewActiveCookieOptions() {
+  return clearGuestSessionCookieOptions();
+}
+
+export function readPreviewActiveFromCookies(
+  getCookie: (name: string) => string | undefined,
+): boolean {
+  return getCookie(RIVAL_PREVIEW_ACTIVE_COOKIE) === "1";
 }
