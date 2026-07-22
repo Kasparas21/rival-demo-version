@@ -548,7 +548,7 @@ export function useAdLibrary(
         clientMeta: hydrateClientMeta ?? undefined,
       });
       if (loadAbortRef.current !== ac || snapshot !== sessionRef.current) return;
-      if (fromDb === "fresh") {
+      if (fromDb.kind === "fresh") {
         const cached = readLocalAdsLibraryCacheForDomain(payloadKey, brand.domain);
         const latestHydrateMeta = readAdsCacheHydrateClientMeta(brand.domain);
         if (cached && cachedLibraryResponseIsComplete(cached, adsPlatforms, latestHydrateMeta)) {
@@ -558,9 +558,9 @@ export function useAdLibrary(
         void load({ skipCache: false });
         return;
       }
-      if (fromDb && totalAdsInResponse(fromDb) > 0) {
+      if (fromDb.kind === "full" && totalAdsInResponse(fromDb.response) > 0) {
         const merged = repairAdsLibraryResponseMedia(
-          mergeAdsLibraryState(dataRef.current, fromDb),
+          mergeAdsLibraryState(dataRef.current, fromDb.response),
         );
         paintResponse(merged, true);
         return;
