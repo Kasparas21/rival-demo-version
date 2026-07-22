@@ -21,7 +21,10 @@ import {
   type FetchAdsLibraryResult,
 } from "@/lib/ad-library/deduped-fetch";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
-import { countLibraryAdsForPlatform } from "@/lib/ad-library/library-response-utils";
+import {
+  adsLibraryResponseMissingExpectedPlatforms,
+  countLibraryAdsForPlatform,
+} from "@/lib/ad-library/library-response-utils";
 import {
   DEFAULT_GOOGLE_ADS_REGION,
   normalizeGoogleAdsRegion,
@@ -90,17 +93,14 @@ function readLocalAdsLibraryCacheForDomain(
   );
 }
 
-async function fetchHydratedAdsLibraryFromDomain(
-  domain: string,
-  signal?: AbortSignal,
-  clientMeta = readAdsCacheHydrateClientMeta(domain),
-): Promise<AdsLibraryResponse | null | "fresh"> {
-  const d = domain.trim();
-  if (!d) return null;
-  const result = await fetchHydratedAdsLibraryConditional(d, { signal, clientMeta });
-  if (result.kind === "fresh") return "fresh";
-  if (result.kind === "full") return result.response;
-  return null;
+function cachedLibraryResponseIsComplete(
+  cached: FetchAdsLibraryResult,
+  expectedPlatforms: readonly AdsLibraryPlatform[],
+  hydrateMeta: ReturnType<typeof readAdsCacheHydrateClientMeta>,
+): boolean {
+  if (!fetchResultHasLibraryCreatives(cached)) return false;
+  const response = coerceAdsLibraryResponse(cached.response as AdsLibraryResponse);
+  return !adsLibraryResponseMissingExpectedPlatforms(response, expectedPlatforms, hydrateMeta);
 }
 
 type Ids = Partial<{
@@ -297,7 +297,29 @@ export function useAdLibrary(
               clientMeta: readAdsCacheHydrateClientMeta(domain),
             });
             if (hydrateResult.kind === "fresh") {
-              hydrateMarkedFresh = true;
+              const cached = readLocalAdsLibraryCacheForDomain(payloadKey, brand.domain);
+              const hydrateMeta = readAdsCacheHydrateClientMeta(domain);
+              if (
+                cached &&
+                cachedLibraryResponseIsComplete(cached, adsPlatforms, hydrateMeta)
+              ) {
+                hydrateMarkedFresh = true;
+              } else {
+                const forced = await fetchHydratedAdsLibraryConditional(domain, {
+                  signal: ac.signal,
+                });
+                if (forced.kind === "full") {
+                  json = forced.response;
+                  httpOk = true;
+                  totalAfterFetch = ALL_ADS_API_PLATFORMS.reduce(
+                    (sum, pl) =>
+                      sum + countLibraryAdsForPlatform(pl, coerceAdsLibraryResponse(json as AdsLibraryResponse)),
+                    0
+                  );
+                } else {
+                  hydrateMarkedFresh = true;
+                }
+              }
             } else if (hydrateResult.kind === "full") {
               json = hydrateResult.response;
               httpOk = true;
@@ -426,7 +448,7 @@ export function useAdLibrary(
         }
       }
     },
-    [payload, payloadKey, brand.domain]
+    [payload, payloadKey, brand.domain, adsPlatforms]
   );
 
   useLayoutEffect(() => {
@@ -481,33 +503,55 @@ export function useAdLibrary(
       return;
     }
 
+    const hydrateMeta = readAdsCacheHydrateClientMeta(brand.domain);
     const exact = readAdsLibraryCacheLastKnownGood(payloadKey);
-    if (exact && fetchResultHasLibraryCreatives(exact)) {
+    if (exact && cachedLibraryResponseIsComplete(exact, adsPlatforms, hydrateMeta)) {
       if (snapshot !== sessionRef.current) return;
       paintResponse(exact.response as AdsLibraryResponse, exact.httpOk);
       return;
     }
 
     const legacy = readAdsLibraryCacheLastKnownGoodForBrandDomain(brand.domain);
-    if (legacy && fetchResultHasLibraryCreatives(legacy)) {
+    if (
+      legacy &&
+      cachedLibraryResponseIsComplete(legacy, adsPlatforms, hydrateMeta) &&
+      legacy !== exact
+    ) {
       if (snapshot !== sessionRef.current) return;
       paintResponse(legacy.response as AdsLibraryResponse, legacy.httpOk);
       return;
     }
 
-    setData(null);
-    setLoading(true);
-    setFetchError(null);
+    const partialCached = exact ?? legacy;
+    if (partialCached && fetchResultHasLibraryCreatives(partialCached)) {
+      if (snapshot !== sessionRef.current) return;
+      dataRef.current = coerceAdsLibraryResponse(partialCached.response as AdsLibraryResponse);
+      setData(dataRef.current);
+      setFetchError(null);
+      setLoading(true);
+    } else {
+      setData(null);
+      setLoading(true);
+      setFetchError(null);
+    }
 
     const ac = new AbortController();
     loadAbortRef.current = ac;
 
     void (async () => {
-      const fromDb = await fetchHydratedAdsLibraryFromDomain(brand.domain, ac.signal);
+      const hydrateClientMeta =
+        partialCached && fetchResultHasLibraryCreatives(partialCached)
+          ? undefined
+          : readAdsCacheHydrateClientMeta(brand.domain);
+      const fromDb = await fetchHydratedAdsLibraryConditional(brand.domain, {
+        signal: ac.signal,
+        clientMeta: hydrateClientMeta ?? undefined,
+      });
       if (loadAbortRef.current !== ac || snapshot !== sessionRef.current) return;
       if (fromDb === "fresh") {
         const cached = readLocalAdsLibraryCacheForDomain(payloadKey, brand.domain);
-        if (cached && fetchResultHasLibraryCreatives(cached)) {
+        const latestHydrateMeta = readAdsCacheHydrateClientMeta(brand.domain);
+        if (cached && cachedLibraryResponseIsComplete(cached, adsPlatforms, latestHydrateMeta)) {
           paintResponse(cached.response as AdsLibraryResponse, cached.httpOk);
           return;
         }
@@ -515,12 +559,15 @@ export function useAdLibrary(
         return;
       }
       if (fromDb && totalAdsInResponse(fromDb) > 0) {
-        paintResponse(fromDb, true);
+        const merged = repairAdsLibraryResponseMedia(
+          mergeAdsLibraryState(dataRef.current, fromDb),
+        );
+        paintResponse(merged, true);
         return;
       }
       void load({ skipCache: false });
     })();
-  }, [enabled, payloadKey, brand.domain, load]);
+  }, [enabled, payloadKey, brand.domain, load, adsPlatforms]);
 
   /** Rescrape / discovery writes session cache + dispatches this event — reload without a full navigation. */
   useEffect(() => {
