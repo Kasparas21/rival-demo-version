@@ -90,12 +90,14 @@ export function resolveCompetitorTrackedAdsPlatforms(
   ids: Record<string, string> | null | undefined,
 ): AdsLibraryPlatform[] {
   const trimmed = channelsCsv.trim();
-  if (trimmed) {
-    return channelsQueryToAdsPlatforms(trimmed.split(","));
-  }
-  const fromIds = resolveAdsPlatformsForCompetitorView("", ids);
-  if (fromIds.length > 0 && fromIds.length < ALL_ADS_API_PLATFORMS.length) {
-    return fromIds;
+  const fromChannels = trimmed ? channelsQueryToAdsPlatforms(trimmed.split(",")) : [];
+  const fromIds =
+    ids && Object.keys(ids).length > 0
+      ? ALL_ADS_API_PLATFORMS.filter((p) => platformHasFilledId(p, ids))
+      : [];
+  const merged = new Set<AdsLibraryPlatform>([...fromChannels, ...fromIds]);
+  if (merged.size > 0) {
+    return ALL_ADS_API_PLATFORMS.filter((p) => merged.has(p));
   }
   return channelsQueryToAdsPlatforms([...DEFAULT_SELECTED_CHANNELS]);
 }

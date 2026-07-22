@@ -30,7 +30,7 @@ export async function assertCanInviteTeamViewer(
   const billing = await getBillingEntitlement(supabase, ownerUserId);
   const maxTeamViewers = billing.limits.maxTeamViewers;
   if (maxTeamViewers <= 0) {
-    throw new Error("Team viewers are available on the Agency plan.");
+    throw new Error("Team viewers are not included on your current plan.");
   }
   const used = await countTeamViewerSlotsUsed(supabase, ownerUserId);
   if (used >= maxTeamViewers) {

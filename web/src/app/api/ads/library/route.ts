@@ -5,6 +5,7 @@ import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
 import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
+  metaSweepCapAllowsKillMarking,
 } from "@/lib/ad-library/constants";
 import { estimateAdsForPlatforms } from "@/lib/billing/estimate-scrape-ads";
 import { filterGoogleRowsActiveToday } from "@/lib/ad-library/google-active-today-filter";
@@ -41,6 +42,7 @@ import {
   type AdsCachePickRow,
 } from "@/lib/ad-library/ads-cache-pick";
 import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
+import { supplementAdsLibraryFromScrapedAds } from "@/lib/ad-library/supplement-library-from-scraped-ads";
 import { assertCanScrape, permissionDeniedResponse } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
 import { workspaceReadClient } from "@/lib/team/workspace-read-client";
@@ -536,13 +538,22 @@ export async function POST(req: Request): Promise<NextResponse> {
       platformsRequested,
       platformsNeedingScrape,
       out,
-      /** Only Meta ACTIVE sweeps prove absence; ALL-status scrapes include ended ads. */
+      /** Only full Meta ACTIVE sweeps may mark absent ads killed — not workspace refreshes (cap 10). */
       sweepCaps: {
-        ...(metaStatus === "ACTIVE" ? { meta: metaMaxAds } : {}),
-        google: googleResultsLimit,
-        tiktok: tiktokMaxAds,
+        ...(metaStatus === "ACTIVE" && metaSweepCapAllowsKillMarking(metaMaxAds)
+          ? { meta: metaMaxAds }
+          : {}),
       },
     });
+  }
+
+  if (userId && resolvedCompetitorId) {
+    const supplemented = await supplementAdsLibraryFromScrapedAds(readDb, {
+      userId,
+      competitorId: resolvedCompetitorId,
+      response: out,
+    });
+    Object.assign(out, supplemented);
   }
 
   /** Refresh Strategy Map whenever ads are loaded (cache hit or fresh scrape) so derivation/spend stay current. */

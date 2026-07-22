@@ -166,6 +166,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
         ),
         out: outForReconcile,
         sweepCaps,
+        lastScrapedAt: nowPersist,
       });
     } catch (reconcileErr) {
       console.error("[finalizeAdsLibrary] reconcileLifecycleAfterSweep", reconcileErr);

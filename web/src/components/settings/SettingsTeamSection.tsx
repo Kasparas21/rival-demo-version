@@ -130,8 +130,8 @@ export function SettingsTeamSection() {
     >
       {max <= 0 ? (
         <SettingsGlassBanner tone="info">
-          Team viewers are available on the Agency plan. Upgrade to invite your boss or teammates for free
-          read-only access.
+          Team viewers are not included on your current plan. Upgrade to invite read-only teammates to your
+          workspace.
         </SettingsGlassBanner>
       ) : (
         <>

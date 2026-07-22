@@ -15,6 +15,11 @@ export const ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM = 2000;
  */
 export const FULL_SWEEP_ADS_PER_PLATFORM = 1000;
 
+/** Only full sweeps may mark Meta ads killed when absent from results. */
+export function metaSweepCapAllowsKillMarking(metaMaxAds: number): boolean {
+  return metaMaxAds >= FULL_SWEEP_ADS_PER_PLATFORM;
+}
+
 /** Google Transparency `resultsLimit` when the client omits `googleResultsLimit`. */
 export const GOOGLE_ADS_LIBRARY_DEFAULT_RESULTS_LIMIT = 25;
 

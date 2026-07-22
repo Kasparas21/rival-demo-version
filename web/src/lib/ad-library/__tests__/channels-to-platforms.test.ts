@@ -30,6 +30,12 @@ describe("resolveCompetitorTrackedAdsPlatforms", () => {
     expect(resolveCompetitorTrackedAdsPlatforms("meta,google", null)).toEqual(["meta", "google"]);
   });
 
+  it("includes platforms with filled ids even when channels omit them", () => {
+    expect(
+      resolveCompetitorTrackedAdsPlatforms("meta,google", { linkedin: "https://linkedin.com/company/foo" }),
+    ).toEqual(["meta", "google", "linkedin"]);
+  });
+
   it("defaults to Meta + Google when selection is unknown", () => {
     expect(resolveCompetitorTrackedAdsPlatforms("", null)).toEqual(["meta", "google"]);
     expect(resolveCompetitorTrackedAdsPlatforms("", {})).toEqual(["meta", "google"]);

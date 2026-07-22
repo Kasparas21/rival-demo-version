@@ -8,6 +8,7 @@ import {
   adsLibraryResponseFromAdsCacheRows,
   expandAdsCacheDomainCandidates,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
+import { supplementAdsLibraryFromScrapedAds } from "@/lib/ad-library/supplement-library-from-scraped-ads";
 import type { Database } from "@/lib/supabase/types";
 
 export type AdsCacheUserFetchResult = {
@@ -38,7 +39,11 @@ export async function fetchLatestAdsLibraryBundleFromUserCache(
   if (!trimmed) return null;
   const cleaned = normalizeCompetitorSlug(trimmed).toLowerCase();
 
-  const { readDomains, cacheDomain } = await resolveAdsCacheDomainForUser(supabase, userId, trimmed);
+  const { readDomains, cacheDomain, competitorId } = await resolveAdsCacheDomainForUser(
+    supabase,
+    userId,
+    trimmed,
+  );
   if (readDomains.length === 0) return null;
 
   const fetchCache = async (domains: string[]) => {
@@ -91,8 +96,16 @@ export async function fetchLatestAdsLibraryBundleFromUserCache(
     new Date().toISOString(),
   );
   if (latestByPlatform.size === 0) return null;
+  let response = adsLibraryResponseFromAdsCacheRows([...latestByPlatform.values()]);
+  if (competitorId) {
+    response = await supplementAdsLibraryFromScrapedAds(supabase, {
+      userId,
+      competitorId,
+      response,
+    });
+  }
   return {
-    response: adsLibraryResponseFromAdsCacheRows([...latestByPlatform.values()]),
+    response,
     pickedRows: [...latestByPlatform.values()],
     cacheDomain,
   };

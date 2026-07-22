@@ -66,7 +66,7 @@ const FREE_TRIAL_LIMITS: PlanLimits = {
   maxEmailTrackers: 1,
   maxEmailAiAnalysesPerMonth: 5,
   initialScrapeAdsPerPlatform: 200,
-  maxTeamViewers: 0,
+  maxTeamViewers: 1,
 };
 
 const STARTER_LIMITS: PlanLimits = {
@@ -92,7 +92,7 @@ const STARTER_LIMITS: PlanLimits = {
   maxEmailTrackers: 5,
   maxEmailAiAnalysesPerMonth: 10,
   initialScrapeAdsPerPlatform: null,
-  maxTeamViewers: 0,
+  maxTeamViewers: 2,
 };
 
 const PRO_LIMITS: PlanLimits = {
@@ -118,7 +118,7 @@ const PRO_LIMITS: PlanLimits = {
   maxEmailTrackers: 15,
   maxEmailAiAnalysesPerMonth: 20,
   initialScrapeAdsPerPlatform: null,
-  maxTeamViewers: 0,
+  maxTeamViewers: 5,
 };
 
 /** Pro limits × 5 — multi-brand workspaces for agencies (up to 5 client brands). */
