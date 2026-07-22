@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { computeActivityScore } from "@/lib/activity-score/compute";
+import {
+  cachedScoreLooksStale,
+  competitorDomainHint,
+  countScrapedAdsForCompetitor,
+  ensureScrapedAdsForActivityScore,
+} from "@/lib/activity-score/prepare-score-read";
 import { scheduleActivityScoreRecompute } from "@/lib/activity-score/schedule-recompute";
 import type { ActivityScoreResult, ActivitySignalName } from "@/lib/activity-score/types";
 import { SIGNAL_WEIGHTS as W } from "@/lib/activity-score/types";
@@ -88,7 +94,7 @@ export async function GET(
 
   const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
-    .select("id")
+    .select("id, brand_domain, slug")
     .eq("id", competitorId)
     .eq("user_id", dataUserId)
     .single();
@@ -96,6 +102,15 @@ export async function GET(
   if (compErr || !competitor) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
+
+  const domainHint = competitorDomainHint(competitor);
+  let liveAdsCount = await countScrapedAdsForCompetitor(db, dataUserId, competitorId);
+  liveAdsCount = await ensureScrapedAdsForActivityScore({
+    userId: dataUserId,
+    competitorId,
+    domainHint,
+    liveAdsCount,
+  });
 
   const { data: row, error: rowErr } = await db
     .from("competitor_activity_scores")
@@ -106,6 +121,23 @@ export async function GET(
 
   if (rowErr) {
     return NextResponse.json({ ok: false, error: rowErr.message }, { status: 500 });
+  }
+
+  const admin = createSupabaseAdminClient();
+  const shouldRecomputeNow =
+    liveAdsCount >= 3 && (!row || cachedScoreLooksStale(row, liveAdsCount));
+
+  if (shouldRecomputeNow) {
+    const fresh = await computeActivityScore({
+      userId: dataUserId,
+      competitorId,
+      supabaseAdmin: admin,
+    });
+    return NextResponse.json({
+      ok: true,
+      ...fresh,
+      calculatedAt: new Date().toISOString(),
+    });
   }
 
   if (row) {
@@ -133,7 +165,6 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "Activity score not available yet" }, { status: 404 });
   }
 
-  const admin = createSupabaseAdminClient();
   const fresh = await computeActivityScore({
     userId: dataUserId,
     competitorId,
@@ -180,7 +211,7 @@ export async function POST(
 
   const { data: competitor, error: compErr } = await supabase
     .from("saved_competitors")
-    .select("id")
+    .select("id, brand_domain, slug")
     .eq("id", competitorId)
     .eq("user_id", dataUserId)
     .single();
@@ -188,6 +219,14 @@ export async function POST(
   if (compErr || !competitor) {
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
+
+  let liveAdsCount = await countScrapedAdsForCompetitor(supabase, dataUserId, competitorId);
+  liveAdsCount = await ensureScrapedAdsForActivityScore({
+    userId: dataUserId,
+    competitorId,
+    domainHint: competitorDomainHint(competitor),
+    liveAdsCount,
+  });
 
   const admin = createSupabaseAdminClient();
   const fresh = await computeActivityScore({

@@ -311,8 +311,9 @@ export function ActivityScorePanel({
             isAnalytics ? "bg-amber-50/90 border-amber-200/80" : "text-amber-900 bg-amber-50/90 border-amber-200/80"
           }`}
         >
-          Not enough ads scraped yet to compute a meaningful score. We need at least 3 ads. Try scraping more data or
-          wait for the next library update.
+          {typeof activeAdsCount === "number" && activeAdsCount >= 3
+            ? "Activity score is still syncing with the ad library. Refresh in a moment or tap the refresh button."
+            : "Not enough ads scraped yet to compute a meaningful score. We need at least 3 ads. Try scraping more data or wait for the next library update."}
         </p>
       ) : null}
 

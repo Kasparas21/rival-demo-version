@@ -138,24 +138,38 @@ export async function computeActivityScore(params: {
 
   const activityScoreBefore = priorScoreRow?.score ?? null;
 
-  const { data: rows, error: fetchErr } = await supabaseAdmin
-    .from("scraped_ads")
-    .select("format, ad_text, first_seen_at, platform, raw_payload, ad_creative_url")
-    .eq("user_id", userId)
-    .eq("competitor_id", competitorId);
+  const pageSize = 1000;
+  const ads: ScrapedAdForActivityScore[] = [];
+  let fetchErr: { message: string } | null = null;
+  for (let from = 0; ; from += pageSize) {
+    const { data: rows, error } = await supabaseAdmin
+      .from("scraped_ads")
+      .select("format, ad_text, first_seen_at, platform, raw_payload, ad_creative_url")
+      .eq("user_id", userId)
+      .eq("competitor_id", competitorId)
+      .range(from, from + pageSize - 1);
 
-  if (fetchErr) {
-    console.error("[activity-score] scraped_ads fetch failed", fetchErr);
+    if (error) {
+      fetchErr = error;
+      console.error("[activity-score] scraped_ads fetch failed", error);
+      ads.length = 0;
+      break;
+    }
+
+    const batch = rows ?? [];
+    for (const r of batch as Row[]) {
+      ads.push({
+        format: r.format,
+        ad_text: r.ad_text ?? "",
+        first_seen_at: r.first_seen_at,
+        platform: r.platform,
+        raw_payload: r.raw_payload,
+        ad_creative_url: r.ad_creative_url,
+      });
+    }
+
+    if (batch.length < pageSize) break;
   }
-
-  const ads: ScrapedAdForActivityScore[] = (rows ?? []).map((r: Row) => ({
-    format: r.format,
-    ad_text: r.ad_text ?? "",
-    first_seen_at: r.first_seen_at,
-    platform: r.platform,
-    raw_payload: r.raw_payload,
-    ad_creative_url: r.ad_creative_url,
-  }));
 
   const adsCount = ads.length;
 
