@@ -70,7 +70,7 @@ function mergeSimpleAdsPlatform<T extends { id?: string }>(
   platform: Exclude<AdsLibraryPlatform, "meta" | "google" | "microsoft">,
   rows: ScrapedRow[],
 ): AdsLibraryResponse {
-  const bucket = out[platform] as { ads: T[]; error: string | null };
+  const bucket = out[platform] as unknown as { ads: T[]; error: string | null };
   const existingKeys = new Set((bucket.ads ?? []).map((ad) => stableAdKeyForLibraryItem(platform, ad)));
   const merged = [...(bucket.ads ?? [])];
   for (const row of rows) {

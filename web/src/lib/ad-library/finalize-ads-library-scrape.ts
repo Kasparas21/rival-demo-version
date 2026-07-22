@@ -150,6 +150,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
   }
 
   if (userId && resolvedCompetitorId && platformsNeedingScrape.size > 0) {
+    const lastScrapedAt = new Date().toISOString();
     /**
      * Sweep reconciliation must see the raw scrape results, not the cache-merged
      * arrays — pass the pre-merge Meta ads captured above.
@@ -166,7 +167,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
         ),
         out: outForReconcile,
         sweepCaps,
-        lastScrapedAt: nowPersist,
+        lastScrapedAt,
       });
     } catch (reconcileErr) {
       console.error("[finalizeAdsLibrary] reconcileLifecycleAfterSweep", reconcileErr);
