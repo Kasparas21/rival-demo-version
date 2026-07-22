@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { assertCanMutate, permissionDeniedResponse } from "@/lib/team/permissions";
 import { getRequestWorkspace } from "@/lib/team/session-workspace";
+import { workspaceReadClient } from "@/lib/team/workspace-read-client";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,14 +78,15 @@ export async function GET(
   if (!workspace) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
-  const { supabase, user, ctx, dataUserId } = workspace;
+  const { ctx, dataUserId } = workspace;
+  const db = workspaceReadClient(workspace);
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId");
   if (!competitorId) {
     return NextResponse.json({ ok: false, error: "missing competitorId" }, { status: 400 });
   }
 
-  const { data: competitor, error: compErr } = await supabase
+  const { data: competitor, error: compErr } = await db
     .from("saved_competitors")
     .select("id")
     .eq("id", competitorId)
@@ -95,7 +97,7 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
   }
 
-  const { data: row, error: rowErr } = await supabase
+  const { data: row, error: rowErr } = await db
     .from("competitor_activity_scores")
     .select("*")
     .eq("user_id", dataUserId)
