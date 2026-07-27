@@ -184,7 +184,7 @@ async function fetchScrapedAdRows(
 
     if (error) return { rows: [], error: error.message };
 
-    for (const row of (data ?? []) as ScrapedRow[]) {
+    for (const row of (data ?? []) as unknown as ScrapedRow[]) {
       if (!row?.id) continue;
       byId.set(row.id, {
         ...row,
@@ -320,7 +320,7 @@ export async function buildDiscoveryFeed(
   }
 
   const { rows: competitors, error: compErr } = await loadCompetitorsById(supabase, userId, competitorIds);
-  if (compErr) return { ok: false, error: compErr.message };
+  if (compErr) return { ok: false, error: compErr };
 
   const competitorById = new Map<string, CompetitorRow>();
   for (const c of competitors) {
@@ -339,7 +339,7 @@ export async function buildDiscoveryFeed(
     needsPayloadUpfront ? FULL_AD_SELECT : LEAN_AD_SELECT,
     input.competitorId,
   );
-  if (adsErr) return { ok: false, error: adsErr.message };
+  if (adsErr) return { ok: false, error: adsErr };
 
   const nowMs = Date.now();
   const dateStart = datePresetStart(input.datePreset, nowMs);
