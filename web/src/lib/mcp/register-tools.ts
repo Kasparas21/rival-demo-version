@@ -77,7 +77,7 @@ export function registerMcpTools(
     {
       title: "Get competitor ads",
       description:
-        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort newest or longest_running. Set include_full_copy=true for untruncated ad text.`,
+        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort newest or longest_running. Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url (Spy Rival detail drawer) and platform_library_url (direct Meta Ads Library / platform transparency link when available). Prefer platform_library_url when the user asks for Meta Ads Library links.`,
       inputSchema: {
         competitor: z.string().min(1).describe("Competitor name, domain, or UUID"),
         platform: z.string().optional(),
@@ -132,7 +132,7 @@ export function registerMcpTools(
     {
       title: "Search copy vault",
       description:
-        `Full-text search across enriched ad copy and angles. Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT} per page). Requires active subscription.`,
+        `Full-text search across enriched ad copy and angles. Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT} per page). Requires active subscription. Each result includes spy_rival_url and platform_library_url (direct Meta Ads Library link when available).`,
       inputSchema: {
         query: z.string().min(1),
         competitor: z.string().optional(),
@@ -153,7 +153,7 @@ export function registerMcpTools(
     {
       title: "Get proven winners",
       description:
-        `Longest-running active ads (30+ days). Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT}). Requires active subscription.`,
+        `Longest-running active ads (30+ days). Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT}). Requires active subscription. Each winner includes spy_rival_url and platform_library_url (direct Meta Ads Library link when available).`,
       inputSchema: {
         competitor: z.string().optional(),
         platform: z.string().optional(),
@@ -260,7 +260,7 @@ export function registerMcpTools(
     {
       title: "Get landing pages",
       description:
-        `Landing page groups from active ads (max ${MCP_PAGE_MAX_VAULT} per page). Pass url to fetch ads for a specific landing page instead.`,
+        `Landing page groups from active ads (max ${MCP_PAGE_MAX_VAULT} per page). Pass url to fetch ads for a specific landing page instead. Ads include spy_rival_url and platform_library_url (direct Meta Ads Library link when available).`,
       inputSchema: {
         competitor: z.string().min(1),
         url: z.string().optional().describe("When set, returns ads pointing to this URL instead of page groups."),

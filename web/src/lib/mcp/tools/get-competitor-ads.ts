@@ -5,6 +5,7 @@ import { buildMcpPagination, MCP_PAGE_MAX, parseMcpPage } from "@/lib/mcp/pagina
 import { requireCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { lifespanDays } from "@/lib/mcp/truncate";
+import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 
 export type GetCompetitorAdsInput = {
@@ -25,7 +26,7 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
   let q = ctx.supabase
     .from("scraped_ads")
     .select(
-      "id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, format, is_active",
+      "id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, format, is_active, raw_payload",
       { count: "exact" },
     )
     .eq("user_id", ctx.auth.userId)
@@ -46,6 +47,13 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
   const total = count ?? 0;
   const rows = (data ?? []).map((a) => {
     const copy = formatAdCopyForMcp(a.ad_text ?? "", input.include_full_copy);
+    const links = mcpAdLinksForScrapedRow(
+      ctx.auth.appOrigin,
+      comp.domain,
+      a.platform,
+      a.id,
+      a.raw_payload,
+    );
     return {
       id: a.id,
       platform: a.platform,
@@ -56,6 +64,8 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
       last_seen_at: a.last_seen_at,
       days_running: lifespanDays(a.first_seen_at, a.last_seen_at),
       angle: a.ai_extracted_angle,
+      spy_rival_url: links.spy_rival_url,
+      platform_library_url: links.platform_library_url,
     };
   });
 

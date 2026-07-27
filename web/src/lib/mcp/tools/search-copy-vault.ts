@@ -6,6 +6,7 @@ import { paginateInMemory, parseMcpPage, MCP_PAGE_MAX_VAULT } from "@/lib/mcp/pa
 import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { lifespanDays } from "@/lib/mcp/truncate";
+import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 
 export async function searchCopyVault(
@@ -32,6 +33,7 @@ export async function searchCopyVault(
 
   let competitorIds: string[] | null = null;
   let dashboardDomain: string | null = null;
+  const domainById = new Map<string, string | null>();
 
   if (input.competitor?.trim()) {
     const comp = await resolveCompetitor(ctx.supabase, ctx.auth.userId, input.competitor);
@@ -40,12 +42,22 @@ export async function searchCopyVault(
     }
     competitorIds = [comp.id];
     dashboardDomain = comp.domain;
+    domainById.set(comp.id, comp.domain);
+  } else {
+    const { data: rows } = await ctx.supabase
+      .from("saved_competitors")
+      .select("id, brand_domain")
+      .eq("user_id", ctx.auth.userId)
+      .eq("is_workspace_brand", false);
+    for (const row of rows ?? []) {
+      domainById.set(row.id, row.brand_domain?.trim() || null);
+    }
   }
 
   let q = ctx.supabase
     .from("scraped_ads")
     .select(
-      "id, competitor_id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, funnel_stage",
+      "id, competitor_id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, funnel_stage, raw_payload",
     )
     .eq("user_id", ctx.auth.userId)
     .eq("is_active", true)
@@ -61,6 +73,13 @@ export async function searchCopyVault(
 
   const mapped = (data ?? []).map((a) => {
     const copy = formatAdCopyForMcp(a.ad_text ?? "", input.include_full_copy);
+    const links = mcpAdLinksForScrapedRow(
+      ctx.auth.appOrigin,
+      domainById.get(a.competitor_id) ?? null,
+      a.platform,
+      a.id,
+      a.raw_payload,
+    );
     return {
       id: a.id,
       competitor_id: a.competitor_id,
@@ -70,6 +89,8 @@ export async function searchCopyVault(
       angle: a.ai_extracted_angle,
       funnel_stage: a.funnel_stage,
       days_running: lifespanDays(a.first_seen_at, a.last_seen_at),
+      spy_rival_url: links.spy_rival_url,
+      platform_library_url: links.platform_library_url,
     };
   });
 

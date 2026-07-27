@@ -4,6 +4,7 @@ import { buildMcpPagination, parseMcpPage, paginateInMemory } from "@/lib/mcp/pa
 import { requireCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { truncateAdCopy } from "@/lib/mcp/truncate";
+import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import {
@@ -70,6 +71,9 @@ export async function getLandingPages(
 
   if (adsErr) throw adsErr;
 
+  const adLinksForRow = (row: ScrapedAdRow) =>
+    mcpAdLinksForScrapedRow(ctx.auth.appOrigin, comp.domain, row.platform, row.id, row.raw_payload);
+
   const urlFilter = input.url?.trim();
   if (urlFilter) {
     let decoded: string;
@@ -108,6 +112,7 @@ export async function getLandingPages(
           ad_creative_url: a.ad_creative_url,
           first_seen_at: a.first_seen_at,
           ai_extracted_angle: a.ai_extracted_angle,
+          ...adLinksForRow(a),
         };
       }),
       pagination,
@@ -118,6 +123,9 @@ export async function getLandingPages(
   const grouped = groupLandingPagesFromAds(
     (ads ?? []) as LandingPageAdRow[],
     competitorRow.last_scraped_at,
+  );
+  const payloadByAdId = new Map(
+    (ads ?? []).map((ad) => [ad.id, (ad as ScrapedAdRow).raw_payload] as const),
   );
   const { items, pagination } = paginateInMemory(grouped.groups, limit, offset);
 
@@ -144,6 +152,13 @@ export async function getLandingPages(
         ad_creative_url: a.ad_creative_url,
         ai_extracted_angle: a.ai_extracted_angle,
         last_seen_at: a.last_seen_at,
+        ...mcpAdLinksForScrapedRow(
+          ctx.auth.appOrigin,
+          comp.domain,
+          a.platform,
+          a.id,
+          payloadByAdId.get(a.id) ?? null,
+        ),
       };
     }),
   }));
