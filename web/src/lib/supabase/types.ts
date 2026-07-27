@@ -2332,6 +2332,7 @@ export type Database = {
           email_ai_analyses_month: number;
           scrape_paused: boolean;
           days_inactive: number;
+          account_suspended: boolean;
           funnel_stage: string | null;
           profile_created_at: string | null;
           snapshot_at: string;
@@ -2362,6 +2363,7 @@ export type Database = {
           email_ai_analyses_month?: number;
           scrape_paused?: boolean;
           days_inactive?: number;
+          account_suspended?: boolean;
           funnel_stage?: string | null;
           profile_created_at?: string | null;
           snapshot_at?: string;
@@ -2392,6 +2394,7 @@ export type Database = {
           email_ai_analyses_month?: number;
           scrape_paused?: boolean;
           days_inactive?: number;
+          account_suspended?: boolean;
           funnel_stage?: string | null;
           profile_created_at?: string | null;
           snapshot_at?: string;

@@ -115,6 +115,7 @@ export async function rebuildAdminUserSnapshot(
       email_ai_analyses_month: emailUsageRes.data?.analysis_count ?? 0,
       scrape_paused: scrapePaused,
       days_inactive: daysInactive,
+      account_suspended: billing.isAdminSuspended,
       funnel_stage: funnelStage,
       profile_created_at: profile?.created_at ?? null,
       snapshot_at: new Date().toISOString(),

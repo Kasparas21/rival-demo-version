@@ -84,6 +84,7 @@ export async function GET() {
       cancelAtPeriodEnd: billing.cancelAtPeriodEnd,
       canUseDevPlanSwitcher: billing.canUseDevPlanSwitcher,
       devPlanOverride: billing.devPlanOverride,
+      isAdminSuspended: billing.isAdminSuspended,
       limits: billing.limits,
       remaining: {
         adsProcessedThisMonth: remainingMonthlyAdsProcessed(

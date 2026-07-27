@@ -25,6 +25,7 @@ function proBilling(): BillingEntitlement {
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,
+    isAdminSuspended: false,
   };
 }
 

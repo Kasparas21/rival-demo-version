@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
+
+import { deleteUserAccount } from "@/lib/admin/delete-user-account";
 import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
-import { deletePolarCustomerForUser } from "@/lib/billing/delete-polar-customer";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -35,22 +36,6 @@ export async function POST(req: Request) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const polarResult = await deletePolarCustomerForUser({
-    userId: user.id,
-    polarCustomerId: billingRow?.polar_customer_id,
-    polarSubscriptionId: billingRow?.polar_subscription_id,
-  });
-
-  if (!polarResult.ok) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: `Could not remove billing profile: ${polarResult.error}`,
-      },
-      { status: 502 },
-    );
-  }
-
   const posthog = getPostHogServerClient();
   if (posthog) {
     const distinctId = (await getPostHogDistinctId()) ?? user.id;
@@ -62,9 +47,21 @@ export async function POST(req: Request) {
   }
 
   const admin = createSupabaseAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(user.id);
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  const result = await deleteUserAccount({
+    admin,
+    userId: user.id,
+    polarCustomerId: billingRow?.polar_customer_id,
+    polarSubscriptionId: billingRow?.polar_subscription_id,
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: result.stage === "polar" ? `Could not remove billing profile: ${result.error}` : result.error,
+      },
+      { status: result.stage === "polar" ? 502 : 500 },
+    );
   }
 
   return NextResponse.json({ ok: true, redirect: "/login" });

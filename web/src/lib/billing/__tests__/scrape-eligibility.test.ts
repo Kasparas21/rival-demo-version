@@ -32,6 +32,7 @@ function billingForTier(tier: BillingEntitlement["planTier"], overrides: Partial
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,
+    isAdminSuspended: false,
     ...overrides,
   };
 }
@@ -151,5 +152,15 @@ describe("resolveScrapeEligibility", () => {
       polarProductId: null,
     });
     expect(resolveScrapeEligibility({ activity: recentActivity, billing, now }).allowed).toBe(true);
+  });
+
+  it("blocks admin-suspended accounts even with active paid plan", () => {
+    const result = resolveScrapeEligibility({
+      activity: recentActivity,
+      billing: billingForTier("pro", { isAdminSuspended: true, status: "canceled" }),
+      now,
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe("admin_suspended");
   });
 });

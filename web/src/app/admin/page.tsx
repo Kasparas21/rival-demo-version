@@ -15,6 +15,7 @@ type SnapshotRow = {
   mrr_cents: number;
   days_inactive: number;
   scrape_paused: boolean;
+  account_suspended?: boolean;
   funnel_stage: string | null;
   last_active_date: string | null;
 };
@@ -66,6 +67,7 @@ export default function AdminUsersPage() {
             <option value="quote_sent">Quote sent</option>
             <option value="inactive">Inactive 7+ days</option>
             <option value="scrape_paused">Scrape paused</option>
+            <option value="suspended">Suspended</option>
           </select>
           <button
             type="button"
@@ -112,7 +114,13 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div>{row.plan_tier ?? "—"}</div>
-                    <div className="text-xs text-zinc-500">{row.billing_status ?? "none"}</div>
+                    <div className="text-xs text-zinc-500">
+                      {row.account_suspended ? (
+                        <span className="text-red-700">suspended</span>
+                      ) : (
+                        row.billing_status ?? "none"
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">{row.custom_quote_status ?? "—"}</td>
                   <td className="px-4 py-3">

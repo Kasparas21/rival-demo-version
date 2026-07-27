@@ -270,6 +270,9 @@ export async function analyzeCompetitorEmail(emailId: string): Promise<AnalyzeCo
   }
 
   const billing = await getBillingEntitlement(admin, row.user_id);
+  if (billing.isAdminSuspended) {
+    return { ok: false, error: "Account suspended — AI analysis is disabled.", quotaExceeded: true };
+  }
   const usedThisMonth = await loadEmailAiAnalysisUsage(admin, row.user_id);
   const quotaCheck = canRunEmailAiAnalysis(billing, usedThisMonth);
   if (!quotaCheck.ok) {

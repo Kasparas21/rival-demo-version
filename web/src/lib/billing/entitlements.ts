@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
+import { isAdminSuspendedAccount } from "@/lib/admin/account-lifecycle";
 import { TESTER_FULL_PRO_PAYLOAD_KEY } from "@/lib/billing/claim-tester-access-core";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { getPolarProductIds, isPolarCustomProductId } from "@/lib/billing/config";
@@ -44,6 +45,8 @@ export type BillingEntitlement = {
   customQuote: CustomQuoteRow | null;
   pendingQuote: CustomQuoteRow | null;
   customPriceLabel: string | null;
+  /** Admin suspended — read-only retention; no new scrapes or AI spend. */
+  isAdminSuspended: boolean;
 };
 
 export function isSubscriptionStatusAllowed(status: string | null | undefined): boolean {
@@ -148,6 +151,12 @@ export function resolvePlanTier(params: {
   return "free_trial";
 }
 
+export function hasReadOnlyRetentionAccess(
+  billing: Pick<BillingEntitlement, "isAdminSuspended">,
+): boolean {
+  return billing.isAdminSuspended;
+}
+
 export function hasAccessForTier(tier: PlanTier, status: string, isUnlimited: boolean): boolean {
   if (isUnlimited && tier === "admin") return true;
   if (tier === "free_trial") return true;
@@ -196,8 +205,14 @@ export function subscriptionStatusBadge(
   billing: Pick<
     BillingEntitlement,
     "status" | "planTier" | "isUnlimited" | "cancelAtPeriodEnd" | "hasAccess" | "polarProductId" | "hasPolarBillingRecord"
-  >,
+  > & {
+    isAdminSuspended?: boolean;
+  },
 ): SubscriptionStatusBadge {
+  if (billing.isAdminSuspended) {
+    return { label: "Suspended (read-only)", tone: "red" };
+  }
+
   if (billing.isUnlimited) {
     return { label: "Admin access", tone: "sky" };
   }
@@ -291,8 +306,11 @@ export function shouldShowAwaitingQuotePage(
   billing: Pick<
     BillingEntitlement,
     "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
-  >,
+  > & {
+    isAdminSuspended?: boolean;
+  },
 ): boolean {
+  if (billing.isAdminSuspended) return false;
   if (billing.isUnlimited) return false;
   if (hasActivePaidSubscription(billing)) return false;
   return true;
@@ -380,6 +398,7 @@ export async function getBillingEntitlement(
 
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
+  const isAdminSuspended = isAdminSuspendedAccount(rawPayload);
   const adminPlanOverride = readAdminPlanOverride(rawPayload);
   const isUnlimited = isManualAdminUnlimited(rawPayload) || adminPlanOverride === "admin";
   const devPlanOverride = readDevPlanOverride(rawPayload);
@@ -404,9 +423,11 @@ export async function getBillingEntitlement(
   } else {
     limits = applyPolarTrialCompetitorCap(limits, status, planTier);
   }
-  const hasAccess = adminPlanOverride
-    ? tierHasProductAccess(planTier)
-    : hasAccessForTier(planTier, status, isUnlimited);
+  const hasAccess = isAdminSuspended
+    ? true
+    : adminPlanOverride
+      ? tierHasProductAccess(planTier)
+      : hasAccessForTier(planTier, status, isUnlimited);
 
   let planName = PLAN_DISPLAY_NAMES[planTier];
   if (planTier === "custom" && customQuote) {
@@ -438,6 +459,7 @@ export async function getBillingEntitlement(
     customQuote,
     pendingQuote,
     customPriceLabel: customQuote ? formatQuotePriceLabel(customQuote) : null,
+    isAdminSuspended,
   };
 }
 
@@ -527,9 +549,19 @@ export function subscriptionEndedScrapePausedResponseBody() {
   };
 }
 
+export function adminSuspendedScrapePausedResponseBody() {
+  return {
+    ok: false,
+    code: "admin_suspended",
+    error:
+      "Your account is suspended. You can view existing ads and reports, but new scrapes and AI analysis are disabled.",
+  };
+}
+
 export function scrapePausedResponseBody(
-  reason: "inactive_gate" | "billing",
+  reason: "inactive_gate" | "billing" | "admin_suspended",
 ) {
+  if (reason === "admin_suspended") return adminSuspendedScrapePausedResponseBody();
   return reason === "billing"
     ? subscriptionEndedScrapePausedResponseBody()
     : inactiveUserScrapePausedResponseBody();

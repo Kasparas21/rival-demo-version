@@ -25,6 +25,7 @@ type UserDetail = {
     status: string;
     adminPlanOverride: string | null;
     customPriceLabel: string | null;
+    isAdminSuspended?: boolean;
   };
   usage: {
     month: string;
@@ -51,6 +52,7 @@ type UserDetail = {
     scrape_paused: boolean | null;
     days_inactive: number | null;
     email_ai_analyses_month: number | null;
+    account_suspended?: boolean | null;
   } | null;
   usageDetail: AdminUserUsageDetail;
 };
@@ -116,6 +118,11 @@ export default function AdminUserDetailPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [form, setForm] = useState<EditForm | null>(null);
   const [expandedCompetitorId, setExpandedCompetitorId] = useState<string | null>(null);
+  const [accountActionBusy, setAccountActionBusy] = useState<"suspend" | "unsuspend" | "delete" | null>(null);
+  const [accountActionError, setAccountActionError] = useState<string | null>(null);
+  const [accountActionSuccess, setAccountActionSuccess] = useState<string | null>(null);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -211,6 +218,79 @@ export default function AdminUserDetailPage() {
     await load();
   }
 
+  async function suspendAccount() {
+    if (!window.confirm(
+      "Suspend this account?\n\nPolar billing will be revoked immediately. The user can still log in and view existing scraped ads, but no new scrapes or AI analysis will run.",
+    )) {
+      return;
+    }
+    setAccountActionBusy("suspend");
+    setAccountActionError(null);
+    setAccountActionSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/suspend`, { method: "POST" });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setAccountActionError(json.error ?? `Suspend failed (${res.status})`);
+        return;
+      }
+      setAccountActionSuccess("Account suspended (read-only).");
+      await load();
+    } catch (e) {
+      setAccountActionError(e instanceof Error ? e.message : "Suspend failed");
+    } finally {
+      setAccountActionBusy(null);
+    }
+  }
+
+  async function unsuspendAccount() {
+    setAccountActionBusy("unsuspend");
+    setAccountActionError(null);
+    setAccountActionSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/unsuspend`, { method: "POST" });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setAccountActionError(json.error ?? `Unsuspend failed (${res.status})`);
+        return;
+      }
+      setAccountActionSuccess("Suspension cleared.");
+      await load();
+    } catch (e) {
+      setAccountActionError(e instanceof Error ? e.message : "Unsuspend failed");
+    } finally {
+      setAccountActionBusy(null);
+    }
+  }
+
+  async function deleteAccount() {
+    const email = data?.profile.email?.trim() ?? "";
+    if (!email || deleteConfirmEmail.trim().toLowerCase() !== email.toLowerCase()) {
+      setAccountActionError("Type the user's email exactly to confirm deletion.");
+      return;
+    }
+    setAccountActionBusy("delete");
+    setAccountActionError(null);
+    setAccountActionSuccess(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmEmail: deleteConfirmEmail.trim() }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setAccountActionError(json.error ?? `Delete failed (${res.status})`);
+        return;
+      }
+      window.location.href = "/admin";
+    } catch (e) {
+      setAccountActionError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setAccountActionBusy(null);
+    }
+  }
+
   if (loading) {
     return <p className="text-zinc-500">Loading user…</p>;
   }
@@ -220,6 +300,7 @@ export default function AdminUserDetailPage() {
   }
 
   const detail = data.usageDetail;
+  const isSuspended = Boolean(data.billing.isAdminSuspended ?? data.snapshot?.account_suspended);
   const competitorNameById = new Map(
     detail.competitors.map((c) => [c.id, c.name ?? c.brand_domain ?? "—"]),
   );
@@ -233,6 +314,13 @@ export default function AdminUserDetailPage() {
           </Link>
           <h1 className="mt-1 text-xl font-semibold">{data.profile.email}</h1>
           <p className="text-sm text-zinc-500">{data.profile.company_name}</p>
+          {isSuspended ? (
+            <p className="mt-1">
+              <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
+                Suspended (read-only)
+              </span>
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -418,7 +506,14 @@ export default function AdminUserDetailPage() {
             </div>
             <div>
               <dt className="text-zinc-500">Status</dt>
-              <dd>{data.billing.status}</dd>
+              <dd>
+                {data.billing.status}
+                {isSuspended ? (
+                  <span className="ml-2 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800">
+                    read-only
+                  </span>
+                ) : null}
+              </dd>
             </div>
             <div>
               <dt className="text-zinc-500">Custom price</dt>
@@ -474,6 +569,87 @@ export default function AdminUserDetailPage() {
           </dl>
         </section>
       </div>
+
+      <section className="rounded-xl border border-red-200 bg-red-50/40 p-4">
+        <h2 className="text-sm font-semibold text-red-900">Account actions</h2>
+        <p className="mt-1 text-sm text-red-800/90">
+          Suspend stops Polar billing and all new scrapes/AI immediately. The user keeps read-only access to
+          existing ads and usage history. Delete permanently removes the account and all workspace data.
+        </p>
+
+        {accountActionError ? (
+          <p className="mt-3 text-sm text-red-700">{accountActionError}</p>
+        ) : null}
+        {accountActionSuccess ? (
+          <p className="mt-3 text-sm text-emerald-700">{accountActionSuccess}</p>
+        ) : null}
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {isSuspended ? (
+            <button
+              type="button"
+              onClick={() => void unsuspendAccount()}
+              disabled={accountActionBusy !== null}
+              className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {accountActionBusy === "unsuspend" ? "Restoring…" : "Unsuspend account"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void suspendAccount()}
+              disabled={accountActionBusy !== null}
+              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-950 hover:bg-amber-100 disabled:opacity-50"
+            >
+              {accountActionBusy === "suspend" ? "Suspending…" : "Suspend (read-only)"}
+            </button>
+          )}
+
+          {!showDeleteConfirm ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowDeleteConfirm(true);
+                setDeleteConfirmEmail("");
+                setAccountActionError(null);
+              }}
+              disabled={accountActionBusy !== null}
+              className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm text-red-800 hover:bg-red-100 disabled:opacity-50"
+            >
+              Delete account
+            </button>
+          ) : (
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                type="email"
+                value={deleteConfirmEmail}
+                onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                placeholder={`Type ${data.profile.email ?? "email"} to confirm`}
+                className="min-w-0 flex-1 rounded-lg border border-red-300 bg-white px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => void deleteAccount()}
+                disabled={accountActionBusy !== null}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {accountActionBusy === "delete" ? "Deleting…" : "Confirm delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmEmail("");
+                }}
+                disabled={accountActionBusy !== null}
+                className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-zinc-700">Inventory totals</h2>

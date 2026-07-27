@@ -78,6 +78,7 @@ create table if not exists public.admin_user_snapshots (
   ad_preview_analyses_month integer not null default 0,
   email_ai_analyses_month integer not null default 0,
   scrape_paused boolean not null default false,
+  account_suspended boolean not null default false,
   days_inactive integer not null default 0,
   funnel_stage text,
   profile_created_at timestamptz,
@@ -88,6 +89,9 @@ create index if not exists admin_user_snapshots_email_idx on public.admin_user_s
 create index if not exists admin_user_snapshots_last_active_idx on public.admin_user_snapshots (last_active_date desc nulls last);
 create index if not exists admin_user_snapshots_funnel_idx on public.admin_user_snapshots (funnel_stage);
 create index if not exists admin_user_snapshots_scrape_paused_idx on public.admin_user_snapshots (scrape_paused) where scrape_paused = true;
+create index if not exists admin_user_snapshots_account_suspended_idx
+  on public.admin_user_snapshots (account_suspended)
+  where account_suspended = true;
 
 alter table public.admin_user_snapshots enable row level security;
 revoke all on public.admin_user_snapshots from anon, authenticated;

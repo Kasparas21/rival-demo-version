@@ -2,15 +2,21 @@ import { describe, expect, it } from "vitest";
 import { annualSavingsPercent, PLAN_OFFERS } from "@/lib/billing/plan-offers";
 import {
   hasActivePaidSubscription,
+  shouldShowAwaitingQuotePage,
   shouldShowPostOnboardingPlanPicker,
 } from "@/lib/billing/entitlements";
 import type { BillingEntitlement } from "@/lib/billing/entitlements";
 
 function billing(
-  partial: Partial<Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord">> &
+  partial: Partial<
+    Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord" | "isAdminSuspended">
+  > &
     Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited">,
-): Pick<BillingEntitlement, "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"> {
-  return { hasPolarBillingRecord: false, ...partial };
+): Pick<
+  BillingEntitlement,
+  "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord" | "isAdminSuspended"
+> {
+  return { hasPolarBillingRecord: false, isAdminSuspended: false, ...partial };
 }
 
 describe("post-onboarding plan picker", () => {
@@ -45,5 +51,16 @@ describe("post-onboarding plan picker", () => {
     expect(
       shouldShowPostOnboardingPlanPicker(billing({ planTier: "admin", status: "active", isUnlimited: true })),
     ).toBe(false);
+  });
+
+  it("hides awaiting-quote redirect for admin-suspended read-only users", () => {
+    const suspended = billing({
+      planTier: "free_trial",
+      status: "canceled",
+      isUnlimited: false,
+      isAdminSuspended: true,
+    });
+    expect(shouldShowAwaitingQuotePage(suspended)).toBe(false);
+    expect(shouldShowPostOnboardingPlanPicker(suspended)).toBe(false);
   });
 });

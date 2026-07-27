@@ -24,6 +24,13 @@ function billing(overrides: Record<string, unknown> = {}) {
 }
 
 describe("subscriptionStatusBadge", () => {
+  it("returns suspended label for admin-suspended accounts", () => {
+    expect(subscriptionStatusBadge(billing({ isAdminSuspended: true }))).toEqual({
+      label: "Suspended (read-only)",
+      tone: "red",
+    });
+  });
+
   it("returns admin access for unlimited accounts", () => {
     expect(subscriptionStatusBadge(billing({ isUnlimited: true }))).toEqual({
       label: "Admin access",

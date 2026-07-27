@@ -68,6 +68,8 @@ export async function GET(req: Request) {
     query = query.gte("days_inactive", 7);
   } else if (filter === "scrape_paused") {
     query = query.eq("scrape_paused", true);
+  } else if (filter === "suspended") {
+    query = query.eq("account_suspended", true);
   } else if (filter === "awaiting_quote") {
     query = query.in("custom_quote_status", ["draft", "null"]).neq("plan_tier", "custom");
   } else if (filter === "quote_sent") {

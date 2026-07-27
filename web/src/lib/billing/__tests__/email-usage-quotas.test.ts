@@ -25,6 +25,7 @@ function billingForTier(tier: BillingEntitlement["planTier"], unlimited = false)
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,
+    isAdminSuspended: false,
   };
 }
 

@@ -73,6 +73,7 @@ type UsageState = {
 type BillingState = {
   hasAccess: boolean;
   isUnlimited: boolean;
+  isAdminSuspended: boolean;
   status: string;
   planTier: PlanTier;
   planName: string;
@@ -121,6 +122,7 @@ const emptyUsage: UsageState = {
 const emptyBilling: BillingState = {
   hasAccess: false,
   isUnlimited: false,
+  isAdminSuspended: false,
   status: "none",
   planTier: "free_trial",
   planName: "Free trial",
@@ -308,6 +310,7 @@ export default function SettingsPage() {
           setBilling({
             hasAccess: u.billing.hasAccess ?? false,
             isUnlimited: u.billing.isUnlimited ?? false,
+            isAdminSuspended: u.billing.isAdminSuspended === true,
             status: u.billing.status ?? "none",
             planTier: u.billing.planTier ?? "free_trial",
             planName: u.billing.planName ?? "Free",
@@ -543,6 +546,18 @@ export default function SettingsPage() {
   };
 
   const subscriptionActions = useMemo(() => {
+    if (billing.isAdminSuspended) {
+      return {
+        showCheckout: false,
+        showPolarPortal: false,
+        showUpgradeToPro: false,
+        showManage: false,
+        cancelScheduled: false,
+        accessEndsAt: null as string | null,
+        isFullyCanceled: true,
+      };
+    }
+
     if (billing.isUnlimited) {
       return {
         showCheckout: false,
@@ -787,6 +802,13 @@ export default function SettingsPage() {
             </>
           }
         >
+          {billing.isAdminSuspended ? (
+            <SettingsGlassBanner tone="warning" className="mb-4">
+              Your account is suspended in read-only mode. Existing ads and reports remain available, but
+              billing, new scrapes, refreshes, and AI analysis are disabled. Contact support to reactivate.
+            </SettingsGlassBanner>
+          ) : null}
+
           {upgradeBanner ? (
             <SettingsGlassBanner
               tone={

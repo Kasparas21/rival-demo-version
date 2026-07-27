@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { adminSuspendedResponseBody } from "@/lib/admin/account-lifecycle";
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import {
   canRunAdPreviewAnalysis,
@@ -49,6 +50,9 @@ export async function POST(
   assertCanRunSharedAi(ctx);
 
   const billing = await getBillingEntitlement(supabase, dataUserId);
+  if (billing.isAdminSuspended) {
+    return NextResponse.json(adminSuspendedResponseBody(), { status: 403 });
+  }
   if (!billing.hasAccess) {
     return NextResponse.json(
       billingRequiredResponseBody("Subscription required for organic post AI analysis."),

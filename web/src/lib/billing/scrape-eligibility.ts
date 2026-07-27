@@ -14,7 +14,7 @@ import {
 } from "@/lib/billing/user-activity";
 import type { Database } from "@/lib/supabase/types";
 
-export type ScrapeEligibilityReason = "inactive_gate" | "billing";
+export type ScrapeEligibilityReason = "inactive_gate" | "billing" | "admin_suspended";
 
 export type ScrapeEligibility = {
   allowed: boolean;
@@ -61,6 +61,10 @@ export function resolveScrapeEligibility(params: {
 }): ScrapeEligibility {
   const { activity, billing, now } = params;
   const lastActiveDateYmd = resolveLastActiveDateYmd(activity);
+
+  if (billing.isAdminSuspended) {
+    return { allowed: false, reason: "admin_suspended", activity, lastActiveDateYmd, billing };
+  }
 
   if (isLapsedPaidSubscription(billing)) {
     return { allowed: false, reason: "billing", activity, lastActiveDateYmd, billing };

@@ -1885,10 +1885,12 @@ function CompetitorDashboardBody({
     "free_trial" | "starter" | "pro" | "agency" | "admin"
   >("free_trial");
   const [billingStatus, setBillingStatus] = useState("none");
+  const [billingAdminSuspended, setBillingAdminSuspended] = useState(false);
   const [alertsUnreadCount, setAlertsUnreadCount] = useState(0);
   const [manualRefreshStatus, setManualRefreshStatus] = useState<ManualRefreshStatus | null>(null);
 
-  const canManualRefresh = billingAllowManualRefresh || billingIsUnlimited;
+  const canManualRefresh =
+    !billingAdminSuspended && (billingAllowManualRefresh || billingIsUnlimited);
 
   useEffect(() => {
     let cancelled = false;
@@ -1898,11 +1900,13 @@ function CompetitorDashboardBody({
         billing?: {
           limits?: { allowManualRefresh?: boolean; allowAlertRules?: boolean; allowAlertEmail?: boolean };
           isUnlimited?: boolean;
+          isAdminSuspended?: boolean;
           planTier?: "free_trial" | "starter" | "pro" | "agency" | "admin";
           status?: string;
         };
       }) => {
         if (cancelled) return;
+        setBillingAdminSuspended(j.billing?.isAdminSuspended === true);
         setBillingAllowManualRefresh(j.billing?.limits?.allowManualRefresh === true);
         setBillingIsUnlimited(j.billing?.isUnlimited === true);
         setBillingAllowAlertRules(j.billing?.limits?.allowAlertRules === true);
@@ -1912,6 +1916,7 @@ function CompetitorDashboardBody({
       })
       .catch(() => {
         if (!cancelled) {
+          setBillingAdminSuspended(false);
           setBillingAllowManualRefresh(false);
           setBillingIsUnlimited(false);
           setBillingAllowAlertRules(false);
@@ -3037,6 +3042,7 @@ function CompetitorDashboardBody({
 
   const manualRefreshDisabled =
     isWorkspaceViewer ||
+    billingAdminSuspended ||
     !canManualRefresh ||
     !manualRefreshStatus?.canRefreshNow ||
     manualRefreshBusyPlatform != null;
@@ -4026,6 +4032,13 @@ function CompetitorDashboardBody({
                     </button>
                   ) : null}
                 </div>
+              </div>
+            ) : null}
+            {billingAdminSuspended ? (
+              <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[14px] text-amber-950">
+                <span className="font-semibold">Account suspended (read-only). </span>
+                You can browse ads and reports already in your workspace, but new scrapes, refreshes, and AI
+                analysis are disabled. Contact support if you need this reactivated.
               </div>
             ) : null}
             {adsPlatforms.length > 0 ? (

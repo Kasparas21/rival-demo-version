@@ -17,11 +17,16 @@ export async function GET() {
   }
 
   const eligibility = await getUserScrapeEligibility(supabase, user.id);
-  const scrapePaused = !eligibility.allowed && eligibility.reason === "inactive_gate";
+  const adminSuspended = eligibility.reason === "admin_suspended";
+  const scrapePaused =
+    !eligibility.allowed &&
+    (eligibility.reason === "inactive_gate" || eligibility.reason === "admin_suspended");
 
   return NextResponse.json({
     ok: true,
     scrapePaused,
+    adminSuspended,
+    scrapePauseReason: eligibility.allowed ? null : eligibility.reason ?? null,
     lastActiveDateYmd: eligibility.lastActiveDateYmd,
   });
 }

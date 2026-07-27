@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
+import { userIsAdminSuspended } from "@/lib/admin/account-lifecycle";
 import { enrichAllPendingScrapedAdsForCompetitor } from "@/lib/strategy-overview/adEnrichment";
 
 export const runtime = "nodejs";
@@ -41,6 +42,7 @@ async function runEnrichPending(req: Request) {
   let adsEnriched = 0;
 
   for (const { userId, competitorId } of pairs) {
+    if (await userIsAdminSuspended(admin, userId)) continue;
     const stats = await enrichAllPendingScrapedAdsForCompetitor(admin, userId, competitorId);
     competitorsProcessed += 1;
     adsEnriched += stats.enriched;
