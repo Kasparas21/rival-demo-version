@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Image as ImageIcon, LayoutList, Minus, Plus, Trophy, Video } from "lucide-react";
+import { Image as ImageIcon, LayoutList, Minus, Plus, Sparkles, Trophy, Video } from "lucide-react";
 
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { CreativeTestPreviewThumb } from "@/components/competitor/tests-timeline/creative-test-preview-thumb";
@@ -207,6 +207,15 @@ function RowLabel({ ad, viewFields, duplicateCount }: LabelProps) {
         {viewFields.headlineCta ? (
           <p className="flex items-center gap-1 truncate text-[13px] font-medium text-slate-900">
             <span className="truncate">{headlineForAd(ad)}</span>
+            {ad.is_ultimate_winner ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800"
+                title="Ultimate winner — high impressions and long runtime"
+              >
+                <Sparkles className="h-3 w-3" aria-hidden />
+                Ultimate
+              </span>
+            ) : null}
             {ad.is_winner ? <Trophy className="h-3.5 w-3.5 shrink-0 text-[#e37400]" aria-hidden /> : null}
             {duplicateCount && duplicateCount > 1 ? (
               <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0 text-[10px] font-bold text-slate-600">

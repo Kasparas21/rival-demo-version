@@ -150,9 +150,9 @@ export function TimelineFiltersBar(props: Props) {
             className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900"
           >
             <option value="newest">Newest first</option>
-            <option value="longest">Longest running</option>
-            <option value="recently_killed">Most recently killed</option>
-            <option value="platform">Platform grouped</option>
+            <option value="longest_running">Longest running</option>
+            <option value="impressions">Impressions (high → low)</option>
+            <option value="ultimate_winner">Ultimate winner</option>
           </select>
         </div>
       </div>

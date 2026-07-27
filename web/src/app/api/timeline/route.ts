@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import {
+  extractImpressionsIndex,
+  qualifiesAsUltimateWinner,
+} from "@/lib/ad-library/ad-performance-ranking";
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -18,6 +22,8 @@ export type TimelineAdDto = {
   format: string;
   is_winner: boolean;
   is_killed: boolean;
+  impressions_index: number | null;
+  is_ultimate_winner: boolean;
 };
 
 export async function GET(request: Request) {
@@ -78,18 +84,9 @@ export async function GET(request: Request) {
   const lastScrapedAt = competitor.last_scraped_at ?? null;
 
   const rows = (ads ?? []).slice().reverse();
-  const hydrated: TimelineAdDto[] = rows.map((ad) => ({
-    id: ad.id,
-    platform: ad.platform,
-    ad_creative_url: ad.ad_creative_url,
-    archived_creative_url: ad.archived_creative_url,
-    ad_text: ad.ad_text,
-    ai_extracted_angle: ad.ai_extracted_angle,
-    first_seen_at: ad.first_seen_at,
-    last_seen_at: ad.last_seen_at,
-    format: ad.format,
-    is_winner: winnerIds.has(ad.id),
-    is_killed: resolveTimelineAdKilled(
+  const nowMs = Date.now();
+  const hydrated: TimelineAdDto[] = rows.map((ad) => {
+    const is_killed = resolveTimelineAdKilled(
       {
         platform: ad.platform,
         last_seen_at: ad.last_seen_at,
@@ -97,8 +94,28 @@ export async function GET(request: Request) {
         raw_payload: ad.raw_payload,
       },
       lastScrapedAt,
-    ),
-  }));
+    );
+    const impressions_index = extractImpressionsIndex(ad.raw_payload);
+    const startMs = new Date(ad.first_seen_at).getTime();
+    const endMs = is_killed ? new Date(ad.last_seen_at).getTime() : nowMs;
+    const daysRunning = Math.max(0, Math.floor((endMs - startMs) / 86_400_000));
+
+    return {
+      id: ad.id,
+      platform: ad.platform,
+      ad_creative_url: ad.ad_creative_url,
+      archived_creative_url: ad.archived_creative_url,
+      ad_text: ad.ad_text,
+      ai_extracted_angle: ad.ai_extracted_angle,
+      first_seen_at: ad.first_seen_at,
+      last_seen_at: ad.last_seen_at,
+      format: ad.format,
+      is_winner: winnerIds.has(ad.id),
+      is_killed,
+      impressions_index,
+      is_ultimate_winner: qualifiesAsUltimateWinner(impressions_index, daysRunning),
+    };
+  });
 
   const platformCounts: Record<string, number> = {};
   for (const ad of hydrated) {

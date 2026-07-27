@@ -1,3 +1,5 @@
+import type { AdPerformanceSort } from "@/lib/ad-library/ad-performance-ranking";
+
 export type TimelineAd = {
   id: string;
   platform: string;
@@ -10,6 +12,10 @@ export type TimelineAd = {
   format: string;
   is_winner: boolean;
   is_killed: boolean;
+  /** Meta library impression band (1–5), when available. */
+  impressions_index?: number | null;
+  /** High impressions + long runtime tier. */
+  is_ultimate_winner?: boolean;
 };
 
 /** @deprecated Use TimelineDatePreset in toolbar */
@@ -17,7 +23,7 @@ export type TimelineZoom = "30d" | "90d" | "6mo" | "1y" | "all";
 
 export type TimelineDatePreset = "7d" | "14d" | "30d" | "90d" | "365d" | "all" | "custom";
 
-export type TimelineSort = "newest" | "oldest" | "longest";
+export type TimelineSort = AdPerformanceSort;
 
 export type TimelineStatusFilter = "all" | "active" | "retired";
 

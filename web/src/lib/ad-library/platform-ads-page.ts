@@ -1,3 +1,8 @@
+import {
+  computeUltimateWinnerScore,
+  extractImpressionsIndex,
+  type AdPerformanceSort,
+} from "@/lib/ad-library/ad-performance-ranking";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
 import type { AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { PLATFORM_ADS_MODAL_BATCH_SIZE } from "@/lib/ad-library/constants";
@@ -26,7 +31,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/types";
 
 export type PlatformAdsDatePreset = "7d" | "14d" | "30d" | "90d" | "365d" | "all" | "custom";
-export type PlatformAdsSort = "newest" | "oldest" | "longest";
+export type PlatformAdsSort = AdPerformanceSort;
 
 export type PlatformAdsPageQuery = {
   domain: string;
@@ -180,12 +185,44 @@ function adOverlapsWindow(platform: AdsLibraryPlatform, ad: unknown, window: { s
   return adEnd >= window.start && adStart <= window.end;
 }
 
+function impressionsIndexForPlatformAd(platform: AdsLibraryPlatform, ad: unknown): number | null {
+  if (platform === "meta") {
+    const card = ad as MetaAdCard;
+    return card.impressionsIndex ?? extractImpressionsIndex(card);
+  }
+  return extractImpressionsIndex(ad);
+}
+
 function sortPlatformAds<T>(platform: AdsLibraryPlatform, ads: T[], sort: PlatformAdsSort, nowMs: number): T[] {
   const withSpan = ads.map((ad) => ({ ad, span: getSpan(platform, ad, nowMs) }));
+
+  if (sort === "impressions" || sort === "ultimate_winner") {
+    return [...ads].sort((a, b) => {
+      const spanA = getSpan(platform, a, nowMs);
+      const spanB = getSpan(platform, b, nowMs);
+      const daysA = Math.max(0, Math.floor(spanA.lifespanMs / DAY_MS));
+      const daysB = Math.max(0, Math.floor(spanB.lifespanMs / DAY_MS));
+      const impA = impressionsIndexForPlatformAd(platform, a);
+      const impB = impressionsIndexForPlatformAd(platform, b);
+
+      if (sort === "impressions") {
+        const iA = impA ?? -1;
+        const iB = impB ?? -1;
+        if (iB !== iA) return iB - iA;
+        return daysB - daysA;
+      }
+
+      const scoreA = computeUltimateWinnerScore(impA, daysA);
+      const scoreB = computeUltimateWinnerScore(impB, daysB);
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      return daysB - daysA;
+    });
+  }
+
   switch (sort) {
     case "oldest":
       return withSpan.sort((a, b) => a.span.startMs - b.span.startMs).map((x) => x.ad);
-    case "longest":
+    case "longest_running":
       return withSpan.sort((a, b) => b.span.lifespanMs - a.span.lifespanMs).map((x) => x.ad);
     case "newest":
     default:

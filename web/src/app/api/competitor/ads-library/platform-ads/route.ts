@@ -23,7 +23,16 @@ function parseDatePreset(raw: string | null): PlatformAdsDatePreset {
 
 function parseSort(raw: string | null): PlatformAdsSort {
   const v = (raw ?? "newest").trim().toLowerCase();
-  if (v === "oldest" || v === "longest" || v === "newest") return v;
+  if (
+    v === "oldest" ||
+    v === "longest_running" ||
+    v === "longest" ||
+    v === "newest" ||
+    v === "impressions" ||
+    v === "ultimate_winner"
+  ) {
+    return v === "longest" ? "longest_running" : (v as PlatformAdsSort);
+  }
   return "newest";
 }
 

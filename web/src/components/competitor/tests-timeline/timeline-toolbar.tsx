@@ -58,14 +58,20 @@ type Props = {
   dateRangeEarliest: number | null;
   dateRangeLatest: number | null;
   hiddenBrandBidCount: number;
+  showMetaSortOptions?: boolean;
 };
 
 const DATE_PRESETS: TimelineDatePreset[] = ["7d", "14d", "30d", "90d", "365d", "all"];
 
-const SORT_OPTIONS: { id: TimelineSort; label: string }[] = [
+const BASE_SORT_OPTIONS: { id: TimelineSort; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "longest", label: "Longest running" },
+  { id: "longest_running", label: "Longest running" },
+];
+
+const META_SORT_OPTIONS: { id: TimelineSort; label: string }[] = [
+  { id: "impressions", label: "Impressions (high → low)" },
+  { id: "ultimate_winner", label: "Ultimate winner" },
 ];
 
 function formatShortDate(ms: number): string {
@@ -94,6 +100,7 @@ export function TimelineToolbar({
   dateRangeEarliest,
   dateRangeLatest,
   hiddenBrandBidCount,
+  showMetaSortOptions = false,
 }: Props) {
   const menu = useMenuState();
   const [filterPane, setFilterPane] = useState<"root" | "platform" | "status" | "format">("root");
@@ -114,7 +121,12 @@ export function TimelineToolbar({
       ? `${formatShortDate(state.customRangeStart)} – ${formatShortDate(state.customRangeEnd)}`
       : datePresetLabel(state.datePreset);
 
-  const sortLabel = SORT_OPTIONS.find((o) => o.id === state.sort)?.label ?? "Newest";
+  const sortOptions = useMemo(
+    () => (showMetaSortOptions ? [...BASE_SORT_OPTIONS, ...META_SORT_OPTIONS] : BASE_SORT_OPTIONS),
+    [showMetaSortOptions],
+  );
+
+  const sortLabel = sortOptions.find((o) => o.id === state.sort)?.label ?? "Newest";
 
   const togglePlatform = (id: string) => {
     const next = new Set(state.selectedPlatforms);
@@ -377,7 +389,7 @@ export function TimelineToolbar({
             onClick={() => menu.toggle("sort")}
           />
           <TimelineMenuPanel open={menu.isOpen("sort")} onClose={menu.close} className="w-44">
-            {SORT_OPTIONS.map((opt) => (
+            {sortOptions.map((opt) => (
               <TimelineMenuItem
                 key={opt.id}
                 label={opt.label}

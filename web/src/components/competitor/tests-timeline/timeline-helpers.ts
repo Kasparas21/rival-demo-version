@@ -1,3 +1,7 @@
+import {
+  extractImpressionsIndex,
+  sortAdsByPerformanceSort,
+} from "@/lib/ad-library/ad-performance-ranking";
 import { ALL_COMPARISON_PLATFORMS } from "@/lib/platforms/comparison-platform-order";
 export { PLATFORM_LABELS, platformLabel } from "@/lib/platforms/platform-label";
 
@@ -65,6 +69,7 @@ export function barToneForAd(ad: TimelineAd, nowMs: number): BarTone {
   const daysSinceKilled = ad.is_killed ? (nowMs - lastMs) / DAY_MS : 0;
 
   if (!ad.is_killed) {
+    if (ad.is_ultimate_winner) return "winner_active";
     if (ad.is_winner || runningDays >= 60) return "winner_active";
     return "active";
   }
@@ -459,21 +464,12 @@ export function median(values: number[]): number {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
-export function sortTimelineAds(ads: TimelineAd[], sort: TimelineSort): TimelineAd[] {
-  const out = [...ads];
-  switch (sort) {
-    case "oldest":
-      return out.sort((a, b) => new Date(a.first_seen_at).getTime() - new Date(b.first_seen_at).getTime());
-    case "longest":
-      return out.sort(
-        (a, b) =>
-          computeLifespanDays(b.first_seen_at, b.last_seen_at) -
-          computeLifespanDays(a.first_seen_at, a.last_seen_at),
-      );
-    case "newest":
-    default:
-      return out.sort((a, b) => new Date(b.first_seen_at).getTime() - new Date(a.first_seen_at).getTime());
-  }
+export function sortTimelineAds(ads: TimelineAd[], sort: TimelineSort, nowMs = Date.now()): TimelineAd[] {
+  return sortAdsByPerformanceSort(ads, sort, {
+    impressionsIndexFor: (ad) => ad.impressions_index ?? extractImpressionsIndex(ad),
+    daysRunningFor: (ad) => displayLifespanDays(ad, nowMs),
+    newestMsFor: (ad) => new Date(ad.first_seen_at).getTime(),
+  });
 }
 
 export function adMatchesWeekFilter(ad: TimelineAd, weekStart: number): boolean {

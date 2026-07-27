@@ -85,8 +85,11 @@ function sortDemoAds(ads: DemoAd[], sort: PlatformAdsSort, nowMs: number): DemoA
   switch (sort) {
     case "oldest":
       return withSpan.sort((a, b) => a.startMs - b.startMs).map((x) => x.ad);
-    case "longest":
+    case "longest_running":
       return withSpan.sort((a, b) => b.lifespanMs - a.lifespanMs).map((x) => x.ad);
+    case "impressions":
+    case "ultimate_winner":
+      return [...ads].sort((a, b) => b.activeDays - a.activeDays);
     case "newest":
     default:
       return withSpan.sort((a, b) => b.startMs - a.startMs).map((x) => x.ad);

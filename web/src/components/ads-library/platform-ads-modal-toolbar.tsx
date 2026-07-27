@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowUpDown,
   Calendar,
@@ -26,10 +26,15 @@ import type { PlatformAdsToolbarState } from "@/components/ads-library/platform-
 
 const DATE_PRESETS: PlatformAdsDatePreset[] = ["7d", "14d", "30d", "90d", "365d", "all"];
 
-const SORT_OPTIONS: { id: PlatformAdsToolbarState["sort"]; label: string }[] = [
+const BASE_SORT_OPTIONS: { id: PlatformAdsToolbarState["sort"]; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-  { id: "longest", label: "Longest running" },
+  { id: "longest_running", label: "Longest running" },
+];
+
+const META_SORT_OPTIONS: { id: PlatformAdsToolbarState["sort"]; label: string }[] = [
+  { id: "impressions", label: "Impressions (high → low)" },
+  { id: "ultimate_winner", label: "Ultimate winner" },
 ];
 
 function formatShortDate(ms: number): string {
@@ -79,7 +84,12 @@ export function PlatformAdsModalToolbar({
       ? `${formatShortDate(state.customRangeStart)} – ${formatShortDate(state.customRangeEnd)}`
       : datePresetLabel(state.datePreset);
 
-  const sortLabel = SORT_OPTIONS.find((o) => o.id === state.sort)?.label ?? "Newest";
+  const sortOptions = useMemo(
+    () => (platform === "meta" ? [...BASE_SORT_OPTIONS, ...META_SORT_OPTIONS] : BASE_SORT_OPTIONS),
+    [platform],
+  );
+
+  const sortLabel = sortOptions.find((o) => o.id === state.sort)?.label ?? "Newest";
 
   const applyCustomRange = useCallback(() => {
     const start = fromDateInputValue(draftStart);
@@ -185,7 +195,7 @@ export function PlatformAdsModalToolbar({
           onClick={() => menu.toggle("sort")}
         />
         <TimelineMenuPanel open={menu.isOpen("sort")} onClose={menu.close} className="min-w-[168px] py-1">
-          {SORT_OPTIONS.map((opt) => (
+          {sortOptions.map((opt) => (
             <TimelineMenuItem
               key={opt.id}
               label={opt.label}

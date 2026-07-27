@@ -374,6 +374,7 @@ export function TimelineTab({
         dateRangeEarliest={dateRangeEarliest}
         dateRangeLatest={dateRangeLatest}
         hiddenBrandBidCount={!toolbar.showBrandBids ? brandBidCount : 0}
+        showMetaSortOptions={platformChips.some((p) => p.id === "meta")}
       />
 
       {onlyBrandBidsFiltered ? (

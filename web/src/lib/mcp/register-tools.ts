@@ -77,13 +77,16 @@ export function registerMcpTools(
     {
       title: "Get competitor ads",
       description:
-        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort newest or longest_running. Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url (Spy Rival detail drawer) and platform_library_url (direct Meta Ads Library / platform transparency link when available). Prefer platform_library_url when the user asks for Meta Ads Library links.`,
+        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort: newest, oldest, longest_running, impressions (Meta impression band, high first), or ultimate_winner (combines high impressions + long runtime). Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url, platform_library_url, impressions_index (Meta), and is_ultimate_winner when it qualifies.`,
       inputSchema: {
         competitor: z.string().min(1).describe("Competitor name, domain, or UUID"),
         platform: z.string().optional(),
         limit: mcpLimitSchema(MCP_PAGE_MAX, 50),
         offset: mcpOffsetSchema(),
-        sort: z.enum(["newest", "longest_running"]).optional(),
+        sort: z
+          .enum(["newest", "oldest", "longest_running", "impressions", "ultimate_winner"])
+          .optional()
+          .describe("Sort order. Use impressions or ultimate_winner for Meta performance ranking."),
         include_full_copy: mcpIncludeFullCopySchema(),
       },
     },
