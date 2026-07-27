@@ -5,6 +5,7 @@ import {
   type AdPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
+import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
@@ -13,23 +14,28 @@ import type {
   DiscoveryFeedQuery,
   DiscoveryFeedResult,
 } from "./types";
-import type { Database } from "@/lib/supabase/types";
+import type { Database, Json } from "@/lib/supabase/types";
 
-const FETCH_CAP = 3000;
+const FETCH_CAP = 1500;
+const IN_CHUNK = 40;
 const DAY_MS = 86_400_000;
+
+const LEAN_AD_SELECT =
+  "id, competitor_id, platform, format, ad_text, ad_creative_url, archived_creative_url, first_seen_at, last_seen_at, is_active";
+const FULL_AD_SELECT = `${LEAN_AD_SELECT}, raw_payload`;
 
 type ScrapedRow = {
   id: string;
   competitor_id: string;
   platform: string;
   format: string | null;
-  ad_text: string;
+  ad_text: string | null;
   ad_creative_url: string | null;
   archived_creative_url: string | null;
   first_seen_at: string;
   last_seen_at: string;
   is_active: boolean | null;
-  raw_payload: unknown;
+  raw_payload?: unknown;
 };
 
 type CompetitorRow = {
@@ -73,28 +79,219 @@ function datePresetStart(preset: DiscoveryFeedQuery["datePreset"], nowMs: number
   return nowMs - days * DAY_MS;
 }
 
+function normalizePlatform(platform: string | null | undefined): string {
+  return (platform ?? "").trim().toLowerCase();
+}
+
+function chunkIds<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 async function loadCompetitorIdsForBrand(
   supabase: SupabaseClient<Database>,
   userId: string,
   brandId: string,
-): Promise<string[]> {
-  const { data: mapped, error: mapErr } = await supabase
+): Promise<{ ids: string[]; error?: string }> {
+  if (!brandId || brandId === "default") return { ids: [] };
+
+  const { data: mappings, error: mapErr } = await supabase
     .from("brand_competitors")
     .select("competitor_id")
     .eq("user_id", userId)
     .eq("brand_id", brandId);
 
-  if (!mapErr && (mapped ?? []).length > 0) {
-    return mapped!.map((r) => String(r.competitor_id)).filter(Boolean);
+  if (
+    mapErr &&
+    !(
+      isMissingDbColumnError(mapErr.message, "brand_competitors") ||
+      /brand_competitors/i.test(mapErr.message)
+    )
+  ) {
+    return { ids: [], error: mapErr.message };
   }
 
-  const { data: rows } = await supabase
+  const mappedIds = [...new Set((mappings ?? []).map((r) => String(r.competitor_id)).filter(Boolean))];
+  if (mappedIds.length > 0) return { ids: mappedIds };
+
+  const { data: rows, error: rowsErr } = await supabase
     .from("saved_competitors")
     .select("id")
     .eq("user_id", userId)
     .eq("is_workspace_brand", false);
 
-  return (rows ?? []).map((r) => r.id);
+  if (rowsErr) return { ids: [], error: rowsErr.message };
+  return { ids: (rows ?? []).map((r) => r.id) };
+}
+
+async function loadCompetitorsById(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  competitorIds: string[],
+): Promise<{ rows: CompetitorRow[]; error?: string }> {
+  const rows: CompetitorRow[] = [];
+  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
+    const { data, error } = await supabase
+      .from("saved_competitors")
+      .select("id, name, brand_name, brand_domain, logo_url, brand_logo_url, last_scraped_at")
+      .eq("user_id", userId)
+      .in("id", chunk);
+    if (error) return { rows: [], error: error.message };
+    rows.push(...((data ?? []) as CompetitorRow[]));
+  }
+  return { rows };
+}
+
+async function fetchScrapedAdRows(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  competitorIds: string[],
+  select: string,
+  competitorId: string | null,
+): Promise<{ rows: ScrapedRow[]; error?: string }> {
+  const byId = new Map<string, ScrapedRow>();
+
+  const fetchChunk = async (chunk: string[], selectCols: string) => {
+    let query = supabase
+      .from("scraped_ads")
+      .select(selectCols)
+      .eq("user_id", userId)
+      .in("competitor_id", chunk)
+      .order("last_seen_at", { ascending: false })
+      .limit(FETCH_CAP);
+
+    if (competitorId) {
+      query = query.eq("competitor_id", competitorId);
+    }
+
+    return query;
+  };
+
+  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
+    let { data, error } = await fetchChunk(chunk, select);
+
+    if (
+      error &&
+      select.includes("archived_creative_url") &&
+      isMissingDbColumnError(error.message, "archived_creative_url")
+    ) {
+      const fallbackSelect = select.replace(", archived_creative_url", "").replace("archived_creative_url, ", "");
+      ({ data, error } = await fetchChunk(chunk, fallbackSelect));
+    }
+
+    if (error) return { rows: [], error: error.message };
+
+    for (const row of (data ?? []) as ScrapedRow[]) {
+      if (!row?.id) continue;
+      byId.set(row.id, {
+        ...row,
+        archived_creative_url: row.archived_creative_url ?? null,
+        raw_payload: row.raw_payload,
+      });
+    }
+  }
+
+  const rows = [...byId.values()]
+    .sort((a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime())
+    .slice(0, FETCH_CAP);
+
+  return { rows };
+}
+
+async function attachRawPayloads(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  ads: DiscoveryAdDto[],
+): Promise<DiscoveryAdDto[]> {
+  const missing = ads.filter((ad) => ad.raw_payload == null);
+  if (missing.length === 0) return ads;
+
+  const payloadById = new Map<string, Json>();
+  for (const chunk of chunkIds(
+    missing.map((ad) => ad.id),
+    IN_CHUNK,
+  )) {
+    const { data, error } = await supabase
+      .from("scraped_ads")
+      .select("id, raw_payload")
+      .eq("user_id", userId)
+      .in("id", chunk);
+    if (error) continue;
+    for (const row of data ?? []) {
+      if (row?.id) payloadById.set(row.id, row.raw_payload);
+    }
+  }
+
+  return ads.map((ad) =>
+    ad.raw_payload != null
+      ? ad
+      : { ...ad, raw_payload: (payloadById.get(ad.id) ?? null) as DiscoveryAdDto["raw_payload"] },
+  );
+}
+
+function hydrateDiscoveryRow(
+  row: ScrapedRow,
+  comp: CompetitorRow,
+  nowMs: number,
+  input: DiscoveryFeedQuery,
+  dateStart: number | null,
+  needle: string,
+  platformSet: Set<string>,
+): DiscoveryAdDto | null {
+  const platform = normalizePlatform(row.platform);
+  if (!row.id || !platform) return null;
+
+  const is_killed = resolveTimelineAdKilled(
+    {
+      platform,
+      last_seen_at: row.last_seen_at,
+      is_active: row.is_active ?? true,
+      raw_payload: row.raw_payload ?? null,
+    },
+    comp.last_scraped_at,
+    nowMs,
+  );
+
+  const impressions_index = extractImpressionsIndex(row.raw_payload ?? null);
+  const startMs = new Date(row.first_seen_at).getTime();
+  const endMs = is_killed ? new Date(row.last_seen_at).getTime() : nowMs;
+  const daysRunning = Math.max(0, Math.floor((endMs - startMs) / DAY_MS));
+  const is_ultimate_winner = qualifiesAsUltimateWinner(impressions_index, daysRunning);
+
+  if (platformSet.size > 0 && !platformSet.has(platform)) return null;
+  if (input.status === "active" && is_killed) return null;
+  if (input.status === "retired" && !is_killed) return null;
+  if (input.ultimateOnly && !is_ultimate_winner) return null;
+  if (input.format === "video" && !isVideoFormat(row.format)) return null;
+  if (input.format === "image" && isVideoFormat(row.format)) return null;
+  if (dateStart != null && endMs < dateStart) return null;
+  if (needle) {
+    const hay = `${row.ad_text ?? ""} ${comp.brand_name ?? ""} ${comp.name ?? ""}`.toLowerCase();
+    if (!hay.includes(needle)) return null;
+  }
+
+  return {
+    id: row.id,
+    competitor_id: row.competitor_id,
+    competitor_name: comp.brand_name?.trim() || comp.name?.trim() || "Competitor",
+    competitor_domain: comp.brand_domain?.trim() || null,
+    competitor_logo_url: comp.brand_logo_url?.trim() || comp.logo_url?.trim() || null,
+    platform,
+    format: row.format ?? "",
+    ad_text: row.ad_text ?? "",
+    ad_creative_url: row.ad_creative_url,
+    archived_creative_url: row.archived_creative_url ?? null,
+    first_seen_at: row.first_seen_at,
+    last_seen_at: row.last_seen_at,
+    is_active: row.is_active ?? true,
+    is_killed,
+    impressions_index,
+    is_ultimate_winner,
+    raw_payload: (row.raw_payload ?? null) as DiscoveryAdDto["raw_payload"],
+  };
 }
 
 export async function buildDiscoveryFeed(
@@ -102,7 +299,12 @@ export async function buildDiscoveryFeed(
   userId: string,
   input: DiscoveryFeedQuery,
 ): Promise<DiscoveryFeedResult | { ok: false; error: string }> {
-  const competitorIds = await loadCompetitorIdsForBrand(supabase, userId, input.brandId);
+  const { ids: competitorIds, error: competitorIdsError } = await loadCompetitorIdsForBrand(
+    supabase,
+    userId,
+    input.brandId,
+  );
+  if (competitorIdsError) return { ok: false, error: competitorIdsError };
   if (!competitorIds.length) {
     return {
       ok: true,
@@ -117,34 +319,26 @@ export async function buildDiscoveryFeed(
     };
   }
 
-  const { data: competitors, error: compErr } = await supabase
-    .from("saved_competitors")
-    .select("id, name, brand_name, brand_domain, logo_url, brand_logo_url, last_scraped_at")
-    .eq("user_id", userId)
-    .in("id", competitorIds);
-
+  const { rows: competitors, error: compErr } = await loadCompetitorsById(supabase, userId, competitorIds);
   if (compErr) return { ok: false, error: compErr.message };
 
   const competitorById = new Map<string, CompetitorRow>();
-  for (const c of competitors ?? []) {
-    competitorById.set(c.id, c);
+  for (const c of competitors) {
+    if (c?.id) competitorById.set(c.id, c);
   }
 
-  let adsQuery = supabase
-    .from("scraped_ads")
-    .select(
-      "id, competitor_id, platform, format, ad_text, ad_creative_url, archived_creative_url, first_seen_at, last_seen_at, is_active, raw_payload",
-    )
-    .eq("user_id", userId)
-    .in("competitor_id", competitorIds)
-    .order("last_seen_at", { ascending: false })
-    .limit(FETCH_CAP);
+  const needsPayloadUpfront =
+    input.sort === "impressions" ||
+    input.sort === "ultimate_winner" ||
+    input.ultimateOnly;
 
-  if (input.competitorId) {
-    adsQuery = adsQuery.eq("competitor_id", input.competitorId);
-  }
-
-  const { data: adRows, error: adsErr } = await adsQuery;
+  const { rows: adRows, error: adsErr } = await fetchScrapedAdRows(
+    supabase,
+    userId,
+    competitorIds,
+    needsPayloadUpfront ? FULL_AD_SELECT : LEAN_AD_SELECT,
+    input.competitorId,
+  );
   if (adsErr) return { ok: false, error: adsErr.message };
 
   const nowMs = Date.now();
@@ -156,60 +350,16 @@ export async function buildDiscoveryFeed(
   const platformCounts: Record<string, number> = {};
   const competitorCounts = new Map<string, number>();
 
-  for (const row of (adRows ?? []) as ScrapedRow[]) {
+  for (const row of adRows) {
     const comp = competitorById.get(row.competitor_id);
     if (!comp) continue;
 
-    const is_killed = resolveTimelineAdKilled(
-      {
-        platform: row.platform,
-        last_seen_at: row.last_seen_at,
-        is_active: row.is_active ?? true,
-        raw_payload: row.raw_payload,
-      },
-      comp.last_scraped_at,
-    );
+    const dto = hydrateDiscoveryRow(row, comp, nowMs, input, dateStart, needle, platformSet);
+    if (!dto) continue;
 
-    const impressions_index = extractImpressionsIndex(row.raw_payload);
-    const startMs = new Date(row.first_seen_at).getTime();
-    const endMs = is_killed ? new Date(row.last_seen_at).getTime() : nowMs;
-    const daysRunning = Math.max(0, Math.floor((endMs - startMs) / DAY_MS));
-    const is_ultimate_winner = qualifiesAsUltimateWinner(impressions_index, daysRunning);
-
-    if (platformSet.size > 0 && !platformSet.has(row.platform.trim().toLowerCase())) continue;
-    if (input.status === "active" && is_killed) continue;
-    if (input.status === "retired" && !is_killed) continue;
-    if (input.ultimateOnly && !is_ultimate_winner) continue;
-    if (input.format === "video" && !isVideoFormat(row.format)) continue;
-    if (input.format === "image" && isVideoFormat(row.format)) continue;
-    if (dateStart != null && endMs < dateStart) continue;
-    if (needle) {
-      const hay = `${row.ad_text} ${comp.brand_name ?? ""} ${comp.name ?? ""}`.toLowerCase();
-      if (!hay.includes(needle)) continue;
-    }
-
-    platformCounts[row.platform] = (platformCounts[row.platform] ?? 0) + 1;
-    competitorCounts.set(row.competitor_id, (competitorCounts.get(row.competitor_id) ?? 0) + 1);
-
-    hydrated.push({
-      id: row.id,
-      competitor_id: row.competitor_id,
-      competitor_name: comp.brand_name?.trim() || comp.name?.trim() || "Competitor",
-      competitor_domain: comp.brand_domain?.trim() || null,
-      competitor_logo_url: comp.brand_logo_url?.trim() || comp.logo_url?.trim() || null,
-      platform: row.platform,
-      format: row.format ?? "",
-      ad_text: row.ad_text,
-      ad_creative_url: row.ad_creative_url,
-      archived_creative_url: row.archived_creative_url,
-      first_seen_at: row.first_seen_at,
-      last_seen_at: row.last_seen_at,
-      is_active: row.is_active ?? true,
-      is_killed,
-      impressions_index,
-      is_ultimate_winner,
-      raw_payload: row.raw_payload as DiscoveryAdDto["raw_payload"],
-    });
+    platformCounts[dto.platform] = (platformCounts[dto.platform] ?? 0) + 1;
+    competitorCounts.set(dto.competitor_id, (competitorCounts.get(dto.competitor_id) ?? 0) + 1);
+    hydrated.push(dto);
   }
 
   let sorted = hydrated;
@@ -228,7 +378,11 @@ export async function buildDiscoveryFeed(
   }
 
   const total = sorted.length;
-  const page = sorted.slice(input.offset, input.offset + input.limit);
+  let page = sorted.slice(input.offset, input.offset + input.limit);
+
+  if (!needsPayloadUpfront) {
+    page = await attachRawPayloads(supabase, userId, page);
+  }
 
   const competitorChips: DiscoveryCompetitorChip[] = [...competitorById.entries()]
     .map(([id, c]) => ({
@@ -243,7 +397,7 @@ export async function buildDiscoveryFeed(
 
   return {
     ok: true,
-    ads: page,
+    ads: page.filter((ad) => Boolean(ad?.id)),
     total,
     offset: input.offset,
     limit: input.limit,

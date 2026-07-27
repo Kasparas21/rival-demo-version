@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Compass, Loader2, RefreshCw, Search } from "lucide-react";
 
@@ -9,141 +9,45 @@ import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { DiscoveryAdCard } from "@/components/discovery/discovery-ad-card";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
-import {
-  DEFAULT_DISCOVERY_TOOLBAR,
-  toolbarForTab,
-  type DiscoveryFeedTab,
-  type DiscoveryToolbarState,
-} from "@/components/discovery/discovery-types";
-import type { DiscoveryAdDto, DiscoveryFeedResult } from "@/lib/discovery/types";
+import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
 import { cn } from "@/lib/utils";
-
-const PAGE_SIZE = 24;
-
-function buildFeedUrl(
-  brandId: string,
-  toolbar: DiscoveryToolbarState,
-  offset: number,
-  shuffleSeed: string,
-  searchDebounced: string,
-): string {
-  const params = new URLSearchParams({
-    brandId,
-    offset: String(offset),
-    limit: String(PAGE_SIZE),
-    sort: toolbar.sort,
-    shuffleSeed,
-    format: toolbar.format,
-    status: toolbar.status,
-    datePreset: toolbar.datePreset,
-    q: searchDebounced,
-  });
-  if (toolbar.ultimateOnly) params.set("ultimateOnly", "1");
-  if (toolbar.competitorId) params.set("competitorId", toolbar.competitorId);
-  for (const p of toolbar.selectedPlatforms) params.append("platform", p);
-  return `/api/discovery/feed?${params.toString()}`;
-}
 
 export function DiscoveryPageClient() {
   const activeBrand = useActiveBrand();
   const { activeAdId, openAd, closeAd } = useAdDetailState();
 
-  const [tab, setTab] = useState<DiscoveryFeedTab>("explore");
-  const [toolbar, setToolbar] = useState<DiscoveryToolbarState>(DEFAULT_DISCOVERY_TOOLBAR);
-  const [searchDebounced, setSearchDebounced] = useState("");
-  const [ads, setAds] = useState<DiscoveryAdDto[]>([]);
-  const [total, setTotal] = useState(0);
-  const [competitors, setCompetitors] = useState<DiscoveryFeedResult["competitors"]>([]);
-  const [platformCounts, setPlatformCounts] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-
-  const patchToolbar = useCallback((patch: Partial<DiscoveryToolbarState>) => {
-    setToolbar((prev) => ({ ...prev, ...patch }));
-  }, []);
-
-  const [shuffleSeed, setShuffleSeed] = useState(
-    () => `${activeBrand.id}:${Date.now().toString(36)}`,
-  );
-
-  const reshuffle = useCallback(() => {
-    setShuffleSeed(`${activeBrand.id}:${Date.now().toString(36)}`);
-    patchToolbar({ sort: "shuffle" });
-    setTab("explore");
-  }, [activeBrand.id, patchToolbar]);
+  const {
+    tab,
+    selectTab,
+    toolbar,
+    patchToolbar,
+    ads,
+    total,
+    competitors,
+    platformCounts,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    reshuffle,
+    loadMore,
+  } = useDiscoveryFeed(activeBrand.id);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const requestGen = useRef(0);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setSearchDebounced(toolbar.search.trim()), 250);
-    return () => window.clearTimeout(t);
-  }, [toolbar.search]);
-
-  const selectTab = useCallback((next: DiscoveryFeedTab) => {
-    setTab(next);
-    setToolbar((prev) => ({ ...prev, ...toolbarForTab(next) }));
-  }, []);
-
-  const fetchPage = useCallback(
-    async (nextOffset: number, append: boolean) => {
-      if (!activeBrand.id || activeBrand.id === "default") return;
-      const gen = ++requestGen.current;
-      if (append) setLoadingMore(true);
-      else setLoading(true);
-      setError(null);
-
-      try {
-        const res = await fetch(
-          buildFeedUrl(activeBrand.id, toolbar, nextOffset, shuffleSeed, searchDebounced),
-          { credentials: "include" },
-        );
-        const json = (await res.json()) as DiscoveryFeedResult | { ok: false; error?: string };
-        if (gen !== requestGen.current) return;
-        if (!res.ok || !("ads" in json)) {
-          throw new Error(("error" in json && json.error) || "Failed to load discovery feed");
-        }
-        setAds((prev) => (append ? [...prev, ...json.ads] : json.ads));
-        setTotal(json.total);
-        setHasMore(json.has_more);
-        setOffset(nextOffset + json.ads.length);
-        setCompetitors(json.competitors);
-        setPlatformCounts(json.platform_counts);
-      } catch (e) {
-        if (gen !== requestGen.current) return;
-        setError(e instanceof Error ? e.message : "Failed to load");
-        if (!append) setAds([]);
-      } finally {
-        if (gen === requestGen.current) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
-      }
-    },
-    [activeBrand.id, toolbar, shuffleSeed, searchDebounced],
-  );
-
-  useEffect(() => {
-    setOffset(0);
-    void fetchPage(0, false);
-  }, [fetchPage, shuffleSeed]);
 
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node || !hasMore || loading || loadingMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) void fetchPage(offset, true);
+        if (entries[0]?.isIntersecting) void loadMore();
       },
       { rootMargin: "480px 0px" },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [fetchPage, hasMore, loading, loadingMore, offset]);
+  }, [hasMore, loadMore, loading, loadingMore]);
 
   return (
     <div className="mx-auto w-full max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8">

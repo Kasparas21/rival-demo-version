@@ -47,59 +47,65 @@ function parseStatus(raw: string | null): DiscoveryStatusFilter {
 }
 
 export async function GET(request: Request) {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabase.auth.getUser();
 
-  if (authErr || !user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    if (authErr || !user) {
+      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    }
+
+    const url = new URL(request.url);
+    const brandId = (url.searchParams.get("brandId") ?? "").trim();
+    if (!brandId) {
+      return NextResponse.json({ ok: false, error: "brandId required" }, { status: 400 });
+    }
+
+    let offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
+    if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+    let limit = Number.parseInt(url.searchParams.get("limit") ?? "24", 10);
+    if (!Number.isFinite(limit) || limit < 1) limit = 24;
+    limit = Math.min(limit, 48);
+
+    const platforms = url.searchParams
+      .getAll("platform")
+      .flatMap((p) => p.split(","))
+      .map((p) => p.trim().toLowerCase())
+      .filter(Boolean);
+
+    const shuffleSeed =
+      (url.searchParams.get("shuffleSeed") ?? "").trim() ||
+      `${user.id}:${brandId}:${new Date().toISOString().slice(0, 10)}`;
+
+    const result = await buildDiscoveryFeed(supabase, user.id, {
+      brandId,
+      offset,
+      limit,
+      sort: parseSort(url.searchParams.get("sort")),
+      shuffleSeed,
+      platforms,
+      format: parseFormat(url.searchParams.get("format")),
+      status: parseStatus(url.searchParams.get("status")),
+      ultimateOnly: url.searchParams.get("ultimateOnly") === "1",
+      query: url.searchParams.get("q") ?? "",
+      competitorId: (url.searchParams.get("competitorId") ?? "").trim() || null,
+      datePreset: parseDatePreset(url.searchParams.get("datePreset")),
+    });
+
+    if (!result.ok) {
+      return NextResponse.json(result, { status: 500 });
+    }
+
+    return NextResponse.json(result, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "discovery feed failed";
+    console.error("[discovery/feed]", message, err);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
-
-  const url = new URL(request.url);
-  const brandId = (url.searchParams.get("brandId") ?? "").trim();
-  if (!brandId) {
-    return NextResponse.json({ ok: false, error: "brandId required" }, { status: 400 });
-  }
-
-  let offset = Number.parseInt(url.searchParams.get("offset") ?? "0", 10);
-  if (!Number.isFinite(offset) || offset < 0) offset = 0;
-
-  let limit = Number.parseInt(url.searchParams.get("limit") ?? "24", 10);
-  if (!Number.isFinite(limit) || limit < 1) limit = 24;
-  limit = Math.min(limit, 48);
-
-  const platforms = url.searchParams
-    .getAll("platform")
-    .flatMap((p) => p.split(","))
-    .map((p) => p.trim().toLowerCase())
-    .filter(Boolean);
-
-  const shuffleSeed =
-    (url.searchParams.get("shuffleSeed") ?? "").trim() ||
-    `${user.id}:${brandId}:${new Date().toISOString().slice(0, 10)}`;
-
-  const result = await buildDiscoveryFeed(supabase, user.id, {
-    brandId,
-    offset,
-    limit,
-    sort: parseSort(url.searchParams.get("sort")),
-    shuffleSeed,
-    platforms,
-    format: parseFormat(url.searchParams.get("format")),
-    status: parseStatus(url.searchParams.get("status")),
-    ultimateOnly: url.searchParams.get("ultimateOnly") === "1",
-    query: url.searchParams.get("q") ?? "",
-    competitorId: (url.searchParams.get("competitorId") ?? "").trim() || null,
-    datePreset: parseDatePreset(url.searchParams.get("datePreset")),
-  });
-
-  if (!result.ok) {
-    return NextResponse.json(result, { status: 500 });
-  }
-
-  return NextResponse.json(result, {
-    headers: { "Cache-Control": "private, no-store" },
-  });
 }
