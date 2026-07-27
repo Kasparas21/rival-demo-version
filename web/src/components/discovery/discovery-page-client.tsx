@@ -8,6 +8,7 @@ import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { DiscoveryAdCard } from "@/components/discovery/discovery-ad-card";
+import { DiscoveryAdCardBoundary } from "@/components/discovery/discovery-ad-card-boundary";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
@@ -123,7 +124,9 @@ export function DiscoveryPageClient() {
           )}
         >
           {ads.map((ad) => (
-            <DiscoveryAdCard key={ad.id} ad={ad} onOpen={() => openAd(ad.id)} />
+            <DiscoveryAdCardBoundary key={ad.id}>
+              <DiscoveryAdCard ad={ad} onOpen={() => openAd(ad.id)} />
+            </DiscoveryAdCardBoundary>
           ))}
         </div>
       )}

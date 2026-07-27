@@ -57,11 +57,11 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
-function seededShuffle<T>(items: T[], seed: string): T[] {
+export function seededShuffle<T>(items: T[], seed: string): T[] {
   const arr = [...items];
   let state = hashSeed(seed) || 1;
   for (let i = arr.length - 1; i > 0; i--) {
-    state = (Math.imul(state, 48271) + i) % 2147483647;
+    state = (Math.imul(state, 48271) + i) >>> 0;
     const j = state % (i + 1);
     [arr[i], arr[j]] = [arr[j]!, arr[i]!];
   }

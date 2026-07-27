@@ -41,11 +41,11 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v1:${day}:${query}`;
+  return `${brandId}:discovery:v2:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
-  return `${brandId}:discovery-shuffle:v1:${day}`;
+  return `${brandId}:discovery-shuffle:v2:${day}`;
 }
 
 export function validateDiscoveryFeedCache(cached: DiscoveryFeedPageCache): boolean {

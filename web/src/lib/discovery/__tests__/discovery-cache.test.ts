@@ -14,7 +14,7 @@ describe("discovery-cache", () => {
     const keyA = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a", "2026-07-27");
     const keyB = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a", "2026-07-27");
     expect(keyA).toBe(keyB);
-    expect(keyA).toContain("brand-1:discovery:v1:2026-07-27:");
+    expect(keyA).toContain("brand-1:discovery:v2:2026-07-27:");
   });
 
   it("changes cache key when shuffle seed changes", () => {
