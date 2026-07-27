@@ -48,6 +48,8 @@ export type TimelineToolbarState = {
   selectedPlatforms: Set<string>;
   groupDuplicates: boolean;
   showBrandBids: boolean;
+  ultimateOnly: boolean;
+  impressionsOnly: boolean;
   viewFields: TimelineViewFields;
 };
 
@@ -58,7 +60,6 @@ type Props = {
   dateRangeEarliest: number | null;
   dateRangeLatest: number | null;
   hiddenBrandBidCount: number;
-  showMetaSortOptions?: boolean;
 };
 
 const DATE_PRESETS: TimelineDatePreset[] = ["7d", "14d", "30d", "90d", "365d", "all"];
@@ -100,7 +101,6 @@ export function TimelineToolbar({
   dateRangeEarliest,
   dateRangeLatest,
   hiddenBrandBidCount,
-  showMetaSortOptions = false,
 }: Props) {
   const menu = useMenuState();
   const [filterPane, setFilterPane] = useState<"root" | "platform" | "status" | "format">("root");
@@ -113,6 +113,8 @@ export function TimelineToolbar({
     if (state.formatFilter !== "all") n += 1;
     if (state.selectedPlatforms.size > 0 && state.selectedPlatforms.size < platforms.length) n += 1;
     if (!state.showBrandBids && hiddenBrandBidCount > 0) n += 1;
+    if (state.ultimateOnly) n += 1;
+    if (state.impressionsOnly) n += 1;
     return n;
   }, [state, platforms.length, hiddenBrandBidCount]);
 
@@ -121,10 +123,7 @@ export function TimelineToolbar({
       ? `${formatShortDate(state.customRangeStart)} – ${formatShortDate(state.customRangeEnd)}`
       : datePresetLabel(state.datePreset);
 
-  const sortOptions = useMemo(
-    () => (showMetaSortOptions ? [...BASE_SORT_OPTIONS, ...META_SORT_OPTIONS] : BASE_SORT_OPTIONS),
-    [showMetaSortOptions],
-  );
+  const sortOptions = useMemo(() => [...BASE_SORT_OPTIONS, ...META_SORT_OPTIONS], []);
 
   const sortLabel = sortOptions.find((o) => o.id === state.sort)?.label ?? "Newest";
 
@@ -206,6 +205,18 @@ export function TimelineToolbar({
                     label="Show brand bids"
                     checked={state.showBrandBids}
                     onChange={(showBrandBids) => onChange({ showBrandBids })}
+                  />
+                  <TimelineToggleRow
+                    label="Ultimate winners only"
+                    description="High Meta impression band plus 30+ days live."
+                    checked={state.ultimateOnly}
+                    onChange={(ultimateOnly) => onChange({ ultimateOnly })}
+                  />
+                  <TimelineToggleRow
+                    label="Has impression data"
+                    description="Meta ads with a reported impression band."
+                    checked={state.impressionsOnly}
+                    onChange={(impressionsOnly) => onChange({ impressionsOnly })}
                   />
                 </div>
               </>
@@ -388,7 +399,7 @@ export function TimelineToolbar({
             active={menu.isOpen("sort")}
             onClick={() => menu.toggle("sort")}
           />
-          <TimelineMenuPanel open={menu.isOpen("sort")} onClose={menu.close} className="w-44">
+          <TimelineMenuPanel open={menu.isOpen("sort")} onClose={menu.close} className="w-56">
             {sortOptions.map((opt) => (
               <TimelineMenuItem
                 key={opt.id}

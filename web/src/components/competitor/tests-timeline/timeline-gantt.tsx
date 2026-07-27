@@ -233,11 +233,16 @@ function RowLabel({ ad, viewFields, duplicateCount }: LabelProps) {
         {viewFields.adCopy ? (
           <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-500">{adCopySnippet(ad)}</p>
         ) : null}
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-600">
           <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", statusDotCls)} aria-hidden />
           <span>
             {statusLabel} · {formatLifespanLabel(lifespanDays)}
           </span>
+          {typeof ad.impressions_index === "number" && Number.isFinite(ad.impressions_index) ? (
+            <span className="rounded-full bg-slate-100 px-1.5 py-0 text-[10px] font-semibold text-slate-600">
+              Imp. band {ad.impressions_index}
+            </span>
+          ) : null}
         </div>
       </div>
     </div>

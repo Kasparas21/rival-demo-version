@@ -17,6 +17,7 @@ import {
   adMatchesWeekFilter,
   aggregateWeekActivity,
   DAY_MS,
+  enrichTimelineAd,
   headlineForAd,
   isBrandBidAngle,
   isVideoFormat,
@@ -119,7 +120,7 @@ export function TimelineTab({
 }: Props) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
-  const cacheKey = `${domainKey}:timeline:v3:${competitorId}:${stamp}`;
+  const cacheKey = `${domainKey}:timeline:v4:${competitorId}:${stamp}`;
 
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<TimelineResponseLight>({
     cacheKey,
@@ -138,7 +139,7 @@ export function TimelineTab({
   });
 
   const loadErr = hookError?.message ?? null;
-  const rawAds = data?.ads ?? [];
+  const rawAds = useMemo(() => (data?.ads ?? []).map((ad) => enrichTimelineAd(ad)), [data?.ads]);
 
   const [toolbar, setToolbar] = useState<TimelineToolbarState>({
     search: "",
@@ -151,6 +152,8 @@ export function TimelineTab({
     selectedPlatforms: new Set(),
     groupDuplicates: false,
     showBrandBids: false,
+    ultimateOnly: false,
+    impressionsOnly: false,
     viewFields: DEFAULT_VIEW_FIELDS,
   });
 
@@ -219,6 +222,11 @@ export function TimelineTab({
 
       if (toolbar.selectedPlatforms.size > 0 && !toolbar.selectedPlatforms.has(ad.platform)) return false;
 
+      if (toolbar.ultimateOnly && !ad.is_ultimate_winner) return false;
+      if (toolbar.impressionsOnly && (ad.impressions_index == null || !Number.isFinite(ad.impressions_index))) {
+        return false;
+      }
+
       if (viewWindow) {
         const adEnd = effectiveBarEndForFilter(ad, viewWindow.end);
         const adStart = new Date(ad.first_seen_at).getTime();
@@ -274,6 +282,8 @@ export function TimelineTab({
       selectedPlatforms: new Set(allPlatforms),
       groupDuplicates: false,
       showBrandBids: true,
+      ultimateOnly: false,
+      impressionsOnly: false,
       viewFields: DEFAULT_VIEW_FIELDS,
     });
     setHeatmapWeek(null);
@@ -374,7 +384,6 @@ export function TimelineTab({
         dateRangeEarliest={dateRangeEarliest}
         dateRangeLatest={dateRangeLatest}
         hiddenBrandBidCount={!toolbar.showBrandBids ? brandBidCount : 0}
-        showMetaSortOptions={platformChips.some((p) => p.id === "meta")}
       />
 
       {onlyBrandBidsFiltered ? (

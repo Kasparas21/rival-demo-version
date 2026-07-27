@@ -1,5 +1,5 @@
 import {
-  extractImpressionsIndex,
+  qualifiesAsUltimateWinner,
   sortAdsByPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
 import { ALL_COMPARISON_PLATFORMS } from "@/lib/platforms/comparison-platform-order";
@@ -464,9 +464,31 @@ export function median(values: number[]): number {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
+export function isMetaPlatform(platform: string): boolean {
+  const p = platform.trim().toLowerCase();
+  return p === "meta" || p === "facebook" || p === "instagram";
+}
+
+/** Fill performance fields when API/cache rows predate timeline v4. */
+export function enrichTimelineAd(ad: TimelineAd, nowMs = Date.now()): TimelineAd {
+  const impressions_index = ad.impressions_index ?? null;
+  const startMs = new Date(ad.first_seen_at).getTime();
+  const endMs = ad.is_killed ? new Date(ad.last_seen_at).getTime() : nowMs;
+  const daysRunning = Math.max(0, Math.floor((endMs - startMs) / DAY_MS));
+  const is_ultimate_winner =
+    ad.is_ultimate_winner ?? qualifiesAsUltimateWinner(impressions_index, daysRunning);
+
+  return {
+    ...ad,
+    impressions_index,
+    is_ultimate_winner,
+  };
+}
+
 export function sortTimelineAds(ads: TimelineAd[], sort: TimelineSort, nowMs = Date.now()): TimelineAd[] {
-  return sortAdsByPerformanceSort(ads, sort, {
-    impressionsIndexFor: (ad) => ad.impressions_index ?? extractImpressionsIndex(ad),
+  const enriched = ads.map((ad) => enrichTimelineAd(ad, nowMs));
+  return sortAdsByPerformanceSort(enriched, sort, {
+    impressionsIndexFor: (ad) => ad.impressions_index ?? null,
     daysRunningFor: (ad) => displayLifespanDays(ad, nowMs),
     newestMsFor: (ad) => new Date(ad.first_seen_at).getTime(),
   });

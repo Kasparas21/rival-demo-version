@@ -115,6 +115,8 @@ export function DemoTimelineView({ domain }: { domain?: string }) {
     selectedPlatforms: new Set(platformChips.map((p) => p.id)),
     groupDuplicates: false,
     showBrandBids: true,
+    ultimateOnly: false,
+    impressionsOnly: false,
     viewFields: DEFAULT_VIEW_FIELDS,
   });
 
@@ -184,6 +186,8 @@ export function DemoTimelineView({ domain }: { domain?: string }) {
       selectedPlatforms: new Set(platformChips.map((p) => p.id)),
       groupDuplicates: false,
       showBrandBids: true,
+      ultimateOnly: false,
+      impressionsOnly: false,
       viewFields: DEFAULT_VIEW_FIELDS,
     });
     setHeatmapWeek(null);
