@@ -119,7 +119,8 @@ export type SidebarCompetitor = {
 function firstNonEmptyLogoUrl(...urls: (string | undefined)[]): string | undefined {
   for (const u of urls) {
     const t = u?.trim();
-    if (t) return t;
+    /** Clearbit Logo API is discontinued — stored URLs pointing at it are dead. */
+    if (t && !t.includes("logo.clearbit.com")) return t;
   }
   return undefined;
 }
@@ -656,38 +657,33 @@ export function competitorSidebarShowsLoadingSkeleton(c: SidebarCompetitor): boo
   return Boolean(c.pending);
 }
 
-/** Third-party favicon endpoint when Clearbit + Google SVG proxy fail (CDN hotlink quirks). */
+/** Third-party favicon endpoint when the Google favicon proxy fails (CDN hotlink quirks). */
 function duckduckgoFaviconUrlForDomain(host: string): string {
   const h = normalizeCompetitorSlug(host).replace(/^www\./i, "");
   return `https://icons.duckduckgo.com/ip3/${encodeURIComponent(h)}.ico`;
 }
 
-/** When no stored logo URL, derive one from the domain (not the blue globe favicon). */
-function synthesizeClearbitLogoUrl(c: Pick<SidebarCompetitor, "slug" | "brand">): string | undefined {
+/** When no stored logo URL, derive one from the domain (Clearbit is discontinued — use Google favicon). */
+function synthesizeDomainLogoUrl(c: Pick<SidebarCompetitor, "slug" | "brand">): string | undefined {
   const host = coerceSidebarCompetitorUrlHost(c);
   const h = normalizeCompetitorSlug(host);
   if (!h.includes(".")) return undefined;
   if (!/^([a-z0-9][a-z0-9-]*\.)+[a-z]{2,}$/i.test(h)) return undefined;
-  return `https://logo.clearbit.com/${encodeURIComponent(h)}`;
+  return googleFaviconUrlForDomain(h);
 }
 
-/** Ensures `logoUrl` is set where possible (Clearbit → Google favicon) before sidebar display or API sync */
+/** Ensures `logoUrl` is set where possible (stored logo → Google favicon) before sidebar display or API sync */
 export function hoistLogoOntoRow(c: SidebarCompetitor): SidebarCompetitor {
   const direct = resolvedSidebarCompetitorLogoUrl(c);
   if (direct) return { ...c, logoUrl: direct };
-  const syn = synthesizeClearbitLogoUrl(c);
+  const syn = synthesizeDomainLogoUrl(c);
   if (syn) return { ...c, logoUrl: syn };
-  const host = coerceSidebarCompetitorUrlHost(c);
-  const h = normalizeCompetitorSlug(host);
-  if (h.includes(".") && /^([a-z0-9][a-z0-9-]*\.)+[a-z]{2,}$/i.test(h)) {
-    return { ...c, logoUrl: googleFaviconUrlForDomain(h) };
-  }
   return { ...c };
 }
 
 /**
  * Preferred logo URLs for the sidebar (first loads first); fall back on image error for flaky CDNs.
- * Order: stored logo → Clearbit inferred from domain → Google favicon.
+ * Order: stored logo → Google favicon inferred from domain → DuckDuckGo favicon.
  */
 export function sidebarCompetitorLogoCandidates(c: SidebarCompetitor): string[] {
   const out: string[] = [];
@@ -697,11 +693,10 @@ export function sidebarCompetitorLogoCandidates(c: SidebarCompetitor): string[] 
     out.push(t);
   };
   push(resolvedSidebarCompetitorLogoUrl(c));
-  push(synthesizeClearbitLogoUrl(c));
+  push(synthesizeDomainLogoUrl(c));
   const host = coerceSidebarCompetitorUrlHost(c);
   const h = normalizeCompetitorSlug(host);
   if (h.includes(".") && /^([a-z0-9][a-z0-9-]*\.)+[a-z]{2,}$/i.test(h)) {
-    push(googleFaviconUrlForDomain(h));
     push(duckduckgoFaviconUrlForDomain(h));
   }
   return out;

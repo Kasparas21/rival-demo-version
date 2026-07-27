@@ -569,7 +569,6 @@ export async function resolveBrandLogo(
     ...(firstHit ? [firstHit] : []),
     ...(scrape ? [scrape] : []),
     ...fromSearch.filter((u): u is string => Boolean(u) && u !== firstHit),
-    `https://logo.clearbit.com/${encodeURIComponent(dom)}`,
     fav,
     `https://icons.duckduckgo.com/ip3/${encodeURIComponent(dom)}.ico`,
   ];

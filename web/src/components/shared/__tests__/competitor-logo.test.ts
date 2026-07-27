@@ -28,9 +28,17 @@ describe("buildLogoCandidates", () => {
       primary: null,
       domain: "https://www.example.co.uk/path",
     });
-    expect(urls.some((x) => x.includes("logo.clearbit.com"))).toBe(true);
     expect(urls.some((x) => x.includes("google.com/s2/favicons"))).toBe(true);
     expect(urls.some((x) => x.includes("duckduckgo.com"))).toBe(true);
+  });
+
+  it("drops dead Clearbit URLs from stored sources", () => {
+    const urls = buildLogoCandidates({
+      primary: "https://logo.clearbit.com/example.com",
+      domain: "example.com",
+    });
+    expect(urls.some((x) => x.includes("logo.clearbit.com"))).toBe(false);
+    expect(urls.some((x) => x.includes("google.com/s2/favicons"))).toBe(true);
   });
 
   it("skips synthetics for non-domain strings", () => {

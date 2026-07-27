@@ -11,6 +11,7 @@ import {
   isLibraryAdKilled,
   type LibraryRunStatus,
 } from "@/lib/ad-library/library-run-status";
+import { isExpiredMetaCdnUrl } from "@/lib/ad-library/meta-cdn-expiry";
 import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
 import { safeHttpsUrl, looksLikeMetaRasterPreviewUrl } from "@/lib/ad-library/normalize";
 import { resolveMetaLibraryCardPreview } from "@/lib/ad-library/resolve-meta-library-card-preview";
@@ -61,7 +62,9 @@ function MetaCreativeMedia({
       ? ad.pageProfilePic.trim()
       : "";
   const archived = !archivedFailed ? archivedUrl?.trim() ?? "" : "";
-  const cdnStill = still || fallbackStill;
+  const rawCdnStill = still || fallbackStill;
+  /** Signed CDN link already past its `oe=` expiry always 403s — skip it when we have an archived copy. */
+  const cdnStill = archived && isExpiredMetaCdnUrl(rawCdnStill) ? "" : rawCdnStill;
   /** CDN link first (freshest); archived Storage copy when the CDN link has expired; page logo last. */
   const displayStill = !imageFailed ? cdnStill || archived || pagePicFallback : archived || pagePicFallback;
   const onStillError = () => {

@@ -11,12 +11,17 @@ export type LogoSource = {
   domain?: string | null;
 };
 
-/** Ordered candidate URLs: caller URLs first, then Clearbit / Google favicon / DuckDuckGo when domain looks like a host. */
+/** Clearbit Logo API is discontinued — its DNS no longer resolves, so any stored URL is dead. */
+function isDeadLogoUrl(url: string): boolean {
+  return url.includes("logo.clearbit.com");
+}
+
+/** Ordered candidate URLs: caller URLs first, then Google favicon / DuckDuckGo when domain looks like a host. */
 export function buildLogoCandidates(sources: LogoSource): string[] {
   const out: string[] = [];
   const push = (u?: string | null) => {
     const t = u?.trim();
-    if (!t || out.includes(t)) return;
+    if (!t || out.includes(t) || isDeadLogoUrl(t)) return;
     out.push(t);
   };
 
@@ -31,7 +36,6 @@ export function buildLogoCandidates(sources: LogoSource): string[] {
     return out;
   }
 
-  push(`https://logo.clearbit.com/${encodeURIComponent(cleanHost)}`);
   push(googleFaviconUrlForDomain(cleanHost));
   push(`https://icons.duckduckgo.com/ip3/${encodeURIComponent(cleanHost)}.ico`);
 

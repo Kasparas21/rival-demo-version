@@ -91,31 +91,40 @@ function chunkIds<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function loadCompetitorIdsForBrand(
   supabase: SupabaseClient<Database>,
   userId: string,
   brandId: string,
 ): Promise<{ ids: string[]; error?: string }> {
-  if (!brandId || brandId === "default") return { ids: [] };
+  /**
+   * Legacy sentinel brand ids ("default", "_workspace") are not rows in `brands`;
+   * querying `brand_competitors.brand_id` (uuid) with them is a Postgres type error.
+   * Treat any non-UUID brand id as "all tracked competitors".
+   */
+  const isRealBrandId = UUID_RE.test(brandId.trim());
 
-  const { data: mappings, error: mapErr } = await supabase
-    .from("brand_competitors")
-    .select("competitor_id")
-    .eq("user_id", userId)
-    .eq("brand_id", brandId);
+  if (isRealBrandId) {
+    const { data: mappings, error: mapErr } = await supabase
+      .from("brand_competitors")
+      .select("competitor_id")
+      .eq("user_id", userId)
+      .eq("brand_id", brandId);
 
-  if (
-    mapErr &&
-    !(
-      isMissingDbColumnError(mapErr.message, "brand_competitors") ||
-      /brand_competitors/i.test(mapErr.message)
-    )
-  ) {
-    return { ids: [], error: mapErr.message };
+    if (
+      mapErr &&
+      !(
+        isMissingDbColumnError(mapErr.message, "brand_competitors") ||
+        /brand_competitors/i.test(mapErr.message)
+      )
+    ) {
+      return { ids: [], error: mapErr.message };
+    }
+
+    const mappedIds = [...new Set((mappings ?? []).map((r) => String(r.competitor_id)).filter(Boolean))];
+    if (mappedIds.length > 0) return { ids: mappedIds };
   }
-
-  const mappedIds = [...new Set((mappings ?? []).map((r) => String(r.competitor_id)).filter(Boolean))];
-  if (mappedIds.length > 0) return { ids: mappedIds };
 
   const { data: rows, error: rowsErr } = await supabase
     .from("saved_competitors")
