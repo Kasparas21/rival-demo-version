@@ -1,6 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Plus, Settings, Trash2 } from "lucide-react";
+import { LogOut, Search, ChevronDown, ChevronsLeft, ChevronsRight, Plus, Settings, Trash2, Compass } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandProvider, type Brand } from "./brand-context";
@@ -1083,6 +1083,24 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         {/* Rival Agent — between brand and search */}
         <div className={`shrink-0 ${collapsed ? "px-3" : "px-4"} pb-0.5 pt-0`}>
           <SidebarRivalAgentControl collapsed={collapsed} />
+        </div>
+
+        <div className={`shrink-0 ${collapsed ? "px-3" : "px-4"} pt-2 pb-0.5`}>
+          <Link
+            href="/dashboard/discovery"
+            scroll={false}
+            className={`flex items-center rounded-xl transition-colors duration-200 motion-reduce:transition-none ${
+              pathname === "/dashboard/discovery"
+                ? collapsed
+                  ? "bg-[color:var(--rival-accent-blue)]/70 text-[color:var(--rival-primary)] ring-1 ring-[color:var(--rival-accent-blue)]"
+                  : "bg-[color:var(--rival-accent-blue)]/70 text-[color:var(--rival-primary)] ring-1 ring-[color:var(--rival-accent-blue)]"
+                : "border border-transparent bg-white/50 text-[#52525b] shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:bg-white/90 hover:text-[color:var(--rival-primary)] hover:border-[#e8e8e8]/90"
+            } ${collapsed ? "size-11 shrink-0 justify-center" : "min-h-[52px] gap-3 px-3 py-2.5 w-full items-center"}`}
+            title="Discovery"
+          >
+            <Compass className={`shrink-0 ${collapsed ? "w-[18px] h-[18px]" : "w-[18px] h-[18px]"}`} />
+            {!collapsed && <span className="text-[14px] font-medium">Discovery</span>}
+          </Link>
         </div>
 
         {/* Find competitor + competitors header + filter — fixed under brand */}
