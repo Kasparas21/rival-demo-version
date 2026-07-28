@@ -29,6 +29,12 @@ export type DiscoveryAssistantAdRef = {
   id: string;
   competitor_name: string;
   preview: string;
+  format?: string;
+  creative_url?: string | null;
+  competitor_logo_url?: string | null;
+  is_ultimate_winner?: boolean;
+  is_active?: boolean;
+  impressions_index?: number | null;
 };
 
 export type DiscoveryAssistantResponse = {
@@ -62,6 +68,12 @@ export const discoveryAssistantResponseSchema = z.object({
         id: z.string(),
         competitor_name: z.string(),
         preview: z.string(),
+        format: z.string().optional(),
+        creative_url: z.string().nullable().optional(),
+        competitor_logo_url: z.string().nullable().optional(),
+        is_ultimate_winner: z.boolean().optional(),
+        is_active: z.boolean().optional(),
+        impressions_index: z.number().nullable().optional(),
       }),
     )
     .optional(),

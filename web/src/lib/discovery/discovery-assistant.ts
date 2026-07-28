@@ -4,6 +4,7 @@ import { stripJsonFences } from "@/lib/email-intelligence/analyze";
 import { resolveModelForTask } from "@/lib/llm/model-routing";
 import { createMcpToolContext } from "@/lib/mcp/tool-context";
 import type { McpAuthContext } from "@/lib/mcp/types";
+import type { Database } from "@/lib/supabase/types";
 import {
   mcpAnalyzeDiscoveryKeywords,
   mcpGetDiscoveryAd,
@@ -13,10 +14,11 @@ import {
   mcpGetDiscoveryPatterns,
   mcpSearchDiscoveryAds,
 } from "@/lib/mcp/tools/discovery-tools";
-import type { Database } from "@/lib/supabase/types";
 
+import { buildDiscoveryFeed } from "./build-discovery-feed";
 import {
   discoveryAssistantResponseSchema,
+  type DiscoveryAssistantAdRef,
   type DiscoveryAssistantMessage,
   type DiscoveryAssistantResponse,
 } from "./discovery-assistant-types";
@@ -239,7 +241,70 @@ function parseAssistantJson(text: string): DiscoveryAssistantResponse {
   return discoveryAssistantResponseSchema.parse(parsed);
 }
 
+async function enrichAssistantAdRefs(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  brandId: string,
+  response: DiscoveryAssistantResponse,
+): Promise<DiscoveryAssistantResponse> {
+  const ids = [
+    ...new Set([
+      ...(response.ad_refs?.map((a) => a.id) ?? []),
+      ...(response.highlight_ad_ids ?? []),
+    ]),
+  ];
+  if (!ids.length) return response;
+
+  const feed = await buildDiscoveryFeed(supabase, userId, {
+    brandId,
+    clientBrandIds: [brandId],
+    offset: 0,
+    limit: 50_000_000,
+    sort: "impressions",
+    shuffleSeed: `assistant-enrich:${brandId}`,
+    platforms: [],
+    format: "all",
+    status: "all",
+    ultimateOnly: false,
+    query: "",
+    competitorFilterIds: [],
+    datePreset: "all",
+  });
+  if (!("ads" in feed)) return response;
+
+  const byId = new Map(feed.ads.map((ad) => [ad.id, ad]));
+  const enriched: DiscoveryAssistantAdRef[] = [];
+  const seen = new Set<string>();
+
+  const push = (id: string, partial?: DiscoveryAssistantAdRef) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    const ad = byId.get(id);
+    if (!ad) {
+      if (partial) enriched.push(partial);
+      return;
+    }
+    enriched.push({
+      id: ad.id,
+      competitor_name: ad.competitor_name,
+      preview: (partial?.preview ?? ad.ad_text).trim().slice(0, 160) || "Ad",
+      format: ad.format,
+      creative_url: ad.ad_creative_url ?? ad.archived_creative_url ?? null,
+      competitor_logo_url: ad.competitor_logo_url,
+      is_ultimate_winner: ad.is_ultimate_winner,
+      is_active: ad.is_active,
+      impressions_index: ad.impressions_index,
+    });
+  };
+
+  for (const ref of response.ad_refs ?? []) push(ref.id, ref);
+  for (const id of response.highlight_ad_ids ?? []) push(id);
+
+  return { ...response, ad_refs: enriched.slice(0, 12) };
+}
+
 export async function runDiscoveryAssistant(params: {
+  supabase: SupabaseClient<Database>;
   userId: string;
   brandId: string;
   brandName: string;
@@ -322,7 +387,8 @@ export async function runDiscoveryAssistant(params: {
   }
 
   try {
-    return parseAssistantJson(lastText);
+    const parsed = parseAssistantJson(lastText);
+    return enrichAssistantAdRefs(params.supabase, params.userId, params.brandId, parsed);
   } catch {
     return {
       message: lastText || "I couldn't process that request. Try rephrasing or be more specific about keywords or competitors.",
@@ -344,8 +410,8 @@ export async function runDiscoveryAssistantForUser(
   },
   appOrigin: string,
 ): Promise<DiscoveryAssistantResponse> {
-  void supabase;
   return runDiscoveryAssistant({
+    supabase,
     userId,
     brandId: input.brandId,
     brandName: input.brandName,
