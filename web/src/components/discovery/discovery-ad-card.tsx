@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Bookmark, BookmarkCheck, Check, Sparkles } from "lucide-react";
+import { Bookmark, BookmarkCheck, Check, Circle, Sparkles } from "lucide-react";
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
@@ -50,7 +50,7 @@ export function DiscoveryAdCard({
   };
 
   const header = (
-    <div className="relative flex items-center gap-2 border-b border-slate-100/90 bg-white/80 px-3 py-2.5 backdrop-blur-sm">
+    <div className="relative flex items-center gap-2.5 border-b border-slate-100/90 bg-white/80 px-3 py-2.5 backdrop-blur-sm">
       {selectable ? (
         <button
           type="button"
@@ -62,13 +62,17 @@ export function DiscoveryAdCard({
           aria-label={selected ? "Deselect ad" : "Select ad for chat"}
           aria-pressed={selected}
           className={cn(
-            "absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full border shadow-sm transition",
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 shadow-sm transition",
             selected
               ? "border-[color:var(--rival-primary)] bg-[color:var(--rival-primary)] text-white"
-              : "border-white/80 bg-white/90 text-slate-500 hover:border-[color-mix(in_srgb,var(--rival-accent-blue)_55%,white)] hover:text-[color:var(--rival-primary)]",
+              : "border-slate-300 bg-white text-slate-400 hover:border-[color:var(--rival-primary)] hover:text-[color:var(--rival-primary)]",
           )}
         >
-          {selected ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
+          {selected ? (
+            <Check className="h-4 w-4" aria-hidden />
+          ) : (
+            <Circle className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+          )}
         </button>
       ) : null}
       <CompetitorLogo
