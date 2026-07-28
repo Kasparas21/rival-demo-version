@@ -3,6 +3,9 @@
  * Used by Ads Library, Timeline, and MCP tools.
  */
 
+import { computeMetaAdRunDays } from "@/lib/ad-library/count-active-ads";
+import type { MetaAdCard } from "@/lib/ad-library/normalize";
+
 export type AdPerformanceSort =
   | "newest"
   | "oldest"
@@ -82,6 +85,48 @@ export function qualifiesAsUltimateWinner(
   }
 
   return days >= ULTIMATE_WINNER_RUNTIME_ONLY_MIN_DAYS;
+}
+
+/**
+ * Prefer Meta library start/end dates from `raw_payload` when present — scraped_ads
+ * first_seen_at can reflect when we first discovered the ad, not when it launched.
+ */
+export function resolveScrapedAdRunDays(args: {
+  platform: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  is_killed: boolean;
+  raw_payload: unknown;
+  scrapeAtMs?: number;
+  nowMs?: number;
+}): number {
+  const nowMs = args.nowMs ?? Date.now();
+  const startMs = new Date(args.first_seen_at).getTime();
+  const endMs = args.is_killed ? new Date(args.last_seen_at).getTime() : nowMs;
+  const dbDays = Math.max(0, Math.floor((endMs - startMs) / 86_400_000));
+
+  const platform = args.platform.trim().toLowerCase();
+  if (platform !== "meta" || !args.raw_payload || typeof args.raw_payload !== "object") {
+    return dbDays;
+  }
+
+  const card = args.raw_payload as MetaAdCard;
+  if (card.startedAt == null || !Number.isFinite(card.startedAt)) {
+    return dbDays;
+  }
+
+  const metaDays = computeMetaAdRunDays(card, args.scrapeAtMs, nowMs);
+  return Math.max(dbDays, metaDays);
+}
+
+/** Used by Discovery “Ultimate winners” tab — strict winners plus long-run performers. */
+export function passesUltimateWinnersFeedFilter(
+  impressionsIndex: number | null,
+  daysRunning: number,
+): boolean {
+  if (qualifiesAsUltimateWinner(impressionsIndex, daysRunning)) return true;
+  if (daysRunning < ULTIMATE_WINNER_MIN_DAYS_RUNNING) return false;
+  return computeUltimateWinnerScore(impressionsIndex, daysRunning) > 0;
 }
 
 export function compareAdsByPerformanceSort<T extends { first_seen_at: string; last_seen_at: string }>(

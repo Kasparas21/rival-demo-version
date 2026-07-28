@@ -1,6 +1,8 @@
 import {
   extractImpressionsIndex,
+  passesUltimateWinnersFeedFilter,
   qualifiesAsUltimateWinner,
+  resolveScrapedAdRunDays,
   sortAdsByPerformanceSort,
   type AdPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
@@ -327,15 +329,23 @@ function hydrateDiscoveryRow(
   );
 
   const impressions_index = extractImpressionsIndex(row.raw_payload ?? null);
-  const startMs = new Date(row.first_seen_at).getTime();
-  const endMs = is_killed ? new Date(row.last_seen_at).getTime() : nowMs;
-  const daysRunning = Math.max(0, Math.floor((endMs - startMs) / DAY_MS));
+  const scrapeAtMs = comp.last_scraped_at ? new Date(comp.last_scraped_at).getTime() : nowMs;
+  const daysRunning = resolveScrapedAdRunDays({
+    platform,
+    first_seen_at: row.first_seen_at,
+    last_seen_at: row.last_seen_at,
+    is_killed,
+    raw_payload: row.raw_payload ?? null,
+    scrapeAtMs,
+    nowMs,
+  });
   const is_ultimate_winner = qualifiesAsUltimateWinner(impressions_index, daysRunning);
+  const endMs = is_killed ? new Date(row.last_seen_at).getTime() : nowMs;
 
   if (platformSet.size > 0 && !platformSet.has(platform)) return null;
   if (input.status === "active" && is_killed) return null;
   if (input.status === "retired" && !is_killed) return null;
-  if (input.ultimateOnly && !is_ultimate_winner) return null;
+  if (input.ultimateOnly && !passesUltimateWinnersFeedFilter(impressions_index, daysRunning)) return null;
   if (input.format === "video" && !isVideoFormat(row.format)) return null;
   if (input.format === "image" && isVideoFormat(row.format)) return null;
   if (dateStart != null && endMs < dateStart) return null;
@@ -459,9 +469,17 @@ export async function buildDiscoveryFeed(
     sorted = sortAdsByPerformanceSort(hydrated, input.sort as AdPerformanceSort, {
       impressionsIndexFor: (ad) => ad.impressions_index,
       daysRunningFor: (ad) => {
-        const start = new Date(ad.first_seen_at).getTime();
-        const end = ad.is_killed ? new Date(ad.last_seen_at).getTime() : nowMs;
-        return Math.max(0, Math.floor((end - start) / DAY_MS));
+        const comp = competitorById.get(ad.competitor_id);
+        const scrapeAtMs = comp?.last_scraped_at ? new Date(comp.last_scraped_at).getTime() : nowMs;
+        return resolveScrapedAdRunDays({
+          platform: ad.platform,
+          first_seen_at: ad.first_seen_at,
+          last_seen_at: ad.last_seen_at,
+          is_killed: ad.is_killed,
+          raw_payload: ad.raw_payload,
+          scrapeAtMs,
+          nowMs,
+        });
       },
       newestMsFor: (ad) => new Date(ad.first_seen_at).getTime(),
     });
