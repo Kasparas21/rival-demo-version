@@ -22,6 +22,8 @@ import type { Database, Json } from "@/lib/supabase/types";
 
 const IN_CHUNK = 40;
 const DAY_MS = 86_400_000;
+/** Max rows pulled from DB for keyword search (avoids full-feed scans). */
+const KEYWORD_DB_CANDIDATE_LIMIT = 2000;
 
 const LEAN_AD_SELECT =
   "id, competitor_id, platform, format, ad_text, ad_creative_url, archived_creative_url, first_seen_at, last_seen_at, is_active";
@@ -334,6 +336,236 @@ function hydrateDiscoveryRow(
     impressions_index,
     is_ultimate_winner,
     raw_payload: (row.raw_payload ?? null) as DiscoveryAdDto["raw_payload"],
+  };
+}
+
+function escapeIlike(term: string): string {
+  return term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+function keywordHaystack(row: ScrapedRow, comp: CompetitorRow, clientBrandName: string | null): string {
+  return `${row.ad_text ?? ""} ${comp.brand_name ?? ""} ${comp.name ?? ""} ${clientBrandName ?? ""}`.toLowerCase();
+}
+
+function matchesKeywords(hay: string, keywords: string[], match: "any" | "all"): boolean {
+  if (!keywords.length) return true;
+  if (match === "all") return keywords.every((k) => hay.includes(k));
+  return keywords.some((k) => hay.includes(k));
+}
+
+async function fetchKeywordCandidateRows(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  competitorIds: string[],
+  keywords: string[],
+  candidateLimit: number,
+  select: string,
+): Promise<{ rows: ScrapedRow[]; error?: string }> {
+  if (!keywords.length || !competitorIds.length) return { rows: [] };
+
+  const orFilter = keywords
+    .slice(0, 8)
+    .map((term) => `ad_text.ilike.%${escapeIlike(term)}%`)
+    .join(",");
+
+  const byId = new Map<string, ScrapedRow>();
+  const chunkCount = Math.max(1, Math.ceil(competitorIds.length / IN_CHUNK));
+  const perChunkLimit = Math.min(600, Math.ceil(candidateLimit / chunkCount));
+
+  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
+    if (byId.size >= candidateLimit) break;
+
+    let selectCols = select;
+    let { data, error } = await supabase
+      .from("scraped_ads")
+      .select(selectCols)
+      .eq("user_id", userId)
+      .eq("platform", "meta")
+      .in("competitor_id", chunk)
+      .or(orFilter)
+      .order("last_seen_at", { ascending: false })
+      .limit(perChunkLimit);
+
+    if (
+      error &&
+      selectCols.includes("archived_creative_url") &&
+      isMissingDbColumnError(error.message, "archived_creative_url")
+    ) {
+      selectCols = selectCols.replace(", archived_creative_url", "").replace("archived_creative_url, ", "");
+      ({ data, error } = await supabase
+        .from("scraped_ads")
+        .select(selectCols)
+        .eq("user_id", userId)
+        .eq("platform", "meta")
+        .in("competitor_id", chunk)
+        .or(orFilter)
+        .order("last_seen_at", { ascending: false })
+        .limit(perChunkLimit));
+    }
+
+    if (error) return { rows: [], error: error.message };
+
+    for (const row of (data ?? []) as unknown as ScrapedRow[]) {
+      if (row?.id) byId.set(row.id, row);
+    }
+  }
+
+  return { rows: [...byId.values()].slice(0, candidateLimit) };
+}
+
+/** Fast keyword search via DB ilike — used by assistant/MCP instead of scanning the full feed. */
+export async function searchDiscoveryKeywordFeed(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: DiscoveryFeedQuery,
+  keywords: string[],
+  match: "any" | "all",
+  candidateLimit = KEYWORD_DB_CANDIDATE_LIMIT,
+): Promise<DiscoveryFeedResult | { ok: false; error: string }> {
+  const clientBrandIds =
+    input.clientBrandIds.length > 0
+      ? [...new Set(input.clientBrandIds.map((id) => id.trim()).filter((id) => UUID_RE.test(id)))]
+      : [input.brandId];
+  const { ids: competitorIds, error: competitorIdsError } = await loadCompetitorIdsForBrandIds(
+    supabase,
+    userId,
+    clientBrandIds,
+  );
+  if (competitorIdsError) return { ok: false, error: competitorIdsError };
+
+  const competitorFilter = input.competitorFilterIds.length
+    ? [...new Set(input.competitorFilterIds.filter((id) => competitorIds.includes(id)))]
+    : null;
+  const scopedCompetitorIds = competitorFilter?.length ? competitorFilter : competitorIds;
+
+  if (!scopedCompetitorIds.length) {
+    return {
+      ok: true,
+      ads: [],
+      total: 0,
+      offset: input.offset,
+      limit: input.limit,
+      has_more: false,
+      competitors: [],
+      platform_counts: {},
+      market_stats: computeDiscoveryMarketStats([]),
+      shuffle_seed: input.shuffleSeed,
+    };
+  }
+
+  const { rows: competitors, error: compErr } = await loadCompetitorsById(supabase, userId, scopedCompetitorIds);
+  if (compErr) return { ok: false, error: compErr };
+
+  const competitorById = new Map<string, CompetitorRow>();
+  for (const c of competitors) {
+    if (c?.id) competitorById.set(c.id, c);
+  }
+
+  const showClientLabels = clientBrandIds.length > 1;
+  const clientBrandLabels = showClientLabels
+    ? await loadCompetitorClientBrandLabels(supabase, userId, scopedCompetitorIds)
+    : new Map<string, string>();
+
+  const needsPayloadUpfront =
+    input.sort === "impressions" ||
+    input.sort === "ultimate_winner" ||
+    input.ultimateOnly;
+
+  const { rows: adRows, error: adsErr } = await fetchKeywordCandidateRows(
+    supabase,
+    userId,
+    scopedCompetitorIds,
+    keywords,
+    candidateLimit,
+    needsPayloadUpfront ? FULL_AD_SELECT : LEAN_AD_SELECT,
+  );
+  if (adsErr) return { ok: false, error: adsErr };
+
+  const nowMs = Date.now();
+  const dateStart = datePresetStart(input.datePreset, nowMs);
+  const platformSet = new Set(input.platforms.map((p) => p.trim().toLowerCase()).filter(Boolean));
+
+  const hydrated: DiscoveryAdDto[] = [];
+  const platformCounts: Record<string, number> = {};
+  const competitorCounts = new Map<string, number>();
+
+  for (const row of adRows) {
+    const comp = competitorById.get(row.competitor_id);
+    if (!comp) continue;
+
+    const clientBrandName = clientBrandLabels.get(row.competitor_id) ?? null;
+    if (!matchesKeywords(keywordHaystack(row, comp, clientBrandName), keywords, match)) continue;
+
+    const dto = hydrateDiscoveryRow(
+      row,
+      comp,
+      nowMs,
+      input,
+      dateStart,
+      "",
+      platformSet,
+      clientBrandName,
+    );
+    if (!dto) continue;
+
+    platformCounts[dto.platform] = (platformCounts[dto.platform] ?? 0) + 1;
+    competitorCounts.set(dto.competitor_id, (competitorCounts.get(dto.competitor_id) ?? 0) + 1);
+    hydrated.push(dto);
+  }
+
+  let sorted = hydrated;
+  if (input.sort === "shuffle") {
+    sorted = seededShuffle(hydrated, input.shuffleSeed);
+  } else {
+    sorted = sortAdsByPerformanceSort(hydrated, input.sort as AdPerformanceSort, {
+      impressionsIndexFor: (ad) => ad.impressions_index,
+      daysRunningFor: (ad) => {
+        const comp = competitorById.get(ad.competitor_id);
+        const scrapeAtMs = comp?.last_scraped_at ? new Date(comp.last_scraped_at).getTime() : nowMs;
+        return resolveScrapedAdRunDays({
+          platform: ad.platform,
+          first_seen_at: ad.first_seen_at,
+          last_seen_at: ad.last_seen_at,
+          is_killed: ad.is_killed,
+          raw_payload: ad.raw_payload,
+          scrapeAtMs,
+          nowMs,
+        });
+      },
+      newestMsFor: (ad) => new Date(ad.first_seen_at).getTime(),
+    });
+  }
+
+  const total = sorted.length;
+  const market_stats = computeDiscoveryMarketStats(hydrated, nowMs);
+  let page = sorted.slice(input.offset, input.offset + input.limit);
+
+  if (!needsPayloadUpfront) {
+    page = await attachRawPayloads(supabase, userId, page);
+  }
+
+  const competitorChips: DiscoveryCompetitorChip[] = [...competitorById.entries()]
+    .map(([id, c]) => ({
+      id,
+      name: c.brand_name?.trim() || c.name?.trim() || "Competitor",
+      domain: c.brand_domain?.trim() || null,
+      logo_url: c.brand_logo_url?.trim() || c.logo_url?.trim() || null,
+      ad_count: competitorCounts.get(id) ?? 0,
+    }))
+    .filter((c) => c.ad_count > 0)
+    .sort((a, b) => b.ad_count - a.ad_count || a.name.localeCompare(b.name));
+
+  return {
+    ok: true,
+    ads: page.filter((ad) => Boolean(ad?.id)),
+    total,
+    offset: input.offset,
+    limit: input.limit,
+    has_more: input.offset + page.length < total,
+    competitors: competitorChips,
+    platform_counts: platformCounts,
+    market_stats,
+    shuffle_seed: input.shuffleSeed,
   };
 }
 

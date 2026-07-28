@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
-import { buildDiscoveryFeed } from "@/lib/discovery/build-discovery-feed";
+import { buildDiscoveryFeed, searchDiscoveryKeywordFeed } from "@/lib/discovery/build-discovery-feed";
 import { loadPatternReportHistory } from "@/lib/discovery/generate-pattern-report";
 import type {
   DiscoveryAdDto,
@@ -104,20 +104,50 @@ async function resolveCompetitorIdsByNames(
   return [...new Set(ids)];
 }
 
-function normalizeKeywords(keywords: string[] | undefined, query?: string): string[] {
-  const fromList = (keywords ?? []).map((k) => k.trim().toLowerCase()).filter(Boolean);
-  const fromQuery = (query ?? "")
-    .split(/[,;|]/)
+const QUERY_STOP_WORDS = new Set([
+  "find",
+  "me",
+  "all",
+  "ads",
+  "ad",
+  "show",
+  "get",
+  "the",
+  "and",
+  "with",
+  "for",
+  "from",
+  "that",
+  "this",
+  "about",
+  "su",
+  "ir",
+  "visus",
+  "man",
+  "rask",
+  "surask",
+  "mano",
+  "apie",
+  "kur",
+  "kas",
+]);
+
+function tokenizeSearchTerms(text: string): string[] {
+  return text
+    .split(/[,;|]+|\s+/)
     .map((k) => k.trim().toLowerCase())
-    .filter(Boolean);
-  return [...new Set([...fromList, ...fromQuery])];
+    .filter((k) => k.length >= 3 && !QUERY_STOP_WORDS.has(k));
 }
 
-function adMatchesKeywords(ad: DiscoveryAdDto, keywords: string[], match: "any" | "all"): boolean {
-  if (!keywords.length) return true;
-  const hay = `${ad.ad_text} ${ad.competitor_name} ${ad.client_brand_name ?? ""}`.toLowerCase();
-  if (match === "all") return keywords.every((k) => hay.includes(k));
-  return keywords.some((k) => hay.includes(k));
+function normalizeKeywords(keywords: string[] | undefined, query?: string): string[] {
+  const fromList = (keywords ?? []).flatMap((k) => tokenizeSearchTerms(k));
+  const fromQuery = tokenizeSearchTerms(query ?? "");
+  const merged = [...new Set([...fromList, ...fromQuery])];
+  if (!merged.length) {
+    const fallback = (query ?? "").trim().toLowerCase();
+    if (fallback.length >= 3) return [fallback];
+  }
+  return merged;
 }
 
 function summarizeAd(
@@ -196,35 +226,55 @@ export async function queryDiscoveryAds(
 
   const pageLimit = Math.min(Math.max(filters.limit ?? 48, 1), 200);
   const pageOffset = filters.offset ?? 0;
-  const feedInput = buildFeedQuery(
-    brandId,
-    {
-      ...filters,
-      limit: needsFullScan ? DISCOVERY_FULL_FETCH_LIMIT : pageLimit,
-      offset: needsFullScan ? 0 : pageOffset,
-    },
-    competitorFilterIds,
-  );
+  const feedInput = buildFeedQuery(brandId, filters, competitorFilterIds);
 
-  const result = await buildDiscoveryFeed(supabase, userId, feedInput);
-  if (!("ads" in result)) return result;
+  if (needsFullScan) {
+    const result = await searchDiscoveryKeywordFeed(
+      supabase,
+      userId,
+      { ...feedInput, offset: pageOffset, limit: pageLimit },
+      keywords,
+      match,
+      opts?.fetchLimit ?? 2000,
+    );
+    if (!("ads" in result)) return result;
 
-  let matched = result.ads;
-  if (keywords.length > 0) {
-    matched = result.ads.filter((ad) => adMatchesKeywords(ad, keywords, match));
+    return {
+      ads: result.ads.map((ad) => summarizeAd(ad, appOrigin, opts?.includeFullCopy ?? false)),
+      total: result.total,
+      offset: pageOffset,
+      limit: pageLimit,
+      has_more: result.has_more,
+      competitors: result.competitors,
+      market_stats: result.market_stats,
+      applied_filters: {
+        brand_id: brandId,
+        keywords,
+        match,
+        sort: feedInput.sort,
+        format: feedInput.format,
+        status: feedInput.status,
+        ultimate_only: feedInput.ultimateOnly,
+        date_preset: feedInput.datePreset,
+        competitor_filter_ids: competitorFilterIds,
+        search_mode: "keyword_db",
+      },
+    };
   }
 
-  const page = needsFullScan
-    ? matched.slice(pageOffset, pageOffset + pageLimit)
-    : matched;
-  const total = needsFullScan ? matched.length : result.total;
-
-  return {
-    ads: page.map((ad) => summarizeAd(ad, appOrigin, opts?.includeFullCopy ?? false)),
-    total,
+  const result = await buildDiscoveryFeed(supabase, userId, {
+    ...feedInput,
     offset: pageOffset,
     limit: pageLimit,
-    has_more: pageOffset + page.length < total,
+  });
+  if (!("ads" in result)) return result;
+
+  return {
+    ads: result.ads.map((ad) => summarizeAd(ad, appOrigin, opts?.includeFullCopy ?? false)),
+    total: result.total,
+    offset: pageOffset,
+    limit: pageLimit,
+    has_more: result.has_more,
     competitors: result.competitors,
     market_stats: result.market_stats,
     applied_filters: {

@@ -8,7 +8,6 @@ import {
   History,
   Loader2,
   Maximize2,
-  MessageSquare,
   Minimize2,
   Plus,
   Sparkles,
@@ -39,6 +38,7 @@ import {
 } from "@/lib/discovery/discovery-assistant-types";
 import { aiGlassCardClass, aiSectionLabelClass } from "@/lib/ad-detail/ad-preview-analysis-styles";
 import { formatRelativeTime } from "@/components/email-intelligence/email-intelligence-ui";
+import type { DiscoveryAdDto } from "@/lib/discovery/types";
 import { cn } from "@/lib/utils";
 
 type PanelProps = {
@@ -70,7 +70,24 @@ type PersistedAssistantUi = {
 };
 
 const PANEL_SPRING = { type: "spring" as const, damping: 34, stiffness: 380, mass: 0.82 };
+const PANE_SPRING = { type: "spring" as const, damping: 32, stiffness: 360, mass: 0.78 };
 const UI_STATE_KEY = (brandId: string) => `rival_discovery_assistant_ui_${brandId}`;
+const COMPACT_PANE_WIDTH = 400;
+
+const assistantGlassShell =
+  "relative overflow-hidden border border-white/75 bg-white/42 backdrop-blur-2xl backdrop-saturate-[1.55] shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_24px_80px_-20px_rgba(74,127,165,0.28),0_8px_32px_-12px_rgba(52,52,52,0.12)] ring-1 ring-white/65";
+
+const assistantGlassHeader =
+  "border-b border-white/55 bg-gradient-to-r from-white/55 via-white/35 to-[color-mix(in_srgb,var(--rival-accent-blue)_28%,transparent)]";
+
+const assistantAccentBtn =
+  "bg-gradient-to-br from-[color:var(--rival-success)] to-[color-mix(in_srgb,var(--rival-success)_72%,#6fa838)] text-white shadow-[0_6px_20px_-6px_rgba(149,193,75,0.65)] ring-1 ring-white/40 transition hover:brightness-105 active:scale-95";
+
+const assistantIconBtn =
+  "rounded-xl p-2 text-[#52525b] transition hover:bg-white/55 hover:text-[color:var(--rival-primary)]";
+
+const assistantIconBtnActive =
+  "rounded-xl bg-[color-mix(in_srgb,var(--rival-primary)_88%,#1a1a2e)] p-2 text-white shadow-sm";
 
 function newWindowId(): string {
   return `win_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -109,84 +126,358 @@ function windowFromSession(session: DiscoveryChatSession): AssistantWindow {
   };
 }
 
-function windowTitle(window: AssistantWindow, sessions: DiscoveryChatSession[]): string {
-  const session = sessions.find((s) => s.id === window.sessionId);
+function windowTitle(win: AssistantWindow, sessions: DiscoveryChatSession[]): string {
+  const session = sessions.find((s) => s.id === win.sessionId);
   if (session?.title && session.title !== "New chat") return session.title;
-  const firstUser = window.messages.find((m) => m.role === "user");
+  const firstUser = win.messages.find((m) => m.role === "user");
   if (firstUser?.content.trim()) return firstUser.content.trim().slice(0, 40);
   return "New chat";
 }
 
-function DiscoveryAssistantWindowRail({
-  windows,
-  activeWindowId,
-  sessions,
-  onSelect,
-  onAdd,
-  onClose,
-}: {
-  windows: AssistantWindow[];
-  activeWindowId: string | null;
+type ChatPaneProps = {
+  win: AssistantWindow;
+  index: number;
+  isPrimary: boolean;
+  expanded: boolean;
+  brandName: string;
   sessions: DiscoveryChatSession[];
-  onSelect: (windowId: string) => void;
-  onAdd: () => void;
-  onClose: (windowId: string) => void;
-}) {
+  historyOpen: boolean;
+  isSaved: (id: string) => boolean;
+  isPending: (id: string) => boolean;
+  reduceMotion: boolean | null;
+  onClosePane: () => void;
+  onCloseAll: () => void;
+  onToggleExpanded: () => void;
+  onToggleHistory: () => void;
+  onNewChat: () => void;
+  onInputChange: (value: string) => void;
+  onSend: (text: string) => void;
+  onOpenAd: (adId: string) => void;
+  onToggleSave: (ad: DiscoveryAdDto) => void;
+  onLoadSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string, e: React.MouseEvent) => void;
+};
+
+function DiscoveryAssistantChatPane({
+  win,
+  index,
+  isPrimary,
+  expanded,
+  brandName,
+  sessions,
+  historyOpen,
+  isSaved,
+  isPending,
+  reduceMotion,
+  onClosePane,
+  onCloseAll,
+  onToggleExpanded,
+  onToggleHistory,
+  onNewChat,
+  onInputChange,
+  onSend,
+  onOpenAd,
+  onToggleSave,
+  onLoadSession,
+  onDeleteSession,
+}: ChatPaneProps) {
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const title = windowTitle(win, sessions);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+  }, [win.messages, win.loading, historyOpen, reduceMotion]);
+
   return (
-    <div className="flex w-12 shrink-0 flex-col items-center gap-1.5 border-r border-slate-100 bg-slate-50/80 py-3">
-      <button
-        type="button"
-        onClick={onAdd}
-        className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-sm transition hover:bg-emerald-600 active:scale-95"
-        aria-label="New chat window"
-        title="New chat"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
-      <div className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-1 py-1">
-        {windows.map((win, index) => {
-          const active = win.windowId === activeWindowId;
-          const title = windowTitle(win, sessions);
-          return (
-            <div key={win.windowId} className="group relative">
+    <motion.div
+      layout
+      initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.96 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 20, scale: 0.96 }}
+      transition={PANE_SPRING}
+      style={expanded ? undefined : { width: COMPACT_PANE_WIDTH, minWidth: COMPACT_PANE_WIDTH }}
+      className={cn(
+        "flex h-[min(760px,calc(100vh-6rem))] shrink-0 flex-col",
+        expanded && "min-w-[300px] flex-1",
+        assistantGlassShell,
+        "rounded-[1.65rem]",
+      )}
+    >
+      <header className={cn("flex shrink-0 items-center justify-between gap-2 px-3.5 py-3", assistantGlassHeader)}>
+        <div className="flex min-w-0 items-center gap-2">
+          <div
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white shadow-sm",
+              assistantAccentBtn,
+            )}
+          >
+            <Bot className="h-3.5 w-3.5" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold text-[color:var(--rival-primary)]">
+              {title}
+            </p>
+            <p className="truncate text-[10px] text-[color:var(--rival-muted)]">
+              {brandName}
+              {isPrimary ? " · Assistant" : ` · Chat ${index + 1}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {isPrimary ? (
+            <>
               <button
                 type="button"
-                onClick={() => onSelect(win.windowId)}
-                title={title}
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-xl border text-[11px] font-semibold transition",
-                  active
-                    ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                    : "border-slate-200/80 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50",
-                )}
-                aria-label={title}
-                aria-current={active ? "true" : undefined}
+                onClick={onNewChat}
+                className={cn(assistantIconBtn, "text-[color:var(--rival-success)] hover:bg-[color-mix(in_srgb,var(--rival-success)_12%,white)]")}
+                aria-label="New chat"
+                title="New chat to the left"
               >
-                {win.loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-                )}
-                <span className="sr-only">{title || `Chat ${index + 1}`}</span>
+                <Plus className="h-4 w-4" />
               </button>
-              {windows.length > 1 ? (
+              <button
+                type="button"
+                onClick={onToggleExpanded}
+                className={expanded ? assistantIconBtnActive : assistantIconBtn}
+                aria-label={expanded ? "Collapse" : "Expand"}
+                aria-pressed={expanded}
+              >
+                {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={onToggleHistory}
+                className={historyOpen ? assistantIconBtnActive : assistantIconBtn}
+                aria-label="Chat history"
+                aria-pressed={historyOpen}
+              >
+                <History className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={onCloseAll} className={assistantIconBtn} aria-label="Close assistant">
+                <X className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={onClosePane} className={assistantIconBtn} aria-label="Close chat">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </header>
+
+      <AnimatePresence mode="wait">
+        {isPrimary && historyOpen ? (
+          <motion.div
+            key="history"
+            initial={reduceMotion ? false : { opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={reduceMotion ? undefined : { opacity: 0, x: 10 }}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="flex items-center justify-between border-b border-white/50 px-3.5 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--rival-muted)]">
+                History
+              </p>
+              <button
+                type="button"
+                onClick={onNewChat}
+                className={cn("inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold", assistantAccentBtn)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {sessions.length === 0 ? (
+                <p className="px-3 py-8 text-center text-sm text-[color:var(--rival-muted)]">No past chats yet.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {sessions.map((session) => {
+                    const active = session.id === win.sessionId;
+                    return (
+                      <li key={session.id}>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => onLoadSession(session.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onLoadSession(session.id);
+                            }
+                          }}
+                          className={cn(
+                            "group flex w-full cursor-pointer items-start gap-2 rounded-xl px-3 py-2.5 text-left transition",
+                            active
+                              ? "bg-[color-mix(in_srgb,var(--rival-primary)_88%,#1a1a2e)] text-white shadow-sm"
+                              : "hover:bg-white/50",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className={cn("truncate text-sm font-medium", active ? "text-white" : "text-[color:var(--rival-primary)]")}>
+                              {session.title}
+                            </p>
+                            <p className={cn("mt-0.5 text-[11px]", active ? "text-white/70" : "text-[color:var(--rival-muted)]")}>
+                              {session.messages.length} messages · {formatRelativeTime(session.updatedAt)}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => onDeleteSession(session.id, e)}
+                            className={cn(
+                              "mt-0.5 shrink-0 rounded-lg p-1.5 opacity-0 transition group-hover:opacity-100",
+                              active ? "text-white/80 hover:bg-white/10" : "text-slate-400 hover:bg-red-50 hover:text-red-600",
+                            )}
+                            aria-label="Delete chat"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="chat"
+            initial={reduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0 }}
+            className="flex min-h-0 flex-1 flex-col"
+          >
+            <div className="flex-1 overflow-y-auto px-3.5 py-3">
+              <div className={cn("space-y-3", expanded && "space-y-4")}>
+                {win.messages.length === 0 ? (
+                  <motion.div
+                    initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={cn("p-3", aiGlassCardClass)}
+                  >
+                    <p className={aiSectionLabelClass}>Try asking</p>
+                    <ul className="mt-2 space-y-1.5">
+                      {DISCOVERY_ASSISTANT_SUGGESTIONS.slice(0, expanded ? 6 : 4).map((s) => (
+                        <li key={s}>
+                          <button
+                            type="button"
+                            onClick={() => void onSend(s)}
+                            className="w-full rounded-xl border border-white/70 bg-white/55 px-3 py-2.5 text-left text-sm text-[color:var(--rival-primary)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-sm transition hover:border-[color-mix(in_srgb,var(--rival-accent-blue)_55%,white)] hover:bg-white/75"
+                          >
+                            {s}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {isPrimary ? (
+                      <p className="mt-3 text-[11px] leading-relaxed text-[color:var(--rival-muted)]">
+                        Also via{" "}
+                        <Link href="/docs/mcp" className="font-semibold text-[color:var(--rival-primary)] underline">
+                          MCP
+                        </Link>
+                      </p>
+                    ) : null}
+                  </motion.div>
+                ) : null}
+
+                {win.messages.map((msg, i) => (
+                  <motion.div
+                    key={`${msg.role}-${i}-${msg.content.slice(0, 24)}`}
+                    initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: "spring", damping: 28, stiffness: 340 }}
+                    className={cn(
+                      msg.role === "user"
+                        ? cn(
+                            "ml-auto max-w-[92%] rounded-2xl bg-gradient-to-br from-[color:var(--rival-primary)] to-[#1a1a2e] px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_8px_24px_-12px_rgba(52,52,52,0.45)]",
+                            expanded && "max-w-[min(560px,72%)]",
+                          )
+                        : "w-full",
+                    )}
+                  >
+                    {msg.role === "user" ? (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    ) : (
+                      <div className={cn("overflow-hidden rounded-2xl p-2", aiGlassCardClass)}>
+                        {(msg.discoveryAds?.length ?? 0) > 0 ? (
+                          <DiscoveryAssistantAdGallery
+                            ads={msg.discoveryAds!}
+                            isSaved={isSaved}
+                            isPending={isPending}
+                            onOpenAd={onOpenAd}
+                            onToggleSave={(ad) => onToggleSave(ad)}
+                            expanded={expanded}
+                          />
+                        ) : null}
+                        <div className="px-1 pb-1 pt-2">
+                          <DiscoveryAssistantVisualMessage message={msg.content} visualStats={msg.visualStats} />
+                          {msg.suggestions?.length ? (
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                              {msg.suggestions.map((s) => (
+                                <button
+                                  key={s}
+                                  type="button"
+                                  onClick={() => void onSend(s)}
+                                  className="rounded-full border border-white/70 bg-white/60 px-2.5 py-1 text-[11px] font-medium text-[color:var(--rival-primary)] backdrop-blur-sm transition hover:bg-white/85"
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+
+                {win.loading ? (
+                  <div className="flex items-center gap-2 px-1 text-sm text-[color:var(--rival-muted)]">
+                    <Loader2 className="h-4 w-4 animate-spin text-[color:var(--rival-success)]" aria-hidden />
+                    Searching competitors…
+                  </div>
+                ) : null}
+                {win.error ? <p className="text-sm text-red-600">{win.error}</p> : null}
+                <div ref={endRef} />
+              </div>
+            </div>
+
+            <footer className="shrink-0 border-t border-white/50 p-3">
+              <div className="flex items-end gap-2 rounded-2xl border border-white/70 bg-white/45 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-md">
+                <textarea
+                  ref={inputRef}
+                  value={win.input}
+                  onChange={(e) => onInputChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void onSend(win.input);
+                    }
+                  }}
+                  rows={expanded ? 3 : 2}
+                  placeholder="Search keywords, filter ads…"
+                  className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm text-[color:var(--rival-primary)] outline-none placeholder:text-[color:var(--rival-muted)]"
+                />
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClose(win.windowId);
-                  }}
-                  className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-white opacity-0 shadow transition group-hover:opacity-100"
-                  aria-label={`Close ${title}`}
+                  disabled={!win.input.trim() || win.loading}
+                  onClick={() => void onSend(win.input)}
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-40",
+                    assistantAccentBtn,
+                  )}
+                  aria-label="Send"
                 >
-                  <X className="h-2.5 w-2.5" />
+                  <ArrowUp className="h-4 w-4" aria-hidden />
                 </button>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </div>
+              </div>
+            </footer>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -205,16 +496,9 @@ function DiscoveryAssistantPanel({
   const reduceMotion = useReducedMotion();
   const [expanded, setExpanded] = useState(false);
   const [windows, setWindows] = useState<AssistantWindow[]>([]);
-  const [activeWindowId, setActiveWindowId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<DiscoveryChatSession[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const activeWindow = useMemo(
-    () => windows.find((w) => w.windowId === activeWindowId) ?? windows[0] ?? null,
-    [windows, activeWindowId],
-  );
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const assistantAdRefs = useMemo(() => {
     const map = new Map<string, { id: string; competitor_id: string }>();
@@ -238,11 +522,11 @@ function DiscoveryAssistantPanel({
   }, [brandId]);
 
   const persistUi = useCallback(
-    (nextWindows: AssistantWindow[], nextActiveId: string | null, nextExpanded: boolean) => {
-      const active = nextWindows.find((w) => w.windowId === nextActiveId) ?? nextWindows[0];
+    (nextWindows: AssistantWindow[], nextExpanded: boolean) => {
+      const primary = nextWindows[nextWindows.length - 1];
       writePersistedUi(brandId, {
         sessionIds: nextWindows.map((w) => w.sessionId),
-        activeSessionId: active?.sessionId ?? null,
+        activeSessionId: primary?.sessionId ?? null,
         expanded: nextExpanded,
       });
     },
@@ -258,22 +542,21 @@ function DiscoveryAssistantPanel({
       const created = session ?? createDiscoveryChatSession(brandId);
       const win = windowFromSession(created);
       setWindows((prev) => {
-        const next = [...prev, win];
-        persistUi(next, win.windowId, expanded);
+        const next = [win, ...prev];
+        persistUi(next, expanded);
         return next;
       });
-      setActiveWindowId(win.windowId);
       setHistoryOpen(false);
       refreshSessions();
-      window.setTimeout(() => inputRef.current?.focus(), 80);
+      window.setTimeout(() => {
+        scrollRef.current?.scrollTo({ left: 0, behavior: reduceMotion ? "auto" : "smooth" });
+      }, 60);
       return win;
     },
-    [brandId, expanded, persistUi, refreshSessions],
+    [brandId, expanded, persistUi, refreshSessions, reduceMotion],
   );
 
-  const startNewChat = useCallback(() => {
-    addWindow();
-  }, [addWindow]);
+  const startNewChat = useCallback(() => addWindow(), [addWindow]);
 
   const initWindows = useCallback(() => {
     migrateLegacyDiscoveryChat(brandId);
@@ -285,14 +568,12 @@ function DiscoveryAssistantPanel({
     if (persisted?.sessionIds.length) {
       const loaded: AssistantWindow[] = [];
       for (const sessionId of persisted.sessionIds) {
-        const session = sessionList.find((s) => s.id === sessionId) ?? loadDiscoveryChatSession(brandId, sessionId);
+        const session =
+          sessionList.find((s) => s.id === sessionId) ?? loadDiscoveryChatSession(brandId, sessionId);
         if (session) loaded.push(windowFromSession(session));
       }
       if (loaded.length) {
-        const active =
-          loaded.find((w) => w.sessionId === persisted.activeSessionId)?.windowId ?? loaded[0]!.windowId;
         setWindows(loaded);
-        setActiveWindowId(active);
         setExpanded(persisted.expanded ?? false);
         return;
       }
@@ -301,9 +582,8 @@ function DiscoveryAssistantPanel({
     const active = sessionList[0] ?? createDiscoveryChatSession(brandId);
     const win = windowFromSession(active);
     setWindows([win]);
-    setActiveWindowId(win.windowId);
     setExpanded(false);
-    persistUi([win], win.windowId, false);
+    persistUi([win], false);
   }, [brandId, persistUi, refreshSessions]);
 
   const loadSession = useCallback(
@@ -312,16 +592,14 @@ function DiscoveryAssistantPanel({
       if (!session) return;
       const existing = windows.find((w) => w.sessionId === sessionId);
       if (existing) {
-        setActiveWindowId(existing.windowId);
         updateWindow(existing.windowId, { messages: session.messages, error: null });
       } else {
         const win = windowFromSession(session);
         setWindows((prev) => {
-          const next = [...prev, win];
-          persistUi(next, win.windowId, expanded);
+          const next = [win, ...prev];
+          persistUi(next, expanded);
           return next;
         });
-        setActiveWindowId(win.windowId);
       }
       setHistoryOpen(false);
       refreshSessions();
@@ -333,24 +611,15 @@ function DiscoveryAssistantPanel({
     (windowId: string) => {
       setWindows((prev) => {
         if (prev.length <= 1) {
-          const fresh = createDiscoveryChatSession(brandId);
-          const win = windowFromSession(fresh);
-          setActiveWindowId(win.windowId);
-          persistUi([win], win.windowId, expanded);
-          refreshSessions();
-          return [win];
+          onClose();
+          return prev;
         }
         const next = prev.filter((w) => w.windowId !== windowId);
-        const nextActiveId =
-          activeWindowId === windowId ? (next[0]?.windowId ?? null) : activeWindowId;
-        if (activeWindowId === windowId) {
-          setActiveWindowId(nextActiveId);
-        }
-        persistUi(next, nextActiveId, expanded);
+        persistUi(next, expanded);
         return next;
       });
     },
-    [activeWindowId, brandId, expanded, persistUi, refreshSessions],
+    [expanded, onClose, persistUi],
   );
 
   const initializedRef = useRef(false);
@@ -371,15 +640,8 @@ function DiscoveryAssistantPanel({
       if (win.messages.length) saveDiscoveryChatMessages(brandId, win.sessionId, win.messages);
     }
     refreshSessions();
-    persistUi(windows, activeWindowId, expanded);
-  }, [brandId, windows, activeWindowId, expanded, open, persistUi, refreshSessions]);
-
-  useEffect(() => {
-    if (!open || !activeWindow) return;
-    endRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
-    const t = window.setTimeout(() => inputRef.current?.focus(), expanded ? 120 : 280);
-    return () => window.clearTimeout(t);
-  }, [open, activeWindow, activeWindow?.messages, activeWindow?.loading, historyOpen, reduceMotion, expanded]);
+    persistUi(windows, expanded);
+  }, [brandId, windows, expanded, open, persistUi, refreshSessions]);
 
   useEffect(() => {
     if (!open) return;
@@ -394,18 +656,17 @@ function DiscoveryAssistantPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, historyOpen, expanded]);
 
-  const send = useCallback(
-    async (text: string) => {
-      if (!activeWindow) return;
+  const sendForWindow = useCallback(
+    async (windowId: string, text: string) => {
+      const win = windows.find((w) => w.windowId === windowId);
+      if (!win) return;
       const trimmed = text.trim();
-      if (!trimmed || activeWindow.loading) return;
-
-      const windowId = activeWindow.windowId;
+      if (!trimmed || win.loading) return;
 
       updateWindow(windowId, { error: null, loading: true, input: "" });
 
       const userMsg: DiscoveryChatEntry = { role: "user", content: trimmed };
-      const nextMessages = [...activeWindow.messages, userMsg];
+      const nextMessages = [...win.messages, userMsg];
       updateWindow(windowId, { messages: nextMessages });
 
       try {
@@ -440,7 +701,11 @@ function DiscoveryAssistantPanel({
         try {
           json = JSON.parse(raw) as DiscoveryAssistantResponse & { ok?: boolean; error?: string };
         } catch {
-          throw new Error(raw.trim().slice(0, 240) || `Assistant request failed (${res.status})`);
+          const snippet = raw.trim().slice(0, 240);
+          if (snippet.includes("FUNCTION_INVOCATION_TIMEOUT")) {
+            throw new Error("Search timed out — try fewer keywords or a shorter query.");
+          }
+          throw new Error(snippet || `Assistant request failed (${res.status})`);
         }
         if (!res.ok || json.ok === false) {
           throw new Error(json.error ?? "Assistant request failed");
@@ -481,7 +746,7 @@ function DiscoveryAssistantPanel({
       }
     },
     [
-      activeWindow,
+      windows,
       brandId,
       brandName,
       tab,
@@ -496,385 +761,97 @@ function DiscoveryAssistantPanel({
   const handleDeleteSession = useCallback(
     (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      const nextId = deleteDiscoveryChatSession(brandId, id);
+      deleteDiscoveryChatSession(brandId, id);
       refreshSessions();
       setWindows((prev) => {
         const next = prev.filter((w) => w.sessionId !== id);
         if (next.length === 0) {
           const fresh = createDiscoveryChatSession(brandId);
-          const win = windowFromSession(fresh);
-          setActiveWindowId(win.windowId);
-          return [win];
-        }
-        if (prev.some((w) => w.sessionId === id && w.windowId === activeWindowId)) {
-          const fallback = next.find((w) => w.sessionId === nextId) ?? next[0]!;
-          setActiveWindowId(fallback.windowId);
+          return [windowFromSession(fresh)];
         }
         return next;
       });
     },
-    [brandId, activeWindowId, refreshSessions],
+    [brandId, refreshSessions],
   );
 
   const toggleExpanded = useCallback(() => {
     setExpanded((v) => {
       const next = !v;
-      persistUi(windows, activeWindowId, next);
+      persistUi(windows, next);
       return next;
     });
-  }, [windows, activeWindowId, persistUi]);
-
-  const messages = activeWindow?.messages ?? [];
-  const loading = activeWindow?.loading ?? false;
-  const error = activeWindow?.error ?? null;
-  const input = activeWindow?.input ?? "";
+  }, [windows, persistUi]);
 
   return (
     <AnimatePresence>
       {open ? (
-        <motion.aside
-          key="assistant-panel"
-          role="dialog"
-          aria-modal={expanded ? "true" : "false"}
-          aria-label="Discovery assistant"
-          layout
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 24 }}
-          animate={
-            reduceMotion
-              ? { opacity: 1 }
-              : {
-                  opacity: 1,
-                  scale: 1,
-                  y: 0,
-                }
-          }
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 16 }}
-          transition={reduceMotion ? { duration: 0.15 } : PANEL_SPRING}
+        <motion.div
+          key="assistant-cluster"
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
+          transition={PANEL_SPRING}
           className={cn(
-            "fixed z-50 flex overflow-hidden border border-white/90 bg-white/98 shadow-[0_28px_90px_-16px_rgba(15,23,42,0.32),0_12px_40px_-12px_rgba(74,127,165,0.2)] ring-1 ring-black/[0.04] motion-safe:transition-[left,right,bottom,width,height,border-radius] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "fixed z-50 flex items-end gap-2.5 motion-safe:transition-[left,right,bottom,width] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]",
             expanded
-              ? "inset-y-0 right-0 left-0 h-screen max-h-screen rounded-none sm:left-[var(--rival-sidebar-width,280px)]"
-              : "bottom-[5.25rem] right-6 left-auto h-[min(760px,calc(100vh-6rem))] w-[min(480px,calc(100vw-1.5rem))] rounded-[1.75rem]",
+              ? "inset-y-0 right-0 left-0 sm:left-[var(--rival-sidebar-width,280px)] max-h-screen items-stretch gap-3 p-3"
+              : "bottom-[5.25rem] right-6 max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-var(--rival-sidebar-width,280px)-2rem)]",
           )}
-          onClick={(e) => e.stopPropagation()}
         >
-          <DiscoveryAssistantWindowRail
-            windows={windows}
-            activeWindowId={activeWindow?.windowId ?? null}
-            sessions={sessions}
-            onSelect={setActiveWindowId}
-            onAdd={startNewChat}
-            onClose={closeWindow}
-          />
+          <motion.button
+            type="button"
+            layout
+            onClick={startNewChat}
+            whileTap={reduceMotion ? undefined : { scale: 0.94 }}
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-2xl",
+              assistantAccentBtn,
+              expanded ? "h-14 w-14 self-center" : "mb-1 h-11 w-11",
+            )}
+            aria-label="New chat window to the left"
+            title="New chat"
+          >
+            <Plus className={expanded ? "h-5 w-5" : "h-4 w-4"} />
+          </motion.button>
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5">
-              <div className="flex min-w-0 items-center gap-2.5">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
-                  <Bot className="h-4 w-4" aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">Discovery assistant</p>
-                  <p className="truncate text-[11px] text-slate-500">
-                    {brandName} · {windows.length} chat{windows.length === 1 ? "" : "s"}
-                    {expanded ? " · Expanded" : ""}
-                  </p>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={startNewChat}
-                  className="rounded-xl p-2 text-emerald-600 transition hover:bg-emerald-50 hover:text-emerald-700"
-                  aria-label="New chat"
-                  title="New chat"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={toggleExpanded}
-                  className={cn(
-                    "rounded-xl p-2 transition",
-                    expanded
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
-                  )}
-                  aria-label={expanded ? "Collapse assistant" : "Expand assistant"}
-                  aria-pressed={expanded}
-                  title={expanded ? "Collapse" : "Expand to full width"}
-                >
-                  {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHistoryOpen((v) => !v)}
-                  className={cn(
-                    "rounded-xl p-2 transition",
-                    historyOpen
-                      ? "bg-slate-900 text-white"
-                      : "text-slate-500 hover:bg-slate-100 hover:text-slate-800",
-                  )}
-                  aria-label="Chat history"
-                  aria-pressed={historyOpen}
-                >
-                  <History className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </header>
-
-            <AnimatePresence mode="wait">
-              {historyOpen ? (
-                <motion.div
-                  key="history"
-                  initial={reduceMotion ? false : { opacity: 0, x: 12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={reduceMotion ? undefined : { opacity: 0, x: 12 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex min-h-0 flex-1 flex-col"
-                >
-                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Chat history</p>
-                    <button
-                      type="button"
-                      onClick={startNewChat}
-                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-emerald-600"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      New chat
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-2">
-                    {sessions.length === 0 ? (
-                      <p className="px-3 py-8 text-center text-sm text-slate-500">No past chats yet.</p>
-                    ) : (
-                      <ul className="space-y-1">
-                        {sessions.map((session) => {
-                          const active = session.id === activeWindow?.sessionId;
-                          return (
-                            <li key={session.id}>
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => loadSession(session.id)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    loadSession(session.id);
-                                  }
-                                }}
-                                className={cn(
-                                  "group flex w-full cursor-pointer items-start gap-2 rounded-xl px-3 py-2.5 text-left transition",
-                                  active ? "bg-slate-900 text-white" : "hover:bg-slate-50",
-                                )}
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <p
-                                    className={cn(
-                                      "truncate text-sm font-medium",
-                                      active ? "text-white" : "text-slate-900",
-                                    )}
-                                  >
-                                    {session.title}
-                                  </p>
-                                  <p
-                                    className={cn(
-                                      "mt-0.5 text-[11px]",
-                                      active ? "text-white/70" : "text-slate-500",
-                                    )}
-                                  >
-                                    {session.messages.length} messages · {formatRelativeTime(session.updatedAt)}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleDeleteSession(session.id, e)}
-                                  className={cn(
-                                    "mt-0.5 shrink-0 rounded-lg p-1.5 opacity-0 transition group-hover:opacity-100",
-                                    active
-                                      ? "text-white/80 hover:bg-white/10 hover:text-white"
-                                      : "text-slate-400 hover:bg-red-50 hover:text-red-600",
-                                  )}
-                                  aria-label="Delete chat"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="chat"
-                  initial={reduceMotion ? false : { opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={reduceMotion ? undefined : { opacity: 0 }}
-                  className="flex min-h-0 flex-1 flex-col"
-                >
-                  <div
-                    className={cn(
-                      "flex-1 overflow-y-auto px-4 py-3",
-                      expanded ? "max-w-[1400px] mx-auto w-full" : "",
-                    )}
-                  >
-                    <div className={cn("space-y-3", expanded && "space-y-4")}>
-                      {messages.length === 0 ? (
-                        <motion.div
-                          initial={reduceMotion ? false : { opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.08, duration: 0.25 }}
-                          className={cn("p-3", aiGlassCardClass)}
-                        >
-                          <p className={aiSectionLabelClass}>Try asking</p>
-                          <ul
-                            className={cn(
-                              "mt-2 gap-1.5",
-                              expanded ? "grid sm:grid-cols-2" : "space-y-1.5",
-                            )}
-                          >
-                            {DISCOVERY_ASSISTANT_SUGGESTIONS.map((s) => (
-                              <li key={s}>
-                                <button
-                                  type="button"
-                                  onClick={() => void send(s)}
-                                  className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-                                >
-                                  {s}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                          <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-                            Also available via{" "}
-                            <Link href="/docs/mcp" className="font-semibold text-slate-700 underline">
-                              MCP
-                            </Link>{" "}
-                            in Claude Desktop, Cursor, or ChatGPT.
-                          </p>
-                        </motion.div>
-                      ) : null}
-
-                      {messages.map((msg, i) => (
-                        <motion.div
-                          key={`${msg.role}-${i}-${msg.content.slice(0, 24)}`}
-                          initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ type: "spring", damping: 28, stiffness: 340 }}
-                          className={cn(
-                            msg.role === "user"
-                              ? cn(
-                                  "rounded-2xl bg-slate-900 px-3.5 py-2.5 text-sm leading-relaxed text-white",
-                                  expanded ? "ml-auto max-w-[min(640px,72%)]" : "ml-8",
-                                )
-                              : expanded ? "w-full" : "mr-1",
-                          )}
-                        >
-                          {msg.role === "user" ? (
-                            <p className="whitespace-pre-wrap">{msg.content}</p>
-                          ) : (
-                            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/50 p-2 shadow-sm">
-                              {(msg.discoveryAds?.length ?? 0) > 0 ? (
-                                <DiscoveryAssistantAdGallery
-                                  ads={msg.discoveryAds!}
-                                  isSaved={isSaved}
-                                  isPending={isPending}
-                                  onOpenAd={onOpenAd}
-                                  onToggleSave={(ad) => void toggleSave(ad)}
-                                  expanded={expanded}
-                                />
-                              ) : null}
-                              <div className="px-1 pb-1 pt-2">
-                                <DiscoveryAssistantVisualMessage
-                                  message={msg.content}
-                                  visualStats={msg.visualStats}
-                                />
-                                {msg.suggestions?.length ? (
-                                  <div className="mt-3 flex flex-wrap gap-1.5">
-                                    {msg.suggestions.map((s) => (
-                                      <button
-                                        key={s}
-                                        type="button"
-                                        onClick={() => void send(s)}
-                                        className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
-                                      >
-                                        {s}
-                                      </button>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          )}
-                        </motion.div>
-                      ))}
-
-                      {loading ? (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="flex items-center gap-2 px-1 text-sm text-slate-500"
-                        >
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                          Searching competitors…
-                        </motion.div>
-                      ) : null}
-                      {error ? <p className="text-sm text-red-600">{error}</p> : null}
-                      <div ref={endRef} />
-                    </div>
-                  </div>
-
-                  <footer
-                    className={cn(
-                      "shrink-0 border-t border-slate-100 p-3",
-                      expanded ? "max-w-[1400px] mx-auto w-full" : "",
-                    )}
-                  >
-                    <div className="flex items-end gap-2 rounded-2xl border border-slate-200/90 bg-slate-50/80 p-2 shadow-inner">
-                      <textarea
-                        ref={inputRef}
-                        value={input}
-                        onChange={(e) => {
-                          if (!activeWindow) return;
-                          updateWindow(activeWindow.windowId, { input: e.target.value });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            void send(input);
-                          }
-                        }}
-                        rows={expanded ? 3 : 2}
-                        placeholder="Search keywords, filter ads, compare competitors…"
-                        className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
-                      />
-                      <button
-                        type="button"
-                        disabled={!input.trim() || loading}
-                        onClick={() => void send(input)}
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-800 disabled:opacity-40"
-                        aria-label="Send"
-                      >
-                        <ArrowUp className="h-4 w-4" aria-hidden />
-                      </button>
-                    </div>
-                  </footer>
-                </motion.div>
-              )}
+          <div
+            ref={scrollRef}
+            className={cn(
+              "flex min-w-0 items-stretch gap-2.5",
+              expanded ? "h-full min-h-0 flex-1 overflow-hidden" : "overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+            )}
+          >
+            <AnimatePresence mode="popLayout">
+              {windows.map((win, index) => (
+                <DiscoveryAssistantChatPane
+                  key={win.windowId}
+                  win={win}
+                  index={index}
+                  isPrimary={index === windows.length - 1}
+                  expanded={expanded}
+                  brandName={brandName}
+                  sessions={sessions}
+                  historyOpen={historyOpen}
+                  isSaved={isSaved}
+                  isPending={isPending}
+                  reduceMotion={reduceMotion}
+                  onClosePane={() => closeWindow(win.windowId)}
+                  onCloseAll={onClose}
+                  onToggleExpanded={toggleExpanded}
+                  onToggleHistory={() => setHistoryOpen((v) => !v)}
+                  onNewChat={startNewChat}
+                  onInputChange={(value) => updateWindow(win.windowId, { input: value })}
+                  onSend={(text) => void sendForWindow(win.windowId, text)}
+                  onOpenAd={onOpenAd}
+                  onToggleSave={(ad) => void toggleSave(ad)}
+                  onLoadSession={loadSession}
+                  onDeleteSession={handleDeleteSession}
+                />
+              ))}
             </AnimatePresence>
           </div>
-        </motion.aside>
+        </motion.div>
       ) : null}
     </AnimatePresence>
   );
@@ -897,7 +874,8 @@ export function DiscoveryAssistant(props: AssistantProps) {
         whileTap={reduceMotion ? undefined : { scale: 0.96 }}
         transition={PANEL_SPRING}
         className={cn(
-          "fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full bg-slate-900 text-sm font-semibold text-white shadow-[0_12px_40px_-8px_rgba(15,23,42,0.45)] transition-colors hover:bg-slate-800",
+          "fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_40px_-8px_rgba(52,52,52,0.4),0_4px_20px_-6px_rgba(149,193,75,0.35)] ring-1 ring-white/30 transition hover:brightness-105",
+          assistantAccentBtn,
           open ? "h-12 w-12 justify-center px-0" : "px-4 py-3",
         )}
         aria-label={open ? "Close assistant" : "Open assistant"}

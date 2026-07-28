@@ -9,10 +9,10 @@ type Props = {
 };
 
 const TONE_CLASS: Record<NonNullable<DiscoveryVisualStat["tone"]>, string> = {
-  up: "border-emerald-200/80 bg-emerald-50 text-emerald-900",
-  down: "border-rose-200/80 bg-rose-50 text-rose-900",
-  hot: "border-amber-200/80 bg-amber-50 text-amber-950",
-  neutral: "border-slate-200/80 bg-white text-slate-900",
+  up: "border-[color-mix(in_srgb,var(--rival-success)_35%,white)] bg-[color-mix(in_srgb,var(--rival-success)_12%,white)] text-[color-mix(in_srgb,var(--rival-success)_75%,#1a1a2e)]",
+  down: "border-rose-200/80 bg-rose-50/90 text-rose-900 backdrop-blur-sm",
+  hot: "border-[color-mix(in_srgb,var(--rival-accent-warm)_55%,white)] bg-[color-mix(in_srgb,var(--rival-accent-warm)_35%,white)] text-amber-950 backdrop-blur-sm",
+  neutral: "border-white/70 bg-white/55 text-[color:var(--rival-primary)] backdrop-blur-sm",
 };
 
 export function DiscoveryAssistantVisualMessage({ message, visualStats }: Props) {
