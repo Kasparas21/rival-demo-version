@@ -1,9 +1,12 @@
 import type { DiscoveryAssistantResponse } from "@/lib/discovery/discovery-assistant-types";
+import type { DiscoveryAdDto } from "@/lib/discovery/types";
 
 export type DiscoveryChatEntry = {
   role: "user" | "assistant";
   content: string;
   adRefs?: DiscoveryAssistantResponse["ad_refs"];
+  discoveryAds?: DiscoveryAdDto[];
+  visualStats?: DiscoveryAssistantResponse["visual_stats"];
   suggestions?: string[];
 };
 

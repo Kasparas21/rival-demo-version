@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUp, Bot, History, Loader2, MessageSquarePlus, Sparkles, Trash2, X } from "lucide-react";
 import Link from "next/link";
 
 import type { DiscoveryFeedTab, DiscoveryToolbarState } from "@/components/discovery/discovery-types";
 import { DiscoveryAssistantAdGallery } from "@/components/discovery/discovery-assistant-ad-gallery";
+import { DiscoveryAssistantVisualMessage } from "@/components/discovery/discovery-assistant-visual-message";
+import { useDiscoverySavedAds } from "@/components/discovery/use-discovery-saved-ads";
 import {
   createDiscoveryChatSession,
   deleteDiscoveryChatSession,
@@ -65,6 +67,21 @@ function DiscoveryAssistantPanel({
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const assistantAdRefs = useMemo(() => {
+    const map = new Map<string, { id: string; competitor_id: string }>();
+    for (const msg of messages) {
+      for (const ad of msg.discoveryAds ?? []) {
+        map.set(ad.id, { id: ad.id, competitor_id: ad.competitor_id });
+      }
+    }
+    return [...map.values()];
+  }, [messages]);
+
+  const { isSaved, isPending, toggleSave } = useDiscoverySavedAds(
+    assistantAdRefs,
+    `assistant:${brandId}`,
+  );
 
   const refreshSessions = useCallback(() => {
     setSessions(listDiscoveryChatSessions(brandId));
@@ -191,6 +208,8 @@ function DiscoveryAssistantPanel({
             role: "assistant",
             content: json.message,
             adRefs: json.ad_refs,
+            discoveryAds: json.discovery_ads,
+            visualStats: json.visual_stats,
             suggestions: json.suggestions,
           },
         ]);
@@ -253,7 +272,7 @@ function DiscoveryAssistantPanel({
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 20 }}
             transition={reduceMotion ? { duration: 0.15 } : PANEL_SPRING}
             style={{ transformOrigin: "bottom right" }}
-            className="fixed bottom-[5.25rem] right-6 z-50 flex h-[min(720px,calc(100vh-7rem))] w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/98 shadow-[0_28px_90px_-16px_rgba(15,23,42,0.32),0_12px_40px_-12px_rgba(74,127,165,0.2)] ring-1 ring-black/[0.04]"
+            className="fixed bottom-[5.25rem] right-6 z-50 flex h-[min(760px,calc(100vh-6rem))] w-[min(440px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/98 shadow-[0_28px_90px_-16px_rgba(15,23,42,0.32),0_12px_40px_-12px_rgba(74,127,165,0.2)] ring-1 ring-black/[0.04]"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-100 px-4 py-3.5">
@@ -425,30 +444,46 @@ function DiscoveryAssistantPanel({
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ type: "spring", damping: 28, stiffness: 340 }}
                         className={cn(
-                          "rounded-2xl px-3.5 py-3 text-sm leading-relaxed",
                           msg.role === "user"
-                            ? "ml-6 bg-slate-900 text-white"
-                            : "mr-2 border border-slate-200/80 bg-white text-slate-800 shadow-sm",
+                            ? "ml-8 rounded-2xl bg-slate-900 px-3.5 py-2.5 text-sm leading-relaxed text-white"
+                            : "mr-1",
                         )}
                       >
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
-                        {msg.adRefs?.length ? (
-                          <DiscoveryAssistantAdGallery ads={msg.adRefs} onOpenAd={onOpenAd} />
-                        ) : null}
-                        {msg.role === "assistant" && msg.suggestions?.length ? (
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {msg.suggestions.map((s) => (
-                              <button
-                                key={s}
-                                type="button"
-                                onClick={() => void send(s)}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-white hover:text-slate-900"
-                              >
-                                {s}
-                              </button>
-                            ))}
+                        {msg.role === "user" ? (
+                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                        ) : (
+                          <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/50 p-2 shadow-sm">
+                            {(msg.discoveryAds?.length ?? 0) > 0 ? (
+                              <DiscoveryAssistantAdGallery
+                                ads={msg.discoveryAds!}
+                                isSaved={isSaved}
+                                isPending={isPending}
+                                onOpenAd={onOpenAd}
+                                onToggleSave={(ad) => void toggleSave(ad)}
+                              />
+                            ) : null}
+                            <div className="px-1 pb-1 pt-2">
+                              <DiscoveryAssistantVisualMessage
+                                message={msg.content}
+                                visualStats={msg.visualStats}
+                              />
+                              {msg.suggestions?.length ? (
+                                <div className="mt-3 flex flex-wrap gap-1.5">
+                                  {msg.suggestions.map((s) => (
+                                    <button
+                                      key={s}
+                                      type="button"
+                                      onClick={() => void send(s)}
+                                      className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                                    >
+                                      {s}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
                           </div>
-                        ) : null}
+                        )}
                       </motion.div>
                     ))}
 

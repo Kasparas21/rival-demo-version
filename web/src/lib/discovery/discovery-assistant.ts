@@ -16,37 +16,42 @@ import {
   mcpSearchDiscoveryAds,
 } from "@/lib/mcp/tools/discovery-tools";
 
-import { buildDiscoveryFeed } from "./build-discovery-feed";
 import {
   discoveryAssistantResponseSchema,
   type DiscoveryAssistantAdRef,
   type DiscoveryAssistantMessage,
   type DiscoveryAssistantResponse,
+  type DiscoveryVisualStat,
 } from "./discovery-assistant-types";
+import { loadDiscoveryAdsByIds } from "./load-discovery-ads-by-ids";
+import type { DiscoveryAdDto, DiscoveryMarketStats } from "./types";
 
 const MAX_TOOL_ROUNDS = 6;
 
-const SYSTEM_PROMPT = `You are Claude, a senior competitive intelligence analyst embedded in Spy-Rival's Discovery feed. You help agency users search, filter, and interpret Meta ads from their tracked competitors.
+const SYSTEM_PROMPT = `You are the Spy-Rival Discovery assistant — a visual competitive intelligence copilot for Meta ads.
 
-You have tools to search ads by keywords, browse the discovery feed with filters, analyze keyword frequency, compare competitors, read weekly pattern reports, and fetch individual ads.
+The UI shows FULL AD CREATIVES (video/image) inline. Users watch and save ads directly in chat. Your text is secondary.
 
-Rules:
-- Use tools to answer with real data — never invent ad counts, competitor names, or copy.
-- When the user wants to see ads in the UI, include a filter_patch in your final JSON response.
-- filter_patch can set: search, sort, format, status, datePreset, ultimateOnly, competitorNames, tab.
-- For keyword searches, set filter_patch.search to the main keyword(s) joined by space.
-- Reference specific ad ids from tool results in highlight_ad_ids and ad_refs (preview = first 120 chars).
-- Be concise, punchy, and actionable. Agency users want creative/market insights, not fluff.
-- If asked about patterns/trends, call get_discovery_patterns first.
-- sort options: shuffle, newest, impressions, ultimate_winner, longest_running, oldest.
+CRITICAL OUTPUT RULES:
+- Respond with ONLY a single valid JSON object. No markdown, no tables, no prose before or after the JSON.
+- "message": MAX 2 short sentences (under 200 chars total). No bullet lists, no headers, no tables in message.
+- "visual_stats": 3-5 punchy stat chips, e.g. [{"label":"Video implant ads","value":"97","tone":"hot"},{"label":"Market temp","value":"Cooling ↓32%","tone":"down"}]
+- "ad_refs": REQUIRED — include 8-12 ad objects from your tool results. Each: {"id":"<uuid from tool>","competitor_name":"...","preview":"<first 80 chars of ad copy>"}
+- "highlight_ad_ids": same ids as ad_refs
+- "filter_patch": apply relevant filters so the feed matches
+- "suggestions": 3 short follow-up prompts
 
-After using tools, respond with ONLY valid JSON:
+Use tools for real data. Never invent ad ids or counts.
+sort options: shuffle, newest, impressions, ultimate_winner, longest_running, oldest.
+
+JSON schema:
 {
-  "message": "your analysis for the user",
-  "filter_patch": { optional filters to apply in UI },
+  "message": "2 sentences max",
+  "visual_stats": [{"label":"...","value":"...","tone":"up|down|neutral|hot"}],
+  "filter_patch": { optional },
   "highlight_ad_ids": ["uuid", ...],
-  "ad_refs": [{ "id", "competitor_name", "preview" }],
-  "suggestions": ["follow-up question 1", ...]
+  "ad_refs": [{"id","competitor_name","preview"}],
+  "suggestions": ["...", ...]
 }`;
 
 type OpenRouterTool = {
@@ -243,71 +248,128 @@ async function openRouterChat(messages: ChatMessage[], tools: OpenRouterTool[], 
   };
 }
 
-function parseAssistantJson(text: string): DiscoveryAssistantResponse {
-  const parsed = JSON.parse(stripJsonFences(text));
-  return discoveryAssistantResponseSchema.parse(parsed);
+function extractJsonPayload(text: string): string {
+  const stripped = stripJsonFences(text).trim();
+  try {
+    JSON.parse(stripped);
+    return stripped;
+  } catch {
+    const start = stripped.indexOf("{");
+    const end = stripped.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      const candidate = stripped.slice(start, end + 1);
+      JSON.parse(candidate);
+      return candidate;
+    }
+    throw new Error("No JSON object in model response");
+  }
 }
 
-async function enrichAssistantAdRefs(
+function sanitizeDisplayMessage(text: string): string {
+  let s = text.trim();
+  s = s.replace(/\{[\s\S]*"message"\s*:[\s\S]*\}\s*$/m, "").trim();
+  s = s.replace(/^#{1,3}\s+.+$/gm, "").trim();
+  s = s.replace(/\|.+\|/g, "").trim();
+  s = s.replace(/\n{3,}/g, "\n\n");
+  if (s.length > 240) s = `${s.slice(0, 237)}…`;
+  return s;
+}
+
+function parseAssistantJson(text: string): DiscoveryAssistantResponse {
+  const parsed = JSON.parse(extractJsonPayload(text));
+  const result = discoveryAssistantResponseSchema.parse(parsed);
+  return {
+    ...result,
+    message: sanitizeDisplayMessage(result.message),
+  };
+}
+
+function harvestFromToolResult(result: unknown, bucket: {
+  adIds: string[];
+  marketStats: DiscoveryMarketStats | null;
+}) {
+  if (!result || typeof result !== "object") return;
+  const r = result as Record<string, unknown>;
+  if (r.ok !== true) return;
+
+  if (r.market_stats && typeof r.market_stats === "object") {
+    bucket.marketStats = r.market_stats as DiscoveryMarketStats;
+  }
+
+  const ads = r.ads;
+  if (!Array.isArray(ads)) return;
+  for (const ad of ads) {
+    if (ad && typeof ad === "object" && "id" in ad) {
+      const id = String((ad as { id: unknown }).id).trim();
+      if (id) bucket.adIds.push(id);
+    }
+  }
+}
+
+function buildVisualStatsFromMarket(stats: DiscoveryMarketStats): DiscoveryVisualStat[] {
+  const chips: DiscoveryVisualStat[] = [
+    { label: "Total ads", value: String(stats.total_ads), tone: "neutral" },
+    { label: "Active", value: String(stats.active_ads), tone: "up" },
+    { label: "New this week", value: String(stats.new_this_week), tone: stats.new_this_week > 0 ? "hot" : "neutral" },
+  ];
+  if (stats.video_percent != null) {
+    chips.push({ label: "Video share", value: `${Math.round(stats.video_percent)}%`, tone: "neutral" });
+  }
+  if (stats.hottest_competitor_name) {
+    chips.push({
+      label: "Hottest",
+      value: stats.hottest_competitor_name,
+      tone: "hot",
+    });
+  }
+  return chips.slice(0, 5);
+}
+
+async function enrichAssistantResponse(
   supabase: SupabaseClient<Database>,
   userId: string,
-  brandId: string,
   response: DiscoveryAssistantResponse,
+  harvestedAdIds: string[],
+  harvestedMarketStats: DiscoveryMarketStats | null,
 ): Promise<DiscoveryAssistantResponse> {
   const ids = [
     ...new Set([
+      ...harvestedAdIds,
       ...(response.ad_refs?.map((a) => a.id) ?? []),
       ...(response.highlight_ad_ids ?? []),
     ]),
-  ];
-  if (!ids.length) return response;
+  ].slice(0, 12);
 
-  const feed = await buildDiscoveryFeed(supabase, userId, {
-    brandId,
-    clientBrandIds: [brandId],
-    offset: 0,
-    limit: 50_000_000,
-    sort: "impressions",
-    shuffleSeed: `assistant-enrich:${brandId}`,
-    platforms: [],
-    format: "all",
-    status: "all",
-    ultimateOnly: false,
-    query: "",
-    competitorFilterIds: [],
-    datePreset: "all",
-  });
-  if (!("ads" in feed)) return response;
+  const discovery_ads = ids.length ? await loadDiscoveryAdsByIds(supabase, userId, ids) : [];
 
-  const byId = new Map(feed.ads.map((ad) => [ad.id, ad]));
-  const enriched: DiscoveryAssistantAdRef[] = [];
-  const seen = new Set<string>();
+  const ad_refs: DiscoveryAssistantAdRef[] = discovery_ads.map((ad) => ({
+    id: ad.id,
+    competitor_name: ad.competitor_name,
+    preview: ad.ad_text.trim().slice(0, 80) || "Ad",
+    format: ad.format,
+    creative_url: ad.ad_creative_url ?? ad.archived_creative_url ?? null,
+    competitor_logo_url: ad.competitor_logo_url,
+    is_ultimate_winner: ad.is_ultimate_winner,
+    is_active: ad.is_active && !ad.is_killed,
+    impressions_index: ad.impressions_index,
+  }));
 
-  const push = (id: string, partial?: DiscoveryAssistantAdRef) => {
-    if (seen.has(id)) return;
-    seen.add(id);
-    const ad = byId.get(id);
-    if (!ad) {
-      if (partial) enriched.push(partial);
-      return;
-    }
-    enriched.push({
-      id: ad.id,
-      competitor_name: ad.competitor_name,
-      preview: (partial?.preview ?? ad.ad_text).trim().slice(0, 160) || "Ad",
-      format: ad.format,
-      creative_url: ad.ad_creative_url ?? ad.archived_creative_url ?? null,
-      competitor_logo_url: ad.competitor_logo_url,
-      is_ultimate_winner: ad.is_ultimate_winner,
-      is_active: ad.is_active,
-      impressions_index: ad.impressions_index,
-    });
+  const market_stats = harvestedMarketStats ?? response.market_stats;
+  const visual_stats =
+    response.visual_stats?.length
+      ? response.visual_stats
+      : market_stats
+        ? buildVisualStatsFromMarket(market_stats)
+        : undefined;
+
+  return {
+    ...response,
+    ad_refs,
+    highlight_ad_ids: ids,
+    discovery_ads,
+    market_stats: market_stats ?? undefined,
+    visual_stats,
   };
-
-  for (const ref of response.ad_refs ?? []) push(ref.id, ref);
-  for (const id of response.highlight_ad_ids ?? []) push(id);
-
-  return { ...response, ad_refs: enriched.slice(0, 12) };
 }
 
 export async function runDiscoveryAssistant(params: {
@@ -349,6 +411,7 @@ export async function runDiscoveryAssistant(params: {
   }
 
   let lastText = "";
+  const harvest = { adIds: [] as string[], marketStats: null as DiscoveryMarketStats | null };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const result = await openRouterChat(messages, DISCOVERY_TOOLS, route.model);
@@ -370,6 +433,7 @@ export async function runDiscoveryAssistant(params: {
           args = {};
         }
         const toolResult = await executeDiscoveryTool(ctx, params.brandId, call.function.name, args);
+        harvestFromToolResult(toolResult, harvest);
         messages.push({
           role: "tool",
           tool_call_id: call.id,
@@ -387,7 +451,8 @@ export async function runDiscoveryAssistant(params: {
   if (!lastText) {
     messages.push({
       role: "user",
-      content: "Summarize your findings as JSON matching the required schema. No markdown.",
+      content:
+        "Output ONLY valid JSON per schema. No markdown. Include 8-12 ad_refs from tool results with real ids.",
     });
     const final = await openRouterChat(messages, [], route.model);
     lastText = (final.choices?.[0]?.message?.content ?? "").trim();
@@ -395,10 +460,28 @@ export async function runDiscoveryAssistant(params: {
 
   try {
     const parsed = parseAssistantJson(lastText);
-    return enrichAssistantAdRefs(params.supabase, params.userId, params.brandId, parsed);
+    return enrichAssistantResponse(
+      params.supabase,
+      params.userId,
+      parsed,
+      harvest.adIds,
+      harvest.marketStats,
+    );
   } catch {
+    if (harvest.adIds.length) {
+      return enrichAssistantResponse(
+        params.supabase,
+        params.userId,
+        {
+          message: "Here are the matching ads from your market.",
+          suggestions: ["Show more like these", "Which competitor is hottest this week?"],
+        },
+        harvest.adIds,
+        harvest.marketStats,
+      );
+    }
     return {
-      message: lastText || "I couldn't process that request. Try rephrasing or be more specific about keywords or competitors.",
+      message: sanitizeDisplayMessage(lastText) || "Try a more specific question about keywords, competitors, or ad format.",
       suggestions: ["Show video ads about implants", "What are the top keywords this week?"],
     };
   }

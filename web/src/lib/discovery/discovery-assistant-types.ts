@@ -4,8 +4,10 @@ import type { DiscoveryToolbarState } from "@/components/discovery/discovery-typ
 import type {
   DiscoveryDatePreset,
   DiscoveryFormatFilter,
+  DiscoveryMarketStats,
   DiscoverySort,
   DiscoveryStatusFilter,
+  DiscoveryAdDto,
 } from "@/lib/discovery/types";
 
 export type DiscoveryAssistantMessage = {
@@ -37,11 +39,20 @@ export type DiscoveryAssistantAdRef = {
   impressions_index?: number | null;
 };
 
+export type DiscoveryVisualStat = {
+  label: string;
+  value: string;
+  tone?: "up" | "down" | "neutral" | "hot";
+};
+
 export type DiscoveryAssistantResponse = {
   message: string;
   filter_patch?: DiscoveryFilterPatch;
   highlight_ad_ids?: string[];
   ad_refs?: DiscoveryAssistantAdRef[];
+  discovery_ads?: DiscoveryAdDto[];
+  market_stats?: DiscoveryMarketStats;
+  visual_stats?: DiscoveryVisualStat[];
   suggestions?: string[];
 };
 
@@ -74,6 +85,15 @@ export const discoveryAssistantResponseSchema = z.object({
         is_ultimate_winner: z.boolean().optional(),
         is_active: z.boolean().optional(),
         impressions_index: z.number().nullable().optional(),
+      }),
+    )
+    .optional(),
+  visual_stats: z
+    .array(
+      z.object({
+        label: z.string(),
+        value: z.string(),
+        tone: z.enum(["up", "down", "neutral", "hot"]).optional(),
       }),
     )
     .optional(),
