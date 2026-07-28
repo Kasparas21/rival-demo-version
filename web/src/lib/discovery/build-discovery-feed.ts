@@ -144,38 +144,22 @@ async function loadCompetitorIdsForBrand(
   return loadAllSavedCompetitorIds(supabase, userId);
 }
 
-async function loadCompetitorIdsForScope(
+async function loadCompetitorIdsForBrandIds(
   supabase: SupabaseClient<Database>,
   userId: string,
-  activeBrandId: string,
-  clientScope: string,
+  brandIds: string[],
 ): Promise<{ ids: string[]; error?: string }> {
-  const scope = (clientScope || "active").trim();
+  const uniqueBrandIds = [...new Set(brandIds.map((id) => id.trim()).filter(Boolean))];
+  if (!uniqueBrandIds.length) return { ids: [] };
 
-  if (scope === "all") {
-    const { data: mappings, error: mapErr } = await supabase
-      .from("brand_competitors")
-      .select("competitor_id")
-      .eq("user_id", userId);
-
-    if (mapErr && !isBrandCompetitorsTableError(mapErr.message)) {
-      return { ids: [], error: mapErr.message };
-    }
-
-    const mappedIds = [...new Set((mappings ?? []).map((r) => String(r.competitor_id)).filter(Boolean))];
-    if (mappedIds.length > 0) return { ids: mappedIds };
-    return loadAllSavedCompetitorIds(supabase, userId);
+  const allIds = new Set<string>();
+  for (const brandId of uniqueBrandIds) {
+    const { ids, error } = await loadCompetitorIdsForBrand(supabase, userId, brandId);
+    if (error) return { ids: [], error };
+    for (const id of ids) allIds.add(id);
   }
 
-  if (scope === "active") {
-    return loadCompetitorIdsForBrand(supabase, userId, activeBrandId);
-  }
-
-  if (UUID_RE.test(scope)) {
-    return loadCompetitorIdsForBrand(supabase, userId, scope);
-  }
-
-  return loadCompetitorIdsForBrand(supabase, userId, activeBrandId);
+  return { ids: [...allIds] };
 }
 
 async function loadCompetitorClientBrandLabels(
@@ -387,12 +371,14 @@ export async function buildDiscoveryFeed(
   userId: string,
   input: DiscoveryFeedQuery,
 ): Promise<DiscoveryFeedResult | { ok: false; error: string }> {
-  const clientScope = (input.clientScope || "active").trim();
-  const { ids: competitorIds, error: competitorIdsError } = await loadCompetitorIdsForScope(
+  const clientBrandIds =
+    input.clientBrandIds.length > 0
+      ? [...new Set(input.clientBrandIds.map((id) => id.trim()).filter((id) => UUID_RE.test(id)))]
+      : [input.brandId];
+  const { ids: competitorIds, error: competitorIdsError } = await loadCompetitorIdsForBrandIds(
     supabase,
     userId,
-    input.brandId,
-    clientScope,
+    clientBrandIds,
   );
   if (competitorIdsError) return { ok: false, error: competitorIdsError };
   if (!competitorIds.length) {
@@ -417,7 +403,7 @@ export async function buildDiscoveryFeed(
     if (c?.id) competitorById.set(c.id, c);
   }
 
-  const showClientLabels = clientScope === "all";
+  const showClientLabels = clientBrandIds.length > 1;
   const clientBrandLabels = showClientLabels
     ? await loadCompetitorClientBrandLabels(supabase, userId, competitorIds)
     : new Map<string, string>();

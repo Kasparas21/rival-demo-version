@@ -14,18 +14,18 @@ describe("discovery-cache", () => {
     const keyA = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a", "2026-07-27");
     const keyB = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a", "2026-07-27");
     expect(keyA).toBe(keyB);
-    expect(keyA).toContain("brand-1:discovery:v3:2026-07-27:");
+    expect(keyA).toContain("brand-1:discovery:v4:2026-07-27:");
   });
 
-  it("changes cache key when client scope changes", () => {
+  it("changes cache key when client selection changes", () => {
     const active = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a");
-    const all = discoveryFeedCacheKey(
+    const multi = discoveryFeedCacheKey(
       "brand-1",
-      { ...DEFAULT_DISCOVERY_TOOLBAR, clientScope: "all" },
+      { ...DEFAULT_DISCOVERY_TOOLBAR, selectedClientBrandIds: new Set(["brand-1", "brand-2"]) },
       "",
       "seed-a",
     );
-    expect(active).not.toBe(all);
+    expect(active).not.toBe(multi);
   });
 
   it("changes cache key when shuffle seed changes", () => {

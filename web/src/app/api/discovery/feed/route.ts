@@ -81,9 +81,15 @@ export async function GET(request: Request) {
       (url.searchParams.get("shuffleSeed") ?? "").trim() ||
       `${user.id}:${brandId}:${new Date().toISOString().slice(0, 10)}`;
 
+    const clientBrandIds = url.searchParams
+      .getAll("clientBrand")
+      .flatMap((value) => value.split(","))
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     const result = await buildDiscoveryFeed(supabase, user.id, {
       brandId,
-      clientScope: (url.searchParams.get("clientScope") ?? "active").trim() || "active",
+      clientBrandIds,
       offset,
       limit,
       sort: parseSort(url.searchParams.get("sort")),

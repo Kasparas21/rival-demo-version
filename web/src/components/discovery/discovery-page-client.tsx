@@ -43,7 +43,10 @@ export function DiscoveryPageClient() {
     hasMore,
     reshuffle,
     loadMore,
-  } = useDiscoveryFeed(activeBrand.id);
+  } = useDiscoveryFeed(
+    activeBrand.id,
+    clientBrands.map((brand) => brand.id),
+  );
 
   const { isSaved, isPending, toggleSave } = useDiscoverySavedAds(ads);
 

@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   Briefcase,
   Calendar,
+  Check,
   Filter,
   Image as ImageIcon,
   Layers,
@@ -21,7 +22,14 @@ import {
 import type { DiscoveryCompetitorChip } from "@/lib/discovery/types";
 import { cn } from "@/lib/utils";
 
-import type { DiscoveryToolbarState } from "./discovery-types";
+import {
+  discoveryClientSelectionLabel,
+  isDiscoveryDefaultClientSelection,
+  resolveDiscoveryClientBrandIds,
+  setDiscoveryAllClientBrands,
+  toggleDiscoveryClientBrand,
+  type DiscoveryToolbarState,
+} from "./discovery-types";
 
 const SORT_OPTIONS: { id: DiscoveryToolbarState["sort"]; label: string }[] = [
   { id: "shuffle", label: "Shuffle mix" },
@@ -53,6 +61,37 @@ type Props = {
   clientBrands: ClientBrandOption[];
 };
 
+function ClientCheckboxRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50">
+      <span
+        className={cn(
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
+          checked ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white",
+        )}
+        aria-hidden
+      >
+        {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+      </span>
+      <input
+        type="checkbox"
+        className="sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="min-w-0 text-[13px] font-medium text-slate-900">{label}</span>
+    </label>
+  );
+}
+
 export function DiscoveryToolbar({
   state,
   onChange,
@@ -67,13 +106,19 @@ export function DiscoveryToolbar({
   const dateLabel = DATE_OPTIONS.find((o) => o.id === state.datePreset)?.label ?? "All time";
 
   const showClientFilter = clientBrands.length > 1;
-  const clientScope = state.clientScope || "active";
-  const clientLabel =
-    clientScope === "all"
-      ? "All clients"
-      : clientScope === "active"
-        ? activeBrand.name
-        : clientBrands.find((b) => b.id === clientScope)?.name ?? activeBrand.name;
+  const selectedClientIds = useMemo(
+    () => resolveDiscoveryClientBrandIds(state.selectedClientBrandIds, activeBrand.id, clientBrands),
+    [activeBrand.id, clientBrands, state.selectedClientBrandIds],
+  );
+  const selectedClientIdSet = useMemo(() => new Set(selectedClientIds), [selectedClientIds]);
+  const clientLabel = discoveryClientSelectionLabel(
+    state.selectedClientBrandIds,
+    activeBrand,
+    clientBrands,
+  );
+  const allClientsSelected =
+    clientBrands.length > 0 && selectedClientIds.length === clientBrands.length;
+  const someClientsSelected = selectedClientIds.length > 0 && !allClientsSelected;
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -82,9 +127,11 @@ export function DiscoveryToolbar({
     if (state.ultimateOnly) n += 1;
     if (state.competitorId) n += 1;
     if (state.datePreset !== "all") n += 1;
-    if (clientScope !== "active") n += 1;
+    if (!isDiscoveryDefaultClientSelection(state.selectedClientBrandIds, activeBrand.id, clientBrands)) {
+      n += 1;
+    }
     return n;
-  }, [clientScope, state]);
+  }, [activeBrand.id, clientBrands, state]);
 
   return (
     <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:px-4">
@@ -113,44 +160,50 @@ export function DiscoveryToolbar({
                 active={menu.isOpen("client")}
                 onClick={() => menu.toggle("client")}
               />
-              <TimelineMenuPanel open={menu.isOpen("client")} onClose={menu.close} className="min-w-[220px] py-1">
-                <TimelineMenuItem
-                  label={activeBrand.name}
-                  selected={clientScope === "active"}
-                  onClick={() => {
-                    onChange({ clientScope: "active", competitorId: null });
-                    menu.close();
+              <TimelineMenuPanel
+                open={menu.isOpen("client")}
+                onClose={menu.close}
+                className="max-h-[min(70vh,360px)] min-w-[260px] overflow-y-auto py-1"
+              >
+                <ClientCheckboxRow
+                  label="Select all"
+                  checked={allClientsSelected}
+                  onChange={(checked) => {
+                    onChange({
+                      selectedClientBrandIds: setDiscoveryAllClientBrands(
+                        clientBrands,
+                        checked,
+                        activeBrand.id,
+                      ),
+                      competitorId: null,
+                    });
                   }}
                 />
-                <TimelineMenuItem
-                  label="All clients"
-                  selected={clientScope === "all"}
-                  onClick={() => {
-                    onChange({ clientScope: "all", competitorId: null });
-                    menu.close();
-                  }}
-                />
-                {clientBrands.filter((b) => b.id !== activeBrand.id).length > 0 ? (
-                  <>
-                    <div className="my-1 h-px bg-slate-100" />
-                    <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                      Other clients
-                    </p>
-                    {clientBrands
-                      .filter((b) => b.id !== activeBrand.id)
-                      .map((brand) => (
-                        <TimelineMenuItem
-                          key={brand.id}
-                          label={brand.name}
-                          selected={clientScope === brand.id}
-                          onClick={() => {
-                            onChange({ clientScope: brand.id, competitorId: null });
-                            menu.close();
-                          }}
-                        />
-                      ))}
-                  </>
+                {someClientsSelected ? (
+                  <p className="px-3 pb-1 text-[11px] text-slate-500">
+                    {selectedClientIds.length} of {clientBrands.length} clients selected
+                  </p>
                 ) : null}
+                <div className="my-1 h-px bg-slate-100" />
+                {clientBrands.map((brand) => (
+                  <ClientCheckboxRow
+                    key={brand.id}
+                    label={brand.name}
+                    checked={selectedClientIdSet.has(brand.id)}
+                    onChange={(checked) => {
+                      onChange({
+                        selectedClientBrandIds: toggleDiscoveryClientBrand(
+                          state.selectedClientBrandIds,
+                          activeBrand.id,
+                          clientBrands,
+                          brand.id,
+                          checked,
+                        ),
+                        competitorId: null,
+                      });
+                    }}
+                  />
+                ))}
               </TimelineMenuPanel>
             </div>
           ) : null}

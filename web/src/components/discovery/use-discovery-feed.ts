@@ -46,10 +46,14 @@ async function fetchDiscoveryPage(
   offset: number,
   shuffleSeed: string,
   search: string,
+  allClientBrandIds: string[],
 ): Promise<DiscoveryFeedPageCache> {
-  const res = await fetch(buildDiscoveryFeedUrl(brandId, toolbar, offset, shuffleSeed, search), {
-    credentials: "include",
-  });
+  const res = await fetch(
+    buildDiscoveryFeedUrl(brandId, toolbar, offset, shuffleSeed, search, undefined, allClientBrandIds),
+    {
+      credentials: "include",
+    },
+  );
   const json = (await res.json()) as DiscoveryFeedResult | { ok: false; error?: string };
   if (!res.ok || !("ads" in json)) {
     throw new Error(("error" in json && json.error) || "Failed to load discovery feed");
@@ -65,7 +69,7 @@ async function fetchDiscoveryPage(
   };
 }
 
-export function useDiscoveryFeed(brandId: string | null) {
+export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: string[] = []) {
   const day = discoveryDayKey();
   const enabled = Boolean(brandId && brandId !== "default");
 
@@ -79,6 +83,15 @@ export function useDiscoveryFeed(brandId: string | null) {
     if (!enabled || !brandId) return;
     setShuffleSeed(getOrCreateShuffleSeed(brandId, day));
   }, [brandId, day, enabled]);
+
+  useEffect(() => {
+    if (!brandId || brandId === "default") return;
+    setToolbar((prev) => ({
+      ...prev,
+      selectedClientBrandIds: new Set([brandId]),
+      competitorId: null,
+    }));
+  }, [brandId]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchDebounced(toolbar.search.trim()), 250);
@@ -102,7 +115,14 @@ export function useDiscoveryFeed(brandId: string | null) {
     persistAcrossTabs: true,
     fetcher: async () => {
       if (!brandId) throw new Error("Missing brand");
-      const page = await fetchDiscoveryPage(brandId, toolbar, 0, shuffleSeed, searchDebounced);
+      const page = await fetchDiscoveryPage(
+        brandId,
+        toolbar,
+        0,
+        shuffleSeed,
+        searchDebounced,
+        allClientBrandIds,
+      );
       writeShuffleSeed(brandId, day, page.shuffle_seed || shuffleSeed);
       return page;
     },
@@ -155,7 +175,14 @@ export function useDiscoveryFeed(brandId: string | null) {
     const gen = ++loadMoreGen.current;
     setLoadingMore(true);
     try {
-      const page = await fetchDiscoveryPage(brandId, toolbar, offset, shuffleSeed, searchDebounced);
+      const page = await fetchDiscoveryPage(
+        brandId,
+        toolbar,
+        offset,
+        shuffleSeed,
+        searchDebounced,
+        allClientBrandIds,
+      );
       if (gen !== loadMoreGen.current) return;
       setExtraAds((prev) => [...prev, ...page.ads]);
       setExtraHasMore(page.has_more);
@@ -165,7 +192,7 @@ export function useDiscoveryFeed(brandId: string | null) {
     } finally {
       if (gen === loadMoreGen.current) setLoadingMore(false);
     }
-  }, [brandId, hasMore, loading, loadingMore, offset, searchDebounced, shuffleSeed, toolbar]);
+  }, [brandId, hasMore, loading, loadingMore, offset, searchDebounced, shuffleSeed, toolbar, allClientBrandIds]);
 
   return {
     tab,

@@ -1,4 +1,5 @@
 import type { DiscoveryToolbarState } from "@/components/discovery/discovery-types";
+import { resolveDiscoveryClientBrandIds } from "@/components/discovery/discovery-types";
 import type { DiscoveryAdDto, DiscoveryFeedResult } from "@/lib/discovery/types";
 
 export const DISCOVERY_PAGE_SIZE = 24;
@@ -20,6 +21,7 @@ export function serializeDiscoveryQuery(
   shuffleSeed: string,
 ): string {
   const platforms = [...toolbar.selectedPlatforms].sort().join(",");
+  const clientBrands = [...toolbar.selectedClientBrandIds].sort().join(",");
   return [
     toolbar.sort,
     toolbar.datePreset,
@@ -27,7 +29,7 @@ export function serializeDiscoveryQuery(
     toolbar.status,
     toolbar.ultimateOnly ? "1" : "0",
     toolbar.competitorId ?? "",
-    toolbar.clientScope ?? "active",
+    clientBrands,
     platforms,
     search.trim().toLowerCase(),
     shuffleSeed,
@@ -42,7 +44,7 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v3:${day}:${query}`;
+  return `${brandId}:discovery:v4:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
@@ -65,6 +67,7 @@ export function buildDiscoveryFeedUrl(
   shuffleSeed: string,
   search: string,
   limit = DISCOVERY_PAGE_SIZE,
+  allClientBrandIds: string[] = [],
 ): string {
   const params = new URLSearchParams({
     brandId,
@@ -79,8 +82,15 @@ export function buildDiscoveryFeedUrl(
   });
   if (toolbar.ultimateOnly) params.set("ultimateOnly", "1");
   if (toolbar.competitorId) params.set("competitorId", toolbar.competitorId);
-  if (toolbar.clientScope && toolbar.clientScope !== "active") {
-    params.set("clientScope", toolbar.clientScope);
+  const clientBrandIds = resolveDiscoveryClientBrandIds(
+    toolbar.selectedClientBrandIds,
+    brandId,
+    allClientBrandIds.map((id) => ({ id })),
+  );
+  const isDefaultSelection =
+    clientBrandIds.length === 1 && clientBrandIds[0] === brandId;
+  if (!isDefaultSelection) {
+    for (const id of clientBrandIds) params.append("clientBrand", id);
   }
   for (const p of toolbar.selectedPlatforms) params.append("platform", p);
   return `/api/discovery/feed?${params.toString()}`;
