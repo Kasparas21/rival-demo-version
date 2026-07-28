@@ -75,7 +75,7 @@ function MetaCreativeMedia({
     else setArchivedFailed(true);
   };
   /** Poster-first preview so video tiles match image size; mount `<video>` only after play. */
-  const wantsVideo = Boolean(stream && ad.isVideo && displayStill);
+  const wantsVideo = Boolean(stream && ad.isVideo);
   const useNatural = naturalSizing && !compact;
   const maxH = compact ? "max-h-[300px]" : useNatural ? "max-h-[min(80vh,720px)]" : fillFrame ? "max-h-full" : "max-h-[420px]";
   const previewFrameH = compact ? "h-[200px]" : useNatural ? "" : fillFrame ? "h-full min-h-0" : "h-[280px]";
@@ -108,10 +108,17 @@ function MetaCreativeMedia({
       />
     );
     if (fillFrame) {
-      return fillFrameCenter(video, true, `rounded-xl ${videoFrameBg}`);
+      return fillFrameCenter(
+        <div onClick={(e) => e.stopPropagation()}>{video}</div>,
+        true,
+        `rounded-xl ${videoFrameBg}`,
+      );
     }
     return (
-      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}>
+      <div
+        className={`relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {video}
       </div>
     );
@@ -132,6 +139,7 @@ function MetaCreativeMedia({
           e.stopPropagation();
           setPlaying(true);
         }}
+        onMouseDown={(e) => e.stopPropagation()}
         aria-label="Play video ad"
       >
         <img
@@ -139,7 +147,6 @@ function MetaCreativeMedia({
           alt=""
           referrerPolicy="no-referrer"
           className={videoPreviewMediaClass}
-          onClick={(e) => e.stopPropagation()}
           onError={onStillError}
         />
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
@@ -166,10 +173,17 @@ function MetaCreativeMedia({
       />
     );
     if (fillFrame) {
-      return fillFrameCenter(video, true, `rounded-xl ${videoFrameBg}`);
+      return fillFrameCenter(
+        <div onClick={(e) => e.stopPropagation()}>{video}</div>,
+        true,
+        `rounded-xl ${videoFrameBg}`,
+      );
     }
     return (
-      <div className={`relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}>
+      <div
+        className={`relative w-full overflow-hidden rounded-xl ${previewFrameH} ${videoFrameBg}`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {video}
       </div>
     );
