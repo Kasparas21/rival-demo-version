@@ -366,15 +366,11 @@ function migrateV1IfNeeded(): SidebarCompetitor[] {
   return [];
 }
 
-/** Max active watched competitors per user (server + local storage). */
-/** UI fallback when plan limits are not loaded yet (Pro max per PDF). */
+/** Default fallback when plan limits are not loaded yet (Pro tier). Used for add-cap checks only — not sidebar display. */
 export const MAX_WATCHED_COMPETITORS = 15;
 
 /** Placeholder slug used during workspace brand scrape — never a watched competitor. */
 export const WORKSPACE_BRAND_PLACEHOLDER_SLUG = "workspace-brand";
-
-/** Absolute localStorage row cap (includes workspace brand row). Plan caps apply to watched rivals only. */
-const MAX_STORED = MAX_WATCHED_COMPETITORS;
 
 let cachedWorkspaceDomainForCap: string | null = null;
 
@@ -440,12 +436,9 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
     const withLogos = deduped.map(hoistLogoOntoRow);
     const logosHoisted = withLogos.some((c, i) => c.logoUrl !== deduped[i].logoUrl);
     if (deduped.length !== list.length || logosHoisted) {
-      safeSetLocalStorage(
-        key,
-        JSON.stringify(withLogos.slice(0, MAX_STORED))
-      );
+      safeSetLocalStorage(key, JSON.stringify(withLogos));
     }
-    return withLogos.slice(0, MAX_STORED);
+    return withLogos;
   } catch {
     return [];
   }
@@ -453,7 +446,7 @@ export function loadSidebarCompetitors(): SidebarCompetitor[] {
 
 export function saveSidebarCompetitors(list: SidebarCompetitor[]) {
   if (typeof window === "undefined") return;
-  const cleaned = dedupeSidebarCompetitors(list).slice(0, MAX_STORED).map(hoistLogoOntoRow);
+  const cleaned = dedupeSidebarCompetitors(list).map(hoistLogoOntoRow);
   const serialized = JSON.stringify(cleaned);
   const key = scopedSidebarStorageKey();
   const prev = window.localStorage.getItem(key);

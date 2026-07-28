@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { stripJsonFences } from "@/lib/email-intelligence/analyze";
 import { resolveModelForTask } from "@/lib/llm/model-routing";
+import { McpToolError } from "@/lib/mcp/errors";
 import { createMcpToolContext } from "@/lib/mcp/tool-context";
 import type { McpAuthContext } from "@/lib/mcp/types";
 import type { Database } from "@/lib/supabase/types";
@@ -170,23 +171,29 @@ async function executeDiscoveryTool(
   args: Record<string, unknown>,
 ): Promise<unknown> {
   const withBrand = { ...args, brand_id: brandId };
-  switch (name) {
-    case "search_discovery_ads":
-      return mcpSearchDiscoveryAds(ctx, withBrand as Parameters<typeof mcpSearchDiscoveryAds>[1]);
-    case "get_discovery_feed":
-      return mcpGetDiscoveryFeed(ctx, withBrand as Parameters<typeof mcpGetDiscoveryFeed>[1]);
-    case "get_discovery_market_stats":
-      return mcpGetDiscoveryMarketStats(ctx, withBrand as Parameters<typeof mcpGetDiscoveryMarketStats>[1]);
-    case "get_discovery_patterns":
-      return mcpGetDiscoveryPatterns(ctx, withBrand as Parameters<typeof mcpGetDiscoveryPatterns>[1]);
-    case "analyze_discovery_keywords":
-      return mcpAnalyzeDiscoveryKeywords(ctx, withBrand as Parameters<typeof mcpAnalyzeDiscoveryKeywords>[1]);
-    case "get_discovery_competitors":
-      return mcpGetDiscoveryCompetitors(ctx, withBrand as Parameters<typeof mcpGetDiscoveryCompetitors>[1]);
-    case "get_discovery_ad":
-      return mcpGetDiscoveryAd(ctx, withBrand as Parameters<typeof mcpGetDiscoveryAd>[1]);
-    default:
-      return { ok: false, error: `Unknown tool: ${name}` };
+  try {
+    switch (name) {
+      case "search_discovery_ads":
+        return await mcpSearchDiscoveryAds(ctx, withBrand as Parameters<typeof mcpSearchDiscoveryAds>[1]);
+      case "get_discovery_feed":
+        return await mcpGetDiscoveryFeed(ctx, withBrand as Parameters<typeof mcpGetDiscoveryFeed>[1]);
+      case "get_discovery_market_stats":
+        return await mcpGetDiscoveryMarketStats(ctx, withBrand as Parameters<typeof mcpGetDiscoveryMarketStats>[1]);
+      case "get_discovery_patterns":
+        return await mcpGetDiscoveryPatterns(ctx, withBrand as Parameters<typeof mcpGetDiscoveryPatterns>[1]);
+      case "analyze_discovery_keywords":
+        return await mcpAnalyzeDiscoveryKeywords(ctx, withBrand as Parameters<typeof mcpAnalyzeDiscoveryKeywords>[1]);
+      case "get_discovery_competitors":
+        return await mcpGetDiscoveryCompetitors(ctx, withBrand as Parameters<typeof mcpGetDiscoveryCompetitors>[1]);
+      case "get_discovery_ad":
+        return await mcpGetDiscoveryAd(ctx, withBrand as Parameters<typeof mcpGetDiscoveryAd>[1]);
+      default:
+        return { ok: false, error: `Unknown tool: ${name}` };
+    }
+  } catch (err) {
+    if (err instanceof McpToolError) return err.toBody();
+    const message = err instanceof Error ? err.message : "Tool execution failed";
+    return { ok: false, code: "internal_error", message };
   }
 }
 

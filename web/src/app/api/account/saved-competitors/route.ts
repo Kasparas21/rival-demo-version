@@ -10,7 +10,7 @@ import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-lim
 import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
 import { createDefaultLandingPages } from "@/lib/landing-page-tracker/create-defaults";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { MAX_WATCHED_COMPETITORS, normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
+import { normalizeCompetitorSlug, WORKSPACE_BRAND_PLACEHOLDER_SLUG, type SidebarCompetitor, isSidebarRowLikelyWorkspaceBrand } from "@/lib/sidebar-competitors";
 
 function sanitizeAdsLibraryContext(raw: AdsLibraryContextPayload): AdsLibraryContextPayload | null {
   const ids =
@@ -261,8 +261,7 @@ export async function GET(request: Request) {
     .from("saved_competitors")
     .select("*")
     .eq("user_id", user.id)
-    .order("updated_at", { ascending: false })
-    .limit(MAX_WATCHED_COMPETITORS + 4);
+    .order("updated_at", { ascending: false });
 
   const { data, error } = mappedAfterBackfill.supported
     ? mappedAfterBackfill.ids.length > 0
