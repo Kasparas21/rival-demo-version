@@ -864,6 +864,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div
       data-dashboard-app
+      style={{ "--rival-sidebar-width": collapsed ? "92px" : "280px" } as React.CSSProperties}
       className="h-screen w-full max-w-full flex flex-col text-[#343434] font-sans selection:bg-[#DDF1FD] selection:text-[#343434] relative overflow-hidden"
     >
       {/* Brand gradient background */}

@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "framer-motion";
 
 import { DiscoveryAdCard } from "@/components/discovery/discovery-ad-card";
 import type { DiscoveryAdDto } from "@/lib/discovery/types";
+import { cn } from "@/lib/utils";
 
 type Props = {
   ads: DiscoveryAdDto[];
@@ -11,6 +12,7 @@ type Props = {
   isPending: (id: string) => boolean;
   onOpenAd: (id: string) => void;
   onToggleSave: (ad: DiscoveryAdDto) => void;
+  expanded?: boolean;
 };
 
 export function DiscoveryAssistantAdGallery({
@@ -19,13 +21,17 @@ export function DiscoveryAssistantAdGallery({
   isPending,
   onOpenAd,
   onToggleSave,
+  expanded = false,
 }: Props) {
   const reduceMotion = useReducedMotion();
   if (!ads.length) return null;
 
   return (
     <motion.div
-      className="mt-3 space-y-3"
+      className={cn(
+        "mt-3",
+        expanded ? "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" : "space-y-3",
+      )}
       initial={reduceMotion ? false : "hidden"}
       animate="visible"
       variants={{
