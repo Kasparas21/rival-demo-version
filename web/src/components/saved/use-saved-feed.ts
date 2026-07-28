@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_SAVED_TOOLBAR, type SavedFeedTab, type SavedToolbarState } from "@/components/saved/saved-types";
 import { SAVED_ITEMS_CHANGED_EVENT } from "@/lib/saved-items/saved-items-events";
-import type { SavedCompetitorChip, SavedFeedItem, SavedFeedResult, SavedTypeCounts } from "@/lib/saved/types";
+import type { SavedCompetitorChip, SavedFeedItem, SavedFeedResult, SavedFolderChip, SavedTypeCounts } from "@/lib/saved/types";
 
 function buildSavedFeedUrl(
   brandId: string,
@@ -21,6 +21,7 @@ function buildSavedFeedUrl(
   params.set("format", toolbar.format);
   params.set("date", toolbar.datePreset);
   if (toolbar.competitorId) params.set("competitorId", toolbar.competitorId);
+  if (toolbar.folderId) params.set("folderId", toolbar.folderId);
   if (search.trim()) params.set("q", search.trim());
   if (toolbar.selectedPlatforms.size > 0) {
     params.set("platforms", [...toolbar.selectedPlatforms].join(","));
@@ -48,6 +49,7 @@ export function useSavedFeed(brandId: string | null) {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
   const [competitors, setCompetitors] = useState<SavedCompetitorChip[]>([]);
+  const [folders, setFolders] = useState<SavedFolderChip[]>([]);
   const [typeCounts, setTypeCounts] = useState<SavedTypeCounts>(EMPTY_TYPE_COUNTS);
   const [platformCounts, setPlatformCounts] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
@@ -95,6 +97,7 @@ export function useSavedFeed(brandId: string | null) {
         setHasMore(json.has_more);
         setOffset(pageOffset + json.items.length);
         setCompetitors(json.competitors);
+        setFolders(json.folders ?? []);
         setTypeCounts(json.type_counts);
         setPlatformCounts(json.platform_counts);
       } catch (e) {
@@ -170,6 +173,7 @@ export function useSavedFeed(brandId: string | null) {
     items,
     total,
     competitors,
+    folders,
     typeCounts,
     platformCounts,
     loading,

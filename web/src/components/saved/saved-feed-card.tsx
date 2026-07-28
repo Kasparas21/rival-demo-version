@@ -1,14 +1,17 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   Bookmark,
   Eye,
+  Folder,
   Globe,
   Heart,
   Mail,
   MessageCircle,
+  Pencil,
   Share2,
+  StickyNote,
   Trash2,
 } from "lucide-react";
 
@@ -30,7 +33,97 @@ type Props = {
   onOpenAd?: (scrapedAdId: string) => void;
   onOpenEmail?: (competitorId: string, emailId: string, savedEmailId: string) => void;
   onUnsave: () => void;
+  onNotesUpdated?: () => void;
 };
+
+function SavedAdNotes({
+  savedAdId,
+  notes,
+  folderName,
+  onUpdated,
+}: {
+  savedAdId: string;
+  notes: string | null;
+  folderName: string | null;
+  onUpdated?: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = useCallback(async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/saved-ads/${savedAdId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ notes: draft.trim() || "" }),
+      });
+      const json = (await res.json()) as { ok?: boolean };
+      if (json.ok) {
+        setEditing(false);
+        onUpdated?.();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, onUpdated, savedAdId]);
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-slate-100 px-1 pt-2">
+      {folderName ? (
+        <p className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500">
+          <Folder className="h-3 w-3" />
+          {folderName}
+        </p>
+      ) : null}
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value.slice(0, 500))}
+            rows={3}
+            className="w-full resize-none rounded-lg border border-slate-200 px-2.5 py-2 text-[12px] outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+            placeholder="Add a note…"
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(notes ?? "");
+                setEditing(false);
+              }}
+              className="text-[11px] font-semibold text-slate-500"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void save()}
+              className="rounded-lg bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white"
+            >
+              Save note
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="flex w-full items-start gap-2 rounded-lg px-1 py-1 text-left text-[12px] text-slate-600 hover:bg-slate-50"
+        >
+          <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <span className="min-w-0 flex-1">
+            {notes?.trim() ? notes : <span className="text-slate-400">Add a note…</span>}
+          </span>
+          <Pencil className="h-3 w-3 shrink-0 text-slate-400" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
@@ -91,7 +184,7 @@ function ItemHeader({
   );
 }
 
-export function SavedFeedCard({ item, onOpenAd, onOpenEmail, onUnsave }: Props) {
+export function SavedFeedCard({ item, onOpenAd, onOpenEmail, onUnsave, onNotesUpdated }: Props) {
   const shell = (body: ReactNode) => (
     <article
       className={cn(
@@ -109,7 +202,8 @@ export function SavedFeedCard({ item, onOpenAd, onOpenEmail, onUnsave }: Props) 
       source_scraped_ad_id: item.source_scraped_ad_id,
       platform: item.platform,
       ad_text: item.ad_text,
-      ad_creative_url: null,
+      ad_creative_url: item.ad_creative_url,
+      archived_creative_url: item.archived_creative_url,
       format: item.format,
       ai_extracted_angle: item.ai_extracted_angle,
       notes: item.notes,
@@ -117,21 +211,29 @@ export function SavedFeedCard({ item, onOpenAd, onOpenEmail, onUnsave }: Props) 
       raw_payload: item.raw_payload,
     };
     return shell(
-      <SavedAdLibraryCard
-        ad={adRow}
-        brand={{
-          name: item.competitor_name,
-          domain: item.competitor_domain ?? "",
-          logoUrl: item.competitor_logo_url ?? undefined,
-        }}
-        gridCreativeSizing="natural"
-        onOpen={
-          item.source_scraped_ad_id && onOpenAd
-            ? () => onOpenAd(item.source_scraped_ad_id!)
-            : undefined
-        }
-        onUnsave={onUnsave}
-      />,
+      <>
+        <SavedAdLibraryCard
+          ad={adRow}
+          brand={{
+            name: item.competitor_name,
+            domain: item.competitor_domain ?? "",
+            logoUrl: item.competitor_logo_url ?? undefined,
+          }}
+          gridCreativeSizing="natural"
+          onOpen={
+            item.source_scraped_ad_id && onOpenAd
+              ? () => onOpenAd(item.source_scraped_ad_id!)
+              : undefined
+          }
+          onUnsave={onUnsave}
+        />
+        <SavedAdNotes
+          savedAdId={item.id}
+          notes={item.notes}
+          folderName={item.folder_name}
+          onUpdated={onNotesUpdated}
+        />
+      </>,
     );
   }
 

@@ -49,6 +49,7 @@ export async function GET(req: Request) {
   const format = (searchParams.get("format") ?? "all").trim().toLowerCase() as SavedFormatFilter;
   const datePreset = (searchParams.get("date") ?? "all").trim().toLowerCase() as SavedDatePreset;
   const competitorId = (searchParams.get("competitorId") ?? "").trim() || null;
+  const folderId = (searchParams.get("folderId") ?? "").trim() || null;
   const query = (searchParams.get("q") ?? "").trim();
   const platforms = parseList(searchParams.get("platforms"));
 
@@ -63,6 +64,7 @@ export async function GET(req: Request) {
     format: format === "video" || format === "image" ? format : "all",
     query,
     competitorId,
+    folderId,
     datePreset:
       datePreset === "7d" || datePreset === "30d" || datePreset === "90d" ? datePreset : "all",
   });

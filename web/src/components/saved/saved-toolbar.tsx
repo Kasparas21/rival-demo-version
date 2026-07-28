@@ -5,6 +5,7 @@ import {
   ArrowUpDown,
   Calendar,
   Filter,
+  Folder,
   Globe,
   Image as ImageIcon,
   Layers,
@@ -20,7 +21,7 @@ import {
   TimelineToggleRow,
   useMenuState,
 } from "@/components/competitor/tests-timeline/timeline-menu";
-import type { SavedCompetitorChip, SavedTypeCounts } from "@/lib/saved/types";
+import type { SavedCompetitorChip, SavedFolderChip, SavedTypeCounts } from "@/lib/saved/types";
 import { ALL_COMPARISON_PLATFORMS } from "@/lib/platforms/comparison-platform-order";
 import { platformLabel } from "@/lib/platforms/platform-label";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ type Props = {
   state: SavedToolbarState;
   onChange: (patch: Partial<SavedToolbarState>) => void;
   competitors: SavedCompetitorChip[];
+  folders: SavedFolderChip[];
   typeCounts: SavedTypeCounts;
   platformCounts: Record<string, number>;
   total: number;
@@ -61,6 +63,7 @@ export function SavedToolbar({
   state,
   onChange,
   competitors,
+  folders,
   typeCounts,
   platformCounts,
   total,
@@ -75,6 +78,7 @@ export function SavedToolbar({
     if (state.format !== "all") n += 1;
     if (state.selectedPlatforms.size > 0) n += 1;
     if (state.competitorId) n += 1;
+    if (state.folderId) n += 1;
     if (state.datePreset !== "all") n += 1;
     return n;
   }, [state]);
@@ -215,6 +219,42 @@ export function SavedToolbar({
               ))}
             </TimelineMenuPanel>
           </div>
+
+          {folders.length > 0 && (state.itemType === "all" || state.itemType === "ad") ? (
+            <div className="relative">
+              <TimelineMenuButton
+                label={
+                  state.folderId
+                    ? (folders.find((f) => f.id === state.folderId)?.name ?? "Folder")
+                    : "All folders"
+                }
+                icon={<Folder className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
+                active={menu.isOpen("folder")}
+                onClick={() => menu.toggle("folder")}
+              />
+              <TimelineMenuPanel open={menu.isOpen("folder")} onClose={menu.close} className="min-w-[200px] py-1">
+                <TimelineMenuItem
+                  label="All folders"
+                  selected={!state.folderId}
+                  onClick={() => {
+                    onChange({ folderId: null });
+                    menu.close();
+                  }}
+                />
+                {folders.map((f) => (
+                  <TimelineMenuItem
+                    key={f.id}
+                    label={`${f.name} (${f.item_count})`}
+                    selected={state.folderId === f.id}
+                    onClick={() => {
+                      onChange({ folderId: f.id });
+                      menu.close();
+                    }}
+                  />
+                ))}
+              </TimelineMenuPanel>
+            </div>
+          ) : null}
 
           {competitors.length > 0 ? (
             <div className="relative">

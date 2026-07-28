@@ -7,7 +7,7 @@ import { SnapchatAdCard } from "@/components/ads-library/snapchat-ad-card";
 import { GoogleAdRowCard } from "@/components/ads-library/google-ad-row-card";
 import { LinkedInFeedAdCard } from "@/components/ads-library/linkedin-feed-ad-card";
 import type { SavedAdRow } from "@/components/ads-library/saved-ads-panel";
-import { hydrateMetaAdCardForLibrary } from "@/lib/ad-library/count-active-ads";
+import { hydrateSavedAdForDisplay } from "@/lib/saved-ads/hydrate-saved-ad-card";
 import type {
   GoogleAdRow,
   LinkedInAdCard,
@@ -63,9 +63,17 @@ export function SavedAdLibraryCard({
     return null;
   }
 
+  const { raw_payload: displayPayload } = hydrateSavedAdForDisplay({
+    platform: ad.platform,
+    ad_creative_url: ad.ad_creative_url,
+    archived_creative_url: ad.archived_creative_url,
+    raw_payload: ad.raw_payload,
+    source_last_seen_at: ad.source_last_seen_at,
+  });
+
   switch (platform) {
     case "meta": {
-      const hydrated = hydrateMetaAdCardForLibrary(ad.raw_payload as unknown as MetaAdCardModel);
+      const hydrated = displayPayload as unknown as MetaAdCardModel;
       return (
         <MetaAdCard
           ad={hydrated}
@@ -80,7 +88,7 @@ export function SavedAdLibraryCard({
     case "tiktok":
       return (
         <TikTokAdCard
-          ad={ad.raw_payload as unknown as TikTokAdCardModel}
+          ad={displayPayload as unknown as TikTokAdCardModel}
           onClick={onClick}
           {...saveProps}
         />
@@ -88,7 +96,7 @@ export function SavedAdLibraryCard({
     case "pinterest":
       return (
         <PinterestAdCard
-          ad={ad.raw_payload as unknown as PinterestAdCardModel}
+          ad={displayPayload as unknown as PinterestAdCardModel}
           onClick={onClick}
           {...saveProps}
         />
@@ -96,7 +104,7 @@ export function SavedAdLibraryCard({
     case "snapchat":
       return (
         <SnapchatAdCard
-          ad={ad.raw_payload as unknown as SnapchatAdCardModel}
+          ad={displayPayload as unknown as SnapchatAdCardModel}
           onClick={onClick}
           {...saveProps}
         />
@@ -105,7 +113,7 @@ export function SavedAdLibraryCard({
     case "youtube":
       return (
         <GoogleAdRowCard
-          ad={ad.raw_payload as unknown as GoogleAdRow}
+          ad={displayPayload as unknown as GoogleAdRow}
           brand={brand}
           onOpenDetail={onClick}
           {...saveProps}
@@ -114,7 +122,7 @@ export function SavedAdLibraryCard({
     case "linkedin":
       return (
         <LinkedInFeedAdCard
-          ad={ad.raw_payload as unknown as LinkedInAdCard}
+          ad={displayPayload as unknown as LinkedInAdCard}
           brand={brand}
           onOpenDetail={onClick}
           {...saveProps}
@@ -123,7 +131,7 @@ export function SavedAdLibraryCard({
     default:
       return (
         <MetaAdCard
-          ad={hydrateMetaAdCardForLibrary(ad.raw_payload as unknown as MetaAdCardModel)}
+          ad={displayPayload as unknown as MetaAdCardModel}
           viewMode="grid"
           gridCreativeSizing={gridCreativeSizing}
           brand={metaBrand}

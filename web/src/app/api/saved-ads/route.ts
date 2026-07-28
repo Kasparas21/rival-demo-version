@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getPostHogServerClient, getPostHogDistinctId } from "@/lib/analytics/posthog-server";
+import { archiveSavedAdCreative } from "@/lib/saved-ads/archive-saved-ad-creative";
 import { resolveScrapedAdIdForLibraryItem } from "@/lib/saved-ads/resolve-scraped-ad";
+import { resolveSavedFolderId } from "@/lib/saved-ads/saved-folders";
 import { denyIfWorkspaceBrandSavedAdsBlocked } from "@/lib/saved-ads/workspace-brand-saved-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -17,6 +19,7 @@ const postBodySchema = z.object({
   platform: z.string().min(1).optional(),
   libraryItemId: z.string().min(1).optional(),
   notes: z.string().max(500).nullable().optional(),
+  folderId: z.string().uuid().optional(),
 });
 
 export async function GET(request: Request): Promise<NextResponse> {
@@ -108,22 +111,43 @@ export async function POST(request: Request): Promise<NextResponse> {
     .eq("source_scraped_ad_id", srcAd.id)
     .maybeSingle();
 
-  if (existing) {
-    if (body.notes !== undefined && body.notes !== null) {
-      const { data: updated, error: updErr } = await supabase
-        .from("saved_ads")
-        .update({ notes: body.notes.slice(0, 500) })
-        .eq("id", existing.id)
-        .eq("user_id", user.id)
-        .select()
-        .single();
-      if (updErr) {
-        return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
-      }
-      return NextResponse.json({ ok: true, savedAd: updated, wasExisting: true });
-    }
-    return NextResponse.json({ ok: true, savedAd: existing, wasExisting: true });
+  const { folderId: resolvedFolderId, error: folderErr } = await resolveSavedFolderId(
+    supabase,
+    user.id,
+    body.folderId,
+  );
+  if (folderErr || !resolvedFolderId) {
+    return NextResponse.json({ ok: false, error: folderErr ?? "folder required" }, { status: 400 });
   }
+
+  if (existing) {
+    const patch: Database["public"]["Tables"]["saved_ads"]["Update"] = {};
+    if (body.notes !== undefined && body.notes !== null) {
+      patch.notes = body.notes.slice(0, 500);
+    }
+    if (body.folderId) {
+      patch.folder_id = resolvedFolderId;
+    }
+    if (Object.keys(patch).length === 0) {
+      return NextResponse.json({ ok: true, savedAd: existing, wasExisting: true });
+    }
+    const { data: updated, error: updErr } = await supabase
+      .from("saved_ads")
+      .update(patch)
+      .eq("id", existing.id)
+      .eq("user_id", user.id)
+      .select()
+      .single();
+    if (updErr) {
+      return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, savedAd: updated, wasExisting: true });
+  }
+
+  const scrapedArchived =
+    "archived_creative_url" in srcAd
+      ? (srcAd as { archived_creative_url?: string | null }).archived_creative_url
+      : null;
 
   const insert: Database["public"]["Tables"]["saved_ads"]["Insert"] = {
     user_id: user.id,
@@ -132,6 +156,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     platform: srcAd.platform,
     ad_text: srcAd.ad_text,
     ad_creative_url: srcAd.ad_creative_url,
+    archived_creative_url: scrapedArchived?.trim() || null,
     format: srcAd.format,
     ai_extracted_angle: srcAd.ai_extracted_angle,
     funnel_stage: srcAd.funnel_stage,
@@ -139,6 +164,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     source_first_seen_at: srcAd.first_seen_at,
     source_last_seen_at: srcAd.last_seen_at,
     notes: body.notes != null ? body.notes.slice(0, 500) : null,
+    folder_id: resolvedFolderId,
     saved_by_user_id: user.id,
   };
 
@@ -146,6 +172,29 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (insertErr) {
     return NextResponse.json({ ok: false, error: insertErr.message }, { status: 500 });
+  }
+
+  const archivedUrl = await archiveSavedAdCreative({
+    userId: user.id,
+    savedAdId: inserted.id,
+    row: {
+      id: inserted.id,
+      ad_creative_url: inserted.ad_creative_url,
+      raw_payload: inserted.raw_payload,
+      archived_creative_url: inserted.archived_creative_url,
+    },
+    scrapedArchivedUrl: scrapedArchived,
+  });
+
+  let savedAd = inserted;
+  if (archivedUrl && archivedUrl !== inserted.archived_creative_url) {
+    const { data: refreshed } = await supabase
+      .from("saved_ads")
+      .select("*")
+      .eq("id", inserted.id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (refreshed) savedAd = refreshed;
   }
 
   const posthog = getPostHogServerClient();
@@ -163,5 +212,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   }
 
-  return NextResponse.json({ ok: true, savedAd: inserted });
+  return NextResponse.json({ ok: true, savedAd });
 }

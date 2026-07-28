@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { useSaveAdModalOptional } from "@/components/saved-ads/save-ad-modal-context";
+
 export type SavedMap = Record<string, string>;
 
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
@@ -76,6 +78,7 @@ export function useSavedAdsStatus(
   scrapedAdIds: readonly string[] | undefined = undefined,
   cacheDomainNorm?: string | null
 ) {
+  const saveModal = useSaveAdModalOptional();
   const checkQueryKey = useMemo(
     () => buildSavedAdsCheckQueryKey(competitorId, libraryItems, scrapedAdIds ?? EMPTY_SCRAPED_IDS),
     [competitorId, libraryItems, scrapedAdIds],
@@ -347,6 +350,7 @@ export function useSavedAdsStatus(
       platform?: string;
       libraryItemId?: string;
       notes?: string | null;
+      folderId?: string;
       signal?: AbortSignal;
     }) => {
       const cid = competitorId.trim();
@@ -362,6 +366,7 @@ export function useSavedAdsStatus(
           platform: args.platform,
           libraryItemId: args.libraryItemId,
           notes: args.notes,
+          folderId: args.folderId,
         }),
       });
       const json = (await res.json()) as { ok?: boolean; savedAd?: { id: string; source_scraped_ad_id: string | null } };
@@ -374,7 +379,36 @@ export function useSavedAdsStatus(
   );
 
   const saveAd = useCallback(
-    async (args: { scrapedAdId?: string; platform?: string; libraryItemId?: string; notes?: string | null }) => {
+    async (args: {
+      scrapedAdId?: string;
+      platform?: string;
+      libraryItemId?: string;
+      notes?: string | null;
+      folderId?: string;
+    }) => {
+      const cid = competitorId.trim();
+      if (!cid) return null;
+
+      if (saveModal && !args.folderId) {
+        try {
+          const result = await saveModal.requestSaveAd({
+            competitorId: cid,
+            scrapedAdId: args.scrapedAdId,
+            platform: args.platform,
+            libraryItemId: args.libraryItemId,
+            cacheDomainNorm,
+          });
+          const sid = args.scrapedAdId?.trim() || result.sourceScrapedAdId?.trim();
+          if (sid) {
+            bumpSavedAdsListCache();
+            patchSessionSavedMap((prev) => ({ ...prev, [sid]: result.savedAdId }));
+          }
+          return result.savedAdId;
+        } catch {
+          return null;
+        }
+      }
+
       const id = await postSaveAd({ ...args });
       const sid = args.scrapedAdId?.trim();
       if (id && sid) {
@@ -383,7 +417,7 @@ export function useSavedAdsStatus(
       }
       return id;
     },
-    [postSaveAd, bumpSavedAdsListCache, patchSessionSavedMap],
+    [competitorId, saveModal, cacheDomainNorm, postSaveAd, bumpSavedAdsListCache, patchSessionSavedMap],
   );
 
   const unsaveAd = useCallback(async (scrapedAdId: string) => {
@@ -464,6 +498,28 @@ export function useSavedAdsStatus(
       }
 
       patchSessionSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
+
+      if (saveModal) {
+        void (async () => {
+          try {
+            const result = await saveModal.requestSaveAd({
+              competitorId: competitorId.trim(),
+              scrapedAdId: sid,
+              cacheDomainNorm,
+            });
+            bumpSavedAdsListCache();
+            patchSessionSavedMap((prev) => ({ ...prev, [sid]: result.savedAdId }));
+          } catch {
+            patchSessionSavedMap((prev) => {
+              const next = { ...prev };
+              if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
+              return next;
+            });
+          }
+        })();
+        return;
+      }
+
       const ac = new AbortController();
       saveAbortByScrapedRef.current.set(sid, ac);
 
@@ -493,7 +549,7 @@ export function useSavedAdsStatus(
         }
       })();
     },
-    [competitorId, scrapedIdForCard, postSaveAd, bumpSavedAdsListCache, patchSessionSavedMap],
+    [competitorId, scrapedIdForCard, postSaveAd, bumpSavedAdsListCache, patchSessionSavedMap, saveModal, cacheDomainNorm],
   );
 
   return {

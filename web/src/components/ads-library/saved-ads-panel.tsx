@@ -18,10 +18,12 @@ export type SavedAdRow = {
   platform: string;
   ad_text: string;
   ad_creative_url: string | null;
+  archived_creative_url?: string | null;
   format: string;
   ai_extracted_angle: string | null;
   notes: string | null;
   saved_at: string;
+  source_last_seen_at?: string | null;
   raw_payload: Json;
 };
 

@@ -313,6 +313,7 @@ export type Database = {
           platform: string;
           ad_text: string;
           ad_creative_url: string | null;
+          archived_creative_url: string | null;
           format: string;
           ai_extracted_angle: string | null;
           funnel_stage: string | null;
@@ -320,6 +321,7 @@ export type Database = {
           source_first_seen_at: string | null;
           source_last_seen_at: string | null;
           notes: string | null;
+          folder_id: string | null;
           saved_by_user_id: string;
           saved_at: string;
           created_at: string;
@@ -333,6 +335,7 @@ export type Database = {
           platform: string;
           ad_text?: string;
           ad_creative_url?: string | null;
+          archived_creative_url?: string | null;
           format?: string;
           ai_extracted_angle?: string | null;
           funnel_stage?: string | null;
@@ -340,6 +343,7 @@ export type Database = {
           source_first_seen_at?: string | null;
           source_last_seen_at?: string | null;
           notes?: string | null;
+          folder_id?: string | null;
           saved_by_user_id: string;
           saved_at?: string;
           created_at?: string;
@@ -353,6 +357,7 @@ export type Database = {
           platform?: string;
           ad_text?: string;
           ad_creative_url?: string | null;
+          archived_creative_url?: string | null;
           format?: string;
           ai_extracted_angle?: string | null;
           funnel_stage?: string | null;
@@ -360,8 +365,33 @@ export type Database = {
           source_first_seen_at?: string | null;
           source_last_seen_at?: string | null;
           notes?: string | null;
+          folder_id?: string | null;
           saved_by_user_id?: string;
           saved_at?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      saved_folders: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          name?: string;
           created_at?: string;
           updated_at?: string;
         };

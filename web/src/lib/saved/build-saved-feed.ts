@@ -9,6 +9,7 @@ import type {
   SavedFeedItem,
   SavedFeedQuery,
   SavedFeedResult,
+  SavedFolderChip,
   SavedTypeCounts,
 } from "./types";
 
@@ -192,6 +193,11 @@ function filterItem(
     if (input.format === "image" && isVideo) return false;
   }
 
+  if (input.folderId) {
+    if (item.item_type !== "ad") return false;
+    if (item.folder_id !== input.folderId) return false;
+  }
+
   return matchesSearch(item, needle);
 }
 
@@ -208,6 +214,11 @@ export async function buildSavedFeed(
   if (competitorIdsError) return { ok: false, error: competitorIdsError };
 
   if (!competitorIds.length) {
+    const { data: folderRows } = await supabase
+      .from("saved_folders")
+      .select("id, name")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
     return {
       ok: true,
       items: [],
@@ -216,10 +227,19 @@ export async function buildSavedFeed(
       limit: input.limit,
       has_more: false,
       competitors: [],
+      folders: (folderRows ?? []).map((f) => ({ id: f.id, name: f.name, item_count: 0 })),
       type_counts: { ads: 0, emails: 0, organic: 0, landings: 0, total: 0 },
       platform_counts: {},
     };
   }
+
+  const { data: folderRows, error: folderErr } = await supabase
+    .from("saved_folders")
+    .select("id, name")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (folderErr) return { ok: false, error: folderErr.message };
+  const folderNameById = new Map((folderRows ?? []).map((f) => [f.id, f.name]));
 
   const { rows: competitors, error: compErr } = await loadCompetitorsById(supabase, userId, competitorIds);
   if (compErr) return { ok: false, error: compErr };
@@ -243,7 +263,7 @@ export async function buildSavedFeed(
         ? supabase
             .from("saved_ads")
             .select(
-              "id, competitor_id, platform, format, ad_text, notes, ai_extracted_angle, saved_at, source_scraped_ad_id, raw_payload",
+              "id, competitor_id, platform, format, ad_text, notes, ai_extracted_angle, saved_at, source_scraped_ad_id, raw_payload, folder_id, archived_creative_url, ad_creative_url",
             )
             .eq("user_id", userId)
             .in("competitor_id", adChunk)
@@ -296,6 +316,10 @@ export async function buildSavedFeed(
         raw_payload: (row.raw_payload ?? {}) as Json,
         notes: row.notes,
         ai_extracted_angle: row.ai_extracted_angle,
+        folder_id: row.folder_id ?? null,
+        folder_name: row.folder_id ? (folderNameById.get(row.folder_id) ?? null) : null,
+        archived_creative_url: row.archived_creative_url ?? null,
+        ad_creative_url: row.ad_creative_url ?? null,
       });
     }
 
@@ -414,6 +438,19 @@ export async function buildSavedFeed(
     return input.sort === "oldest" ? aMs - bMs : bMs - aMs;
   });
 
+  const folderCounts = new Map<string, number>();
+  for (const item of filteredForTypeCounts) {
+    if (item.item_type === "ad" && item.folder_id) {
+      folderCounts.set(item.folder_id, (folderCounts.get(item.folder_id) ?? 0) + 1);
+    }
+  }
+
+  const folderChips: SavedFolderChip[] = (folderRows ?? []).map((f) => ({
+    id: f.id,
+    name: f.name,
+    item_count: folderCounts.get(f.id) ?? 0,
+  }));
+
   const page = filtered.slice(input.offset, input.offset + input.limit);
 
   return {
@@ -424,6 +461,7 @@ export async function buildSavedFeed(
     limit: input.limit,
     has_more: input.offset + page.length < filtered.length,
     competitors: competitorChips,
+    folders: folderChips,
     type_counts,
     platform_counts,
   };

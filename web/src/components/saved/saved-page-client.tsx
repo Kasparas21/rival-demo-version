@@ -45,6 +45,7 @@ export function SavedPageClient() {
     items,
     total,
     competitors,
+    folders,
     typeCounts,
     platformCounts,
     loading,
@@ -117,6 +118,7 @@ export function SavedPageClient() {
           state={toolbar}
           onChange={patchToolbar}
           competitors={competitors}
+          folders={folders}
           typeCounts={typeCounts}
           platformCounts={platformCounts}
           total={total}
@@ -162,6 +164,7 @@ export function SavedPageClient() {
                 setEmailDrawer({ competitorId, emailId, savedEmailId })
               }
               onUnsave={() => void handleUnsave(item)}
+              onNotesUpdated={refresh}
             />
           ))}
         </div>

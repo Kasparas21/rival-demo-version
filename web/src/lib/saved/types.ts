@@ -19,6 +19,13 @@ export type SavedFeedQuery = {
   query: string;
   competitorId: string | null;
   datePreset: SavedDatePreset;
+  folderId: string | null;
+};
+
+export type SavedFolderChip = {
+  id: string;
+  name: string;
+  item_count: number;
 };
 
 type SavedFeedItemBase = {
@@ -40,6 +47,10 @@ export type SavedFeedAdItem = SavedFeedItemBase & {
   raw_payload: Json;
   notes: string | null;
   ai_extracted_angle: string | null;
+  folder_id: string | null;
+  folder_name: string | null;
+  archived_creative_url: string | null;
+  ad_creative_url: string | null;
 };
 
 export type SavedFeedEmailItem = SavedFeedItemBase & {
@@ -107,6 +118,7 @@ export type SavedFeedResult = {
   limit: number;
   has_more: boolean;
   competitors: SavedCompetitorChip[];
+  folders: SavedFolderChip[];
   type_counts: SavedTypeCounts;
   platform_counts: Record<string, number>;
 };

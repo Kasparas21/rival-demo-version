@@ -58,6 +58,7 @@ import { clearAdsLibraryClientCachesForBrandDomains } from "@/lib/ad-library/ded
 import { RIVAL_BRANDS_UPDATED_EVENT, RIVAL_PROFILE_UPDATED_EVENT } from "@/lib/account/profile-events";
 import { PostOnboardingPricingOverlay } from "@/components/billing/post-onboarding-pricing-overlay";
 import { PricingGateDashboardMock } from "@/components/billing/pricing-gate-dashboard-mock";
+import { SaveAdModalProvider } from "@/components/saved-ads/save-ad-modal-context";
 import { ScrapePausedBanner } from "@/components/dashboard/scrape-paused-banner";
 import { RecentPlatformRefreshNotice } from "@/components/dashboard/recent-platform-refresh-notice";
 import { Toaster } from "sonner";
@@ -1434,7 +1435,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                     : ""
                 }`}
               >
+              <SaveAdModalProvider>
                 {children}
+              </SaveAdModalProvider>
               </div>
             </div>
           </BrandProvider>

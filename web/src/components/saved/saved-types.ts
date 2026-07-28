@@ -8,6 +8,7 @@ export type SavedToolbarState = {
   itemType: "all" | SavedItemType;
   selectedPlatforms: Set<string>;
   competitorId: string | null;
+  folderId: string | null;
 };
 
 export const DEFAULT_SAVED_TOOLBAR: SavedToolbarState = {
@@ -18,6 +19,7 @@ export const DEFAULT_SAVED_TOOLBAR: SavedToolbarState = {
   itemType: "all",
   selectedPlatforms: new Set(),
   competitorId: null,
+  folderId: null,
 };
 
 export type SavedFeedTab = "all" | SavedItemType;

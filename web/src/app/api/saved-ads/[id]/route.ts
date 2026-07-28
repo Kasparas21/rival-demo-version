@@ -65,6 +65,9 @@ export async function PATCH(
   }
 
   const notesRaw = typeof body === "object" && body !== null ? (body as Record<string, unknown>).notes : undefined;
+  const folderIdRaw =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>).folderId : undefined;
+
   const notes =
     notesRaw === null || notesRaw === undefined
       ? undefined
@@ -72,8 +75,10 @@ export async function PATCH(
         ? notesRaw.slice(0, 500)
         : undefined;
 
-  if (notes === undefined) {
-    return NextResponse.json({ ok: false, error: "missing notes" }, { status: 400 });
+  const folderId = typeof folderIdRaw === "string" ? folderIdRaw.trim() : undefined;
+
+  if (notes === undefined && !folderId) {
+    return NextResponse.json({ ok: false, error: "missing notes or folderId" }, { status: 400 });
   }
 
   const { data: savedRow } = await supabase
@@ -90,9 +95,24 @@ export async function PATCH(
   const blocked = await denyIfWorkspaceBrandSavedAdsBlocked(supabase, user.id, savedRow.competitor_id);
   if (blocked) return blocked;
 
+  const patch: { notes?: string; folder_id?: string } = {};
+  if (notes !== undefined) patch.notes = notes;
+  if (folderId) {
+    const { data: folder } = await supabase
+      .from("saved_folders")
+      .select("id")
+      .eq("id", folderId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!folder) {
+      return NextResponse.json({ ok: false, error: "folder not found" }, { status: 404 });
+    }
+    patch.folder_id = folder.id;
+  }
+
   const { data, error } = await supabase
     .from("saved_ads")
-    .update({ notes })
+    .update(patch)
     .eq("id", id)
     .eq("user_id", user.id)
     .select()

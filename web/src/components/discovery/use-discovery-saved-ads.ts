@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useSaveAdModalOptional } from "@/components/saved-ads/save-ad-modal-context";
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 import { emitSavedItemsChanged } from "@/lib/saved-items/saved-items-events";
 import { PENDING_SAVED_AD_ID } from "@/lib/saved-ads/use-saved-ads";
@@ -12,6 +13,7 @@ type DiscoveryAdRef = {
 };
 
 export function useDiscoverySavedAds(ads: DiscoveryAdRef[], feedKey = "") {
+  const saveModal = useSaveAdModalOptional();
   const [savedMap, setSavedMap] = useState<Record<string, string>>({});
   const savedMapRef = useRef(savedMap);
   savedMapRef.current = savedMap;
@@ -78,68 +80,86 @@ export function useDiscoverySavedAds(ads: DiscoveryAdRef[], feedKey = "") {
     [savedMap],
   );
 
-  const toggleSave = useCallback(async (ad: DiscoveryAdRef) => {
-    const sid = ad.id.trim();
-    const competitorId = ad.competitor_id.trim();
-    if (!sid || !competitorId) return;
+  const toggleSave = useCallback(
+    async (ad: DiscoveryAdRef) => {
+      const sid = ad.id.trim();
+      const competitorId = ad.competitor_id.trim();
+      if (!sid || !competitorId) return;
 
-    const current = savedMapRef.current[sid];
+      const current = savedMapRef.current[sid];
 
-    if (current && current !== PENDING_SAVED_AD_ID) {
-      const savedAdId = current;
-      setSavedMap((prev) => {
-        const next = { ...prev };
-        delete next[sid];
-        return next;
-      });
-      try {
-        const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
-        const json = (await res.json()) as { ok?: boolean };
-        if (!json.ok) {
+      if (current && current !== PENDING_SAVED_AD_ID) {
+        const savedAdId = current;
+        setSavedMap((prev) => {
+          const next = { ...prev };
+          delete next[sid];
+          return next;
+        });
+        try {
+          const res = await fetch(`/api/saved-ads/${savedAdId}`, { method: "DELETE", credentials: "include" });
+          const json = (await res.json()) as { ok?: boolean };
+          if (!json.ok) {
+            setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+          } else {
+            emitSavedItemsChanged();
+            invalidateSavedAdsCaches("", competitorId);
+          }
+        } catch {
           setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
-        } else {
-          emitSavedItemsChanged();
-          invalidateSavedAdsCaches("", competitorId);
         }
-      } catch {
-        setSavedMap((prev) => ({ ...prev, [sid]: savedAdId }));
+        return;
       }
-      return;
-    }
 
-    if (current === PENDING_SAVED_AD_ID) return;
+      if (current === PENDING_SAVED_AD_ID) return;
 
-    setSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
-    try {
-      const res = await fetch("/api/saved-ads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ competitorId, scrapedAdId: sid }),
-      });
-      const json = (await res.json()) as {
-        ok?: boolean;
-        savedAd?: { id: string; source_scraped_ad_id: string | null };
-      };
-      if (json.ok && json.savedAd?.id) {
-        setSavedMap((prev) => ({ ...prev, [sid]: json.savedAd!.id }));
-        emitSavedItemsChanged();
-        invalidateSavedAdsCaches("", competitorId);
-      } else {
+      if (!saveModal) {
+        setSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
+        try {
+          const res = await fetch("/api/saved-ads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ competitorId, scrapedAdId: sid }),
+          });
+          const json = (await res.json()) as {
+            ok?: boolean;
+            savedAd?: { id: string; source_scraped_ad_id: string | null };
+          };
+          if (json.ok && json.savedAd?.id) {
+            setSavedMap((prev) => ({ ...prev, [sid]: json.savedAd!.id }));
+            emitSavedItemsChanged();
+            invalidateSavedAdsCaches("", competitorId);
+          } else {
+            setSavedMap((prev) => {
+              const next = { ...prev };
+              if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
+              return next;
+            });
+          }
+        } catch {
+          setSavedMap((prev) => {
+            const next = { ...prev };
+            if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
+            return next;
+          });
+        }
+        return;
+      }
+
+      setSavedMap((prev) => ({ ...prev, [sid]: PENDING_SAVED_AD_ID }));
+      try {
+        const result = await saveModal.requestSaveAd({ competitorId, scrapedAdId: sid });
+        setSavedMap((prev) => ({ ...prev, [sid]: result.savedAdId }));
+      } catch {
         setSavedMap((prev) => {
           const next = { ...prev };
           if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
           return next;
         });
       }
-    } catch {
-      setSavedMap((prev) => {
-        const next = { ...prev };
-        if (next[sid] === PENDING_SAVED_AD_ID) delete next[sid];
-        return next;
-      });
-    }
-  }, []);
+    },
+    [saveModal],
+  );
 
   return { isSaved, isPending, toggleSave };
 }
