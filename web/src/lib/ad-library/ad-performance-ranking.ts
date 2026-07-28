@@ -3,7 +3,7 @@
  * Used by Ads Library, Timeline, and MCP tools.
  */
 
-import { computeMetaAdRunDays } from "@/lib/ad-library/count-active-ads";
+import { computeMetaAdRunDays, hydrateMetaAdCardForLibrary } from "@/lib/ad-library/count-active-ads";
 import type { MetaAdCard } from "@/lib/ad-library/normalize";
 
 export type AdPerformanceSort =
@@ -110,12 +110,33 @@ export function resolveScrapedAdRunDays(args: {
     return dbDays;
   }
 
-  const card = args.raw_payload as MetaAdCard;
+  const raw = args.raw_payload as Record<string, unknown>;
+  let card = args.raw_payload as MetaAdCard;
+  const legacyStart = raw.start_date ?? raw.startDate;
+  if (
+    (card.startedAt == null || !Number.isFinite(card.startedAt)) &&
+    typeof legacyStart === "number" &&
+    Number.isFinite(legacyStart)
+  ) {
+    card = { ...card, startedAt: legacyStart };
+  }
+
   if (card.startedAt == null || !Number.isFinite(card.startedAt)) {
     return dbDays;
   }
 
-  const metaDays = computeMetaAdRunDays(card, args.scrapeAtMs, nowMs);
+  const adScrapeAtMs = new Date(args.last_seen_at).getTime();
+  const scrapeAtMs =
+    Number.isFinite(adScrapeAtMs) && adScrapeAtMs > 0
+      ? adScrapeAtMs
+      : args.scrapeAtMs ?? nowMs;
+
+  const hydrated = hydrateMetaAdCardForLibrary(card, scrapeAtMs);
+  const metaCard = args.is_killed
+    ? hydrated
+    : { ...hydrated, isActive: true, endedAt: undefined };
+
+  const metaDays = computeMetaAdRunDays(metaCard, scrapeAtMs, nowMs);
   return Math.max(dbDays, metaDays);
 }
 

@@ -73,6 +73,25 @@ describe("resolveScrapedAdRunDays", () => {
     });
     expect(days).toBeGreaterThan(500);
   });
+
+  it("ignores stale endedAt on active ads (matches library card run days)", () => {
+    const nowMs = Date.UTC(2026, 6, 1);
+    const startedAt = Math.floor(Date.UTC(2024, 0, 1) / 1000);
+    const staleEnd = Math.floor(Date.UTC(2025, 0, 1) / 1000);
+    const days = resolveScrapedAdRunDays({
+      platform: "meta",
+      first_seen_at: "2026-05-01T00:00:00.000Z",
+      last_seen_at: "2026-06-01T00:00:00.000Z",
+      is_killed: false,
+      raw_payload: {
+        startedAt,
+        endedAt: staleEnd,
+        isActive: true,
+      },
+      nowMs,
+    });
+    expect(days).toBeGreaterThan(500);
+  });
 });
 
 describe("passesUltimateWinnersFeedFilter", () => {

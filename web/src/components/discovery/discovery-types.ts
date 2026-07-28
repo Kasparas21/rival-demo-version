@@ -97,7 +97,7 @@ export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarSt
     case "trending":
       return { sort: "newest", ultimateOnly: false };
     case "ultimate":
-      return { sort: "ultimate_winner", ultimateOnly: true };
+      return { sort: "ultimate_winner", ultimateOnly: false };
     case "explore":
     default:
       return { sort: "shuffle", ultimateOnly: false };
