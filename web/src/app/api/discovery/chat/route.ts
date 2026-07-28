@@ -57,7 +57,13 @@ export async function POST(request: Request) {
       appOrigin,
     );
 
-    return NextResponse.json({ ok: true, ...response });
+    try {
+      return NextResponse.json({ ok: true, ...response });
+    } catch (serializeErr) {
+      const msg =
+        serializeErr instanceof Error ? serializeErr.message : "Failed to serialize assistant response";
+      return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Discovery assistant failed";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

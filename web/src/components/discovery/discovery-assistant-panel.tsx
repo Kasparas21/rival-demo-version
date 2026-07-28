@@ -191,7 +191,13 @@ function DiscoveryAssistantPanel({
           }),
         });
 
-        const json = (await res.json()) as DiscoveryAssistantResponse & { ok?: boolean; error?: string };
+        const raw = await res.text();
+        let json: DiscoveryAssistantResponse & { ok?: boolean; error?: string };
+        try {
+          json = JSON.parse(raw) as DiscoveryAssistantResponse & { ok?: boolean; error?: string };
+        } catch {
+          throw new Error(raw.trim().slice(0, 240) || `Assistant request failed (${res.status})`);
+        }
         if (!res.ok || json.ok === false) {
           throw new Error(json.error ?? "Assistant request failed");
         }

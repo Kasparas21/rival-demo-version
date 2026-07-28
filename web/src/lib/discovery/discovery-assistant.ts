@@ -27,6 +27,8 @@ import { loadDiscoveryAdsByIds } from "./load-discovery-ads-by-ids";
 import type { DiscoveryAdDto, DiscoveryMarketStats } from "./types";
 
 const MAX_TOOL_ROUNDS = 6;
+const MAX_ADS_IN_TOOL_PAYLOAD = 25;
+const MAX_TOOL_JSON_CHARS = 14_000;
 
 const SYSTEM_PROMPT = `You are the Spy-Rival Discovery assistant — a visual competitive intelligence copilot for Meta ads.
 
@@ -169,6 +171,44 @@ const DISCOVERY_TOOLS: OpenRouterTool[] = [
   },
 ];
 
+function compactToolResultForModel(result: unknown): string {
+  if (!result || typeof result !== "object") return JSON.stringify(result);
+  const r = result as Record<string, unknown>;
+  if (r.ok !== true) return JSON.stringify(result);
+
+  const compact: Record<string, unknown> = { ok: true };
+  for (const key of ["brand_id", "query", "keywords", "market_stats", "pagination", "applied_filters"] as const) {
+    if (r[key] !== undefined) compact[key] = r[key];
+  }
+
+  if (Array.isArray(r.ads)) {
+    const ads = r.ads as Array<Record<string, unknown>>;
+    compact.ads_total = ads.length;
+    compact.ads = ads.slice(0, MAX_ADS_IN_TOOL_PAYLOAD).map((ad) => ({
+      id: ad.id,
+      competitor_id: ad.competitor_id,
+      competitor_name: ad.competitor_name,
+      format: ad.format,
+      ad_text: String(ad.ad_text ?? "").slice(0, 120),
+      impressions_index: ad.impressions_index ?? null,
+      is_ultimate_winner: ad.is_ultimate_winner ?? false,
+      is_killed: ad.is_killed ?? false,
+    }));
+    if (ads.length > MAX_ADS_IN_TOOL_PAYLOAD) compact.ads_truncated = true;
+  }
+
+  let json = JSON.stringify(compact);
+  if (json.length > MAX_TOOL_JSON_CHARS && Array.isArray(compact.ads)) {
+    compact.ads = (compact.ads as Array<Record<string, unknown>>).map((ad) => ({
+      id: ad.id,
+      competitor_name: ad.competitor_name,
+      format: ad.format,
+    }));
+    json = JSON.stringify(compact);
+  }
+  return json;
+}
+
 async function executeDiscoveryTool(
   ctx: Awaited<ReturnType<typeof createMcpToolContext>>,
   brandId: string,
@@ -178,8 +218,14 @@ async function executeDiscoveryTool(
   const withBrand = { ...args, brand_id: brandId };
   try {
     switch (name) {
-      case "search_discovery_ads":
-        return await mcpSearchDiscoveryAds(ctx, withBrand as Parameters<typeof mcpSearchDiscoveryAds>[1]);
+      case "search_discovery_ads": {
+        const searchArgs = withBrand as Parameters<typeof mcpSearchDiscoveryAds>[1];
+        return await mcpSearchDiscoveryAds(ctx, {
+          ...searchArgs,
+          sort: searchArgs.sort ?? "newest",
+          limit: Math.min(Math.max(Number(searchArgs.limit) || 50, 1), 50),
+        });
+      }
       case "get_discovery_feed":
         return await mcpGetDiscoveryFeed(ctx, withBrand as Parameters<typeof mcpGetDiscoveryFeed>[1]);
       case "get_discovery_market_stats":
@@ -233,12 +279,21 @@ async function openRouterChat(messages: ChatMessage[], tools: OpenRouterTool[], 
     }),
   });
 
+  const body = await response.text().catch(() => "");
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
     throw new Error(`OpenRouter failed (${response.status}): ${body.slice(0, 300)}`);
   }
 
-  return (await response.json()) as {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    throw new Error(
+      body.trim().slice(0, 300) || `OpenRouter returned invalid JSON (${response.status})`,
+    );
+  }
+
+  return parsed as {
     choices?: Array<{
       message?: {
         content?: string | null;
@@ -340,7 +395,8 @@ async function enrichAssistantResponse(
     ]),
   ].slice(0, 12);
 
-  const discovery_ads = ids.length ? await loadDiscoveryAdsByIds(supabase, userId, ids) : [];
+  const loadedAds = ids.length ? await loadDiscoveryAdsByIds(supabase, userId, ids) : [];
+  const discovery_ads = loadedAds.map((ad) => ({ ...ad, raw_payload: {} }));
 
   const ad_refs: DiscoveryAssistantAdRef[] = discovery_ads.map((ad) => ({
     id: ad.id,
@@ -438,7 +494,7 @@ export async function runDiscoveryAssistant(params: {
           role: "tool",
           tool_call_id: call.id,
           name: call.function.name,
-          content: JSON.stringify(toolResult),
+          content: compactToolResultForModel(toolResult),
         });
       }
       continue;
