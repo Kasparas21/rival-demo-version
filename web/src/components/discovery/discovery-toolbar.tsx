@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import {
   ArrowUpDown,
+  Briefcase,
   Calendar,
   Filter,
   Image as ImageIcon,
@@ -38,18 +39,41 @@ const DATE_OPTIONS: { id: DiscoveryToolbarState["datePreset"]; label: string }[]
   { id: "90d", label: "Last 90 days" },
 ];
 
+type ClientBrandOption = {
+  id: string;
+  name: string;
+};
+
 type Props = {
   state: DiscoveryToolbarState;
   onChange: (patch: Partial<DiscoveryToolbarState>) => void;
   competitors: DiscoveryCompetitorChip[];
   total: number;
+  activeBrand: ClientBrandOption;
+  clientBrands: ClientBrandOption[];
 };
 
-export function DiscoveryToolbar({ state, onChange, competitors, total }: Props) {
+export function DiscoveryToolbar({
+  state,
+  onChange,
+  competitors,
+  total,
+  activeBrand,
+  clientBrands,
+}: Props) {
   const menu = useMenuState();
 
   const sortLabel = SORT_OPTIONS.find((o) => o.id === state.sort)?.label ?? "Shuffle mix";
   const dateLabel = DATE_OPTIONS.find((o) => o.id === state.datePreset)?.label ?? "All time";
+
+  const showClientFilter = clientBrands.length > 1;
+  const clientScope = state.clientScope || "active";
+  const clientLabel =
+    clientScope === "all"
+      ? "All clients"
+      : clientScope === "active"
+        ? activeBrand.name
+        : clientBrands.find((b) => b.id === clientScope)?.name ?? activeBrand.name;
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -58,8 +82,9 @@ export function DiscoveryToolbar({ state, onChange, competitors, total }: Props)
     if (state.ultimateOnly) n += 1;
     if (state.competitorId) n += 1;
     if (state.datePreset !== "all") n += 1;
+    if (clientScope !== "active") n += 1;
     return n;
-  }, [state]);
+  }, [clientScope, state]);
 
   return (
     <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:px-4">
@@ -80,6 +105,56 @@ export function DiscoveryToolbar({ state, onChange, competitors, total }: Props)
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {showClientFilter ? (
+            <div className="relative">
+              <TimelineMenuButton
+                label={clientLabel}
+                icon={<Briefcase className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
+                active={menu.isOpen("client")}
+                onClick={() => menu.toggle("client")}
+              />
+              <TimelineMenuPanel open={menu.isOpen("client")} onClose={menu.close} className="min-w-[220px] py-1">
+                <TimelineMenuItem
+                  label={activeBrand.name}
+                  selected={clientScope === "active"}
+                  onClick={() => {
+                    onChange({ clientScope: "active", competitorId: null });
+                    menu.close();
+                  }}
+                />
+                <TimelineMenuItem
+                  label="All clients"
+                  selected={clientScope === "all"}
+                  onClick={() => {
+                    onChange({ clientScope: "all", competitorId: null });
+                    menu.close();
+                  }}
+                />
+                {clientBrands.filter((b) => b.id !== activeBrand.id).length > 0 ? (
+                  <>
+                    <div className="my-1 h-px bg-slate-100" />
+                    <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      Other clients
+                    </p>
+                    {clientBrands
+                      .filter((b) => b.id !== activeBrand.id)
+                      .map((brand) => (
+                        <TimelineMenuItem
+                          key={brand.id}
+                          label={brand.name}
+                          selected={clientScope === brand.id}
+                          onClick={() => {
+                            onChange({ clientScope: brand.id, competitorId: null });
+                            menu.close();
+                          }}
+                        />
+                      ))}
+                  </>
+                ) : null}
+              </TimelineMenuPanel>
+            </div>
+          ) : null}
+
           <div className="relative">
             <TimelineMenuButton
               label={activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}

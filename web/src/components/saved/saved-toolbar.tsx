@@ -10,6 +10,7 @@ import {
   Layers,
   Mail,
   Search,
+  Share2,
   Video,
 } from "lucide-react";
 import {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Compass, Loader2, RefreshCw, Search } from "lucide-react";
 
@@ -18,6 +18,16 @@ import { cn } from "@/lib/utils";
 export function DiscoveryPageClient() {
   const activeBrand = useActiveBrand();
   const { activeAdId, openAd, closeAd } = useAdDetailState();
+  const [clientBrands, setClientBrands] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    void fetch("/api/account/brands", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: { ok?: boolean; brands?: { id: string; name: string }[] }) => {
+        if (!d.ok || !d.brands?.length) return;
+        setClientBrands(d.brands.map((b) => ({ id: b.id, name: b.name })));
+      });
+  }, []);
 
   const {
     tab,
@@ -90,6 +100,8 @@ export function DiscoveryPageClient() {
           onChange={patchToolbar}
           competitors={competitors}
           total={total}
+          activeBrand={{ id: activeBrand.id, name: activeBrand.name }}
+          clientBrands={clientBrands}
         />
       </div>
 

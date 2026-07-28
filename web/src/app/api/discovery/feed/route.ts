@@ -83,6 +83,7 @@ export async function GET(request: Request) {
 
     const result = await buildDiscoveryFeed(supabase, user.id, {
       brandId,
+      clientScope: (url.searchParams.get("clientScope") ?? "active").trim() || "active",
       offset,
       limit,
       sort: parseSort(url.searchParams.get("sort")),

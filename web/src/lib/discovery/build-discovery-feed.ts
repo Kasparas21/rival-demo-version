@@ -93,6 +93,27 @@ function chunkIds<T>(items: T[], size: number): T[][] {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function isBrandCompetitorsTableError(message: string | undefined): boolean {
+  return Boolean(
+    message &&
+      (isMissingDbColumnError(message, "brand_competitors") || /brand_competitors/i.test(message)),
+  );
+}
+
+async function loadAllSavedCompetitorIds(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<{ ids: string[]; error?: string }> {
+  const { data: rows, error: rowsErr } = await supabase
+    .from("saved_competitors")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("is_workspace_brand", false);
+
+  if (rowsErr) return { ids: [], error: rowsErr.message };
+  return { ids: (rows ?? []).map((r) => r.id) };
+}
+
 async function loadCompetitorIdsForBrand(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -112,13 +133,7 @@ async function loadCompetitorIdsForBrand(
       .eq("user_id", userId)
       .eq("brand_id", brandId);
 
-    if (
-      mapErr &&
-      !(
-        isMissingDbColumnError(mapErr.message, "brand_competitors") ||
-        /brand_competitors/i.test(mapErr.message)
-      )
-    ) {
+    if (mapErr && !isBrandCompetitorsTableError(mapErr.message)) {
       return { ids: [], error: mapErr.message };
     }
 
@@ -126,14 +141,75 @@ async function loadCompetitorIdsForBrand(
     if (mappedIds.length > 0) return { ids: mappedIds };
   }
 
-  const { data: rows, error: rowsErr } = await supabase
-    .from("saved_competitors")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("is_workspace_brand", false);
+  return loadAllSavedCompetitorIds(supabase, userId);
+}
 
-  if (rowsErr) return { ids: [], error: rowsErr.message };
-  return { ids: (rows ?? []).map((r) => r.id) };
+async function loadCompetitorIdsForScope(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  activeBrandId: string,
+  clientScope: string,
+): Promise<{ ids: string[]; error?: string }> {
+  const scope = (clientScope || "active").trim();
+
+  if (scope === "all") {
+    const { data: mappings, error: mapErr } = await supabase
+      .from("brand_competitors")
+      .select("competitor_id")
+      .eq("user_id", userId);
+
+    if (mapErr && !isBrandCompetitorsTableError(mapErr.message)) {
+      return { ids: [], error: mapErr.message };
+    }
+
+    const mappedIds = [...new Set((mappings ?? []).map((r) => String(r.competitor_id)).filter(Boolean))];
+    if (mappedIds.length > 0) return { ids: mappedIds };
+    return loadAllSavedCompetitorIds(supabase, userId);
+  }
+
+  if (scope === "active") {
+    return loadCompetitorIdsForBrand(supabase, userId, activeBrandId);
+  }
+
+  if (UUID_RE.test(scope)) {
+    return loadCompetitorIdsForBrand(supabase, userId, scope);
+  }
+
+  return loadCompetitorIdsForBrand(supabase, userId, activeBrandId);
+}
+
+async function loadCompetitorClientBrandLabels(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  competitorIds: string[],
+): Promise<Map<string, string>> {
+  const namesByCompetitor = new Map<string, string[]>();
+
+  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
+    const { data, error } = await supabase
+      .from("brand_competitors")
+      .select("competitor_id, brands(name)")
+      .eq("user_id", userId)
+      .in("competitor_id", chunk);
+
+    if (error) continue;
+
+    for (const row of data ?? []) {
+      const brand = row.brands as { name?: string | null } | null;
+      const name = brand?.name?.trim();
+      if (!name) continue;
+      const competitorId = String(row.competitor_id);
+      const list = namesByCompetitor.get(competitorId) ?? [];
+      if (!list.includes(name)) list.push(name);
+      namesByCompetitor.set(competitorId, list);
+    }
+  }
+
+  const labels = new Map<string, string>();
+  for (const [competitorId, names] of namesByCompetitor) {
+    labels.set(competitorId, names.sort((a, b) => a.localeCompare(b)).join(", "));
+  }
+  return labels;
 }
 
 async function loadCompetitorsById(
@@ -250,6 +326,7 @@ function hydrateDiscoveryRow(
   dateStart: number | null,
   needle: string,
   platformSet: Set<string>,
+  clientBrandName: string | null,
 ): DiscoveryAdDto | null {
   const platform = normalizePlatform(row.platform);
   if (!row.id || !platform) return null;
@@ -289,6 +366,7 @@ function hydrateDiscoveryRow(
     competitor_name: comp.brand_name?.trim() || comp.name?.trim() || "Competitor",
     competitor_domain: comp.brand_domain?.trim() || null,
     competitor_logo_url: comp.brand_logo_url?.trim() || comp.logo_url?.trim() || null,
+    client_brand_name: clientBrandName,
     platform,
     format: row.format ?? "",
     ad_text: row.ad_text ?? "",
@@ -309,10 +387,12 @@ export async function buildDiscoveryFeed(
   userId: string,
   input: DiscoveryFeedQuery,
 ): Promise<DiscoveryFeedResult | { ok: false; error: string }> {
-  const { ids: competitorIds, error: competitorIdsError } = await loadCompetitorIdsForBrand(
+  const clientScope = (input.clientScope || "active").trim();
+  const { ids: competitorIds, error: competitorIdsError } = await loadCompetitorIdsForScope(
     supabase,
     userId,
     input.brandId,
+    clientScope,
   );
   if (competitorIdsError) return { ok: false, error: competitorIdsError };
   if (!competitorIds.length) {
@@ -336,6 +416,11 @@ export async function buildDiscoveryFeed(
   for (const c of competitors) {
     if (c?.id) competitorById.set(c.id, c);
   }
+
+  const showClientLabels = clientScope === "all";
+  const clientBrandLabels = showClientLabels
+    ? await loadCompetitorClientBrandLabels(supabase, userId, competitorIds)
+    : new Map<string, string>();
 
   const needsPayloadUpfront =
     input.sort === "impressions" ||
@@ -364,7 +449,16 @@ export async function buildDiscoveryFeed(
     const comp = competitorById.get(row.competitor_id);
     if (!comp) continue;
 
-    const dto = hydrateDiscoveryRow(row, comp, nowMs, input, dateStart, needle, platformSet);
+    const dto = hydrateDiscoveryRow(
+      row,
+      comp,
+      nowMs,
+      input,
+      dateStart,
+      needle,
+      platformSet,
+      clientBrandLabels.get(row.competitor_id) ?? null,
+    );
     if (!dto) continue;
 
     platformCounts[dto.platform] = (platformCounts[dto.platform] ?? 0) + 1;

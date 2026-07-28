@@ -328,7 +328,7 @@ function MetaAdCardImpl({
   ad: MetaAdCardModel;
   viewMode: "grid" | "list";
   brand: { domain: string; logoUrl: string };
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   /** DB row id when this card exists as scraped_ads (may be absent until resolve). */
   scrapedAdId?: string;
   isSaved?: boolean;
@@ -354,7 +354,7 @@ function MetaAdCardImpl({
 
   return (
     <article
-      onClick={onClick}
+      onClick={(e) => onClick?.(e)}
       className={`min-w-0 ${viewMode === "list" || isGrid ? "h-full" : ""} bg-white rounded-2xl border border-[#e5e7eb] overflow-hidden transition-all duration-200 flex flex-col ${
         onClick ? "cursor-pointer hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-2 hover:ring-slate-200" : "hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
       }`}

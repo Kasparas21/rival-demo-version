@@ -27,6 +27,7 @@ export function serializeDiscoveryQuery(
     toolbar.status,
     toolbar.ultimateOnly ? "1" : "0",
     toolbar.competitorId ?? "",
+    toolbar.clientScope ?? "active",
     platforms,
     search.trim().toLowerCase(),
     shuffleSeed,
@@ -41,7 +42,7 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v2:${day}:${query}`;
+  return `${brandId}:discovery:v3:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
@@ -78,6 +79,9 @@ export function buildDiscoveryFeedUrl(
   });
   if (toolbar.ultimateOnly) params.set("ultimateOnly", "1");
   if (toolbar.competitorId) params.set("competitorId", toolbar.competitorId);
+  if (toolbar.clientScope && toolbar.clientScope !== "active") {
+    params.set("clientScope", toolbar.clientScope);
+  }
   for (const p of toolbar.selectedPlatforms) params.append("platform", p);
   return `/api/discovery/feed?${params.toString()}`;
 }

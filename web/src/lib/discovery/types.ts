@@ -9,12 +9,17 @@ export type DiscoveryFormatFilter = "all" | "video" | "image";
 
 export type DiscoveryDatePreset = "7d" | "30d" | "90d" | "all";
 
+/** Which client workspace(s) to include in the feed. */
+export type DiscoveryClientScope = "active" | "all" | (string & {});
+
 export type DiscoveryAdDto = {
   id: string;
   competitor_id: string;
   competitor_name: string;
   competitor_domain: string | null;
   competitor_logo_url: string | null;
+  /** Set when aggregating across clients so ads show which workspace they belong to. */
+  client_brand_name?: string | null;
   platform: string;
   format: string;
   ad_text: string;
@@ -39,6 +44,8 @@ export type DiscoveryCompetitorChip = {
 
 export type DiscoveryFeedQuery = {
   brandId: string;
+  /** Defaults to "active" (use brandId). "all" unions every client workspace. */
+  clientScope: DiscoveryClientScope;
   offset: number;
   limit: number;
   sort: DiscoverySort;

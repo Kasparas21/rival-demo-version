@@ -56,9 +56,14 @@ export function DiscoveryAdCard({
       />
       <div className="min-w-0 flex-1 pr-10">
         <p className="truncate text-[13px] font-semibold text-slate-900">{ad.competitor_name}</p>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
           <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-3 w-3" />
           <span className="capitalize">{platform}</span>
+          {ad.client_brand_name ? (
+            <span className="rounded-full bg-slate-100 px-1.5 py-0 text-[10px] font-medium text-slate-600">
+              {ad.client_brand_name}
+            </span>
+          ) : null}
           {ad.is_ultimate_winner ? (
             <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800">
               <Sparkles className="h-2.5 w-2.5" aria-hidden />
@@ -112,7 +117,21 @@ export function DiscoveryAdCard({
       viewMode="grid"
       gridCreativeSizing="natural"
       brand={brand}
-      onClick={onOpen}
+      onClick={
+        onOpen
+          ? (e) => {
+              const target = e.target as HTMLElement;
+              if (
+                target.closest(
+                  'button[aria-label="Play video ad"], video, a, [data-discovery-no-open]',
+                )
+              ) {
+                return;
+              }
+              onOpen();
+            }
+          : undefined
+      }
       {...saveProps}
     />,
   );

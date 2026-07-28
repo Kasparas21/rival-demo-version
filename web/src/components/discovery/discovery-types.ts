@@ -14,6 +14,8 @@ export type DiscoveryToolbarState = {
   ultimateOnly: boolean;
   selectedPlatforms: Set<string>;
   competitorId: string | null;
+  /** "active" = current workspace client; "all" = every client; uuid = specific client */
+  clientScope: "active" | "all" | string;
 };
 
 export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
@@ -25,6 +27,7 @@ export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
   ultimateOnly: false,
   selectedPlatforms: new Set(),
   competitorId: null,
+  clientScope: "active",
 };
 
 export type DiscoveryFeedTab = "explore" | "trending" | "ultimate";

@@ -108,18 +108,23 @@ async function loadCompetitorsById(
 ): Promise<{ rows: CompetitorRow[]; error?: string }> {
   const rows: CompetitorRow[] = [];
   for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from("saved_competitors")
       .select("id, name, brand_name, brand_domain, logo_url, brand_logo_url, is_workspace_brand")
       .eq("user_id", userId)
       .in("id", chunk);
 
     if (error && isMissingDbColumnError(error.message, "is_workspace_brand")) {
-      ({ data, error } = await supabase
+      const fallback = await supabase
         .from("saved_competitors")
         .select("id, name, brand_name, brand_domain, logo_url, brand_logo_url")
         .eq("user_id", userId)
-        .in("id", chunk));
+        .in("id", chunk);
+      if (fallback.error) return { rows: [], error: fallback.error.message };
+      for (const row of fallback.data ?? []) {
+        rows.push({ ...row, is_workspace_brand: false });
+      }
+      continue;
     }
 
     if (error) return { rows: [], error: error.message };
@@ -363,6 +368,7 @@ export async function buildSavedFeed(
 
   const filteredForTypeCounts = allItems.filter((item) =>
     filterItem(
+      item,
       { ...input, itemType: "all" },
       dateStart,
       platformSet,
