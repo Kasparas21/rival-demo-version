@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowUp,
@@ -66,14 +66,72 @@ type AssistantWindow = {
 type PersistedAssistantUi = {
   sessionIds: string[];
   activeSessionId: string | null;
+  clusterExpanded?: boolean;
   expanded?: boolean;
   expandedSessionId?: string | null;
+  clusterSize?: ClusterSize | null;
+  paneWidths?: Record<string, number>;
 };
+
+type ClusterSize = { width: number; height: number };
 
 const PANEL_SPRING = { type: "spring" as const, damping: 34, stiffness: 380, mass: 0.82 };
 const PANE_SPRING = { type: "spring" as const, damping: 32, stiffness: 360, mass: 0.78 };
 const UI_STATE_KEY = (brandId: string) => `rival_discovery_assistant_ui_${brandId}`;
 const COMPACT_PANE_WIDTH = 400;
+const MIN_CLUSTER_WIDTH = 520;
+const MIN_CLUSTER_HEIGHT = 420;
+const MIN_PANE_WIDTH = 280;
+
+function getSidebarWidthPx(): number {
+  if (typeof window === "undefined") return 280;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue("--rival-sidebar-width").trim();
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : 280;
+}
+
+function getDefaultClusterSize(): ClusterSize {
+  if (typeof window === "undefined") return { width: 1200, height: 800 };
+  const sidebar = window.innerWidth >= 640 ? getSidebarWidthPx() : 0;
+  return {
+    width: Math.max(MIN_CLUSTER_WIDTH, window.innerWidth - sidebar),
+    height: Math.max(MIN_CLUSTER_HEIGHT, window.innerHeight),
+  };
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+function startPointerDrag(
+  e: React.PointerEvent,
+  onMove: (dx: number, dy: number, ev: PointerEvent) => void,
+  onEnd?: () => void,
+): void {
+  e.preventDefault();
+  e.stopPropagation();
+  const target = e.currentTarget as HTMLElement;
+  target.setPointerCapture(e.pointerId);
+  const startX = e.clientX;
+  const startY = e.clientY;
+  let lastX = startX;
+  let lastY = startY;
+  const onPointerMove = (ev: PointerEvent) => {
+    const dx = ev.clientX - lastX;
+    const dy = ev.clientY - lastY;
+    lastX = ev.clientX;
+    lastY = ev.clientY;
+    onMove(dx, dy, ev);
+  };
+  const onPointerUp = () => {
+    target.releasePointerCapture(e.pointerId);
+    document.removeEventListener("pointermove", onPointerMove);
+    document.removeEventListener("pointerup", onPointerUp);
+    onEnd?.();
+  };
+  document.addEventListener("pointermove", onPointerMove);
+  document.addEventListener("pointerup", onPointerUp);
+}
 
 const assistantGlassShell =
   "relative overflow-hidden border border-white/70 bg-white/48 backdrop-blur-2xl backdrop-saturate-[1.5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_24px_80px_-20px_rgba(74,127,165,0.22),0_8px_32px_-12px_rgba(52,52,52,0.1)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_45%,white)]";
@@ -141,12 +199,51 @@ function windowTitle(win: AssistantWindow, sessions: DiscoveryChatSession[]): st
   return "New chat";
 }
 
+function PaneResizeDivider({ onDrag }: { onDrag: (dx: number) => void }) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize chat panes"
+      className="group relative z-20 flex w-2 shrink-0 cursor-col-resize items-stretch touch-none"
+      onPointerDown={(e) => {
+        startPointerDrag(e, (dx) => onDrag(dx));
+      }}
+    >
+      <div className="mx-auto h-full w-px bg-transparent transition group-hover:bg-[color-mix(in_srgb,var(--rival-accent-blue)_55%,white)] group-active:bg-[color:var(--rival-primary)]" />
+    </div>
+  );
+}
+
+function ClusterResizeHandle({
+  edge,
+  onDrag,
+}: {
+  edge: "left" | "top" | "corner";
+  onDrag: (dx: number, dy: number) => void;
+}) {
+  return (
+    <div
+      aria-hidden
+      className={cn(
+        "absolute z-30 touch-none",
+        edge === "left" && "bottom-0 left-0 top-0 w-2 cursor-ew-resize",
+        edge === "top" && "left-0 right-0 top-0 h-2 cursor-ns-resize",
+        edge === "corner" && "left-0 top-0 h-4 w-4 cursor-nwse-resize",
+      )}
+      onPointerDown={(e) => {
+        startPointerDrag(e, (dx, dy) => onDrag(dx, dy));
+      }}
+    />
+  );
+}
+
 type ChatPaneProps = {
   win: AssistantWindow;
   index: number;
   isPrimary: boolean;
-  isExpanded: boolean;
   clusterExpanded: boolean;
+  paneWidth?: number;
   brandName: string;
   sessions: DiscoveryChatSession[];
   historyOpen: boolean;
@@ -169,8 +266,8 @@ function DiscoveryAssistantChatPane({
   win,
   index,
   isPrimary,
-  isExpanded,
   clusterExpanded,
+  paneWidth,
   brandName,
   sessions,
   historyOpen,
@@ -199,14 +296,21 @@ function DiscoveryAssistantChatPane({
   return (
     <motion.div
       layout
+      data-session-id={win.sessionId}
       initial={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 28, scale: 0.96 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 20, scale: 0.96 }}
       transition={PANE_SPRING}
-      style={isExpanded ? undefined : { width: COMPACT_PANE_WIDTH, minWidth: COMPACT_PANE_WIDTH }}
+      style={
+        clusterExpanded
+          ? paneWidth
+            ? { width: paneWidth, minWidth: MIN_PANE_WIDTH, flex: "0 0 auto" }
+            : { minWidth: MIN_PANE_WIDTH, flex: "1 1 0" }
+          : { width: COMPACT_PANE_WIDTH, minWidth: COMPACT_PANE_WIDTH }
+      }
       className={cn(
-        "flex h-[min(760px,calc(100vh-6rem))] shrink-0 flex-col",
-        isExpanded && "min-w-[300px] flex-1",
+        "flex shrink-0 flex-col",
+        clusterExpanded ? "h-full min-h-0" : "h-[min(760px,calc(100vh-6rem))]",
         assistantGlassShell,
         "rounded-[1.65rem]",
       )}
@@ -246,11 +350,11 @@ function DiscoveryAssistantChatPane({
           <button
             type="button"
             onClick={onToggleExpanded}
-            className={isExpanded ? assistantIconBtnActive : assistantIconBtn}
-            aria-label={isExpanded ? "Collapse" : "Expand"}
-            aria-pressed={isExpanded}
+            className={clusterExpanded ? assistantIconBtnActive : assistantIconBtn}
+            aria-label={clusterExpanded ? "Collapse" : "Expand"}
+            aria-pressed={clusterExpanded}
           >
-            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            {clusterExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
           {isPrimary ? (
             <button
@@ -395,7 +499,7 @@ function DiscoveryAssistantChatPane({
                       msg.role === "user"
                         ? cn(
                             "ml-auto max-w-[92%] rounded-2xl bg-[color:var(--rival-primary)] px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_8px_24px_-12px_rgba(52,52,52,0.35)]",
-                            isExpanded && "max-w-[min(560px,72%)]",
+                            clusterExpanded && "max-w-[min(560px,72%)]",
                           )
                         : "w-full",
                     )}
@@ -411,7 +515,7 @@ function DiscoveryAssistantChatPane({
                             isPending={isPending}
                             onOpenAd={onOpenAd}
                             onToggleSave={(ad) => onToggleSave(ad)}
-                            expanded={isExpanded}
+                            expanded={clusterExpanded}
                           />
                         ) : null}
                         <div className="px-1 pb-1 pt-2">
@@ -459,7 +563,7 @@ function DiscoveryAssistantChatPane({
                       void onSend(win.input);
                     }
                   }}
-                  rows={isExpanded ? 3 : 2}
+                  rows={clusterExpanded ? 3 : 2}
                   placeholder="Search keywords, filter ads…"
                   className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm text-[color:var(--rival-primary)] outline-none placeholder:text-[color:var(--rival-muted)]"
                 />
@@ -497,12 +601,19 @@ function DiscoveryAssistantPanel({
   onOpenAd,
 }: PanelProps) {
   const reduceMotion = useReducedMotion();
-  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
-  const clusterExpanded = expandedSessionId !== null;
+  const [clusterExpanded, setClusterExpanded] = useState(false);
+  const [clusterSize, setClusterSize] = useState<ClusterSize | null>(null);
+  const [paneWidths, setPaneWidths] = useState<Record<string, number>>({});
   const [windows, setWindows] = useState<AssistantWindow[]>([]);
   const [sessions, setSessions] = useState<DiscoveryChatSession[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const clusterRef = useRef<HTMLDivElement>(null);
+  const panesRef = useRef<HTMLDivElement>(null);
+  const clusterSizeRef = useRef<ClusterSize | null>(null);
+  const paneWidthsRef = useRef<Record<string, number>>({});
+  clusterSizeRef.current = clusterSize;
+  paneWidthsRef.current = paneWidths;
 
   const assistantAdRefs = useMemo(() => {
     const map = new Map<string, { id: string; competitor_id: string }>();
@@ -526,12 +637,19 @@ function DiscoveryAssistantPanel({
   }, [brandId]);
 
   const persistUi = useCallback(
-    (nextWindows: AssistantWindow[], nextExpandedSessionId: string | null) => {
+    (
+      nextWindows: AssistantWindow[],
+      nextClusterExpanded: boolean,
+      nextClusterSize: ClusterSize | null = clusterSizeRef.current,
+      nextPaneWidths: Record<string, number> = paneWidthsRef.current,
+    ) => {
       const primary = nextWindows[nextWindows.length - 1];
       writePersistedUi(brandId, {
         sessionIds: nextWindows.map((w) => w.sessionId),
         activeSessionId: primary?.sessionId ?? null,
-        expandedSessionId: nextExpandedSessionId,
+        clusterExpanded: nextClusterExpanded,
+        clusterSize: nextClusterSize,
+        paneWidths: nextPaneWidths,
       });
     },
     [brandId],
@@ -547,7 +665,7 @@ function DiscoveryAssistantPanel({
       const win = windowFromSession(created);
       setWindows((prev) => {
         const next = [win, ...prev];
-        persistUi(next, expandedSessionId);
+        persistUi(next, clusterExpanded);
         return next;
       });
       setHistoryOpen(false);
@@ -557,7 +675,7 @@ function DiscoveryAssistantPanel({
       }, 60);
       return win;
     },
-    [brandId, expandedSessionId, persistUi, refreshSessions, reduceMotion],
+    [brandId, clusterExpanded, persistUi, refreshSessions, reduceMotion],
   );
 
   const startNewChat = useCallback(() => addWindow(), [addWindow]);
@@ -578,11 +696,18 @@ function DiscoveryAssistantPanel({
       }
       if (loaded.length) {
         setWindows(loaded);
-        const legacyExpanded = persisted.expanded ?? false;
-        const restored =
-          persisted.expandedSessionId ??
-          (legacyExpanded ? loaded[loaded.length - 1]?.sessionId ?? null : null);
-        setExpandedSessionId(restored);
+        const restoredExpanded =
+          persisted.clusterExpanded ??
+          persisted.expanded ??
+          Boolean(persisted.expandedSessionId);
+        setClusterExpanded(restoredExpanded);
+        setClusterSize(persisted.clusterSize ?? null);
+        const widths = persisted.paneWidths ?? {};
+        const openIds = new Set(loaded.map((w) => w.sessionId));
+        const prunedWidths = Object.fromEntries(
+          Object.entries(widths).filter(([id]) => openIds.has(id)),
+        );
+        setPaneWidths(prunedWidths);
         return;
       }
     }
@@ -590,8 +715,10 @@ function DiscoveryAssistantPanel({
     const active = sessionList[0] ?? createDiscoveryChatSession(brandId);
     const win = windowFromSession(active);
     setWindows([win]);
-    setExpandedSessionId(null);
-    persistUi([win], null);
+    setClusterExpanded(false);
+    setClusterSize(null);
+    setPaneWidths({});
+    persistUi([win], false, null, {});
   }, [brandId, persistUi, refreshSessions]);
 
   const loadSession = useCallback(
@@ -605,14 +732,14 @@ function DiscoveryAssistantPanel({
         const win = windowFromSession(session);
         setWindows((prev) => {
           const next = [win, ...prev];
-          persistUi(next, expandedSessionId);
+          persistUi(next, clusterExpanded);
           return next;
         });
       }
       setHistoryOpen(false);
       refreshSessions();
     },
-    [brandId, expandedSessionId, persistUi, refreshSessions, updateWindow, windows],
+    [brandId, clusterExpanded, persistUi, refreshSessions, updateWindow, windows],
   );
 
   const closeWindow = useCallback(
@@ -622,12 +749,17 @@ function DiscoveryAssistantPanel({
         return;
       }
       const closing = windows.find((w) => w.windowId === windowId);
-      if (closing && expandedSessionId === closing.sessionId) {
-        setExpandedSessionId(null);
+      const next = windows.filter((w) => w.windowId !== windowId);
+      const nextPaneWidths = { ...paneWidths };
+      if (closing) delete nextPaneWidths[closing.sessionId];
+      if (next.length === 1) {
+        Object.keys(nextPaneWidths).forEach((id) => delete nextPaneWidths[id]);
       }
-      setWindows((prev) => prev.filter((w) => w.windowId !== windowId));
+      setPaneWidths(nextPaneWidths);
+      setWindows(next);
+      persistUi(next, clusterExpanded, clusterSize, nextPaneWidths);
     },
-    [expandedSessionId, onClose, windows],
+    [clusterExpanded, clusterSize, onClose, paneWidths, persistUi, windows],
   );
 
   const initializedRef = useRef(false);
@@ -648,21 +780,21 @@ function DiscoveryAssistantPanel({
       if (win.messages.length) saveDiscoveryChatMessages(brandId, win.sessionId, win.messages);
     }
     refreshSessions();
-    persistUi(windows, expandedSessionId);
-  }, [brandId, windows, expandedSessionId, open, persistUi, refreshSessions]);
+    persistUi(windows, clusterExpanded, clusterSize, paneWidths);
+  }, [brandId, windows, clusterExpanded, clusterSize, paneWidths, open, persistUi, refreshSessions]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (historyOpen) setHistoryOpen(false);
-        else if (expandedSessionId) setExpandedSessionId(null);
+        else if (clusterExpanded) setClusterExpanded(false);
         else onClose();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, historyOpen, expandedSessionId]);
+  }, [open, onClose, historyOpen, clusterExpanded]);
 
   const sendForWindow = useCallback(
     async (windowId: string, text: string) => {
@@ -783,33 +915,96 @@ function DiscoveryAssistantPanel({
     [brandId, refreshSessions],
   );
 
-  const toggleExpandedForSession = useCallback(
-    (sessionId: string) => {
-      setExpandedSessionId((prev) => {
-        const next = prev === sessionId ? null : sessionId;
-        persistUi(windows, next);
+  const toggleClusterExpanded = useCallback(() => {
+    setClusterExpanded((prev) => {
+      const next = !prev;
+      persistUi(windows, next, clusterSizeRef.current, paneWidthsRef.current);
+      return next;
+    });
+  }, [persistUi, windows]);
+
+  const resizeCluster = useCallback(
+    (dx: number, dy: number, edge: "left" | "top" | "corner") => {
+      setClusterSize((prev) => {
+        const base = prev ?? getDefaultClusterSize();
+        const sidebar = window.innerWidth >= 640 ? getSidebarWidthPx() : 0;
+        const maxWidth = window.innerWidth - sidebar;
+        const maxHeight = window.innerHeight;
+        let width = base.width;
+        let height = base.height;
+        if (edge === "left" || edge === "corner") {
+          width = clamp(base.width - dx, MIN_CLUSTER_WIDTH, maxWidth);
+        }
+        if (edge === "top" || edge === "corner") {
+          height = clamp(base.height - dy, MIN_CLUSTER_HEIGHT, maxHeight);
+        }
+        const next = { width, height };
+        persistUi(windows, true, next, paneWidthsRef.current);
         return next;
       });
     },
-    [windows, persistUi],
+    [persistUi, windows],
   );
+
+  const resizePaneDivider = useCallback(
+    (leftSessionId: string, rightSessionId: string, dx: number) => {
+      if (!panesRef.current) return;
+      const containerWidth = panesRef.current.clientWidth;
+      const gap = (windows.length - 1) * 8;
+      const available = Math.max(MIN_PANE_WIDTH * 2, containerWidth - gap);
+      const perPane = available / Math.max(1, windows.length);
+
+      setPaneWidths((prev) => {
+        const currentLeft = prev[leftSessionId] ?? perPane;
+        const currentRight = prev[rightSessionId] ?? perPane;
+        const nextLeft = clamp(currentLeft + dx, MIN_PANE_WIDTH, available - MIN_PANE_WIDTH);
+        const nextRight = clamp(currentRight - dx, MIN_PANE_WIDTH, available - MIN_PANE_WIDTH);
+        const next = {
+          ...prev,
+          [leftSessionId]: nextLeft,
+          [rightSessionId]: nextRight,
+        };
+        persistUi(windows, clusterExpanded, clusterSizeRef.current, next);
+        return next;
+      });
+    },
+    [clusterExpanded, persistUi, windows],
+  );
+
+  const useFullCluster = clusterExpanded && !clusterSize;
+  const resolvedClusterSize = clusterExpanded ? (clusterSize ?? getDefaultClusterSize()) : null;
 
   return (
     <AnimatePresence>
       {open ? (
         <motion.div
+          ref={clusterRef}
           key="assistant-cluster"
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 16 }}
           transition={PANEL_SPRING}
+          style={
+            clusterExpanded && resolvedClusterSize && !useFullCluster
+              ? { width: resolvedClusterSize.width, height: resolvedClusterSize.height }
+              : undefined
+          }
           className={cn(
-            "fixed z-50 flex items-end gap-2.5 motion-safe:transition-[left,right,bottom,width] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]",
+            "fixed z-50 flex gap-2.5 motion-safe:transition-[left,right,bottom,width,height] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]",
             clusterExpanded
-              ? "inset-y-0 right-0 left-0 sm:left-[var(--rival-sidebar-width,280px)] max-h-screen items-stretch gap-3 p-3"
-              : "bottom-[5.25rem] right-6 max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-var(--rival-sidebar-width,280px)-2rem)]",
+              ? useFullCluster
+                ? "inset-0 sm:left-[var(--rival-sidebar-width,280px)] h-screen w-auto items-stretch p-2"
+                : "bottom-0 right-0 items-stretch p-2"
+              : "bottom-[5.25rem] right-6 max-w-[calc(100vw-1.5rem)] items-end sm:max-w-[calc(100vw-var(--rival-sidebar-width,280px)-2rem)]",
           )}
         >
+          {clusterExpanded ? (
+            <>
+              <ClusterResizeHandle edge="left" onDrag={(dx, dy) => resizeCluster(dx, dy, "left")} />
+              <ClusterResizeHandle edge="top" onDrag={(dx, dy) => resizeCluster(dx, dy, "top")} />
+              <ClusterResizeHandle edge="corner" onDrag={(dx, dy) => resizeCluster(dx, dy, "corner")} />
+            </>
+          ) : null}
           <motion.button
             type="button"
             layout
@@ -827,7 +1022,10 @@ function DiscoveryAssistantPanel({
           </motion.button>
 
           <div
-            ref={scrollRef}
+            ref={(node) => {
+              scrollRef.current = node;
+              panesRef.current = node;
+            }}
             className={cn(
               "flex min-w-0 items-stretch gap-2.5",
               clusterExpanded
@@ -837,30 +1035,40 @@ function DiscoveryAssistantPanel({
           >
             <AnimatePresence mode="popLayout">
               {windows.map((win, index) => (
-                <DiscoveryAssistantChatPane
-                  key={win.windowId}
-                  win={win}
-                  index={index}
-                  isPrimary={index === windows.length - 1}
-                  isExpanded={expandedSessionId === win.sessionId}
-                  clusterExpanded={clusterExpanded}
-                  brandName={brandName}
-                  sessions={sessions}
-                  historyOpen={historyOpen}
-                  isSaved={isSaved}
-                  isPending={isPending}
-                  reduceMotion={reduceMotion}
-                  onClosePane={() => closeWindow(win.windowId)}
-                  onToggleExpanded={() => toggleExpandedForSession(win.sessionId)}
-                  onToggleHistory={() => setHistoryOpen((v) => !v)}
-                  onNewChat={startNewChat}
-                  onInputChange={(value) => updateWindow(win.windowId, { input: value })}
-                  onSend={(text) => void sendForWindow(win.windowId, text)}
-                  onOpenAd={onOpenAd}
-                  onToggleSave={(ad) => void toggleSave(ad)}
-                  onLoadSession={loadSession}
-                  onDeleteSession={handleDeleteSession}
-                />
+                <Fragment key={win.windowId}>
+                  <DiscoveryAssistantChatPane
+                    win={win}
+                    index={index}
+                    isPrimary={index === windows.length - 1}
+                    clusterExpanded={clusterExpanded}
+                    paneWidth={
+                      clusterExpanded && windows.length > 1 ? paneWidths[win.sessionId] : undefined
+                    }
+                    brandName={brandName}
+                    sessions={sessions}
+                    historyOpen={historyOpen}
+                    isSaved={isSaved}
+                    isPending={isPending}
+                    reduceMotion={reduceMotion}
+                    onClosePane={() => closeWindow(win.windowId)}
+                    onToggleExpanded={toggleClusterExpanded}
+                    onToggleHistory={() => setHistoryOpen((v) => !v)}
+                    onNewChat={startNewChat}
+                    onInputChange={(value) => updateWindow(win.windowId, { input: value })}
+                    onSend={(text) => void sendForWindow(win.windowId, text)}
+                    onOpenAd={onOpenAd}
+                    onToggleSave={(ad) => void toggleSave(ad)}
+                    onLoadSession={loadSession}
+                    onDeleteSession={handleDeleteSession}
+                  />
+                  {clusterExpanded && index < windows.length - 1 ? (
+                    <PaneResizeDivider
+                      onDrag={(dx) =>
+                        resizePaneDivider(win.sessionId, windows[index + 1]!.sessionId, dx)
+                      }
+                    />
+                  ) : null}
+                </Fragment>
               ))}
             </AnimatePresence>
           </div>
