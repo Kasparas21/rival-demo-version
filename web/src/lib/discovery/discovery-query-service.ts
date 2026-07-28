@@ -136,6 +136,7 @@ const QUERY_STOP_WORDS = new Set([
   "reklamos",
   "give",
   "please",
+  "dantu",
 ]);
 
 function tokenizeSearchTerms(text: string): string[] {
@@ -225,7 +226,7 @@ export async function queryDiscoveryAds(
 ): Promise<DiscoveryQueryResult | { error: string }> {
   const brandId = await resolveDiscoveryBrandId(supabase, userId, filters.brandId);
   const keywords = normalizeKeywords(filters.keywords, filters.query);
-  const match = filters.match ?? "any";
+  const match = filters.match ?? (keywords.length >= 3 ? "all" : "any");
   const needsFullScan = keywords.length > 0;
 
   let competitorFilterIds = [...(filters.competitorIds ?? [])];

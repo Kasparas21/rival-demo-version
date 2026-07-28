@@ -33,12 +33,33 @@ export function hydrateDiscoveryMetaAdCard(ad: DiscoveryAdDto): {
   card: MetaAdCard;
   runStatus?: LibraryRunStatus;
 } | null {
-  if (ad.platform.trim().toLowerCase() !== "meta" || !isRecord(ad.raw_payload)) {
-    return null;
+  if (ad.platform.trim().toLowerCase() !== "meta") return null;
+
+  const preview = resolveDiscoveryPreview(ad);
+  const adText = ad.ad_text?.trim() || "";
+
+  if (!isRecord(ad.raw_payload) || Object.keys(ad.raw_payload).length === 0) {
+    if (!preview && !adText) return null;
+    const card: MetaAdCard = {
+      id: ad.id,
+      img: preview ?? "",
+      headline: "",
+      desc: adText,
+      cta: "",
+      subtext: "",
+      isVideo: false,
+      adLibraryUrl: "",
+      pageName: ad.competitor_name?.trim() || "Advertiser",
+    };
+    return {
+      card: hydrateMetaAdCardForLibrary(card),
+      runStatus: ad.archived_creative_url?.trim()
+        ? { isRunning: !ad.is_killed, archivedCreativeUrl: ad.archived_creative_url.trim() }
+        : undefined,
+    };
   }
 
   const raw = ad.raw_payload as unknown as MetaAdCard;
-  const preview = resolveDiscoveryPreview(ad);
   const seed =
     preview && !raw.img?.trim()
       ? { ...raw, img: preview }

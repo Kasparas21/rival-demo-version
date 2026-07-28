@@ -350,7 +350,14 @@ function keywordHaystack(row: ScrapedRow, comp: CompetitorRow, clientBrandName: 
 function matchesKeywords(hay: string, keywords: string[], match: "any" | "all"): boolean {
   if (!keywords.length) return true;
   if (match === "all") return keywords.every((k) => hay.includes(k));
-  return keywords.some((k) => hay.includes(k));
+  const score = keywords.reduce((n, k) => n + (hay.includes(k) ? 1 : 0), 0);
+  const minScore =
+    keywords.length >= 4 ? 3 : keywords.length >= 3 ? 2 : 1;
+  return score >= minScore;
+}
+
+function keywordRelevanceScore(hay: string, keywords: string[]): number {
+  return keywords.reduce((n, k) => n + (hay.includes(k) ? 1 : 0), 0);
 }
 
 async function fetchKeywordCandidateRows(
@@ -491,7 +498,7 @@ export async function searchDiscoveryKeywordFeed(
   const dateStart = datePresetStart(input.datePreset, nowMs);
   const platformSet = new Set(input.platforms.map((p) => p.trim().toLowerCase()).filter(Boolean));
 
-  const hydrated: DiscoveryAdDto[] = [];
+  const scored: Array<{ dto: DiscoveryAdDto; score: number }> = [];
   const platformCounts: Record<string, number> = {};
   const competitorCounts = new Map<string, number>();
 
@@ -500,7 +507,8 @@ export async function searchDiscoveryKeywordFeed(
     if (!comp) continue;
 
     const clientBrandName = clientBrandLabels.get(row.competitor_id) ?? null;
-    if (!matchesKeywords(keywordHaystack(row, comp, clientBrandName), keywords, match)) continue;
+    const hay = keywordHaystack(row, comp, clientBrandName);
+    if (!matchesKeywords(hay, keywords, match)) continue;
 
     const dto = hydrateDiscoveryRow(
       row,
@@ -514,16 +522,18 @@ export async function searchDiscoveryKeywordFeed(
     );
     if (!dto) continue;
 
+    const score = keywordRelevanceScore(hay, keywords);
+    scored.push({ dto, score });
     platformCounts[dto.platform] = (platformCounts[dto.platform] ?? 0) + 1;
     competitorCounts.set(dto.competitor_id, (competitorCounts.get(dto.competitor_id) ?? 0) + 1);
-    hydrated.push(dto);
   }
 
-  let sorted = hydrated;
+  scored.sort((a, b) => b.score - a.score || b.dto.first_seen_at.localeCompare(a.dto.first_seen_at));
+  let sorted = scored.map((s) => s.dto);
   if (input.sort === "shuffle") {
-    sorted = seededShuffle(hydrated, input.shuffleSeed);
-  } else {
-    sorted = sortAdsByPerformanceSort(hydrated, input.sort as AdPerformanceSort, {
+    sorted = seededShuffle(sorted, input.shuffleSeed);
+  } else if (input.sort !== "newest") {
+    sorted = sortAdsByPerformanceSort(sorted, input.sort as AdPerformanceSort, {
       impressionsIndexFor: (ad) => ad.impressions_index,
       daysRunningFor: (ad) => {
         const comp = competitorById.get(ad.competitor_id);
@@ -543,7 +553,7 @@ export async function searchDiscoveryKeywordFeed(
   }
 
   const total = sorted.length;
-  const market_stats = computeDiscoveryMarketStats(hydrated, nowMs);
+  const market_stats = computeDiscoveryMarketStats(sorted, nowMs);
   let page = sorted.slice(input.offset, input.offset + input.limit);
 
   if (!needsPayloadUpfront) {

@@ -66,7 +66,8 @@ type AssistantWindow = {
 type PersistedAssistantUi = {
   sessionIds: string[];
   activeSessionId: string | null;
-  expanded: boolean;
+  expanded?: boolean;
+  expandedSessionId?: string | null;
 };
 
 const PANEL_SPRING = { type: "spring" as const, damping: 34, stiffness: 380, mass: 0.82 };
@@ -144,7 +145,8 @@ type ChatPaneProps = {
   win: AssistantWindow;
   index: number;
   isPrimary: boolean;
-  expanded: boolean;
+  isExpanded: boolean;
+  clusterExpanded: boolean;
   brandName: string;
   sessions: DiscoveryChatSession[];
   historyOpen: boolean;
@@ -152,7 +154,6 @@ type ChatPaneProps = {
   isPending: (id: string) => boolean;
   reduceMotion: boolean | null;
   onClosePane: () => void;
-  onCloseAll: () => void;
   onToggleExpanded: () => void;
   onToggleHistory: () => void;
   onNewChat: () => void;
@@ -168,7 +169,8 @@ function DiscoveryAssistantChatPane({
   win,
   index,
   isPrimary,
-  expanded,
+  isExpanded,
+  clusterExpanded,
   brandName,
   sessions,
   historyOpen,
@@ -176,7 +178,6 @@ function DiscoveryAssistantChatPane({
   isPending,
   reduceMotion,
   onClosePane,
-  onCloseAll,
   onToggleExpanded,
   onToggleHistory,
   onNewChat,
@@ -202,10 +203,10 @@ function DiscoveryAssistantChatPane({
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: 20, scale: 0.96 }}
       transition={PANE_SPRING}
-      style={expanded ? undefined : { width: COMPACT_PANE_WIDTH, minWidth: COMPACT_PANE_WIDTH }}
+      style={isExpanded ? undefined : { width: COMPACT_PANE_WIDTH, minWidth: COMPACT_PANE_WIDTH }}
       className={cn(
         "flex h-[min(760px,calc(100vh-6rem))] shrink-0 flex-col",
-        expanded && "min-w-[300px] flex-1",
+        isExpanded && "min-w-[300px] flex-1",
         assistantGlassShell,
         "rounded-[1.65rem]",
       )}
@@ -232,43 +233,39 @@ function DiscoveryAssistantChatPane({
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           {isPrimary ? (
-            <>
-              <button
-                type="button"
-                onClick={onNewChat}
-                className={cn(assistantIconBtn, "text-[color:var(--rival-primary)]")}
-                aria-label="New chat"
-                title="New chat to the left"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={onToggleExpanded}
-                className={expanded ? assistantIconBtnActive : assistantIconBtn}
-                aria-label={expanded ? "Collapse" : "Expand"}
-                aria-pressed={expanded}
-              >
-                {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </button>
-              <button
-                type="button"
-                onClick={onToggleHistory}
-                className={historyOpen ? assistantIconBtnActive : assistantIconBtn}
-                aria-label="Chat history"
-                aria-pressed={historyOpen}
-              >
-                <History className="h-4 w-4" />
-              </button>
-              <button type="button" onClick={onCloseAll} className={assistantIconBtn} aria-label="Close assistant">
-                <X className="h-4 w-4" />
-              </button>
-            </>
-          ) : (
-            <button type="button" onClick={onClosePane} className={assistantIconBtn} aria-label="Close chat">
-              <X className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={onNewChat}
+              className={cn(assistantIconBtn, "text-[color:var(--rival-primary)]")}
+              aria-label="New chat"
+              title="New chat to the left"
+            >
+              <Plus className="h-4 w-4" />
             </button>
-          )}
+          ) : null}
+          <button
+            type="button"
+            onClick={onToggleExpanded}
+            className={isExpanded ? assistantIconBtnActive : assistantIconBtn}
+            aria-label={isExpanded ? "Collapse" : "Expand"}
+            aria-pressed={isExpanded}
+          >
+            {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+          {isPrimary ? (
+            <button
+              type="button"
+              onClick={onToggleHistory}
+              className={historyOpen ? assistantIconBtnActive : assistantIconBtn}
+              aria-label="Chat history"
+              aria-pressed={historyOpen}
+            >
+              <History className="h-4 w-4" />
+            </button>
+          ) : null}
+          <button type="button" onClick={onClosePane} className={assistantIconBtn} aria-label="Close chat">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
@@ -356,7 +353,7 @@ function DiscoveryAssistantChatPane({
             className="flex min-h-0 flex-1 flex-col"
           >
             <div className="flex-1 overflow-y-auto px-3.5 py-3">
-              <div className={cn("space-y-3", expanded && "space-y-4")}>
+              <div className={cn("space-y-3", clusterExpanded && "space-y-4")}>
                 {win.messages.length === 0 ? (
                   <motion.div
                     initial={reduceMotion ? false : { opacity: 0, y: 8 }}
@@ -365,7 +362,7 @@ function DiscoveryAssistantChatPane({
                   >
                     <p className={aiSectionLabelClass}>Try asking</p>
                     <ul className="mt-2 space-y-1.5">
-                      {DISCOVERY_ASSISTANT_SUGGESTIONS.slice(0, expanded ? 6 : 4).map((s) => (
+                      {DISCOVERY_ASSISTANT_SUGGESTIONS.slice(0, clusterExpanded ? 6 : 4).map((s) => (
                         <li key={s}>
                           <button
                             type="button"
@@ -398,7 +395,7 @@ function DiscoveryAssistantChatPane({
                       msg.role === "user"
                         ? cn(
                             "ml-auto max-w-[92%] rounded-2xl bg-[color:var(--rival-primary)] px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_8px_24px_-12px_rgba(52,52,52,0.35)]",
-                            expanded && "max-w-[min(560px,72%)]",
+                            isExpanded && "max-w-[min(560px,72%)]",
                           )
                         : "w-full",
                     )}
@@ -414,7 +411,7 @@ function DiscoveryAssistantChatPane({
                             isPending={isPending}
                             onOpenAd={onOpenAd}
                             onToggleSave={(ad) => onToggleSave(ad)}
-                            expanded={expanded}
+                            expanded={isExpanded}
                           />
                         ) : null}
                         <div className="px-1 pb-1 pt-2">
@@ -462,7 +459,7 @@ function DiscoveryAssistantChatPane({
                       void onSend(win.input);
                     }
                   }}
-                  rows={expanded ? 3 : 2}
+                  rows={isExpanded ? 3 : 2}
                   placeholder="Search keywords, filter ads…"
                   className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm text-[color:var(--rival-primary)] outline-none placeholder:text-[color:var(--rival-muted)]"
                 />
@@ -500,7 +497,8 @@ function DiscoveryAssistantPanel({
   onOpenAd,
 }: PanelProps) {
   const reduceMotion = useReducedMotion();
-  const [expanded, setExpanded] = useState(false);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const clusterExpanded = expandedSessionId !== null;
   const [windows, setWindows] = useState<AssistantWindow[]>([]);
   const [sessions, setSessions] = useState<DiscoveryChatSession[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -528,12 +526,12 @@ function DiscoveryAssistantPanel({
   }, [brandId]);
 
   const persistUi = useCallback(
-    (nextWindows: AssistantWindow[], nextExpanded: boolean) => {
+    (nextWindows: AssistantWindow[], nextExpandedSessionId: string | null) => {
       const primary = nextWindows[nextWindows.length - 1];
       writePersistedUi(brandId, {
         sessionIds: nextWindows.map((w) => w.sessionId),
         activeSessionId: primary?.sessionId ?? null,
-        expanded: nextExpanded,
+        expandedSessionId: nextExpandedSessionId,
       });
     },
     [brandId],
@@ -549,7 +547,7 @@ function DiscoveryAssistantPanel({
       const win = windowFromSession(created);
       setWindows((prev) => {
         const next = [win, ...prev];
-        persistUi(next, expanded);
+        persistUi(next, expandedSessionId);
         return next;
       });
       setHistoryOpen(false);
@@ -559,7 +557,7 @@ function DiscoveryAssistantPanel({
       }, 60);
       return win;
     },
-    [brandId, expanded, persistUi, refreshSessions, reduceMotion],
+    [brandId, expandedSessionId, persistUi, refreshSessions, reduceMotion],
   );
 
   const startNewChat = useCallback(() => addWindow(), [addWindow]);
@@ -580,7 +578,11 @@ function DiscoveryAssistantPanel({
       }
       if (loaded.length) {
         setWindows(loaded);
-        setExpanded(persisted.expanded ?? false);
+        const legacyExpanded = persisted.expanded ?? false;
+        const restored =
+          persisted.expandedSessionId ??
+          (legacyExpanded ? loaded[loaded.length - 1]?.sessionId ?? null : null);
+        setExpandedSessionId(restored);
         return;
       }
     }
@@ -588,8 +590,8 @@ function DiscoveryAssistantPanel({
     const active = sessionList[0] ?? createDiscoveryChatSession(brandId);
     const win = windowFromSession(active);
     setWindows([win]);
-    setExpanded(false);
-    persistUi([win], false);
+    setExpandedSessionId(null);
+    persistUi([win], null);
   }, [brandId, persistUi, refreshSessions]);
 
   const loadSession = useCallback(
@@ -603,29 +605,29 @@ function DiscoveryAssistantPanel({
         const win = windowFromSession(session);
         setWindows((prev) => {
           const next = [win, ...prev];
-          persistUi(next, expanded);
+          persistUi(next, expandedSessionId);
           return next;
         });
       }
       setHistoryOpen(false);
       refreshSessions();
     },
-    [brandId, expanded, persistUi, refreshSessions, updateWindow, windows],
+    [brandId, expandedSessionId, persistUi, refreshSessions, updateWindow, windows],
   );
 
   const closeWindow = useCallback(
     (windowId: string) => {
-      setWindows((prev) => {
-        if (prev.length <= 1) {
-          onClose();
-          return prev;
-        }
-        const next = prev.filter((w) => w.windowId !== windowId);
-        persistUi(next, expanded);
-        return next;
-      });
+      if (windows.length <= 1) {
+        onClose();
+        return;
+      }
+      const closing = windows.find((w) => w.windowId === windowId);
+      if (closing && expandedSessionId === closing.sessionId) {
+        setExpandedSessionId(null);
+      }
+      setWindows((prev) => prev.filter((w) => w.windowId !== windowId));
     },
-    [expanded, onClose, persistUi],
+    [expandedSessionId, onClose, windows],
   );
 
   const initializedRef = useRef(false);
@@ -646,21 +648,21 @@ function DiscoveryAssistantPanel({
       if (win.messages.length) saveDiscoveryChatMessages(brandId, win.sessionId, win.messages);
     }
     refreshSessions();
-    persistUi(windows, expanded);
-  }, [brandId, windows, expanded, open, persistUi, refreshSessions]);
+    persistUi(windows, expandedSessionId);
+  }, [brandId, windows, expandedSessionId, open, persistUi, refreshSessions]);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (historyOpen) setHistoryOpen(false);
-        else if (expanded) setExpanded(false);
+        else if (expandedSessionId) setExpandedSessionId(null);
         else onClose();
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose, historyOpen, expanded]);
+  }, [open, onClose, historyOpen, expandedSessionId]);
 
   const sendForWindow = useCallback(
     async (windowId: string, text: string) => {
@@ -781,13 +783,16 @@ function DiscoveryAssistantPanel({
     [brandId, refreshSessions],
   );
 
-  const toggleExpanded = useCallback(() => {
-    setExpanded((v) => {
-      const next = !v;
-      persistUi(windows, next);
-      return next;
-    });
-  }, [windows, persistUi]);
+  const toggleExpandedForSession = useCallback(
+    (sessionId: string) => {
+      setExpandedSessionId((prev) => {
+        const next = prev === sessionId ? null : sessionId;
+        persistUi(windows, next);
+        return next;
+      });
+    },
+    [windows, persistUi],
+  );
 
   return (
     <AnimatePresence>
@@ -800,7 +805,7 @@ function DiscoveryAssistantPanel({
           transition={PANEL_SPRING}
           className={cn(
             "fixed z-50 flex items-end gap-2.5 motion-safe:transition-[left,right,bottom,width] motion-safe:duration-300 motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]",
-            expanded
+            clusterExpanded
               ? "inset-y-0 right-0 left-0 sm:left-[var(--rival-sidebar-width,280px)] max-h-screen items-stretch gap-3 p-3"
               : "bottom-[5.25rem] right-6 max-w-[calc(100vw-1.5rem)] sm:max-w-[calc(100vw-var(--rival-sidebar-width,280px)-2rem)]",
           )}
@@ -813,19 +818,21 @@ function DiscoveryAssistantPanel({
             className={cn(
               "flex shrink-0 items-center justify-center rounded-2xl",
               assistantPlusBtn,
-              expanded ? "h-14 w-14 self-center" : "mb-1 h-11 w-11",
+              clusterExpanded ? "h-14 w-14 self-center" : "mb-1 h-11 w-11",
             )}
             aria-label="New chat window to the left"
             title="New chat"
           >
-            <Plus className={expanded ? "h-5 w-5" : "h-4 w-4"} />
+            <Plus className={clusterExpanded ? "h-5 w-5" : "h-4 w-4"} />
           </motion.button>
 
           <div
             ref={scrollRef}
             className={cn(
               "flex min-w-0 items-stretch gap-2.5",
-              expanded ? "h-full min-h-0 flex-1 overflow-hidden" : "overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+              clusterExpanded
+                ? "h-full min-h-0 flex-1 overflow-hidden"
+                : "overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
             )}
           >
             <AnimatePresence mode="popLayout">
@@ -835,7 +842,8 @@ function DiscoveryAssistantPanel({
                   win={win}
                   index={index}
                   isPrimary={index === windows.length - 1}
-                  expanded={expanded}
+                  isExpanded={expandedSessionId === win.sessionId}
+                  clusterExpanded={clusterExpanded}
                   brandName={brandName}
                   sessions={sessions}
                   historyOpen={historyOpen}
@@ -843,8 +851,7 @@ function DiscoveryAssistantPanel({
                   isPending={isPending}
                   reduceMotion={reduceMotion}
                   onClosePane={() => closeWindow(win.windowId)}
-                  onCloseAll={onClose}
-                  onToggleExpanded={toggleExpanded}
+                  onToggleExpanded={() => toggleExpandedForSession(win.sessionId)}
                   onToggleHistory={() => setHistoryOpen((v) => !v)}
                   onNewChat={startNewChat}
                   onInputChange={(value) => updateWindow(win.windowId, { input: value })}

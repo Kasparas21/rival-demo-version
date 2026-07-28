@@ -23,17 +23,13 @@ import {
   type DiscoveryAssistantResponse,
   type DiscoveryVisualStat,
 } from "./discovery-assistant-types";
-import { extractDiscoverySearchKeywords } from "./discovery-query-service";
 import { loadDiscoveryAdsByIds } from "./load-discovery-ads-by-ids";
-import type { DiscoveryAdDto, DiscoveryFormatFilter, DiscoveryMarketStats } from "./types";
+import type { DiscoveryAdDto, DiscoveryMarketStats } from "./types";
 
 const MAX_TOOL_ROUNDS = 4;
 const MAX_ADS_IN_TOOL_PAYLOAD = 25;
 const MAX_TOOL_JSON_CHARS = 14_000;
-const OPENROUTER_TIMEOUT_MS = 45_000;
-
-const ANALYTICAL_QUERY_RE =
-  /\b(pattern|keyword|market|compare|competitor|stats|analyze|analyse|hottest|ultimate|trending|which|how many|kiek|overview|report)\b/i;
+const OPENROUTER_TIMEOUT_MS = 60_000;
 
 const SYSTEM_PROMPT = `You are the Spy-Rival Discovery assistant — a visual competitive intelligence copilot for Meta ads.
 
@@ -49,6 +45,8 @@ CRITICAL OUTPUT RULES:
 - "suggestions": 3 short follow-up prompts
 
 Use tools for real data. Never invent ad ids or counts.
+For specific product/treatment searches (e.g. aligners, implants, whitening), pass ALL distinguishing keywords with match:"all" — do not use broad single words like "dental" alone.
+Pick ad_refs from the most relevant tool results (highest keyword overlap). Include real ad copy in each preview field.
 sort options: shuffle, newest, impressions, ultimate_winner, longest_running, oldest.
 
 JSON schema:
@@ -227,7 +225,8 @@ async function executeDiscoveryTool(
         const searchArgs = withBrand as Parameters<typeof mcpSearchDiscoveryAds>[1];
         return await mcpSearchDiscoveryAds(ctx, {
           ...searchArgs,
-          sort: searchArgs.sort ?? "newest",
+          include_full_copy: true,
+          sort: searchArgs.sort ?? "impressions",
           limit: Math.min(Math.max(Number(searchArgs.limit) || 50, 1), 50),
         });
       }
@@ -402,7 +401,7 @@ async function enrichAssistantResponse(
   ].slice(0, 12);
 
   const loadedAds = ids.length ? await loadDiscoveryAdsByIds(supabase, userId, ids) : [];
-  const discovery_ads = loadedAds.map((ad) => ({ ...ad, raw_payload: {} }));
+  const discovery_ads = loadedAds;
 
   const ad_refs: DiscoveryAssistantAdRef[] = discovery_ads.map((ad) => ({
     id: ad.id,
@@ -434,91 +433,6 @@ async function enrichAssistantResponse(
   };
 }
 
-function inferFormatFromMessage(message: string): DiscoveryFormatFilter {
-  const m = message.toLowerCase();
-  if (/\b(video|reel|reels)\b/.test(m)) return "video";
-  if (/\b(image|photo|static|carousel)\b/.test(m)) return "image";
-  return "all";
-}
-
-function shouldUseDirectSearch(message: string): boolean {
-  if (ANALYTICAL_QUERY_RE.test(message)) return false;
-  return extractDiscoverySearchKeywords(message).length > 0;
-}
-
-function toolResultTotal(toolResult: unknown): number {
-  if (!toolResult || typeof toolResult !== "object") return 0;
-  const pagination = (toolResult as { pagination?: { total?: number } }).pagination;
-  return pagination?.total ?? 0;
-}
-
-async function runDirectSearchFastPath(params: {
-  ctx: Awaited<ReturnType<typeof createMcpToolContext>>;
-  supabase: SupabaseClient<Database>;
-  userId: string;
-  brandId: string;
-  message: string;
-}): Promise<DiscoveryAssistantResponse | null> {
-  const keywords = extractDiscoverySearchKeywords(params.message);
-  if (!keywords.length) return null;
-
-  const format = inferFormatFromMessage(params.message);
-  const toolResult = await executeDiscoveryTool(params.ctx, params.brandId, "search_discovery_ads", {
-    query: keywords[0],
-    keywords,
-    match: "any",
-    format,
-    sort: "newest",
-    limit: 50,
-  });
-
-  const harvest = { adIds: [] as string[], marketStats: null as DiscoveryMarketStats | null };
-  harvestFromToolResult(toolResult, harvest);
-
-  const total = toolResultTotal(toolResult) || harvest.adIds.length;
-  const label = keywords.slice(0, 3).join(", ");
-
-  if (harvest.adIds.length > 0) {
-    return enrichAssistantResponse(
-      params.supabase,
-      params.userId,
-      {
-        message: `Found ${total} ads matching ${label}.`,
-        filter_patch: {
-          search: keywords.join(" "),
-          ...(format !== "all" ? { format } : {}),
-        },
-        suggestions: [
-          "Show only ultimate winners",
-          "Which competitor runs the most?",
-          "Compare video vs image share",
-        ],
-      },
-      harvest.adIds,
-      harvest.marketStats,
-    );
-  }
-
-  if (toolResult && typeof toolResult === "object" && (toolResult as { ok?: boolean }).ok === true) {
-    return enrichAssistantResponse(
-      params.supabase,
-      params.userId,
-      {
-        message: `No ads matched "${label}". Try fewer or broader keywords.`,
-        suggestions: [
-          "Show video ads about implants",
-          "What keywords appear most this week?",
-          "Show ultimate winners",
-        ],
-      },
-      [],
-      harvest.marketStats,
-    );
-  }
-
-  return null;
-}
-
 export async function runDiscoveryAssistant(params: {
   supabase: SupabaseClient<Database>;
   userId: string;
@@ -536,17 +450,6 @@ export async function runDiscoveryAssistant(params: {
     authMethod: "api_key",
   };
   const ctx = await createMcpToolContext(auth);
-
-  if (shouldUseDirectSearch(params.message)) {
-    const fast = await runDirectSearchFastPath({
-      ctx,
-      supabase: params.supabase,
-      userId: params.userId,
-      brandId: params.brandId,
-      message: params.message,
-    });
-    if (fast) return fast;
-  }
 
   const route = resolveModelForTask("discovery_chat");
   const contextBlock = JSON.stringify({
