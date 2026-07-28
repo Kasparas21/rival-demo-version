@@ -168,6 +168,7 @@ async function fetchScrapedAdRows(
       .from("scraped_ads")
       .select(selectCols)
       .eq("user_id", userId)
+      .eq("platform", "meta")
       .in("competitor_id", chunk)
       .order("last_seen_at", { ascending: false })
       .limit(FETCH_CAP);

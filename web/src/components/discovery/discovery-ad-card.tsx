@@ -1,24 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
+import { Bookmark, BookmarkCheck, Sparkles } from "lucide-react";
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
-import { TikTokAdCard } from "@/components/ads-library/tiktok-ad-card";
-import { PinterestAdCard } from "@/components/ads-library/pinterest-ad-card";
-import { SnapchatAdCard } from "@/components/ads-library/snapchat-ad-card";
-import { GoogleAdRowCard } from "@/components/ads-library/google-ad-row-card";
-import { LinkedInFeedAdCard } from "@/components/ads-library/linkedin-feed-ad-card";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
 import { hydrateMetaAdCardForLibrary } from "@/lib/ad-library/count-active-ads";
-import type {
-  GoogleAdRow,
-  LinkedInAdCard,
-  MetaAdCard as MetaAdCardModel,
-  PinterestAdCard as PinterestAdCardModel,
-  SnapchatAdCard as SnapchatAdCardModel,
-  TikTokAdCard as TikTokAdCardModel,
-} from "@/lib/ad-library/normalize";
+import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
 import type { DiscoveryAdDto } from "@/lib/discovery/types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { cn } from "@/lib/utils";
@@ -31,27 +19,42 @@ type Props = {
   ad: DiscoveryAdDto;
   onOpen?: () => void;
   className?: string;
+  isSaved?: boolean;
+  isSavePending?: boolean;
+  onToggleSave?: () => void;
 };
 
-export function DiscoveryAdCard({ ad, onOpen, className }: Props) {
+export function DiscoveryAdCard({
+  ad,
+  onOpen,
+  className,
+  isSaved = false,
+  isSavePending = false,
+  onToggleSave,
+}: Props) {
   const platform = ad.platform.trim().toLowerCase();
+  if (platform !== "meta" || !isRecord(ad.raw_payload)) {
+    return null;
+  }
+
   const domain = ad.competitor_domain ?? "";
   const brand = { name: ad.competitor_name, domain, logoUrl: ad.competitor_logo_url ?? "" };
-  const onClick = onOpen;
+  const hydrated = hydrateMetaAdCardForLibrary(ad.raw_payload as unknown as MetaAdCardModel);
   const saveProps = {
     scrapedAdId: ad.id,
-    isSaved: false as const,
-    saveDisabled: false,
+    isSaved: isSaved || isSavePending,
+    onToggleSave,
+    saveDisabled: !onToggleSave,
   };
 
   const header = (
-    <div className="flex items-center gap-2 border-b border-slate-100/90 bg-white/80 px-3 py-2.5 backdrop-blur-sm">
+    <div className="relative flex items-center gap-2 border-b border-slate-100/90 bg-white/80 px-3 py-2.5 backdrop-blur-sm">
       <CompetitorLogo
         sources={{ primary: ad.competitor_logo_url, domain }}
         name={ad.competitor_name}
         size="xs"
       />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 pr-10">
         <p className="truncate text-[13px] font-semibold text-slate-900">{ad.competitor_name}</p>
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
           <ComparisonPlatformIcon platform={ad.platform as StrategyPlatform} className="h-3 w-3" />
@@ -64,12 +67,32 @@ export function DiscoveryAdCard({ ad, onOpen, className }: Props) {
           ) : null}
         </div>
       </div>
+      {onToggleSave ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSave();
+          }}
+          disabled={isSavePending}
+          aria-label={isSaved ? "Unsave ad" : "Save ad"}
+          className={cn(
+            "absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition",
+            isSaved
+              ? "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+              : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+            isSavePending && "opacity-60",
+          )}
+        >
+          {isSaved ? (
+            <BookmarkCheck className="h-4 w-4" aria-hidden />
+          ) : (
+            <Bookmark className="h-4 w-4" aria-hidden />
+          )}
+        </button>
+      ) : null}
     </div>
   );
-
-  if (!isRecord(ad.raw_payload)) {
-    return null;
-  }
 
   const shell = (body: ReactNode) => (
     <article
@@ -83,45 +106,14 @@ export function DiscoveryAdCard({ ad, onOpen, className }: Props) {
     </article>
   );
 
-  switch (platform) {
-    case "meta": {
-      const hydrated = hydrateMetaAdCardForLibrary(ad.raw_payload as unknown as MetaAdCardModel);
-      return shell(
-        <MetaAdCard ad={hydrated} viewMode="grid" brand={brand} onClick={onClick} {...saveProps} />,
-      );
-    }
-    case "tiktok":
-      return shell(
-        <TikTokAdCard ad={ad.raw_payload as unknown as TikTokAdCardModel} onClick={onClick} {...saveProps} />,
-      );
-    case "pinterest":
-      return shell(
-        <PinterestAdCard ad={ad.raw_payload as unknown as PinterestAdCardModel} onClick={onClick} {...saveProps} />,
-      );
-    case "snapchat":
-      return shell(
-        <SnapchatAdCard ad={ad.raw_payload as unknown as SnapchatAdCardModel} onClick={onClick} {...saveProps} />,
-      );
-    case "google":
-    case "youtube":
-      return shell(
-        <GoogleAdRowCard
-          ad={ad.raw_payload as unknown as GoogleAdRow}
-          brand={brand}
-          onOpenDetail={onClick}
-          {...saveProps}
-        />,
-      );
-    case "linkedin":
-      return shell(
-        <LinkedInFeedAdCard
-          ad={ad.raw_payload as unknown as LinkedInAdCard}
-          brand={brand}
-          onOpenDetail={onClick}
-          {...saveProps}
-        />,
-      );
-    default:
-      return null;
-  }
+  return shell(
+    <MetaAdCard
+      ad={hydrated}
+      viewMode="grid"
+      gridCreativeSizing="natural"
+      brand={brand}
+      onClick={onOpen}
+      {...saveProps}
+    />,
+  );
 }

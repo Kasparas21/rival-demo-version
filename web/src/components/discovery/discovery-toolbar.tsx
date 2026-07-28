@@ -18,8 +18,6 @@ import {
   useMenuState,
 } from "@/components/competitor/tests-timeline/timeline-menu";
 import type { DiscoveryCompetitorChip } from "@/lib/discovery/types";
-import { ALL_COMPARISON_PLATFORMS } from "@/lib/platforms/comparison-platform-order";
-import { platformLabel } from "@/lib/platforms/platform-label";
 import { cn } from "@/lib/utils";
 
 import type { DiscoveryToolbarState } from "./discovery-types";
@@ -44,11 +42,10 @@ type Props = {
   state: DiscoveryToolbarState;
   onChange: (patch: Partial<DiscoveryToolbarState>) => void;
   competitors: DiscoveryCompetitorChip[];
-  platformCounts: Record<string, number>;
   total: number;
 };
 
-export function DiscoveryToolbar({ state, onChange, competitors, platformCounts, total }: Props) {
+export function DiscoveryToolbar({ state, onChange, competitors, total }: Props) {
   const menu = useMenuState();
 
   const sortLabel = SORT_OPTIONS.find((o) => o.id === state.sort)?.label ?? "Shuffle mix";
@@ -59,18 +56,10 @@ export function DiscoveryToolbar({ state, onChange, competitors, platformCounts,
     if (state.status !== "all") n += 1;
     if (state.format !== "all") n += 1;
     if (state.ultimateOnly) n += 1;
-    if (state.selectedPlatforms.size > 0) n += 1;
     if (state.competitorId) n += 1;
     if (state.datePreset !== "all") n += 1;
     return n;
   }, [state]);
-
-  const togglePlatform = (id: string) => {
-    const next = new Set(state.selectedPlatforms);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onChange({ selectedPlatforms: next });
-  };
 
   return (
     <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:px-4">
@@ -99,18 +88,6 @@ export function DiscoveryToolbar({ state, onChange, competitors, platformCounts,
               onClick={() => menu.toggle("filters")}
             />
             <TimelineMenuPanel open={menu.isOpen("filters")} onClose={menu.close} className="min-w-[240px] py-1">
-              <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Platform
-              </p>
-              {ALL_COMPARISON_PLATFORMS.filter((p) => (platformCounts[p] ?? 0) > 0).map((p) => (
-                <TimelineToggleRow
-                  key={p}
-                  label={`${platformLabel(p)} (${platformCounts[p] ?? 0})`}
-                  checked={state.selectedPlatforms.has(p)}
-                  onChange={() => togglePlatform(p)}
-                />
-              ))}
-              <div className="my-1 h-px bg-slate-100" />
               <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Status
               </p>
@@ -234,21 +211,6 @@ export function DiscoveryToolbar({ state, onChange, competitors, platformCounts,
           ) : null}
         </div>
 
-        {state.selectedPlatforms.size > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {[...state.selectedPlatforms].map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => togglePlatform(p)}
-                className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white"
-              >
-                {platformLabel(p)}
-                <span aria-hidden>×</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
       </div>
     </div>
   );

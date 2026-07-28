@@ -20,6 +20,7 @@ import { getLandingPages } from "@/lib/mcp/tools/get-landing-pages";
 import { getOrganicInsights, getOrganicPosts } from "@/lib/mcp/tools/get-organic-posts";
 import { getProvenWinners } from "@/lib/mcp/tools/get-proven-winners";
 import { getRecentAlerts } from "@/lib/mcp/tools/get-recent-alerts";
+import { getSavedAds } from "@/lib/mcp/tools/get-saved-ads";
 import { getStealableAngles } from "@/lib/mcp/tools/get-stealable-angles";
 import { getStrategyOverview } from "@/lib/mcp/tools/get-strategy-overview";
 import { listCompetitors } from "@/lib/mcp/tools/list-competitors";
@@ -93,6 +94,28 @@ export function registerMcpTools(
     async (input) => {
       const ctx = await buildContext();
       return runTool("get_competitor_ads", ctx, (c) => getCompetitorAds(c, input));
+    },
+  );
+
+  server.registerTool(
+    "get_saved_ads",
+    {
+      title: "Get saved ads",
+      description:
+        `Your bookmarked ad snapshots across tracked competitors. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). ` +
+        "Optional competitor filter. Each result includes ad copy, angle, notes, saved_at, spy_rival_url, and platform_library_url. " +
+        "Use this to answer questions about ads you have saved for later reference.",
+      inputSchema: {
+        competitor: z.string().optional().describe("Competitor name, domain, or UUID"),
+        platform: z.string().optional().describe("Filter by platform, e.g. meta"),
+        limit: mcpLimitSchema(MCP_PAGE_MAX, 50),
+        offset: mcpOffsetSchema(),
+        include_full_copy: mcpIncludeFullCopySchema(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_saved_ads", ctx, (c) => getSavedAds(c, input));
     },
   );
 

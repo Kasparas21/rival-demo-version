@@ -32,7 +32,8 @@ function buildHandler(auth: McpAuthContext) {
         "Defaults: ad copy is truncated to 300 chars unless include_full_copy=true. " +
         "Page sizes up to 200 (ads/alerts/timeline/moves/organic/email) or 500 (copy vault / proven winners / landing pages).\n\n" +
         "Dashboard parity tools: get_organic_posts (view=insights), get_email_intelligence (view=insights|detail), " +
-        "get_landing_pages (url for ads-on-page), get_journey_goal (full map terminal goal + evidence), get_competitor_moves.\n\n" +
+        "get_landing_pages (url for ads-on-page), get_journey_goal (full map terminal goal + evidence), get_competitor_moves, " +
+        "get_saved_ads (your bookmarked ad snapshots).\n\n" +
         "list_competitors: tracked_slot_count may exceed listed_competitor_count when one competitor is mapped to multiple brands.",
     },
     {

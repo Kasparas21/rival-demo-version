@@ -11,6 +11,7 @@ import { DiscoveryAdCard } from "@/components/discovery/discovery-ad-card";
 import { DiscoveryAdCardBoundary } from "@/components/discovery/discovery-ad-card-boundary";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
+import { useDiscoverySavedAds } from "@/components/discovery/use-discovery-saved-ads";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
 import { cn } from "@/lib/utils";
 
@@ -26,7 +27,6 @@ export function DiscoveryPageClient() {
     ads,
     total,
     competitors,
-    platformCounts,
     loading,
     loadingMore,
     error,
@@ -34,6 +34,8 @@ export function DiscoveryPageClient() {
     reshuffle,
     loadMore,
   } = useDiscoveryFeed(activeBrand.id);
+
+  const { isSaved, isPending, toggleSave } = useDiscoverySavedAds(ads);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -55,7 +57,7 @@ export function DiscoveryPageClient() {
       <FeatureSectionHeader
         overline="Inspo"
         title="Discovery"
-        description="A mixed feed of ads from every competitor you track. Shuffle for inspiration or rank by impressions, recency, and ultimate winners."
+        description="Meta ads from every competitor you track. Shuffle for inspiration or rank by impressions, recency, and ultimate winners."
         actions={
           <button
             type="button"
@@ -87,7 +89,6 @@ export function DiscoveryPageClient() {
           state={toolbar}
           onChange={patchToolbar}
           competitors={competitors}
-          platformCounts={platformCounts}
           total={total}
         />
       </div>
@@ -125,7 +126,13 @@ export function DiscoveryPageClient() {
         >
           {ads.map((ad) => (
             <DiscoveryAdCardBoundary key={ad.id}>
-              <DiscoveryAdCard ad={ad} onOpen={() => openAd(ad.id)} />
+              <DiscoveryAdCard
+                ad={ad}
+                onOpen={() => openAd(ad.id)}
+                isSaved={isSaved(ad.id)}
+                isSavePending={isPending(ad.id)}
+                onToggleSave={() => void toggleSave(ad)}
+              />
             </DiscoveryAdCardBoundary>
           ))}
         </div>

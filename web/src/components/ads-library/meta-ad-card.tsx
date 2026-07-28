@@ -36,6 +36,7 @@ function MetaCreativeMedia({
   compact,
   archivedUrl,
   fillFrame,
+  naturalSizing,
 }: {
   ad: MetaAdCardModel;
   compact: boolean;
@@ -43,6 +44,8 @@ function MetaCreativeMedia({
   archivedUrl?: string;
   /** Fit creative inside a fixed-height card frame (grid view). */
   fillFrame?: boolean;
+  /** Size the frame to the creative's natural aspect ratio (discovery masonry). */
+  naturalSizing?: boolean;
 }) {
   const [videoFailed, setVideoFailed] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -73,15 +76,20 @@ function MetaCreativeMedia({
   };
   /** Poster-first preview so video tiles match image size; mount `<video>` only after play. */
   const wantsVideo = Boolean(stream && ad.isVideo && displayStill);
-  const maxH = compact ? "max-h-[300px]" : fillFrame ? "max-h-full" : "max-h-[420px]";
-  const previewFrameH = compact ? "h-[200px]" : fillFrame ? "h-full min-h-0" : "h-[280px]";
-  /** Image ads: natural aspect, width-first. Video posters: fixed frame fills like hero creative. */
-  const imageMediaClass = fillFrame
-    ? fillFrameMediaClass
-    : `block w-full ${maxH} object-contain rounded-xl`;
-  const videoPreviewMediaClass = fillFrame
-    ? fillFrameMediaClass
-    : "block h-full w-full object-cover rounded-xl";
+  const useNatural = naturalSizing && !compact;
+  const maxH = compact ? "max-h-[300px]" : useNatural ? "max-h-[min(80vh,720px)]" : fillFrame ? "max-h-full" : "max-h-[420px]";
+  const previewFrameH = compact ? "h-[200px]" : useNatural ? "" : fillFrame ? "h-full min-h-0" : "h-[280px]";
+  /** Image ads: natural aspect, width-first. Video posters: fixed frame unless naturalSizing. */
+  const imageMediaClass = useNatural
+    ? "block w-full h-auto object-contain rounded-xl"
+    : fillFrame
+      ? fillFrameMediaClass
+      : `block w-full ${maxH} object-contain rounded-xl`;
+  const videoPreviewMediaClass = useNatural
+    ? "block w-full h-auto max-h-[min(80vh,720px)] object-contain rounded-xl"
+    : fillFrame
+      ? fillFrameMediaClass
+      : "block h-full w-full object-cover rounded-xl";
   const videoFrameBg = fillFrame ? "bg-[#f3f4f6]" : "bg-black";
 
   if (wantsVideo && playing && !videoFailed) {
@@ -116,7 +124,9 @@ function MetaCreativeMedia({
         className={
           fillFrame
             ? "relative inline-flex max-h-full max-w-full items-center justify-center overflow-hidden rounded-xl border-0 bg-transparent p-0"
-            : `relative block w-full overflow-hidden rounded-xl border-0 bg-[#f3f4f6] p-0 ${previewFrameH}`
+            : useNatural
+              ? "relative block w-full overflow-hidden rounded-xl border-0 bg-[#f3f4f6] p-0"
+              : `relative block w-full overflow-hidden rounded-xl border-0 bg-[#f3f4f6] p-0 ${previewFrameH}`
         }
         onClick={(e) => {
           e.stopPropagation();
@@ -209,6 +219,18 @@ function MetaCreativeMedia({
   }
 
   if (displayStill) {
+    if (useNatural) {
+      return (
+        <img
+          src={displayStill}
+          alt=""
+          referrerPolicy="no-referrer"
+          className={imageMediaClass}
+          onClick={(e) => e.stopPropagation()}
+          onError={onStillError}
+        />
+      );
+    }
     return fillFrameCenter(
       <img
         src={displayStill}
@@ -287,6 +309,7 @@ function MetaAdCardImpl({
   runStatus,
   metaScrapeAtMs,
   isCreativeTestWinner,
+  gridCreativeSizing = "fixed",
 }: {
   ad: MetaAdCardModel;
   viewMode: "grid" | "list";
@@ -301,6 +324,8 @@ function MetaAdCardImpl({
   /** UTC ms of last Meta scrape — used for end_date vs scrape-day active rule. */
   metaScrapeAtMs?: number;
   isCreativeTestWinner?: boolean;
+  /** Grid creative frame: fixed 280px box vs natural aspect ratio. */
+  gridCreativeSizing?: "fixed" | "natural";
 }) {
   const killed = isLibraryAdKilled("meta", ad, runStatus, metaScrapeAtMs);
   const runDays = computeLibraryAdRunDays("meta", ad, runStatus, metaScrapeAtMs);
@@ -391,15 +416,28 @@ function MetaAdCardImpl({
             </div>
           ) : null}
           {isGrid ? (
-            <div className="flex min-h-0 flex-1 flex-col border-y border-[#e5e7eb] bg-[#f3f4f6]">
-              <div className="min-h-0 flex-1" aria-hidden />
-              <div className="relative z-0 w-full shrink-0 px-3">
-                <div className="h-[280px] w-full overflow-hidden rounded-xl bg-[#f3f4f6]">
-                  <MetaCreativeMedia ad={ad} compact={false} fillFrame archivedUrl={archivedUrl} />
+            gridCreativeSizing === "natural" ? (
+              <div className="border-y border-[#e5e7eb] bg-[#f3f4f6] px-3">
+                <div className="w-full overflow-hidden rounded-xl bg-[#f3f4f6]">
+                  <MetaCreativeMedia
+                    ad={ad}
+                    compact={false}
+                    naturalSizing
+                    archivedUrl={archivedUrl}
+                  />
                 </div>
               </div>
-              <div className="min-h-0 flex-1" aria-hidden />
-            </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col border-y border-[#e5e7eb] bg-[#f3f4f6]">
+                <div className="min-h-0 flex-1" aria-hidden />
+                <div className="relative z-0 w-full shrink-0 px-3">
+                  <div className="h-[280px] w-full overflow-hidden rounded-xl bg-[#f3f4f6]">
+                    <MetaCreativeMedia ad={ad} compact={false} fillFrame archivedUrl={archivedUrl} />
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1" aria-hidden />
+              </div>
+            )
           ) : null}
           <div
             className="px-4 py-3.5 flex flex-col gap-3 bg-[#f3f4f6] shrink-0 border-t border-[#e5e7eb]"

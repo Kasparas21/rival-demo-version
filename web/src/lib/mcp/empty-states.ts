@@ -33,3 +33,6 @@ export const MCP_EMPTY_NO_JOURNEY_GOAL =
 
 export const MCP_EMPTY_NO_MOVES =
   "No competitor moves detected yet — moves appear after strategy snapshots are compared.";
+
+export const MCP_EMPTY_NO_SAVED_ADS =
+  "No saved ads yet — bookmark ads in Discovery or a competitor library to build your collection.";
