@@ -14,7 +14,7 @@ describe("discovery-cache", () => {
     const keyA = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a", "2026-07-27");
     const keyB = discoveryFeedCacheKey("brand-1", DEFAULT_DISCOVERY_TOOLBAR, "", "seed-a", "2026-07-27");
     expect(keyA).toBe(keyB);
-    expect(keyA).toContain("brand-1:discovery:v4:2026-07-27:");
+    expect(keyA).toContain("brand-1:discovery:v5:2026-07-27:");
   });
 
   it("changes cache key when client selection changes", () => {
@@ -43,6 +43,25 @@ describe("discovery-cache", () => {
         has_more: false,
         competitors: [],
         platform_counts: {},
+        market_stats: {
+          total_ads: 1,
+          active_ads: 1,
+          retired_ads: 0,
+          competitors_tracked: 1,
+          new_this_week: 0,
+          new_last_week: 0,
+          new_week_over_week_delta: 0,
+          new_week_over_week_pct: null,
+          retired_this_week: 0,
+          net_change_this_week: 0,
+          ultimate_winners: 0,
+          video_percent: 0,
+          top_competitor_name: null,
+          top_competitor_ad_count: 0,
+          avg_impressions_index: null,
+          hottest_competitor_name: null,
+          hottest_competitor_new_this_week: 0,
+        },
         shuffle_seed: "seed",
         offset: 1,
       }),

@@ -6,6 +6,7 @@ import {
   sortAdsByPerformanceSort,
   type AdPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
+import { computeDiscoveryMarketStats } from "@/lib/discovery/compute-discovery-market-stats";
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -401,6 +402,7 @@ export async function buildDiscoveryFeed(
       has_more: false,
       competitors: [],
       platform_counts: {},
+      market_stats: computeDiscoveryMarketStats([]),
       shuffle_seed: input.shuffleSeed,
     };
   }
@@ -486,6 +488,7 @@ export async function buildDiscoveryFeed(
   }
 
   const total = sorted.length;
+  const market_stats = computeDiscoveryMarketStats(hydrated, nowMs);
   let page = sorted.slice(input.offset, input.offset + input.limit);
 
   if (!needsPayloadUpfront) {
@@ -512,6 +515,7 @@ export async function buildDiscoveryFeed(
     has_more: input.offset + page.length < total,
     competitors: competitorChips,
     platform_counts: platformCounts,
+    market_stats,
     shuffle_seed: input.shuffleSeed,
   };
 }

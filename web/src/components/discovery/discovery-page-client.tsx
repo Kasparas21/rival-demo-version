@@ -7,6 +7,7 @@ import { Compass, Loader2, RefreshCw, Search } from "lucide-react";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import { DiscoveryMarketStatsBar } from "@/components/discovery/discovery-market-stats";
 import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
@@ -35,6 +36,7 @@ export function DiscoveryPageClient() {
     ads,
     total,
     competitors,
+    marketStats,
     loading,
     loadingMore,
     error,
@@ -106,6 +108,10 @@ export function DiscoveryPageClient() {
           clientBrands={clientBrands}
         />
       </div>
+
+      {!loading && !error && marketStats && marketStats.total_ads > 0 ? (
+        <DiscoveryMarketStatsBar stats={marketStats} />
+      ) : null}
 
       {loading ? (
         <div className="mt-10 flex items-center justify-center gap-2 text-sm text-slate-500">

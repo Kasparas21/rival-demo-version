@@ -39,6 +39,30 @@ export type DiscoveryCompetitorChip = {
   ad_count: number;
 };
 
+/** Aggregated market pulse for the current filtered discovery feed. */
+export type DiscoveryMarketStats = {
+  total_ads: number;
+  active_ads: number;
+  retired_ads: number;
+  competitors_tracked: number;
+  /** Ads whose first_seen_at falls in the last 7 days. */
+  new_this_week: number;
+  /** Ads whose first_seen_at falls in the prior 7-day window. */
+  new_last_week: number;
+  new_week_over_week_delta: number;
+  /** Percent change in new launches vs prior week; null when prior week had zero launches. */
+  new_week_over_week_pct: number | null;
+  retired_this_week: number;
+  net_change_this_week: number;
+  ultimate_winners: number;
+  video_percent: number;
+  top_competitor_name: string | null;
+  top_competitor_ad_count: number;
+  avg_impressions_index: number | null;
+  hottest_competitor_name: string | null;
+  hottest_competitor_new_this_week: number;
+};
+
 export type DiscoveryFeedQuery = {
   brandId: string;
   /** Empty = active brand only. Otherwise union competitors from these brand workspaces. */
@@ -65,5 +89,6 @@ export type DiscoveryFeedResult = {
   has_more: boolean;
   competitors: DiscoveryCompetitorChip[];
   platform_counts: Record<string, number>;
+  market_stats: DiscoveryMarketStats;
   shuffle_seed: string;
 };

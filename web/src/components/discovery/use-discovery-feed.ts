@@ -64,6 +64,7 @@ async function fetchDiscoveryPage(
     has_more: json.has_more,
     competitors: json.competitors,
     platform_counts: json.platform_counts,
+    market_stats: json.market_stats,
     shuffle_seed: json.shuffle_seed,
     offset: offset + json.ads.length,
   };
@@ -149,6 +150,7 @@ export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: stri
   const total = firstPage?.total ?? 0;
   const competitors = firstPage?.competitors ?? [];
   const platformCounts = firstPage?.platform_counts ?? {};
+  const marketStats = firstPage?.market_stats ?? null;
   const hasMore = extraAds.length > 0 ? extraHasMore : (firstPage?.has_more ?? false);
   const offset = (firstPage?.offset ?? firstPage?.ads.length ?? 0) + extraAds.length;
 
@@ -203,6 +205,7 @@ export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: stri
     total,
     competitors,
     platformCounts,
+    marketStats,
     loading: loading && !cacheHit,
     loadingMore,
     error: error?.message ?? null,
