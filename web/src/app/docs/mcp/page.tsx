@@ -84,6 +84,10 @@ export default function McpDocsPage() {
           <li>Which landing pages get the most bottom-funnel ad traffic?</li>
           <li>What is their strategy map journey end goal — paths, deals, and creatives?</li>
           <li>Search my copy vault for &quot;free trial&quot; messaging.</li>
+          <li>Search discovery ads for &quot;implant&quot; or &quot;free consultation&quot; across all tracked competitors.</li>
+          <li>What are the top keywords in my discovery feed this week?</li>
+          <li>Show the weekly discovery patterns report for my client workspace.</li>
+          <li>Which competitor launched the most video ads in the last 30 days?</li>
           <li>How many competitors am I tracking on my plan?</li>
           <li>Show the strategy overview for northwindhealth.com if it&apos;s cached.</li>
         </ul>

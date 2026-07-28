@@ -120,6 +120,50 @@ export type DiscoveryPatternFormatMix = {
 export type DiscoveryPatternAngleMix = {
   angle: string;
   count: number;
+  ad_ids?: string[];
+  active_count?: number;
+  killed_count?: number;
+  new_this_week?: number;
+  killed_this_week?: number;
+};
+
+export type PatternDrilldownAdStatus =
+  | "new_this_week"
+  | "active"
+  | "killed_this_week"
+  | "killed"
+  | "ultimate_winner";
+
+export type PatternDrilldownAd = {
+  id: string;
+  competitor_id: string;
+  competitor_name: string;
+  status: PatternDrilldownAdStatus;
+  format: string;
+  preview: string;
+  days_running: number;
+  impressions_index: number | null;
+  launched: string;
+  angle: string | null;
+  is_ultimate_winner: boolean;
+};
+
+export type PatternDrilldownCompetitorGroup = {
+  competitor_id: string;
+  name: string;
+  ads: PatternDrilldownAd[];
+};
+
+export type PatternDrilldownResult = {
+  title: string;
+  total: number;
+  groups: {
+    new_this_week: PatternDrilldownAd[];
+    active: PatternDrilldownAd[];
+    killed_this_week: PatternDrilldownAd[];
+    killed: PatternDrilldownAd[];
+  };
+  by_competitor: PatternDrilldownCompetitorGroup[];
 };
 
 export type DiscoveryPatternMetrics = {

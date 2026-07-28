@@ -25,6 +25,15 @@ import { getStealableAngles } from "@/lib/mcp/tools/get-stealable-angles";
 import { getStrategyOverview } from "@/lib/mcp/tools/get-strategy-overview";
 import { listCompetitors } from "@/lib/mcp/tools/list-competitors";
 import { searchCopyVault } from "@/lib/mcp/tools/search-copy-vault";
+import {
+  mcpAnalyzeDiscoveryKeywords,
+  mcpGetDiscoveryAd,
+  mcpGetDiscoveryCompetitors,
+  mcpGetDiscoveryFeed,
+  mcpGetDiscoveryMarketStats,
+  mcpGetDiscoveryPatterns,
+  mcpSearchDiscoveryAds,
+} from "@/lib/mcp/tools/discovery-tools";
 
 async function runTool(
   name: string,
@@ -333,6 +342,157 @@ export function registerMcpTools(
     async (input) => {
       const ctx = await buildContext();
       return runTool("get_competitor_moves", ctx, (c) => getCompetitorMoves(c, input));
+    },
+  );
+
+  server.registerTool(
+    "search_discovery_ads",
+    {
+      title: "Search discovery ads",
+      description:
+        "Keyword search across the Discovery feed for the current workspace: ad copy, hooks, and competitor names. " +
+        "Supports format (video/image), status (active/retired), date_preset (7d/30d/90d), ultimate_only, competitor filter, and sort. " +
+        "Use match=all to require every keyword. Returns ads with spy_rival_url links and market_stats.",
+      inputSchema: {
+        query: z.string().min(1).describe("Primary search text or comma-separated keywords"),
+        brand_id: z.string().optional().describe("Client workspace brand UUID; defaults to primary brand"),
+        keywords: z.array(z.string()).optional(),
+        match: z.enum(["any", "all"]).optional(),
+        competitor: z.string().optional(),
+        competitors: z.array(z.string()).optional(),
+        format: z.enum(["all", "video", "image"]).optional(),
+        status: z.enum(["all", "active", "retired"]).optional(),
+        ultimate_only: z.boolean().optional(),
+        date_preset: z.enum(["all", "7d", "30d", "90d"]).optional(),
+        sort: z
+          .enum(["shuffle", "newest", "oldest", "longest_running", "impressions", "ultimate_winner"])
+          .optional(),
+        limit: mcpLimitSchema(MCP_PAGE_MAX, 50),
+        offset: mcpOffsetSchema(),
+        include_full_copy: mcpIncludeFullCopySchema(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("search_discovery_ads", ctx, (c) => mcpSearchDiscoveryAds(c, input));
+    },
+  );
+
+  server.registerTool(
+    "get_discovery_feed",
+    {
+      title: "Get discovery feed",
+      description:
+        "Browse the Discovery feed with sort and filters (no keyword required). Returns paginated Meta ads, competitor chips, and market_stats for the workspace.",
+      inputSchema: {
+        brand_id: z.string().optional(),
+        query: z.string().optional(),
+        competitor: z.string().optional(),
+        competitors: z.array(z.string()).optional(),
+        format: z.enum(["all", "video", "image"]).optional(),
+        status: z.enum(["all", "active", "retired"]).optional(),
+        ultimate_only: z.boolean().optional(),
+        date_preset: z.enum(["all", "7d", "30d", "90d"]).optional(),
+        sort: z
+          .enum(["shuffle", "newest", "oldest", "longest_running", "impressions", "ultimate_winner"])
+          .optional(),
+        limit: mcpLimitSchema(MCP_PAGE_MAX, 50),
+        offset: mcpOffsetSchema(),
+        include_full_copy: mcpIncludeFullCopySchema(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_discovery_feed", ctx, (c) => mcpGetDiscoveryFeed(c, input));
+    },
+  );
+
+  server.registerTool(
+    "get_discovery_market_stats",
+    {
+      title: "Get discovery market stats",
+      description:
+        "Market pulse for Discovery: total/active ads, new this week, ultimate winners, video share, hottest competitor. Optional competitor filter.",
+      inputSchema: {
+        brand_id: z.string().optional(),
+        competitor: z.string().optional(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_discovery_market_stats", ctx, (c) => mcpGetDiscoveryMarketStats(c, input));
+    },
+  );
+
+  server.registerTool(
+    "get_discovery_patterns",
+    {
+      title: "Get discovery patterns",
+      description:
+        "Latest weekly AI market-pattern report for the workspace: headline, market temperature, patterns, winners playbook, graveyard lessons, recommended tests, and 12-week metrics history.",
+      inputSchema: {
+        brand_id: z.string().optional(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_discovery_patterns", ctx, (c) => mcpGetDiscoveryPatterns(c, input));
+    },
+  );
+
+  server.registerTool(
+    "analyze_discovery_keywords",
+    {
+      title: "Analyze discovery keywords",
+      description:
+        "Term frequency analysis across all ads in Discovery scope. Returns top terms with ad counts, competitor spread, ultimate-winner count, and sample ad ids. Optional seed_terms to force-include specific hooks/offers.",
+      inputSchema: {
+        brand_id: z.string().optional(),
+        seed_terms: z.array(z.string()).optional(),
+        min_ad_count: z.number().int().min(1).max(20).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+        status: z.enum(["all", "active", "retired"]).optional(),
+        ultimate_only: z.boolean().optional(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("analyze_discovery_keywords", ctx, (c) => mcpAnalyzeDiscoveryKeywords(c, input));
+    },
+  );
+
+  server.registerTool(
+    "get_discovery_competitors",
+    {
+      title: "Get discovery competitors",
+      description:
+        "Competitor breakdown in Discovery scope: ad counts, active ads, ultimate winners, video ads, and newest launch date per competitor.",
+      inputSchema: {
+        brand_id: z.string().optional(),
+        limit: mcpLimitSchema(200, 50),
+        offset: mcpOffsetSchema(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_discovery_competitors", ctx, (c) => mcpGetDiscoveryCompetitors(c, input));
+    },
+  );
+
+  server.registerTool(
+    "get_discovery_ad",
+    {
+      title: "Get discovery ad",
+      description: "Fetch one Meta ad from Discovery by scraped_ads UUID. Returns full copy, performance signals, and links.",
+      inputSchema: {
+        ad_id: z.string().min(1),
+        brand_id: z.string().optional(),
+        include_full_copy: mcpIncludeFullCopySchema(),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_discovery_ad", ctx, (c) => mcpGetDiscoveryAd(c, input));
     },
   );
 }

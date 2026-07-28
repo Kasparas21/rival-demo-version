@@ -132,6 +132,16 @@ describe("computeDiscoveryPatternMetrics", () => {
       nowMs,
     );
 
-    expect(metrics.angle_mix).toEqual([{ angle: "financing", count: 2 }]);
+    expect(metrics.angle_mix).toEqual([
+      {
+        angle: "financing",
+        count: 2,
+        ad_ids: ["a2", "a3"],
+        active_count: 2,
+        killed_count: 0,
+        new_this_week: 2,
+        killed_this_week: 0,
+      },
+    ]);
   });
 });

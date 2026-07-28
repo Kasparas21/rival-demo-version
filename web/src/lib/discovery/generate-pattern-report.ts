@@ -9,7 +9,6 @@ import { stripJsonFences } from "@/lib/email-intelligence/analyze";
 import { resolveModelForTask } from "@/lib/llm/model-routing";
 import { openRouterChatText } from "@/lib/llm/openrouter";
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
-import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Database, Json } from "@/lib/supabase/types";
 
 import { loadCompetitorIdsForBrandIds } from "./build-discovery-feed";
@@ -24,7 +23,8 @@ import { DAY_MS, inUtcHalfOpenRange } from "./pattern-week-utils";
 import { normalizeDiscoveryPatternInsights } from "./pattern-types";
 import type { DiscoveryPatternMetrics, DiscoveryPatternReportDto } from "./types";
 
-const FETCH_CAP = 1500;
+import { fetchAllDiscoveryScrapedAds } from "@/lib/discovery/fetch-discovery-scraped-ads";
+
 const IN_CHUNK = 40;
 const LEAN_AD_SELECT =
   "id, competitor_id, platform, format, ad_text, ad_creative_url, first_seen_at, last_seen_at, is_active, ai_extracted_angle, ai_extracted_launch_date";
@@ -123,45 +123,7 @@ async function fetchPatternAdRows(
   userId: string,
   competitorIds: string[],
 ): Promise<{ rows: ScrapedRow[]; error?: string }> {
-  const byId = new Map<string, ScrapedRow>();
-
-  const fetchChunk = async (chunk: string[], selectCols: string) =>
-    supabase
-      .from("scraped_ads")
-      .select(selectCols)
-      .eq("user_id", userId)
-      .eq("platform", "meta")
-      .in("competitor_id", chunk)
-      .order("last_seen_at", { ascending: false })
-      .limit(FETCH_CAP);
-
-  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
-    let { data, error } = await fetchChunk(chunk, FULL_AD_SELECT);
-
-    if (
-      error &&
-      (isMissingDbColumnError(error.message, "ai_extracted_angle") ||
-        isMissingDbColumnError(error.message, "ai_extracted_launch_date"))
-    ) {
-      ({ data, error } = await fetchChunk(
-        chunk,
-        "id, competitor_id, platform, format, ad_text, ad_creative_url, first_seen_at, last_seen_at, is_active, raw_payload",
-      ));
-    }
-
-    if (error) return { rows: [], error: error.message };
-
-    for (const row of (data ?? []) as unknown as ScrapedRow[]) {
-      if (!row?.id) continue;
-      byId.set(row.id, row);
-    }
-  }
-
-  return {
-    rows: [...byId.values()]
-      .sort((a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime())
-      .slice(0, FETCH_CAP),
-  };
+  return fetchAllDiscoveryScrapedAds(supabase, userId, competitorIds, FULL_AD_SELECT);
 }
 
 function hydratePatternAd(row: ScrapedRow, comp: CompetitorRow, nowMs: number): PatternMetricsAd {

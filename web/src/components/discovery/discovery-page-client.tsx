@@ -7,6 +7,7 @@ import { Compass, Loader2, RefreshCw, Search } from "lucide-react";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
+import { DiscoveryAssistantFab, DiscoveryAssistantPanel } from "@/components/discovery/discovery-assistant-panel";
 import { DiscoveryMarketStatsBar } from "@/components/discovery/discovery-market-stats";
 import { DiscoveryPatternsView } from "@/components/discovery/discovery-patterns-view";
 import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
@@ -19,6 +20,7 @@ export function DiscoveryPageClient() {
   const activeBrand = useActiveBrand();
   const { activeAdId, openAd, closeAd } = useAdDetailState();
   const [clientBrands, setClientBrands] = useState<{ id: string; name: string }[]>([]);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   useEffect(() => {
     void fetch("/api/account/brands", { credentials: "include", cache: "no-store" })
@@ -167,6 +169,20 @@ export function DiscoveryPageClient() {
       )}
 
       <AdDetailDrawer adId={activeAdId} onClose={closeAd} />
+
+      <DiscoveryAssistantFab onClick={() => setAssistantOpen(true)} />
+      <DiscoveryAssistantPanel
+        open={assistantOpen}
+        onClose={() => setAssistantOpen(false)}
+        brandId={activeBrand.id}
+        brandName={activeBrand.name}
+        tab={tab}
+        toolbar={toolbar}
+        competitors={competitors}
+        onApplyFilters={patchToolbar}
+        onSelectTab={selectTab}
+        onOpenAd={openAd}
+      />
     </div>
   );
 }

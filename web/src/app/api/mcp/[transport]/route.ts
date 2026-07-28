@@ -34,6 +34,10 @@ function buildHandler(auth: McpAuthContext) {
         "Dashboard parity tools: get_organic_posts (view=insights), get_email_intelligence (view=insights|detail), " +
         "get_landing_pages (url for ads-on-page), get_journey_goal (full map terminal goal + evidence), get_competitor_moves, " +
         "get_saved_ads (your bookmarked ad snapshots).\n\n" +
+        "Discovery tools (Meta ads across all tracked competitors in a client workspace): search_discovery_ads (keyword search with filters), " +
+        "get_discovery_feed (browse/sort/filter), get_discovery_market_stats (market pulse), get_discovery_patterns (weekly AI pattern report), " +
+        "analyze_discovery_keywords (term frequency), get_discovery_competitors (per-competitor breakdown), get_discovery_ad (single ad by UUID). " +
+        "Pass brand_id for multi-client agencies; defaults to primary workspace.\n\n" +
         "list_competitors: tracked_slot_count may exceed listed_competitor_count when one competitor is mapped to multiple brands.",
     },
     {

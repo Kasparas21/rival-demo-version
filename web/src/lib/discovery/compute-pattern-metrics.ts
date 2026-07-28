@@ -183,7 +183,15 @@ export function computeDiscoveryPatternMetrics(
       videoActive: number;
     }
   >();
-  const angleCounts = new Map<string, number>();
+  type AngleStats = {
+    count: number;
+    ad_ids: string[];
+    active_count: number;
+    killed_count: number;
+    new_this_week: number;
+    killed_this_week: number;
+  };
+  const angleCounts = new Map<string, AngleStats>();
 
   for (const ad of ads) {
     if (!ad.is_killed) activeAds += 1;
@@ -244,7 +252,26 @@ export function computeDiscoveryPatternMetrics(
 
     const angle = ad.ai_extracted_angle?.trim();
     if (angle && angle.toLowerCase() !== "unclassified") {
-      angleCounts.set(angle, (angleCounts.get(angle) ?? 0) + 1);
+      const stats = angleCounts.get(angle) ?? {
+        count: 0,
+        ad_ids: [],
+        active_count: 0,
+        killed_count: 0,
+        new_this_week: 0,
+        killed_this_week: 0,
+      };
+      stats.count += 1;
+      stats.ad_ids.push(ad.id);
+      if (!ad.is_killed) stats.active_count += 1;
+      else stats.killed_count += 1;
+      if (launchedThisWeek) stats.new_this_week += 1;
+      if (ad.is_killed) {
+        const lastMs = parseMs(ad.last_seen_at);
+        if (lastMs != null && inUtcHalfOpenRange(lastMs, weekStartMs, thisWeekEnd)) {
+          stats.killed_this_week += 1;
+        }
+      }
+      angleCounts.set(angle, stats);
     }
   }
 
@@ -262,7 +289,15 @@ export function computeDiscoveryPatternMetrics(
     .sort((a, b) => b.aggression_score - a.aggression_score || a.name.localeCompare(b.name));
 
   const angle_mix = [...angleCounts.entries()]
-    .map(([angle, count]) => ({ angle, count }))
+    .map(([angle, stats]) => ({
+      angle,
+      count: stats.count,
+      ad_ids: stats.ad_ids,
+      active_count: stats.active_count,
+      killed_count: stats.killed_count,
+      new_this_week: stats.new_this_week,
+      killed_this_week: stats.killed_this_week,
+    }))
     .sort((a, b) => b.count - a.count || a.angle.localeCompare(b.angle))
     .slice(0, 8);
 

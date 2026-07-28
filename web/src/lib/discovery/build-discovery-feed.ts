@@ -7,6 +7,7 @@ import {
   type AdPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
 import { computeDiscoveryMarketStats } from "@/lib/discovery/compute-discovery-market-stats";
+import { fetchAllDiscoveryScrapedAds } from "@/lib/discovery/fetch-discovery-scraped-ads";
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -19,7 +20,6 @@ import type {
 } from "./types";
 import type { Database, Json } from "@/lib/supabase/types";
 
-const FETCH_CAP = 1500;
 const IN_CHUNK = 40;
 const DAY_MS = 86_400_000;
 
@@ -223,48 +223,15 @@ async function fetchScrapedAdRows(
   competitorIds: string[],
   select: string,
 ): Promise<{ rows: ScrapedRow[]; error?: string }> {
-  const byId = new Map<string, ScrapedRow>();
-
-  const fetchChunk = async (chunk: string[], selectCols: string) => {
-    return supabase
-      .from("scraped_ads")
-      .select(selectCols)
-      .eq("user_id", userId)
-      .eq("platform", "meta")
-      .in("competitor_id", chunk)
-      .order("last_seen_at", { ascending: false })
-      .limit(FETCH_CAP);
+  const { rows, error } = await fetchAllDiscoveryScrapedAds(supabase, userId, competitorIds, select);
+  if (error) return { rows: [], error };
+  return {
+    rows: rows.map((row) => ({
+      ...row,
+      archived_creative_url: row.archived_creative_url ?? null,
+      raw_payload: row.raw_payload,
+    })) as ScrapedRow[],
   };
-
-  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
-    let { data, error } = await fetchChunk(chunk, select);
-
-    if (
-      error &&
-      select.includes("archived_creative_url") &&
-      isMissingDbColumnError(error.message, "archived_creative_url")
-    ) {
-      const fallbackSelect = select.replace(", archived_creative_url", "").replace("archived_creative_url, ", "");
-      ({ data, error } = await fetchChunk(chunk, fallbackSelect));
-    }
-
-    if (error) return { rows: [], error: error.message };
-
-    for (const row of (data ?? []) as unknown as ScrapedRow[]) {
-      if (!row?.id) continue;
-      byId.set(row.id, {
-        ...row,
-        archived_creative_url: row.archived_creative_url ?? null,
-        raw_payload: row.raw_payload,
-      });
-    }
-  }
-
-  const rows = [...byId.values()]
-    .sort((a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime())
-    .slice(0, FETCH_CAP);
-
-  return { rows };
 }
 
 async function attachRawPayloads(

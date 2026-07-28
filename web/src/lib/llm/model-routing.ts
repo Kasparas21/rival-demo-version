@@ -23,7 +23,8 @@ export type LlmTask =
   | "copy_structure"
   | "landing_page_text_extract"
   | "landing_page_change_analysis"
-  | "discovery_patterns";
+  | "discovery_patterns"
+  | "discovery_chat";
 
 export type LlmRoute = {
   provider: LlmProvider;
@@ -34,6 +35,8 @@ const DEFAULT_OPENROUTER_FAST = "deepseek/deepseek-v4-flash";
 const DEFAULT_OPENROUTER_SMART = "deepseek/deepseek-v4-flash";
 const DEFAULT_ANTHROPIC_FAST = "claude-haiku-4-5-20251001";
 const DEFAULT_ANTHROPIC_SMART = "claude-sonnet-4-6-20250514";
+/** Tool-calling discovery chat — Opus for reliable multi-step MCP tool use. */
+const DEFAULT_DISCOVERY_CHAT_MODEL = "anthropic/claude-opus-5";
 
 function envModel(envKey: string, fallback: string): string {
   const v = process.env[envKey]?.trim();
@@ -79,6 +82,7 @@ export const MODEL_ROUTING: Record<LlmTask, LlmRoute> = {
     "anthropic/claude-sonnet-4-6",
   ),
   discovery_patterns: openRouterRoute("LLM_MODEL_DISCOVERY_PATTERNS"),
+  discovery_chat: openRouterRoute("LLM_MODEL_DISCOVERY_CHAT", DEFAULT_DISCOVERY_CHAT_MODEL),
 };
 
 export function resolveModelForTask(task: LlmTask): LlmRoute {
@@ -94,7 +98,8 @@ export function resolveModelForTask(task: LlmTask): LlmRoute {
       task === "move_detector" ||
       task === "audience_inference" ||
       task === "brand_comparison" ||
-      task === "landing_page_change_analysis";
+      task === "landing_page_change_analysis" ||
+      task === "discovery_chat";
     return {
       provider: "anthropic",
       model: envModel(anthropicEnv, isSmartTier ? DEFAULT_ANTHROPIC_SMART : DEFAULT_ANTHROPIC_FAST),
