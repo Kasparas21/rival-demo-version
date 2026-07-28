@@ -75,19 +75,25 @@ const UI_STATE_KEY = (brandId: string) => `rival_discovery_assistant_ui_${brandI
 const COMPACT_PANE_WIDTH = 400;
 
 const assistantGlassShell =
-  "relative overflow-hidden border border-white/75 bg-white/42 backdrop-blur-2xl backdrop-saturate-[1.55] shadow-[inset_0_1px_0_rgba(255,255,255,0.94),0_24px_80px_-20px_rgba(74,127,165,0.28),0_8px_32px_-12px_rgba(52,52,52,0.12)] ring-1 ring-white/65";
+  "relative overflow-hidden border border-white/70 bg-white/48 backdrop-blur-2xl backdrop-saturate-[1.5] shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_24px_80px_-20px_rgba(74,127,165,0.22),0_8px_32px_-12px_rgba(52,52,52,0.1)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_45%,white)]";
 
 const assistantGlassHeader =
-  "border-b border-white/55 bg-gradient-to-r from-white/55 via-white/35 to-[color-mix(in_srgb,var(--rival-accent-blue)_28%,transparent)]";
+  "border-b border-[color-mix(in_srgb,var(--rival-accent-blue)_35%,white)] bg-gradient-to-r from-white/60 via-[color-mix(in_srgb,var(--rival-accent-blue)_22%,white)] to-[color-mix(in_srgb,var(--rival-accent-warm)_18%,white)]";
 
-const assistantAccentBtn =
-  "bg-gradient-to-br from-[color:var(--rival-success)] to-[color-mix(in_srgb,var(--rival-success)_72%,#6fa838)] text-white shadow-[0_6px_20px_-6px_rgba(149,193,75,0.65)] ring-1 ring-white/40 transition hover:brightness-105 active:scale-95";
+const assistantPrimaryBtn =
+  "bg-[color:var(--rival-primary)] text-white shadow-[0_8px_24px_-10px_rgba(52,52,52,0.42)] ring-1 ring-white/25 transition hover:bg-[#2d2d44] active:scale-95";
+
+const assistantPlusBtn =
+  "bg-[color-mix(in_srgb,var(--rival-accent-blue)_78%,white)] text-[color:var(--rival-primary)] shadow-[0_4px_18px_-8px_rgba(74,127,165,0.4)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_55%,white)] transition hover:bg-[color:var(--rival-accent-blue)] active:scale-95";
+
+const assistantBotIcon =
+  "bg-[color-mix(in_srgb,var(--rival-accent-blue)_70%,white)] text-[color:var(--rival-primary)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_50%,white)]";
 
 const assistantIconBtn =
-  "rounded-xl p-2 text-[#52525b] transition hover:bg-white/55 hover:text-[color:var(--rival-primary)]";
+  "rounded-xl p-2 text-[#52525b] transition hover:bg-[color-mix(in_srgb,var(--rival-accent-blue)_35%,white)] hover:text-[color:var(--rival-primary)]";
 
 const assistantIconBtnActive =
-  "rounded-xl bg-[color-mix(in_srgb,var(--rival-primary)_88%,#1a1a2e)] p-2 text-white shadow-sm";
+  "rounded-xl bg-[color:var(--rival-primary)] p-2 text-white shadow-sm";
 
 function newWindowId(): string {
   return `win_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
@@ -208,8 +214,8 @@ function DiscoveryAssistantChatPane({
         <div className="flex min-w-0 items-center gap-2">
           <div
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white shadow-sm",
-              assistantAccentBtn,
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl shadow-sm",
+              assistantBotIcon,
             )}
           >
             <Bot className="h-3.5 w-3.5" aria-hidden />
@@ -230,7 +236,7 @@ function DiscoveryAssistantChatPane({
               <button
                 type="button"
                 onClick={onNewChat}
-                className={cn(assistantIconBtn, "text-[color:var(--rival-success)] hover:bg-[color-mix(in_srgb,var(--rival-success)_12%,white)]")}
+                className={cn(assistantIconBtn, "text-[color:var(--rival-primary)]")}
                 aria-label="New chat"
                 title="New chat to the left"
               >
@@ -282,7 +288,7 @@ function DiscoveryAssistantChatPane({
               <button
                 type="button"
                 onClick={onNewChat}
-                className={cn("inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold", assistantAccentBtn)}
+                className={cn("inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold", assistantPlusBtn)}
               >
                 <Plus className="h-3.5 w-3.5" />
                 New
@@ -391,7 +397,7 @@ function DiscoveryAssistantChatPane({
                     className={cn(
                       msg.role === "user"
                         ? cn(
-                            "ml-auto max-w-[92%] rounded-2xl bg-gradient-to-br from-[color:var(--rival-primary)] to-[#1a1a2e] px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_8px_24px_-12px_rgba(52,52,52,0.45)]",
+                            "ml-auto max-w-[92%] rounded-2xl bg-[color:var(--rival-primary)] px-3.5 py-2.5 text-sm leading-relaxed text-white shadow-[0_8px_24px_-12px_rgba(52,52,52,0.35)]",
                             expanded && "max-w-[min(560px,72%)]",
                           )
                         : "w-full",
@@ -435,7 +441,7 @@ function DiscoveryAssistantChatPane({
 
                 {win.loading ? (
                   <div className="flex items-center gap-2 px-1 text-sm text-[color:var(--rival-muted)]">
-                    <Loader2 className="h-4 w-4 animate-spin text-[color:var(--rival-success)]" aria-hidden />
+                    <Loader2 className="h-4 w-4 animate-spin text-[color:var(--rival-primary)]" aria-hidden />
                     Searching competitors…
                   </div>
                 ) : null}
@@ -466,7 +472,7 @@ function DiscoveryAssistantChatPane({
                   onClick={() => void onSend(win.input)}
                   className={cn(
                     "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-40",
-                    assistantAccentBtn,
+                    assistantPrimaryBtn,
                   )}
                   aria-label="Send"
                 >
@@ -806,7 +812,7 @@ function DiscoveryAssistantPanel({
             whileTap={reduceMotion ? undefined : { scale: 0.94 }}
             className={cn(
               "flex shrink-0 items-center justify-center rounded-2xl",
-              assistantAccentBtn,
+              assistantPlusBtn,
               expanded ? "h-14 w-14 self-center" : "mb-1 h-11 w-11",
             )}
             aria-label="New chat window to the left"
@@ -874,8 +880,8 @@ export function DiscoveryAssistant(props: AssistantProps) {
         whileTap={reduceMotion ? undefined : { scale: 0.96 }}
         transition={PANEL_SPRING}
         className={cn(
-          "fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_40px_-8px_rgba(52,52,52,0.4),0_4px_20px_-6px_rgba(149,193,75,0.35)] ring-1 ring-white/30 transition hover:brightness-105",
-          assistantAccentBtn,
+          "fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_40px_-8px_rgba(52,52,52,0.38)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_40%,white)] transition hover:bg-[#2d2d44]",
+          assistantPrimaryBtn,
           open ? "h-12 w-12 justify-center px-0" : "px-4 py-3",
         )}
         aria-label={open ? "Close assistant" : "Open assistant"}

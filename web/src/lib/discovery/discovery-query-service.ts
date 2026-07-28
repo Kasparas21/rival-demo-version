@@ -130,6 +130,12 @@ const QUERY_STOP_WORDS = new Set([
   "apie",
   "kur",
   "kas",
+  "duok",
+  "reklamas",
+  "reklama",
+  "reklamos",
+  "give",
+  "please",
 ]);
 
 function tokenizeSearchTerms(text: string): string[] {
@@ -148,6 +154,10 @@ function normalizeKeywords(keywords: string[] | undefined, query?: string): stri
     if (fallback.length >= 3) return [fallback];
   }
   return merged;
+}
+
+export function extractDiscoverySearchKeywords(text: string): string[] {
+  return normalizeKeywords(undefined, text);
 }
 
 function summarizeAd(

@@ -369,12 +369,10 @@ async function fetchKeywordCandidateRows(
     .join(",");
 
   const byId = new Map<string, ScrapedRow>();
-  const chunkCount = Math.max(1, Math.ceil(competitorIds.length / IN_CHUNK));
-  const perChunkLimit = Math.min(600, Math.ceil(candidateLimit / chunkCount));
+  const chunks = chunkIds(competitorIds, IN_CHUNK);
+  const perChunkLimit = Math.min(400, Math.ceil(candidateLimit / Math.max(1, chunks.length)));
 
-  for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
-    if (byId.size >= candidateLimit) break;
-
+  const fetchChunk = async (chunk: string[]) => {
     let selectCols = select;
     let { data, error } = await supabase
       .from("scraped_ads")
@@ -403,11 +401,19 @@ async function fetchKeywordCandidateRows(
         .limit(perChunkLimit));
     }
 
-    if (error) return { rows: [], error: error.message };
-
+    if (error) return { error: error.message };
     for (const row of (data ?? []) as unknown as ScrapedRow[]) {
       if (row?.id) byId.set(row.id, row);
     }
+    return {};
+  };
+
+  for (let i = 0; i < chunks.length; i += 4) {
+    if (byId.size >= candidateLimit) break;
+    const batch = chunks.slice(i, i + 4);
+    const results = await Promise.all(batch.map((chunk) => fetchChunk(chunk)));
+    const err = results.find((r) => r.error)?.error;
+    if (err) return { rows: [], error: err };
   }
 
   return { rows: [...byId.values()].slice(0, candidateLimit) };
