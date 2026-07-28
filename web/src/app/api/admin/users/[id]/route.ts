@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { deleteUserAccount } from "@/lib/account/delete-user-account";
 import { adminCanWrite, authorizeAdminRequest } from "@/lib/admin/auth";
 import { loadAdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import { rebuildAdminUserSnapshot } from "@/lib/admin/rebuild-snapshots";
@@ -135,6 +136,11 @@ async function applyAdminPlanOverride(
   } else {
     payload.admin_plan_override = tier;
   }
+
+  // Hidden complimentary flags (tester invite / dev switcher) bypass Polar and keep unlimited scrapes.
+  // The plan dropdown is the source of truth — clear them whenever an admin edits the plan.
+  delete payload.admin_unlimited;
+  delete payload.dev_plan_override;
 
   let status = existing?.status ?? "none";
   if (tier === "free_trial") {
@@ -291,4 +297,66 @@ export async function PATCH(req: Request, context: RouteContext) {
   ]);
 
   return NextResponse.json({ ok: true, changes, profile: updatedProfile.data, billing });
+}
+
+type DeleteUserBody = { confirm?: unknown };
+
+export async function DELETE(req: Request, context: RouteContext) {
+  const { id: userId } = await context.params;
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const auth = await authorizeAdminRequest(req, supabase, user);
+  if (!auth.ok) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!adminCanWrite(auth.admin.role)) {
+    return NextResponse.json({ error: "Read-only admin access" }, { status: 403 });
+  }
+
+  let body: DeleteUserBody = {};
+  try {
+    body = (await req.json()) as DeleteUserBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  if (body.confirm !== "DELETE") {
+    return NextResponse.json(
+      { error: 'Confirmation required. Send { "confirm": "DELETE" }.' },
+      { status: 400 },
+    );
+  }
+
+  if (user?.id === userId) {
+    return NextResponse.json({ error: "You cannot delete your own account from admin." }, { status: 400 });
+  }
+
+  const admin = createSupabaseAdminClient();
+
+  const { data: profile } = await admin.from("profiles").select("id, email").eq("id", userId).maybeSingle();
+  if (!profile) {
+    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  }
+
+  try {
+    await admin.from("admin_event_log").insert({
+      actor_user_id: user?.id ?? null,
+      target_user_id: userId,
+      event_type: "admin_user_deleted",
+      payload: { email: profile.email } as Json,
+    });
+  } catch (e) {
+    console.warn("[admin] event log insert before delete", e);
+  }
+
+  const result = await deleteUserAccount(admin, userId);
+  if (!result.ok) {
+    const status = result.error.includes("billing") ? 502 : 500;
+    return NextResponse.json({ error: result.error }, { status });
+  }
+
+  return NextResponse.json({ ok: true });
 }

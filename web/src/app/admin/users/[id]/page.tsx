@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import type { AdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
@@ -24,6 +24,7 @@ type UserDetail = {
     planTier: string;
     status: string;
     adminPlanOverride: string | null;
+    isUnlimited: boolean;
     customPriceLabel: string | null;
   };
   usage: {
@@ -106,6 +107,7 @@ function platformLabel(platform: string): string {
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const userId = params.id;
   const [data, setData] = useState<UserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,6 +116,11 @@ export default function AdminUserDetailPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [revokingUnlimited, setRevokingUnlimited] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [form, setForm] = useState<EditForm | null>(null);
   const [expandedCompetitorId, setExpandedCompetitorId] = useState<string | null>(null);
 
@@ -198,6 +205,54 @@ export default function AdminUserDetailPage() {
       setSaveError(e instanceof Error ? e.message : "Update failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function revokeComplimentaryUnlimited() {
+    setRevokingUnlimited(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planTier: null }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setSaveError(json.error ?? `Revoke failed (${res.status})`);
+        return;
+      }
+      setSaveSuccess(true);
+      await load();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Revoke failed");
+    } finally {
+      setRevokingUnlimited(false);
+    }
+  }
+
+  async function deleteUser() {
+    if (deleteConfirmText !== "DELETE") return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DELETE" }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setDeleteError(json.error ?? `Delete failed (${res.status})`);
+        return;
+      }
+      router.push("/admin");
+      router.refresh();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -319,6 +374,12 @@ export default function AdminUserDetailPage() {
                   </option>
                 ))}
               </select>
+              {data.billing.isUnlimited && !data.billing.adminPlanOverride ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  This account has hidden complimentary unlimited access (e.g. tester invite). Saving any
+                  plan change here removes it and applies Polar billing rules.
+                </p>
+              ) : null}
             </label>
             <label className="flex items-center gap-2 text-sm md:col-span-2">
               <input
@@ -414,12 +475,33 @@ export default function AdminUserDetailPage() {
                     admin override
                   </span>
                 ) : null}
+                {data.billing.isUnlimited && !data.billing.adminPlanOverride ? (
+                  <span className="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-800">
+                    complimentary unlimited (hidden)
+                  </span>
+                ) : null}
               </dd>
             </div>
             <div>
               <dt className="text-zinc-500">Status</dt>
               <dd>{data.billing.status}</dd>
             </div>
+            {data.billing.isUnlimited && !data.billing.adminPlanOverride ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm text-amber-900">
+                  Scraping still runs because this account has hidden complimentary unlimited access
+                  (usually from a tester invite), even though the plan override is empty.
+                </p>
+                <button
+                  type="button"
+                  disabled={revokingUnlimited}
+                  onClick={() => void revokeComplimentaryUnlimited()}
+                  className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+                >
+                  {revokingUnlimited ? "Revoking…" : "Revoke unlimited & pause scraping"}
+                </button>
+              </div>
+            ) : null}
             <div>
               <dt className="text-zinc-500">Custom price</dt>
               <dd>{data.billing.customPriceLabel ?? "—"}</dd>
@@ -919,6 +1001,63 @@ export default function AdminUserDetailPage() {
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-red-200 bg-red-50/50 p-4">
+        <h2 className="text-sm font-semibold text-red-900">Danger zone</h2>
+        <p className="mt-2 text-sm text-red-800">
+          Permanently delete this user, their Polar billing profile, and all workspace data. This cannot be
+          undone.
+        </p>
+        {!showDeleteConfirm ? (
+          <button
+            type="button"
+            onClick={() => {
+              setShowDeleteConfirm(true);
+              setDeleteConfirmText("");
+              setDeleteError(null);
+            }}
+            className="mt-3 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-100"
+          >
+            Delete user
+          </button>
+        ) : (
+          <div className="mt-3 max-w-md space-y-3">
+            <label className="block text-sm text-red-900">
+              Type <span className="font-mono font-semibold">DELETE</span> to confirm
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-red-300 bg-white px-3 py-2 font-mono text-sm"
+                autoComplete="off"
+              />
+            </label>
+            {deleteError ? <p className="text-sm text-red-700">{deleteError}</p> : null}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={deleting || deleteConfirmText !== "DELETE"}
+                onClick={() => void deleteUser()}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm text-white disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Permanently delete"}
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmText("");
+                  setDeleteError(null);
+                }}
+                className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </section>
     </div>
