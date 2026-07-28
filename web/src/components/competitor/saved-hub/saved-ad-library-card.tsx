@@ -36,6 +36,7 @@ type SavedAdLibraryCardProps = {
   onOpen?: () => void;
   onUnsave: () => void;
   saveDisabled?: boolean;
+  gridCreativeSizing?: "fixed" | "natural";
 };
 
 export function SavedAdLibraryCard({
@@ -44,6 +45,7 @@ export function SavedAdLibraryCard({
   onOpen,
   onUnsave,
   saveDisabled,
+  gridCreativeSizing = "fixed",
 }: SavedAdLibraryCardProps) {
   const platform = ad.platform.trim().toLowerCase();
   const scrapedAdId = ad.source_scraped_ad_id ?? undefined;
@@ -68,6 +70,7 @@ export function SavedAdLibraryCard({
         <MetaAdCard
           ad={hydrated}
           viewMode="grid"
+          gridCreativeSizing={gridCreativeSizing}
           brand={metaBrand}
           onClick={onClick}
           {...saveProps}
@@ -122,6 +125,7 @@ export function SavedAdLibraryCard({
         <MetaAdCard
           ad={hydrateMetaAdCardForLibrary(ad.raw_payload as unknown as MetaAdCardModel)}
           viewMode="grid"
+          gridCreativeSizing={gridCreativeSizing}
           brand={metaBrand}
           onClick={onClick}
           {...saveProps}
