@@ -5,15 +5,10 @@ import { Bookmark, BookmarkCheck, Sparkles } from "lucide-react";
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import { ComparisonPlatformIcon } from "@/components/comparison/platform-icon";
-import { hydrateMetaAdCardForLibrary } from "@/lib/ad-library/count-active-ads";
-import type { MetaAdCard as MetaAdCardModel } from "@/lib/ad-library/normalize";
+import { hydrateDiscoveryMetaAdCard } from "@/lib/discovery/hydrate-discovery-meta-ad";
 import type { DiscoveryAdDto } from "@/lib/discovery/types";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { cn } from "@/lib/utils";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 type Props = {
   ad: DiscoveryAdDto;
@@ -33,13 +28,14 @@ export function DiscoveryAdCard({
   onToggleSave,
 }: Props) {
   const platform = ad.platform.trim().toLowerCase();
-  if (platform !== "meta" || !isRecord(ad.raw_payload)) {
+  const hydrated = hydrateDiscoveryMetaAdCard(ad);
+  if (platform !== "meta" || !hydrated) {
     return null;
   }
 
   const domain = ad.competitor_domain ?? "";
   const brand = { name: ad.competitor_name, domain, logoUrl: ad.competitor_logo_url ?? "" };
-  const hydrated = hydrateMetaAdCardForLibrary(ad.raw_payload as unknown as MetaAdCardModel);
+  const { card, runStatus } = hydrated;
   const saveProps = {
     scrapedAdId: ad.id,
     isSaved: isSaved || isSavePending,
@@ -113,10 +109,11 @@ export function DiscoveryAdCard({
 
   return shell(
     <MetaAdCard
-      ad={hydrated}
+      ad={card}
       viewMode="grid"
       gridCreativeSizing="natural"
       brand={brand}
+      runStatus={runStatus}
       onClick={
         onOpen
           ? (e) => {

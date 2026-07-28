@@ -262,6 +262,24 @@ function MetaCreativeMedia({
   /** Had a preview URL but every source (CDN + archive) failed → the creative expired on Meta's side. */
   const expired = imageFailed && Boolean(cdnStill || archivedUrl?.trim());
   if (expired) {
+    if (useNatural) {
+      return (
+        <div className="flex w-full flex-col items-center justify-center gap-2 px-2 py-4 text-center">
+          <p className="text-[12px] text-[#6b7280]">Preview expired — open in Meta library.</p>
+          {ad.adLibraryUrl?.trim() ? (
+            <a
+              href={ad.adLibraryUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="rounded-full bg-white text-[#2563eb] text-[12px] font-semibold px-4 py-2 border border-[#bfdbfe] hover:bg-[#eff6ff]"
+            >
+              View in Meta library
+            </a>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <div
         className={`flex w-full ${compact ? "min-h-[200px]" : "min-h-[280px]"} flex-col items-center justify-center gap-2 px-4 text-center`}
@@ -281,6 +299,8 @@ function MetaCreativeMedia({
       </div>
     );
   }
+
+  if (useNatural) return null;
 
   return (
     <div
