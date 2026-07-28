@@ -87,6 +87,12 @@ export async function GET(request: Request) {
       .map((id) => id.trim())
       .filter(Boolean);
 
+    const competitorIds = url.searchParams
+      .getAll("competitorId")
+      .flatMap((value) => value.split(","))
+      .map((id) => id.trim())
+      .filter(Boolean);
+
     const result = await buildDiscoveryFeed(supabase, user.id, {
       brandId,
       clientBrandIds,
@@ -99,7 +105,7 @@ export async function GET(request: Request) {
       status: parseStatus(url.searchParams.get("status")),
       ultimateOnly: url.searchParams.get("ultimateOnly") === "1",
       query: url.searchParams.get("q") ?? "",
-      competitorId: (url.searchParams.get("competitorId") ?? "").trim() || null,
+      competitorFilterIds: competitorIds,
       datePreset: parseDatePreset(url.searchParams.get("datePreset")),
     });
 

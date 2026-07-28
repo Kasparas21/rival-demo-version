@@ -22,13 +22,14 @@ export function serializeDiscoveryQuery(
 ): string {
   const platforms = [...toolbar.selectedPlatforms].sort().join(",");
   const clientBrands = [...toolbar.selectedClientBrandIds].sort().join(",");
+  const competitors = [...toolbar.selectedCompetitorIds].sort().join(",");
   return [
     toolbar.sort,
     toolbar.datePreset,
     toolbar.format,
     toolbar.status,
     toolbar.ultimateOnly ? "1" : "0",
-    toolbar.competitorId ?? "",
+    competitors,
     clientBrands,
     platforms,
     search.trim().toLowerCase(),
@@ -44,7 +45,7 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v5:${day}:${query}`;
+  return `${brandId}:discovery:v6:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
@@ -82,7 +83,9 @@ export function buildDiscoveryFeedUrl(
     q: search,
   });
   if (toolbar.ultimateOnly) params.set("ultimateOnly", "1");
-  if (toolbar.competitorId) params.set("competitorId", toolbar.competitorId);
+  for (const id of [...toolbar.selectedCompetitorIds].sort()) {
+    params.append("competitorId", id);
+  }
   const clientBrandIds = resolveDiscoveryClientBrandIds(
     toolbar.selectedClientBrandIds,
     brandId,

@@ -90,7 +90,7 @@ export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: stri
     setToolbar((prev) => ({
       ...prev,
       selectedClientBrandIds: new Set([brandId]),
-      competitorId: null,
+      selectedCompetitorIds: new Set(),
     }));
   }, [brandId]);
 

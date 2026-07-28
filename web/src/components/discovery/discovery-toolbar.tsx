@@ -24,10 +24,14 @@ import { cn } from "@/lib/utils";
 
 import {
   discoveryClientSelectionLabel,
+  discoveryCompetitorSelectionLabel,
   isDiscoveryDefaultClientSelection,
+  isDiscoveryDefaultCompetitorSelection,
   resolveDiscoveryClientBrandIds,
   setDiscoveryAllClientBrands,
+  setDiscoveryAllCompetitors,
   toggleDiscoveryClientBrand,
+  toggleDiscoveryCompetitor,
   type DiscoveryToolbarState,
 } from "./discovery-types";
 
@@ -120,18 +124,33 @@ export function DiscoveryToolbar({
     clientBrands.length > 0 && selectedClientIds.length === clientBrands.length;
   const someClientsSelected = selectedClientIds.length > 0 && !allClientsSelected;
 
+  const selectedCompetitorIdSet = useMemo(
+    () => new Set(state.selectedCompetitorIds),
+    [state.selectedCompetitorIds],
+  );
+  const competitorLabel = discoveryCompetitorSelectionLabel(
+    state.selectedCompetitorIds,
+    competitors,
+  );
+  const allCompetitorsSelected = isDiscoveryDefaultCompetitorSelection(
+    state.selectedCompetitorIds,
+    competitors,
+  );
+  const someCompetitorsSelected =
+    state.selectedCompetitorIds.size > 0 && !allCompetitorsSelected;
+
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (state.status !== "all") n += 1;
     if (state.format !== "all") n += 1;
     if (state.ultimateOnly) n += 1;
-    if (state.competitorId) n += 1;
+    if (!isDiscoveryDefaultCompetitorSelection(state.selectedCompetitorIds, competitors)) n += 1;
     if (state.datePreset !== "all") n += 1;
     if (!isDiscoveryDefaultClientSelection(state.selectedClientBrandIds, activeBrand.id, clientBrands)) {
       n += 1;
     }
     return n;
-  }, [activeBrand.id, clientBrands, state]);
+  }, [activeBrand.id, clientBrands, competitors, state]);
 
   return (
     <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:px-4">
@@ -175,7 +194,7 @@ export function DiscoveryToolbar({
                         checked,
                         activeBrand.id,
                       ),
-                      competitorId: null,
+                      selectedCompetitorIds: new Set(),
                     });
                   }}
                 />
@@ -199,7 +218,7 @@ export function DiscoveryToolbar({
                           brand.id,
                           checked,
                         ),
-                        competitorId: null,
+                        selectedCompetitorIds: new Set(),
                       });
                     }}
                   />
@@ -305,35 +324,54 @@ export function DiscoveryToolbar({
           {competitors.length > 0 ? (
             <div className="relative">
               <TimelineMenuButton
-                label={
-                  state.competitorId
-                    ? competitors.find((c) => c.id === state.competitorId)?.name ?? "Brand"
-                    : "All brands"
-                }
+                label={competitorLabel}
                 icon={<Layers className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
                 active={menu.isOpen("brand")}
                 onClick={() => menu.toggle("brand")}
               />
-              <TimelineMenuPanel open={menu.isOpen("brand")} onClose={menu.close} className="min-w-[220px] py-1">
-                <TimelineMenuItem
-                  label="All competitors"
-                  selected={!state.competitorId}
-                  onClick={() => {
-                    onChange({ competitorId: null });
-                    menu.close();
+              <TimelineMenuPanel
+                open={menu.isOpen("brand")}
+                onClose={menu.close}
+                className="max-h-[min(70vh,360px)] min-w-[260px] overflow-y-auto py-1"
+              >
+                <ClientCheckboxRow
+                  label="Select all"
+                  checked={allCompetitorsSelected}
+                  onChange={(checked) => {
+                    onChange({
+                      selectedCompetitorIds: setDiscoveryAllCompetitors(competitors, checked),
+                    });
                   }}
                 />
-                {competitors.map((c) => (
-                  <TimelineMenuItem
-                    key={c.id}
-                    label={`${c.name} (${c.ad_count})`}
-                    selected={state.competitorId === c.id}
-                    onClick={() => {
-                      onChange({ competitorId: c.id });
-                      menu.close();
-                    }}
-                  />
-                ))}
+                {someCompetitorsSelected ? (
+                  <p className="px-3 pb-1 text-[11px] text-slate-500">
+                    {state.selectedCompetitorIds.size} of {competitors.length} brands selected
+                  </p>
+                ) : allCompetitorsSelected && competitors.length > 1 ? (
+                  <p className="px-3 pb-1 text-[11px] text-slate-500">All brands selected</p>
+                ) : null}
+                <div className="my-1 h-px bg-slate-100" />
+                {competitors.map((c) => {
+                  const checked =
+                    allCompetitorsSelected || selectedCompetitorIdSet.has(c.id);
+                  return (
+                    <ClientCheckboxRow
+                      key={c.id}
+                      label={`${c.name} (${c.ad_count})`}
+                      checked={checked}
+                      onChange={(nextChecked) => {
+                        onChange({
+                          selectedCompetitorIds: toggleDiscoveryCompetitor(
+                            state.selectedCompetitorIds,
+                            competitors,
+                            c.id,
+                            nextChecked,
+                          ),
+                        });
+                      }}
+                    />
+                  );
+                })}
               </TimelineMenuPanel>
             </div>
           ) : null}

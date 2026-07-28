@@ -13,7 +13,8 @@ export type DiscoveryToolbarState = {
   status: DiscoveryStatusFilter;
   ultimateOnly: boolean;
   selectedPlatforms: Set<string>;
-  competitorId: string | null;
+  /** Empty = all tracked competitors in scope. */
+  selectedCompetitorIds: Set<string>;
   /** Checked client workspaces to include. Empty = active workspace only. */
   selectedClientBrandIds: Set<string>;
 };
@@ -26,7 +27,7 @@ export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
   status: "all",
   ultimateOnly: false,
   selectedPlatforms: new Set(),
-  competitorId: null,
+  selectedCompetitorIds: new Set(),
   selectedClientBrandIds: new Set(),
 };
 
@@ -88,6 +89,76 @@ export function setDiscoveryAllClientBrands(
 ): Set<string> {
   if (checked) return new Set(allBrands.map((b) => b.id));
   return activeBrandId ? new Set([activeBrandId]) : new Set();
+}
+
+/** Resolved competitor filter ids, or null when all competitors in scope should show. */
+export function resolveDiscoveryCompetitorIds(
+  selected: Set<string>,
+  competitors: { id: string }[],
+): string[] | null {
+  const validIds = new Set(competitors.map((c) => c.id));
+  const picked = [...selected].filter((id) => validIds.has(id));
+  if (picked.length === 0 || picked.length === competitors.length) return null;
+  return picked;
+}
+
+export function discoveryCompetitorSelectionLabel(
+  selected: Set<string>,
+  competitors: { id: string; name: string }[],
+): string {
+  const ids = resolveDiscoveryCompetitorIds(selected, competitors);
+  if (!ids) return "All brands";
+  if (ids.length === 1) {
+    return competitors.find((c) => c.id === ids[0])?.name ?? "1 brand";
+  }
+  return `${ids.length} brands`;
+}
+
+export function isDiscoveryDefaultCompetitorSelection(
+  selected: Set<string>,
+  competitors: { id: string }[],
+): boolean {
+  return resolveDiscoveryCompetitorIds(selected, competitors) === null;
+}
+
+function effectiveDiscoveryCompetitorSelection(
+  selected: Set<string>,
+  competitors: { id: string }[],
+): Set<string> {
+  const allIds = competitors.map((c) => c.id);
+  if (selected.size === 0) return new Set(allIds);
+  return new Set([...selected].filter((id) => allIds.includes(id)));
+}
+
+export function toggleDiscoveryCompetitor(
+  selected: Set<string>,
+  competitors: { id: string }[],
+  competitorId: string,
+  checked: boolean,
+): Set<string> {
+  const allIds = competitors.map((c) => c.id);
+  const effective = effectiveDiscoveryCompetitorSelection(selected, competitors);
+
+  if (checked) {
+    effective.add(competitorId);
+    if (effective.size >= allIds.length) return new Set();
+    return effective;
+  }
+
+  effective.delete(competitorId);
+  if (effective.size === 0) {
+    return allIds.length === 1 ? new Set(allIds) : new Set(allIds.filter((id) => id !== competitorId));
+  }
+  if (effective.size >= allIds.length) return new Set();
+  return effective;
+}
+
+export function setDiscoveryAllCompetitors(
+  competitors: { id: string }[],
+  checked: boolean,
+): Set<string> {
+  if (checked) return new Set();
+  return competitors.length > 0 ? new Set([competitors[0]!.id]) : new Set();
 }
 
 export type DiscoveryFeedTab = "explore" | "trending" | "ultimate";

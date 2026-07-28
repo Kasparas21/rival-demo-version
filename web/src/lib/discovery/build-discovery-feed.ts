@@ -222,12 +222,11 @@ async function fetchScrapedAdRows(
   userId: string,
   competitorIds: string[],
   select: string,
-  competitorId: string | null,
 ): Promise<{ rows: ScrapedRow[]; error?: string }> {
   const byId = new Map<string, ScrapedRow>();
 
   const fetchChunk = async (chunk: string[], selectCols: string) => {
-    let query = supabase
+    return supabase
       .from("scraped_ads")
       .select(selectCols)
       .eq("user_id", userId)
@@ -235,12 +234,6 @@ async function fetchScrapedAdRows(
       .in("competitor_id", chunk)
       .order("last_seen_at", { ascending: false })
       .limit(FETCH_CAP);
-
-    if (competitorId) {
-      query = query.eq("competitor_id", competitorId);
-    }
-
-    return query;
   };
 
   for (const chunk of chunkIds(competitorIds, IN_CHUNK)) {
@@ -392,6 +385,10 @@ export async function buildDiscoveryFeed(
     clientBrandIds,
   );
   if (competitorIdsError) return { ok: false, error: competitorIdsError };
+  const competitorFilter = input.competitorFilterIds.length
+    ? [...new Set(input.competitorFilterIds.filter((id) => competitorIds.includes(id)))]
+    : null;
+  const scopedCompetitorIds = competitorFilter?.length ? competitorFilter : competitorIds;
   if (!competitorIds.length) {
     return {
       ok: true,
@@ -407,7 +404,7 @@ export async function buildDiscoveryFeed(
     };
   }
 
-  const { rows: competitors, error: compErr } = await loadCompetitorsById(supabase, userId, competitorIds);
+  const { rows: competitors, error: compErr } = await loadCompetitorsById(supabase, userId, scopedCompetitorIds);
   if (compErr) return { ok: false, error: compErr };
 
   const competitorById = new Map<string, CompetitorRow>();
@@ -417,7 +414,7 @@ export async function buildDiscoveryFeed(
 
   const showClientLabels = clientBrandIds.length > 1;
   const clientBrandLabels = showClientLabels
-    ? await loadCompetitorClientBrandLabels(supabase, userId, competitorIds)
+    ? await loadCompetitorClientBrandLabels(supabase, userId, scopedCompetitorIds)
     : new Map<string, string>();
 
   const needsPayloadUpfront =
@@ -428,9 +425,8 @@ export async function buildDiscoveryFeed(
   const { rows: adRows, error: adsErr } = await fetchScrapedAdRows(
     supabase,
     userId,
-    competitorIds,
+    scopedCompetitorIds,
     needsPayloadUpfront ? FULL_AD_SELECT : LEAN_AD_SELECT,
-    input.competitorId,
   );
   if (adsErr) return { ok: false, error: adsErr };
 

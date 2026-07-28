@@ -76,7 +76,7 @@ export type DiscoveryFeedQuery = {
   status: DiscoveryStatusFilter;
   ultimateOnly: boolean;
   query: string;
-  competitorId: string | null;
+  competitorFilterIds: string[];
   datePreset: DiscoveryDatePreset;
 };
 
