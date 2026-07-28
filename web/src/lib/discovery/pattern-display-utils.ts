@@ -22,11 +22,23 @@ export function patternsPrefsStorageKey(brandId: string): string {
   return `rival_patterns_prefs_${brandId}`;
 }
 
+/** Validate IANA timezone; fall back to UTC when localStorage has a bad value. */
+export function safePatternsTimeZone(timeZone: string): string {
+  const trimmed = timeZone.trim();
+  if (!trimmed) return "UTC";
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: trimmed });
+    return trimmed;
+  } catch {
+    return "UTC";
+  }
+}
+
 export function resolvePatternsTimezone(stored: string): string {
   if (stored === "local" || !stored.trim()) {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return safePatternsTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
   }
-  return stored;
+  return safePatternsTimeZone(stored);
 }
 
 export function loadPatternsDisplayPrefs(brandId: string): PatternsDisplayPrefs {
@@ -53,19 +65,53 @@ export function savePatternsDisplayPrefs(brandId: string, prefs: PatternsDisplay
 
 export function formatWeekLabel(weekStart: string, timeZone: string): string {
   const d = new Date(`${weekStart}T00:00:00.000Z`);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone });
+  const tz = safePatternsTimeZone(timeZone);
+  try {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
+  } catch {
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+  }
 }
 
 export function formatWeekRange(weekStart: string, timeZone: string): string {
   const startMs = parseUtcWeekStartYmd(weekStart);
   const endMs = startMs + 6 * DAY_MS;
-  const fmt = (ms: number) =>
-    new Date(ms).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      timeZone,
-    });
+  const tz = safePatternsTimeZone(timeZone);
+  const fmt = (ms: number) => {
+    try {
+      return new Date(ms).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: tz,
+      });
+    } catch {
+      return new Date(ms).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+    }
+  };
   return `${fmt(startMs)} – ${fmt(endMs)}`;
+}
+
+export function formatPatternsTimestamp(iso: string, timeZone: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const tz = safePatternsTimeZone(timeZone);
+  try {
+    return d.toLocaleString(undefined, {
+      timeZone: tz,
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return d.toLocaleString(undefined, {
+      timeZone: "UTC",
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  }
 }
 
 export function getPriorWeekStart(weekStart: string): string {

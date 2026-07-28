@@ -45,6 +45,7 @@ import {
   formatDelta,
   formatWeekLabel,
   formatWeekRange,
+  formatPatternsTimestamp,
   findPriorWeekMetrics,
   loadPatternsDisplayPrefs,
   resolvePatternsTimezone,
@@ -778,12 +779,7 @@ function ReportDashboard({
       ) : null}
 
       <p className="text-center text-xs text-slate-400">
-        {new Date(report.created_at).toLocaleString(undefined, {
-          timeZone,
-          dateStyle: "medium",
-          timeStyle: "short",
-        })}{" "}
-        · Meta ads from tracked competitors
+        {formatPatternsTimestamp(report.created_at, timeZone)} · Meta ads from tracked competitors
       </p>
     </div>
   );
