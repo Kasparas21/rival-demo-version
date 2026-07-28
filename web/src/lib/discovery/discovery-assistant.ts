@@ -23,6 +23,11 @@ import {
   type DiscoveryAssistantResponse,
   type DiscoveryVisualStat,
 } from "./discovery-assistant-types";
+import type { DiscoveryAssistantAttachmentInput } from "./discovery-assistant-attachments";
+import {
+  buildDiscoveryAssistantUserContext,
+  historyContentWithContext,
+} from "./discovery-assistant-context";
 import { loadDiscoveryAdsByIds } from "./load-discovery-ads-by-ids";
 import type { DiscoveryAdDto, DiscoveryMarketStats } from "./types";
 
@@ -48,6 +53,11 @@ Use tools for real data. Never invent ad ids or counts.
 For specific product/treatment searches (e.g. aligners, implants, whitening), pass ALL distinguishing keywords with match:"all" — do not use broad single words like "dental" alone.
 Pick ad_refs from the most relevant tool results (highest keyword overlap). Include real ad copy in each preview field.
 sort options: shuffle, newest, impressions, ultimate_winner, longest_running, oldest.
+
+When USER-SELECTED ADS or USER FILE ATTACHMENTS are in the message:
+- Answer about those specific ads/files first. For creative ideation, propose fresh angles inspired by the selected ad (hook, offer, visual style) without copying it.
+- ad_refs are optional in this mode unless the user also wants similar ads from the market — then search and include 4-8 relevant refs.
+- visual_stats optional when not doing a market search.
 
 JSON schema:
 {
@@ -443,6 +453,8 @@ export async function runDiscoveryAssistant(params: {
   appOrigin: string;
   currentTab?: string;
   currentFilters?: Record<string, unknown>;
+  selectedAdIds?: string[];
+  attachments?: DiscoveryAssistantAttachmentInput[];
 }): Promise<DiscoveryAssistantResponse> {
   const auth: McpAuthContext = {
     userId: params.userId,
@@ -452,23 +464,37 @@ export async function runDiscoveryAssistant(params: {
   const ctx = await createMcpToolContext(auth);
 
   const route = resolveModelForTask("discovery_chat");
+  const { enrichedMessage, selectedAds, contextSummary } = await buildDiscoveryAssistantUserContext({
+    supabase: params.supabase,
+    userId: params.userId,
+    message: params.message,
+    selectedAdIds: params.selectedAdIds,
+    attachments: params.attachments,
+  });
+
   const contextBlock = JSON.stringify({
     brand_id: params.brandId,
     brand_name: params.brandName,
     current_tab: params.currentTab ?? "explore",
     current_filters: params.currentFilters ?? {},
+    selected_ad_count: selectedAds.length,
+    attachment_count: params.attachments?.length ?? 0,
   });
 
   const messages: ChatMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: `Workspace context: ${contextBlock}\n\nUser message: ${params.message.trim()}`,
+      content: `Workspace context: ${contextBlock}\n\n${enrichedMessage}`,
     },
   ];
 
   for (const h of (params.history ?? []).slice(-8)) {
-    messages.splice(messages.length - 1, 0, { role: h.role, content: h.content });
+    const historyContent =
+      h.role === "user"
+        ? historyContentWithContext(h.content, h.contextSummary, h.selectedAdIds)
+        : h.content;
+    messages.splice(messages.length - 1, 0, { role: h.role, content: historyContent });
   }
 
   let lastText = "";
@@ -521,23 +547,34 @@ export async function runDiscoveryAssistant(params: {
 
   try {
     const parsed = parseAssistantJson(lastText);
+    const mergedHarvestIds = [
+      ...harvest.adIds,
+      ...selectedAds.map((ad) => ad.id),
+    ];
     return enrichAssistantResponse(
       params.supabase,
       params.userId,
       parsed,
-      harvest.adIds,
+      mergedHarvestIds,
       harvest.marketStats,
     );
   } catch {
-    if (harvest.adIds.length) {
+    if (harvest.adIds.length || selectedAds.length) {
       return enrichAssistantResponse(
         params.supabase,
         params.userId,
         {
-          message: "Here are the matching ads from your market.",
-          suggestions: ["Show more like these", "Which competitor is hottest this week?"],
+          message:
+            selectedAds.length && !harvest.adIds.length
+              ? "Here are creative directions based on your selected ad."
+              : "Here are the matching ads from your market.",
+          suggestions: [
+            "Give me 3 more creative angles",
+            "Find similar ads in the market",
+            "Which competitor is hottest this week?",
+          ],
         },
-        harvest.adIds,
+        [...harvest.adIds, ...selectedAds.map((ad) => ad.id)],
         harvest.marketStats,
       );
     }
@@ -558,6 +595,8 @@ export async function runDiscoveryAssistantForUser(
     history?: DiscoveryAssistantMessage[];
     currentTab?: string;
     currentFilters?: Record<string, unknown>;
+    selectedAdIds?: string[];
+    attachments?: DiscoveryAssistantAttachmentInput[];
   },
   appOrigin: string,
 ): Promise<DiscoveryAssistantResponse> {
@@ -571,5 +610,7 @@ export async function runDiscoveryAssistantForUser(
     appOrigin,
     currentTab: input.currentTab,
     currentFilters: input.currentFilters,
+    selectedAdIds: input.selectedAdIds,
+    attachments: input.attachments,
   });
 }

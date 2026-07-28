@@ -13,6 +13,14 @@ import type {
 export type DiscoveryAssistantMessage = {
   role: "user" | "assistant";
   content: string;
+  selectedAdIds?: string[];
+  contextSummary?: string;
+};
+
+export type DiscoveryAssistantSelectedAdRef = {
+  id: string;
+  competitor_name: string;
+  preview: string;
 };
 
 export type DiscoveryFilterPatch = {

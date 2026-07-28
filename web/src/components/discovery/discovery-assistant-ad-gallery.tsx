@@ -13,6 +13,9 @@ type Props = {
   onOpenAd: (id: string) => void;
   onToggleSave: (ad: DiscoveryAdDto) => void;
   expanded?: boolean;
+  selectable?: boolean;
+  selectedAdIds?: Set<string>;
+  onToggleSelectAd?: (ad: DiscoveryAdDto) => void;
 };
 
 export function DiscoveryAssistantAdGallery({
@@ -22,6 +25,9 @@ export function DiscoveryAssistantAdGallery({
   onOpenAd,
   onToggleSave,
   expanded = false,
+  selectable = false,
+  selectedAdIds,
+  onToggleSelectAd,
 }: Props) {
   const reduceMotion = useReducedMotion();
   if (!ads.length) return null;
@@ -57,6 +63,9 @@ export function DiscoveryAssistantAdGallery({
             isSaved={isSaved(ad.id)}
             isSavePending={isPending(ad.id)}
             onToggleSave={() => onToggleSave(ad)}
+            selectable={selectable}
+            selected={selectedAdIds?.has(ad.id)}
+            onToggleSelect={() => onToggleSelectAd?.(ad)}
             className="shadow-[0_8px_28px_-12px_rgba(15,23,42,0.2)]"
           />
         </motion.div>

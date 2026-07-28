@@ -1,3 +1,4 @@
+import type { DiscoveryChatAttachment } from "@/lib/discovery/discovery-assistant-attachments";
 import type { DiscoveryAssistantResponse } from "@/lib/discovery/discovery-assistant-types";
 import type { DiscoveryAdDto } from "@/lib/discovery/types";
 
@@ -8,6 +9,10 @@ export type DiscoveryChatEntry = {
   discoveryAds?: DiscoveryAdDto[];
   visualStats?: DiscoveryAssistantResponse["visual_stats"];
   suggestions?: string[];
+  attachments?: DiscoveryChatAttachment[];
+  selectedAdIds?: string[];
+  selectedAdRefs?: Array<{ id: string; competitor_name: string; preview: string }>;
+  contextSummary?: string;
 };
 
 export type DiscoveryChatSession = {

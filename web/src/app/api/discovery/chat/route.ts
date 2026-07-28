@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { runDiscoveryAssistantForUser } from "@/lib/discovery/discovery-assistant";
+import type { DiscoveryAssistantAttachmentInput } from "@/lib/discovery/discovery-assistant-attachments";
 import type { DiscoveryAssistantMessage } from "@/lib/discovery/discovery-assistant-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
       history?: DiscoveryAssistantMessage[];
       currentTab?: string;
       currentFilters?: Record<string, unknown>;
+      selectedAdIds?: string[];
+      attachments?: DiscoveryAssistantAttachmentInput[];
     };
 
     const brandId = (body.brandId ?? "").trim();
@@ -41,6 +44,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: "message too long" }, { status: 400 });
     }
 
+    const selectedAdIds = [...new Set((body.selectedAdIds ?? []).map((id) => id.trim()).filter(Boolean))].slice(
+      0,
+      8,
+    );
+    const attachments = (body.attachments ?? []).slice(0, 5);
+
     const appOrigin = process.env.NEXT_PUBLIC_APP_URL?.trim() || new URL(request.url).origin;
 
     const response = await runDiscoveryAssistantForUser(
@@ -53,6 +62,8 @@ export async function POST(request: Request) {
         history: body.history,
         currentTab: body.currentTab,
         currentFilters: body.currentFilters,
+        selectedAdIds,
+        attachments,
       },
       appOrigin,
     );

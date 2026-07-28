@@ -3,7 +3,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  ArrowUp,
   Bot,
   History,
   Loader2,
@@ -18,6 +17,7 @@ import Link from "next/link";
 
 import type { DiscoveryFeedTab, DiscoveryToolbarState } from "@/components/discovery/discovery-types";
 import { DiscoveryAssistantAdGallery } from "@/components/discovery/discovery-assistant-ad-gallery";
+import { DiscoveryAssistantComposer } from "@/components/discovery/discovery-assistant-composer";
 import { DiscoveryAssistantVisualMessage } from "@/components/discovery/discovery-assistant-visual-message";
 import { useDiscoverySavedAds } from "@/components/discovery/use-discovery-saved-ads";
 import {
@@ -36,6 +36,11 @@ import {
   type DiscoveryAssistantMessage,
   type DiscoveryAssistantResponse,
 } from "@/lib/discovery/discovery-assistant-types";
+import {
+  attachmentInputFromChat,
+  parseChatAttachmentFiles,
+  type DiscoveryChatAttachment,
+} from "@/lib/discovery/discovery-assistant-attachments";
 import { aiGlassCardClass, aiSectionLabelClass } from "@/lib/ad-detail/ad-preview-analysis-styles";
 import { formatRelativeTime } from "@/components/email-intelligence/email-intelligence-ui";
 import type { DiscoveryAdDto } from "@/lib/discovery/types";
@@ -44,6 +49,7 @@ import { cn } from "@/lib/utils";
 type PanelProps = {
   open: boolean;
   onClose: () => void;
+  onClusterExpandedChange?: (expanded: boolean) => void;
   brandId: string;
   brandName: string;
   tab: DiscoveryFeedTab;
@@ -61,6 +67,9 @@ type AssistantWindow = {
   loading: boolean;
   error: string | null;
   input: string;
+  selectedAdIds: string[];
+  pendingAttachments: DiscoveryChatAttachment[];
+  attachmentError: string | null;
 };
 
 type PersistedAssistantUi = {
@@ -188,7 +197,20 @@ function windowFromSession(session: DiscoveryChatSession): AssistantWindow {
     loading: false,
     error: null,
     input: "",
+    selectedAdIds: [],
+    pendingAttachments: [],
+    attachmentError: null,
   };
+}
+
+function adsByIdFromMessages(messages: DiscoveryChatEntry[]): Map<string, DiscoveryAdDto> {
+  const map = new Map<string, DiscoveryAdDto>();
+  for (const msg of messages) {
+    for (const ad of msg.discoveryAds ?? []) {
+      map.set(ad.id, ad);
+    }
+  }
+  return map;
 }
 
 function windowTitle(win: AssistantWindow, sessions: DiscoveryChatSession[]): string {
@@ -255,9 +277,14 @@ type ChatPaneProps = {
   onToggleHistory: () => void;
   onNewChat: () => void;
   onInputChange: (value: string) => void;
-  onSend: (text: string) => void;
+  onSend: (text?: string) => void;
   onOpenAd: (adId: string) => void;
   onToggleSave: (ad: DiscoveryAdDto) => void;
+  onToggleSelectAd: (ad: DiscoveryAdDto) => void;
+  onAddFiles: (files: FileList | File[]) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+  onClearSelectedAds: () => void;
+  onRemoveSelectedAd: (adId: string) => void;
   onLoadSession: (sessionId: string) => void;
   onDeleteSession: (sessionId: string, e: React.MouseEvent) => void;
 };
@@ -282,12 +309,22 @@ function DiscoveryAssistantChatPane({
   onSend,
   onOpenAd,
   onToggleSave,
+  onToggleSelectAd,
+  onAddFiles,
+  onRemoveAttachment,
+  onClearSelectedAds,
+  onRemoveSelectedAd,
   onLoadSession,
   onDeleteSession,
 }: ChatPaneProps) {
   const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const title = windowTitle(win, sessions);
+  const adsById = useMemo(() => adsByIdFromMessages(win.messages), [win.messages]);
+  const selectedAds = useMemo(
+    () => win.selectedAdIds.map((id) => adsById.get(id)).filter((ad): ad is DiscoveryAdDto => Boolean(ad)),
+    [adsById, win.selectedAdIds],
+  );
+  const selectedAdIdSet = useMemo(() => new Set(win.selectedAdIds), [win.selectedAdIds]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
@@ -505,7 +542,43 @@ function DiscoveryAssistantChatPane({
                     )}
                   >
                     {msg.role === "user" ? (
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                      <div className="space-y-2">
+                        {msg.selectedAdRefs?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {msg.selectedAdRefs.map((ad) => (
+                              <span
+                                key={ad.id}
+                                className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-medium text-white/90"
+                              >
+                                {ad.competitor_name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {msg.attachments?.length ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {msg.attachments.map((attachment) =>
+                              attachment.kind === "image" && attachment.dataUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  key={attachment.id}
+                                  src={attachment.dataUrl}
+                                  alt={attachment.name}
+                                  className="h-12 w-12 rounded-lg object-cover ring-1 ring-white/30"
+                                />
+                              ) : (
+                                <span
+                                  key={attachment.id}
+                                  className="rounded-lg bg-white/15 px-2 py-1 text-[10px] text-white/90"
+                                >
+                                  {attachment.name}
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        ) : null}
+                        <p className="whitespace-pre-wrap">{msg.content}</p>
+                      </div>
                     ) : (
                       <div className={cn("overflow-hidden rounded-2xl p-2", aiGlassCardClass)}>
                         {(msg.discoveryAds?.length ?? 0) > 0 ? (
@@ -516,6 +589,9 @@ function DiscoveryAssistantChatPane({
                             onOpenAd={onOpenAd}
                             onToggleSave={(ad) => onToggleSave(ad)}
                             expanded={clusterExpanded}
+                            selectable
+                            selectedAdIds={selectedAdIdSet}
+                            onToggleSelectAd={onToggleSelectAd}
                           />
                         ) : null}
                         <div className="px-1 pb-1 pt-2">
@@ -551,36 +627,20 @@ function DiscoveryAssistantChatPane({
               </div>
             </div>
 
-            <footer className="shrink-0 border-t border-white/50 p-3">
-              <div className="flex items-end gap-2 rounded-2xl border border-white/70 bg-white/45 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.92)] backdrop-blur-md">
-                <textarea
-                  ref={inputRef}
-                  value={win.input}
-                  onChange={(e) => onInputChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void onSend(win.input);
-                    }
-                  }}
-                  rows={clusterExpanded ? 3 : 2}
-                  placeholder="Search keywords, filter ads…"
-                  className="max-h-28 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm text-[color:var(--rival-primary)] outline-none placeholder:text-[color:var(--rival-muted)]"
-                />
-                <button
-                  type="button"
-                  disabled={!win.input.trim() || win.loading}
-                  onClick={() => void onSend(win.input)}
-                  className={cn(
-                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl disabled:opacity-40",
-                    assistantPrimaryBtn,
-                  )}
-                  aria-label="Send"
-                >
-                  <ArrowUp className="h-4 w-4" aria-hidden />
-                </button>
-              </div>
-            </footer>
+            <DiscoveryAssistantComposer
+              input={win.input}
+              loading={win.loading}
+              expanded={clusterExpanded}
+              attachments={win.pendingAttachments}
+              selectedAds={selectedAds}
+              attachmentError={win.attachmentError}
+              onInputChange={onInputChange}
+              onSend={() => onSend()}
+              onAddFiles={onAddFiles}
+              onRemoveAttachment={onRemoveAttachment}
+              onClearSelectedAds={onClearSelectedAds}
+              onRemoveSelectedAd={onRemoveSelectedAd}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -591,6 +651,7 @@ function DiscoveryAssistantChatPane({
 function DiscoveryAssistantPanel({
   open,
   onClose,
+  onClusterExpandedChange,
   brandId,
   brandName,
   tab,
@@ -796,23 +857,63 @@ function DiscoveryAssistantPanel({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose, historyOpen, clusterExpanded]);
 
+  useEffect(() => {
+    if (!open) return;
+    onClusterExpandedChange?.(clusterExpanded);
+  }, [open, clusterExpanded, onClusterExpandedChange]);
+
   const sendForWindow = useCallback(
-    async (windowId: string, text: string) => {
+    async (windowId: string, overrideText?: string) => {
       const win = windows.find((w) => w.windowId === windowId);
       if (!win) return;
-      const trimmed = text.trim();
-      if (!trimmed || win.loading) return;
+      const trimmed = (overrideText ?? win.input).trim();
+      const hasContext =
+        trimmed.length > 0 || win.pendingAttachments.length > 0 || win.selectedAdIds.length > 0;
+      if (!hasContext || win.loading) return;
 
-      updateWindow(windowId, { error: null, loading: true, input: "" });
+      const adsById = adsByIdFromMessages(win.messages);
+      const selectedAdRefs = win.selectedAdIds
+        .map((id) => adsById.get(id))
+        .filter((ad): ad is DiscoveryAdDto => Boolean(ad))
+        .map((ad) => ({
+          id: ad.id,
+          competitor_name: ad.competitor_name,
+          preview: ad.ad_text.trim().slice(0, 80) || "Ad",
+        }));
 
-      const userMsg: DiscoveryChatEntry = { role: "user", content: trimmed };
+      const attachments = [...win.pendingAttachments];
+      const messageText =
+        trimmed ||
+        (selectedAdRefs.length
+          ? "Analyze the selected ad(s) and give me fresh creative ideas inspired by them — not copies."
+          : "Please analyze the attached file(s).");
+
+      updateWindow(windowId, {
+        error: null,
+        loading: true,
+        input: "",
+        pendingAttachments: [],
+        attachmentError: null,
+        selectedAdIds: [],
+      });
+
+      const userMsg: DiscoveryChatEntry = {
+        role: "user",
+        content: messageText,
+        attachments,
+        selectedAdIds: selectedAdRefs.map((ad) => ad.id),
+        selectedAdRefs,
+      };
       const nextMessages = [...win.messages, userMsg];
       updateWindow(windowId, { messages: nextMessages });
 
       try {
-        const history: DiscoveryAssistantMessage[] = nextMessages
-          .slice(-12)
-          .map(({ role, content }) => ({ role, content }));
+        const history: DiscoveryAssistantMessage[] = nextMessages.slice(-12).map((entry) => ({
+          role: entry.role,
+          content: entry.content,
+          selectedAdIds: entry.selectedAdIds,
+          contextSummary: entry.contextSummary,
+        }));
 
         const res = await fetch("/api/discovery/chat", {
           method: "POST",
@@ -821,8 +922,10 @@ function DiscoveryAssistantPanel({
           body: JSON.stringify({
             brandId,
             brandName,
-            message: trimmed,
+            message: messageText,
             history: history.slice(0, -1),
+            selectedAdIds: selectedAdRefs.map((ad) => ad.id),
+            attachments: attachments.map(attachmentInputFromChat),
             currentTab: tab,
             currentFilters: {
               search: toolbar.search,
@@ -971,6 +1074,29 @@ function DiscoveryAssistantPanel({
     [clusterExpanded, persistUi, windows],
   );
 
+  const toggleSelectAdForWindow = useCallback((windowId: string, ad: DiscoveryAdDto) => {
+    setWindows((prev) =>
+      prev.map((w) => {
+        if (w.windowId !== windowId) return w;
+        const has = w.selectedAdIds.includes(ad.id);
+        const selectedAdIds = has
+          ? w.selectedAdIds.filter((id) => id !== ad.id)
+          : [...w.selectedAdIds, ad.id].slice(0, 8);
+        return { ...w, selectedAdIds };
+      }),
+    );
+  }, []);
+
+  const addFilesForWindow = useCallback(async (windowId: string, files: FileList | File[]) => {
+    const win = windows.find((w) => w.windowId === windowId);
+    if (!win) return;
+    const { attachments, errors } = await parseChatAttachmentFiles(files, win.pendingAttachments.length);
+    updateWindow(windowId, {
+      pendingAttachments: [...win.pendingAttachments, ...attachments],
+      attachmentError: errors[0] ?? null,
+    });
+  }, [updateWindow, windows]);
+
   const useFullCluster = clusterExpanded && !clusterSize;
   const resolvedClusterSize = clusterExpanded ? (clusterSize ?? getDefaultClusterSize()) : null;
 
@@ -1058,6 +1184,20 @@ function DiscoveryAssistantPanel({
                     onSend={(text) => void sendForWindow(win.windowId, text)}
                     onOpenAd={onOpenAd}
                     onToggleSave={(ad) => void toggleSave(ad)}
+                    onToggleSelectAd={(ad) => toggleSelectAdForWindow(win.windowId, ad)}
+                    onAddFiles={(files) => void addFilesForWindow(win.windowId, files)}
+                    onRemoveAttachment={(attachmentId) =>
+                      updateWindow(win.windowId, {
+                        pendingAttachments: win.pendingAttachments.filter((a) => a.id !== attachmentId),
+                        attachmentError: null,
+                      })
+                    }
+                    onClearSelectedAds={() => updateWindow(win.windowId, { selectedAdIds: [] })}
+                    onRemoveSelectedAd={(adId) =>
+                      updateWindow(win.windowId, {
+                        selectedAdIds: win.selectedAdIds.filter((id) => id !== adId),
+                      })
+                    }
                     onLoadSession={loadSession}
                     onDeleteSession={handleDeleteSession}
                   />
@@ -1082,52 +1222,66 @@ type AssistantProps = Omit<PanelProps, "open" | "onClose">;
 
 export function DiscoveryAssistant(props: AssistantProps) {
   const [open, setOpen] = useState(false);
+  const [clusterExpanded, setClusterExpanded] = useState(false);
   const reduceMotion = useReducedMotion();
 
   return (
     <>
-      <DiscoveryAssistantPanel open={open} onClose={() => setOpen(false)} {...props} />
+      <DiscoveryAssistantPanel
+        open={open}
+        onClose={() => setOpen(false)}
+        onClusterExpandedChange={setClusterExpanded}
+        {...props}
+      />
 
-      <motion.button
-        type="button"
-        layout
-        onClick={() => setOpen((v) => !v)}
-        whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-        transition={PANEL_SPRING}
-        className={cn(
-          "fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_40px_-8px_rgba(52,52,52,0.38)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_40%,white)] transition hover:bg-[#2d2d44]",
-          assistantPrimaryBtn,
-          open ? "h-12 w-12 justify-center px-0" : "px-4 py-3",
-        )}
-        aria-label={open ? "Close assistant" : "Open assistant"}
-        aria-expanded={open}
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          {open ? (
-            <motion.span
-              key="close"
-              initial={{ opacity: 0, rotate: -90, scale: 0.8 }}
-              animate={{ opacity: 1, rotate: 0, scale: 1 }}
-              exit={{ opacity: 0, rotate: 90, scale: 0.8 }}
-              transition={{ duration: 0.15 }}
-            >
-              <X className="h-5 w-5" aria-hidden />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="open"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.15 }}
-              className="inline-flex items-center gap-2"
-            >
-              <Sparkles className="h-4 w-4" aria-hidden />
-              Ask Claude
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.button>
+      <AnimatePresence>
+        {!(open && clusterExpanded) ? (
+          <motion.button
+            key="assistant-fab"
+            type="button"
+            layout
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={reduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+            onClick={() => setOpen((v) => !v)}
+            whileTap={reduceMotion ? undefined : { scale: 0.96 }}
+            transition={PANEL_SPRING}
+            className={cn(
+              "fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full text-sm font-semibold text-white shadow-[0_12px_40px_-8px_rgba(52,52,52,0.38)] ring-1 ring-[color-mix(in_srgb,var(--rival-accent-blue)_40%,white)] transition hover:bg-[#2d2d44]",
+              assistantPrimaryBtn,
+              open ? "h-12 w-12 justify-center px-0" : "px-4 py-3",
+            )}
+            aria-label={open ? "Close assistant" : "Open assistant"}
+            aria-expanded={open}
+          >
+            <AnimatePresence mode="wait" initial={false}>
+              {open ? (
+                <motion.span
+                  key="close"
+                  initial={{ opacity: 0, rotate: -90, scale: 0.8 }}
+                  animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                  exit={{ opacity: 0, rotate: 90, scale: 0.8 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <X className="h-5 w-5" aria-hidden />
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="open"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  transition={{ duration: 0.15 }}
+                  className="inline-flex items-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden />
+                  Ask Claude
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.button>
+        ) : null}
+      </AnimatePresence>
     </>
   );
 }
