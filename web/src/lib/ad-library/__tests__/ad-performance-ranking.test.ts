@@ -20,11 +20,24 @@ describe("extractImpressionsIndex", () => {
 });
 
 describe("qualifiesAsUltimateWinner", () => {
-  it("requires both high impressions band and long runtime", () => {
+  it("qualifies high band + moderate runtime", () => {
     expect(qualifiesAsUltimateWinner(4, 60)).toBe(true);
-    expect(qualifiesAsUltimateWinner(2, 60)).toBe(false);
+    expect(qualifiesAsUltimateWinner(4, 14)).toBe(true);
+  });
+
+  it("qualifies mid band + three-week runtime (SMB-friendly)", () => {
+    expect(qualifiesAsUltimateWinner(2, 21)).toBe(true);
+    expect(qualifiesAsUltimateWinner(2, 20)).toBe(false);
+  });
+
+  it("rejects short tests even with a high band", () => {
     expect(qualifiesAsUltimateWinner(4, 10)).toBe(false);
-    expect(qualifiesAsUltimateWinner(null, 90)).toBe(false);
+  });
+
+  it("falls back to long runtime when Meta omits impression band", () => {
+    expect(qualifiesAsUltimateWinner(null, 90)).toBe(true);
+    expect(qualifiesAsUltimateWinner(null, 42)).toBe(true);
+    expect(qualifiesAsUltimateWinner(null, 30)).toBe(false);
   });
 });
 
@@ -35,8 +48,9 @@ describe("computeUltimateWinnerScore", () => {
     expect(long).toBeGreaterThan(short);
   });
 
-  it("returns 0 without impressions index", () => {
-    expect(computeUltimateWinnerScore(null, 120)).toBe(0);
+  it("scores long-runtime ads without impression band", () => {
+    expect(computeUltimateWinnerScore(null, 120)).toBeGreaterThan(0);
+    expect(computeUltimateWinnerScore(null, 14)).toBe(0);
   });
 });
 

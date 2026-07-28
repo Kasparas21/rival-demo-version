@@ -11,10 +11,23 @@ export type AdPerformanceSort =
   | "ultimate_winner";
 
 /** Meta library band threshold for the “ultimate winner” tier (high impressions + long run). */
-export const ULTIMATE_WINNER_MIN_IMPRESSIONS_INDEX = 3;
+export const ULTIMATE_WINNER_MIN_IMPRESSIONS_INDEX = 2;
 
-/** Minimum days live to qualify as an ultimate winner alongside impressions. */
-export const ULTIMATE_WINNER_MIN_DAYS_RUNNING = 30;
+/** Minimum days live to qualify alongside a decent impression band. */
+export const ULTIMATE_WINNER_MIN_DAYS_RUNNING = 21;
+
+/** Top impression band can qualify with a shorter (but still proven) runtime. */
+export const ULTIMATE_WINNER_HIGH_BAND_MIN_INDEX = 4;
+export const ULTIMATE_WINNER_HIGH_BAND_MIN_DAYS = 14;
+
+/**
+ * When Meta omits reach (common for smaller EU / local advertisers), a long runtime
+ * alone still signals the creative worked — use this as the fallback threshold.
+ */
+export const ULTIMATE_WINNER_RUNTIME_ONLY_MIN_DAYS = 42;
+
+/** Score weight for runtime-only winners (between impression band 1 and 2). */
+const RUNTIME_ONLY_SCORE_MULTIPLIER = 1.75;
 
 export function extractImpressionsIndex(rawPayload: unknown): number | null {
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) return null;
@@ -42,23 +55,33 @@ export function extractImpressionsIndex(rawPayload: unknown): number | null {
  * Ads without an impressions index score 0.
  */
 export function computeUltimateWinnerScore(impressionsIndex: number | null, daysRunning: number): number {
-  const imp = impressionsIndex != null && Number.isFinite(impressionsIndex) && impressionsIndex > 0
-    ? impressionsIndex
-    : 0;
   const days = Math.max(0, daysRunning);
-  if (imp <= 0) return 0;
-  return imp * Math.log1p(days / 7);
+  if (impressionsIndex != null && Number.isFinite(impressionsIndex) && impressionsIndex > 0) {
+    return impressionsIndex * Math.log1p(days / 7);
+  }
+  if (days >= ULTIMATE_WINNER_RUNTIME_ONLY_MIN_DAYS) {
+    return RUNTIME_ONLY_SCORE_MULTIPLIER * Math.log1p(days / 7);
+  }
+  return 0;
 }
 
 export function qualifiesAsUltimateWinner(
   impressionsIndex: number | null,
   daysRunning: number,
 ): boolean {
-  if (impressionsIndex == null || !Number.isFinite(impressionsIndex)) return false;
-  return (
-    impressionsIndex >= ULTIMATE_WINNER_MIN_IMPRESSIONS_INDEX &&
-    daysRunning >= ULTIMATE_WINNER_MIN_DAYS_RUNNING
-  );
+  const days = Math.max(0, daysRunning);
+
+  if (impressionsIndex != null && Number.isFinite(impressionsIndex)) {
+    if (impressionsIndex >= ULTIMATE_WINNER_HIGH_BAND_MIN_INDEX && days >= ULTIMATE_WINNER_HIGH_BAND_MIN_DAYS) {
+      return true;
+    }
+    return (
+      impressionsIndex >= ULTIMATE_WINNER_MIN_IMPRESSIONS_INDEX &&
+      days >= ULTIMATE_WINNER_MIN_DAYS_RUNNING
+    );
+  }
+
+  return days >= ULTIMATE_WINNER_RUNTIME_ONLY_MIN_DAYS;
 }
 
 export function compareAdsByPerformanceSort<T extends { first_seen_at: string; last_seen_at: string }>(
