@@ -166,7 +166,7 @@ export function DiscoveryAssistantPanel({
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-900">Discovery assistant</p>
-              <p className="text-[11px] text-slate-500">{brandName} · Claude Opus 5 · 7 tools</p>
+              <p className="text-[11px] text-slate-500">{brandName} · AI assistant · 7 tools</p>
             </div>
           </div>
           <button
