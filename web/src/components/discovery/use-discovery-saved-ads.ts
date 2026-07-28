@@ -11,10 +11,19 @@ type DiscoveryAdRef = {
   competitor_id: string;
 };
 
-export function useDiscoverySavedAds(ads: DiscoveryAdRef[]) {
+export function useDiscoverySavedAds(ads: DiscoveryAdRef[], feedKey = "") {
   const [savedMap, setSavedMap] = useState<Record<string, string>>({});
   const savedMapRef = useRef(savedMap);
   savedMapRef.current = savedMap;
+  const trackedIdsRef = useRef<Set<string>>(new Set());
+  const lastFeedKeyRef = useRef(feedKey);
+
+  useEffect(() => {
+    if (feedKey === lastFeedKeyRef.current) return;
+    lastFeedKeyRef.current = feedKey;
+    trackedIdsRef.current = new Set();
+    setSavedMap({});
+  }, [feedKey]);
 
   const scrapedIds = useMemo(() => {
     const ids = new Set<string>();
@@ -29,20 +38,25 @@ export function useDiscoverySavedAds(ads: DiscoveryAdRef[]) {
   useEffect(() => {
     if (!scrapedIds.length) {
       setSavedMap({});
+      trackedIdsRef.current = new Set();
       return;
     }
+
+    const newIds = scrapedIds.filter((id) => !trackedIdsRef.current.has(id));
+    if (newIds.length === 0) return;
 
     let cancelled = false;
     void fetch("/api/saved-ads/batch-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ scrapedAdIds: scrapedIds }),
+      body: JSON.stringify({ scrapedAdIds: newIds }),
     })
       .then((r) => r.json())
       .then((res: { ok?: boolean; savedMap?: Record<string, string> }) => {
         if (cancelled || !res.ok) return;
-        setSavedMap(res.savedMap ?? {});
+        for (const id of newIds) trackedIdsRef.current.add(id);
+        setSavedMap((prev) => ({ ...prev, ...(res.savedMap ?? {}) }));
       })
       .catch(() => {});
 

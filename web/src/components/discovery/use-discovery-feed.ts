@@ -209,5 +209,6 @@ export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: stri
     hasMore,
     reshuffle,
     loadMore,
+    feedKey: queryCacheKey,
   };
 }

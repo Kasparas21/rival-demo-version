@@ -7,13 +7,11 @@ import { Compass, Loader2, RefreshCw, Search } from "lucide-react";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
-import { DiscoveryAdCard } from "@/components/discovery/discovery-ad-card";
-import { DiscoveryAdCardBoundary } from "@/components/discovery/discovery-ad-card-boundary";
+import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
 import { useDiscoverySavedAds } from "@/components/discovery/use-discovery-saved-ads";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
-import { cn } from "@/lib/utils";
 
 export function DiscoveryPageClient() {
   const activeBrand = useActiveBrand();
@@ -43,12 +41,13 @@ export function DiscoveryPageClient() {
     hasMore,
     reshuffle,
     loadMore,
+    feedKey,
   } = useDiscoveryFeed(
     activeBrand.id,
     clientBrands.map((brand) => brand.id),
   );
 
-  const { isSaved, isPending, toggleSave } = useDiscoverySavedAds(ads);
+  const { isSaved, isPending, toggleSave } = useDiscoverySavedAds(ads, feedKey);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -133,24 +132,13 @@ export function DiscoveryPageClient() {
           </Link>
         </div>
       ) : (
-        <div
-          className={cn(
-            "mt-5 columns-1 gap-4 sm:columns-2 xl:columns-3 2xl:columns-4",
-            "[&>*]:mb-4 [&>*]:break-inside-avoid",
-          )}
-        >
-          {ads.map((ad) => (
-            <DiscoveryAdCardBoundary key={ad.id}>
-              <DiscoveryAdCard
-                ad={ad}
-                onOpen={() => openAd(ad.id)}
-                isSaved={isSaved(ad.id)}
-                isSavePending={isPending(ad.id)}
-                onToggleSave={() => void toggleSave(ad)}
-              />
-            </DiscoveryAdCardBoundary>
-          ))}
-        </div>
+        <DiscoveryMasonryFeed
+          ads={ads}
+          isSaved={isSaved}
+          isPending={isPending}
+          onOpenAd={openAd}
+          onToggleSave={(ad) => void toggleSave(ad)}
+        />
       )}
 
       {loadingMore ? (
