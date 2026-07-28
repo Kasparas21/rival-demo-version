@@ -32,6 +32,10 @@
     {
       "path": "/api/cron/autopilot-report",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/discovery-patterns",
+      "schedule": "0 7 * * 1"
     }
   ]
 }

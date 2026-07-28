@@ -22,7 +22,8 @@ export type LlmTask =
   | "activity_score"
   | "copy_structure"
   | "landing_page_text_extract"
-  | "landing_page_change_analysis";
+  | "landing_page_change_analysis"
+  | "discovery_patterns";
 
 export type LlmRoute = {
   provider: LlmProvider;
@@ -77,6 +78,7 @@ export const MODEL_ROUTING: Record<LlmTask, LlmRoute> = {
     "LLM_MODEL_LANDING_PAGE_CHANGE_ANALYSIS",
     "anthropic/claude-sonnet-4-6",
   ),
+  discovery_patterns: openRouterRoute("LLM_MODEL_DISCOVERY_PATTERNS"),
 };
 
 export function resolveModelForTask(task: LlmTask): LlmRoute {

@@ -161,7 +161,7 @@ export function setDiscoveryAllCompetitors(
   return competitors.length > 0 ? new Set([competitors[0]!.id]) : new Set();
 }
 
-export type DiscoveryFeedTab = "explore" | "trending" | "ultimate";
+export type DiscoveryFeedTab = "explore" | "trending" | "ultimate" | "patterns";
 
 export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarState> {
   switch (tab) {
@@ -169,6 +169,8 @@ export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarSt
       return { sort: "newest", ultimateOnly: false };
     case "ultimate":
       return { sort: "ultimate_winner", ultimateOnly: false };
+    case "patterns":
+      return {};
     case "explore":
     default:
       return { sort: "shuffle", ultimateOnly: false };

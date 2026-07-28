@@ -610,6 +610,57 @@ export type Database = {
         };
         Relationships: [];
       };
+      discovery_pattern_reports: {
+        Row: {
+          id: string;
+          user_id: string;
+          brand_id: string;
+          week_start: string;
+          status: string;
+          error_text: string | null;
+          metrics: Json;
+          insights: Json;
+          model: string | null;
+          input_tokens: number | null;
+          output_tokens: number | null;
+          cost_usd: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          brand_id: string;
+          week_start: string;
+          status?: string;
+          error_text?: string | null;
+          metrics?: Json;
+          insights?: Json;
+          model?: string | null;
+          input_tokens?: number | null;
+          output_tokens?: number | null;
+          cost_usd?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          brand_id?: string;
+          week_start?: string;
+          status?: string;
+          error_text?: string | null;
+          metrics?: Json;
+          insights?: Json;
+          model?: string | null;
+          input_tokens?: number | null;
+          output_tokens?: number | null;
+          cost_usd?: number | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       weekly_scrape_jobs: {
         Row: {
           id: string;

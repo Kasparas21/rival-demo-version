@@ -147,7 +147,7 @@ async function loadCompetitorIdsForBrand(
   return loadAllSavedCompetitorIds(supabase, userId);
 }
 
-async function loadCompetitorIdsForBrandIds(
+export async function loadCompetitorIdsForBrandIds(
   supabase: SupabaseClient<Database>,
   userId: string,
   brandIds: string[],

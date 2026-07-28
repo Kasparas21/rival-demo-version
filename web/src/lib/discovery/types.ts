@@ -92,3 +92,69 @@ export type DiscoveryFeedResult = {
   market_stats: DiscoveryMarketStats;
   shuffle_seed: string;
 };
+
+export type DiscoveryPatternWeeklyPoint = {
+  week_start: string;
+  launches: number;
+  retirements: number;
+  active_total: number;
+};
+
+export type DiscoveryPatternCompetitorMetrics = {
+  competitor_id: string;
+  name: string;
+  active_ads: number;
+  launched_this_week: number;
+  killed_this_week: number;
+  ultimate_winners: number;
+  video_share_pct: number;
+  aggression_score: number;
+};
+
+export type DiscoveryPatternFormatMix = {
+  format: "video" | "image";
+  active: number;
+  new_this_week: number;
+};
+
+export type DiscoveryPatternAngleMix = {
+  angle: string;
+  count: number;
+};
+
+export type DiscoveryPatternMetrics = {
+  week_start: string;
+  total_ads: number;
+  active_ads: number;
+  new_this_week: number;
+  new_prev_week: number;
+  killed_this_week: number;
+  killed_prev_week: number;
+  net_change: number;
+  ultimate_winners_total: number;
+  new_ultimate_winners_this_week: number;
+  video_share_pct: number;
+  video_share_of_new_pct: number;
+  avg_impressions_index: number | null;
+  median_run_days_of_killed: number | null;
+  fast_kills_this_week: number;
+  weekly_series: DiscoveryPatternWeeklyPoint[];
+  competitors: DiscoveryPatternCompetitorMetrics[];
+  format_mix: DiscoveryPatternFormatMix[];
+  angle_mix: DiscoveryPatternAngleMix[];
+};
+
+export type DiscoveryPatternReportStatus = "done" | "failed";
+
+export type DiscoveryPatternReportDto = {
+  id: string;
+  brand_id: string;
+  week_start: string;
+  status: DiscoveryPatternReportStatus;
+  error_text: string | null;
+  metrics: DiscoveryPatternMetrics;
+  insights: import("./pattern-types").DiscoveryPatternInsights;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+};
