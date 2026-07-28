@@ -31,10 +31,15 @@ import {
 import { loadDiscoveryAdsByIds } from "./load-discovery-ads-by-ids";
 import type { DiscoveryAdDto, DiscoveryMarketStats } from "./types";
 
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_ROUNDS = 5;
 const MAX_ADS_IN_TOOL_PAYLOAD = 25;
 const MAX_TOOL_JSON_CHARS = 14_000;
-const OPENROUTER_TIMEOUT_MS = 60_000;
+const OPENROUTER_TIMEOUT_MS = 90_000;
+const OPENROUTER_MAX_RETRIES = 3;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const SYSTEM_PROMPT = `You are the Spy-Rival Discovery assistant — a visual competitive intelligence copilot for Meta ads.
 
@@ -270,52 +275,91 @@ type ChatMessage = {
   name?: string;
 };
 
+type OpenRouterChatResult = {
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+    };
+  }>;
+};
+
+function parseOpenRouterResponseBody(body: string, status: number): OpenRouterChatResult {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    throw new Error(`OpenRouter returned empty body (${status})`);
+  }
+
+  try {
+    return JSON.parse(trimmed) as OpenRouterChatResult;
+  } catch {
+    // Some providers occasionally return SSE chunks even when stream=false.
+    if (trimmed.includes("data:")) {
+      const chunks = trimmed
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim())
+        .filter((line) => line && line !== "[DONE]");
+
+      for (let i = chunks.length - 1; i >= 0; i--) {
+        try {
+          return JSON.parse(chunks[i]!) as OpenRouterChatResult;
+        } catch {
+          /* try previous chunk */
+        }
+      }
+    }
+
+    throw new Error(trimmed.slice(0, 300) || `OpenRouter returned invalid JSON (${status})`);
+  }
+}
+
 async function openRouterChat(messages: ChatMessage[], tools: OpenRouterTool[], model: string) {
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENROUTER_API_KEY not configured");
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      ...(process.env.OPENROUTER_HTTP_REFERER?.trim()
-        ? { "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER.trim() }
-        : {}),
-      "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() ?? "Rival",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: tools.length ? 1024 : 2048,
-      messages,
-      tools,
-      tool_choice: tools.length ? "auto" : undefined,
-    }),
-  });
+  let lastError: Error | null = null;
 
-  const body = await response.text().catch(() => "");
-  if (!response.ok) {
-    throw new Error(`OpenRouter failed (${response.status}): ${body.slice(0, 300)}`);
+  for (let attempt = 0; attempt < OPENROUTER_MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          ...(process.env.OPENROUTER_HTTP_REFERER?.trim()
+            ? { "HTTP-Referer": process.env.OPENROUTER_HTTP_REFERER.trim() }
+            : {}),
+          "X-Title": process.env.OPENROUTER_APP_TITLE?.trim() ?? "Rival",
+        },
+        body: JSON.stringify({
+          model,
+          stream: false,
+          max_tokens: tools.length ? 1536 : 2048,
+          messages,
+          tools: tools.length ? tools : undefined,
+          tool_choice: tools.length ? "auto" : undefined,
+        }),
+      });
+
+      const body = await response.text().catch(() => "");
+      if (!response.ok) {
+        throw new Error(`OpenRouter failed (${response.status}): ${body.slice(0, 300)}`);
+      }
+
+      return parseOpenRouterResponseBody(body, response.status);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < OPENROUTER_MAX_RETRIES - 1) {
+        await sleep(400 * (attempt + 1));
+        continue;
+      }
+    }
   }
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    throw new Error(
-      body.trim().slice(0, 300) || `OpenRouter returned invalid JSON (${response.status})`,
-    );
-  }
-
-  return parsed as {
-    choices?: Array<{
-      message?: {
-        content?: string | null;
-        tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
-      };
-    }>;
-  };
+  throw lastError ?? new Error("OpenRouter request failed");
 }
 
 function extractJsonPayload(text: string): string {
@@ -393,6 +437,110 @@ function buildVisualStatsFromMarket(stats: DiscoveryMarketStats): DiscoveryVisua
     });
   }
   return chips.slice(0, 5);
+}
+
+function buildHarvestFallbackResponse(
+  userMessage: string,
+  harvest: { adIds: string[]; marketStats: DiscoveryMarketStats | null },
+  selectedAdsCount: number,
+): DiscoveryAssistantResponse {
+  const count = harvest.adIds.length;
+  const wantsUltimate = /\bultimate\b/i.test(userMessage);
+
+  if (selectedAdsCount && !count) {
+    return {
+      message: "Here are creative directions based on your selected ad.",
+      suggestions: [
+        "Give me 3 more creative angles",
+        "Find similar ads in the market",
+        "Which competitor runs the most?",
+      ],
+    };
+  }
+
+  if (count > 0) {
+    const label = wantsUltimate ? "ultimate winner" : "matching";
+    return {
+      message: `Found ${count} ${label} ads for your query.`,
+      filter_patch: wantsUltimate ? { ultimateOnly: true } : undefined,
+      suggestions: [
+        "Show only video ads",
+        "Which competitor runs the most?",
+        "Compare video vs image share",
+      ],
+    };
+  }
+
+  return {
+    message: "I couldn't format a full answer, but try refining your keywords or filters.",
+    suggestions: [
+      "Show video ads about implants",
+      "What are the top keywords this week?",
+      "Show ultimate winners",
+    ],
+  };
+}
+
+async function finalizeAssistantResponse(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  params: {
+    lastText: string;
+    messages: ChatMessage[];
+    model: string;
+    harvest: { adIds: string[]; marketStats: DiscoveryMarketStats | null };
+    selectedAds: DiscoveryAdDto[];
+    userMessage: string;
+  },
+): Promise<DiscoveryAssistantResponse> {
+  const mergedHarvestIds = [...params.harvest.adIds, ...params.selectedAds.map((ad) => ad.id)];
+
+  let lastText = params.lastText;
+  if (!lastText) {
+    params.messages.push({
+      role: "user",
+      content:
+        "Using the tool results above, output ONLY one valid JSON object per the schema. Include ad_refs with real ids from tool results.",
+    });
+    try {
+      const final = await openRouterChat(params.messages, [], params.model);
+      lastText = (final.choices?.[0]?.message?.content ?? "").trim();
+    } catch {
+      lastText = "";
+    }
+  }
+
+  if (lastText) {
+    try {
+      const parsed = parseAssistantJson(lastText);
+      return enrichAssistantResponse(
+        supabase,
+        userId,
+        parsed,
+        mergedHarvestIds,
+        params.harvest.marketStats,
+      );
+    } catch {
+      /* fall through to harvest fallback */
+    }
+  }
+
+  if (mergedHarvestIds.length) {
+    return enrichAssistantResponse(
+      supabase,
+      userId,
+      buildHarvestFallbackResponse(params.userMessage, params.harvest, params.selectedAds.length),
+      mergedHarvestIds,
+      params.harvest.marketStats,
+    );
+  }
+
+  return {
+    message:
+      sanitizeDisplayMessage(lastText) ||
+      "Try a more specific question about keywords, competitors, or ad format.",
+    suggestions: ["Show video ads about implants", "What are the top keywords this week?"],
+  };
 }
 
 async function enrichAssistantResponse(
@@ -501,9 +649,19 @@ export async function runDiscoveryAssistant(params: {
   const harvest = { adIds: [] as string[], marketStats: null as DiscoveryMarketStats | null };
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const result = await openRouterChat(messages, DISCOVERY_TOOLS, route.model);
+    let result: OpenRouterChatResult;
+    try {
+      result = await openRouterChat(messages, DISCOVERY_TOOLS, route.model);
+    } catch (err) {
+      if (harvest.adIds.length || selectedAds.length) break;
+      throw err;
+    }
+
     const choice = result.choices?.[0]?.message;
-    if (!choice) throw new Error("Empty model response");
+    if (!choice) {
+      if (harvest.adIds.length || selectedAds.length) break;
+      throw new Error("Empty model response");
+    }
 
     if (choice.tool_calls?.length) {
       messages.push({
@@ -535,54 +693,14 @@ export async function runDiscoveryAssistant(params: {
     break;
   }
 
-  if (!lastText) {
-    messages.push({
-      role: "user",
-      content:
-        "Output ONLY valid JSON per schema. No markdown. Include 8-12 ad_refs from tool results with real ids.",
-    });
-    const final = await openRouterChat(messages, [], route.model);
-    lastText = (final.choices?.[0]?.message?.content ?? "").trim();
-  }
-
-  try {
-    const parsed = parseAssistantJson(lastText);
-    const mergedHarvestIds = [
-      ...harvest.adIds,
-      ...selectedAds.map((ad) => ad.id),
-    ];
-    return enrichAssistantResponse(
-      params.supabase,
-      params.userId,
-      parsed,
-      mergedHarvestIds,
-      harvest.marketStats,
-    );
-  } catch {
-    if (harvest.adIds.length || selectedAds.length) {
-      return enrichAssistantResponse(
-        params.supabase,
-        params.userId,
-        {
-          message:
-            selectedAds.length && !harvest.adIds.length
-              ? "Here are creative directions based on your selected ad."
-              : "Here are the matching ads from your market.",
-          suggestions: [
-            "Give me 3 more creative angles",
-            "Find similar ads in the market",
-            "Which competitor is hottest this week?",
-          ],
-        },
-        [...harvest.adIds, ...selectedAds.map((ad) => ad.id)],
-        harvest.marketStats,
-      );
-    }
-    return {
-      message: sanitizeDisplayMessage(lastText) || "Try a more specific question about keywords, competitors, or ad format.",
-      suggestions: ["Show video ads about implants", "What are the top keywords this week?"],
-    };
-  }
+  return finalizeAssistantResponse(params.supabase, params.userId, {
+    lastText,
+    messages,
+    model: route.model,
+    harvest,
+    selectedAds,
+    userMessage: params.message,
+  });
 }
 
 export async function runDiscoveryAssistantForUser(
