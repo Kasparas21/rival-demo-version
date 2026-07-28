@@ -41,6 +41,7 @@ import {
   type AdsCachePickRow,
 } from "@/lib/ad-library/ads-cache-pick";
 import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
+import { stripDisabledPlatformsFromScrapeSet } from "@/lib/ad-library/disabled-scrape-platforms";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -322,6 +323,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     /** Hydration reads `ads_cache` only; Apify runs require explicit `skipCache: true`. */
     platformsNeedingScrape = new Set();
   }
+
+  platformsNeedingScrape = stripDisabledPlatformsFromScrapeSet(platformsNeedingScrape);
 
   if (platformsNeedingScrape.size > 0) {
     if (!userId) {

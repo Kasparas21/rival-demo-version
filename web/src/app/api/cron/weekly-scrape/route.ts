@@ -31,6 +31,7 @@ import type { Database } from "@/lib/supabase/types";
 import { loadOrderedWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidate-order";
 import { resolveScheduledScrapeRegions } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
+import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { chainCronInvocation } from "@/lib/cron/chain-cron";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
@@ -208,10 +209,11 @@ async function runWeeklyJobForRow(
       spDisabled,
       nowMs,
     );
-    const platformsToScrape =
+    const platformsToScrape = (
       duePlatforms.length > 0
         ? duePlatforms.filter((p) => configuredPlatforms.has(p))
-        : configuredInitial.filter((p) => !trackingForConfigured.some((t) => t.platform === p));
+        : configuredInitial.filter((p) => !trackingForConfigured.some((t) => t.platform === p))
+    ).filter(isScrapeEnabledForPlatform);
 
     if (platformsToScrape.length === 0) {
       await admin

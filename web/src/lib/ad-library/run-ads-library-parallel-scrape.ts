@@ -23,6 +23,10 @@ import {
 } from "@/lib/ad-library/normalize";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
+import {
+  applyDisabledScrapePlatformErrors,
+  SCRAPE_DISABLED_PLATFORMS,
+} from "@/lib/ad-library/disabled-scrape-platforms";
 
 const MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
 
@@ -135,6 +139,11 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
     snapchatConfirmedAdvertiserQuery,
     metaWorkspaceBrandInitialScrape,
   } = params;
+
+  for (const platform of SCRAPE_DISABLED_PLATFORMS) {
+    platformsNeedingScrape.delete(platform);
+  }
+  applyDisabledScrapePlatformErrors(out, platformsRequested);
 
   await Promise.all([
     (async () => {
