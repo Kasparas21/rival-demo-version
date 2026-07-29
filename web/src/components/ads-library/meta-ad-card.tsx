@@ -371,15 +371,16 @@ function MetaAdCardImpl({
   const metaLinkDesc = ad.linkDescription?.trim() || "";
 
   const isGrid = viewMode === "grid";
+  const stretchGrid = isGrid && gridCreativeSizing !== "natural";
 
   return (
     <article
       onClick={(e) => onClick?.(e)}
-      className={`min-w-0 ${viewMode === "list" || isGrid ? "h-full" : ""} bg-white rounded-2xl border border-[#e5e7eb] overflow-hidden transition-all duration-200 flex flex-col ${
+      className={`min-w-0 ${viewMode === "list" || stretchGrid ? "h-full" : ""} bg-white rounded-2xl border border-[#e5e7eb] overflow-hidden transition-all duration-200 flex flex-col ${
         onClick ? "cursor-pointer hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] hover:ring-2 hover:ring-slate-200" : "hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)]"
       }`}
     >
-      <div className={`flex min-h-0 ${viewMode === "list" ? "flex-1 flex-row" : isGrid ? "flex-1 flex-col" : "flex-col"}`}>
+      <div className={`flex min-h-0 ${viewMode === "list" ? "flex-1 flex-row" : stretchGrid ? "flex-1 flex-col" : "flex-col"}`}>
         {viewMode === "list" ? (
           <div className="relative w-56 shrink-0 min-h-[220px] border-r border-[#e5e7eb] bg-[#f3f4f6] p-2">
             <div className="relative flex h-full min-h-[204px] w-full items-center justify-center overflow-hidden rounded-xl bg-white">
@@ -387,7 +388,7 @@ function MetaAdCardImpl({
             </div>
           </div>
         ) : null}
-        <div className={`min-w-0 flex flex-col ${viewMode === "list" || isGrid ? "flex-1 min-h-0" : ""}`}>
+        <div className={`min-w-0 flex flex-col ${viewMode === "list" || stretchGrid ? "flex-1 min-h-0" : ""}`}>
           <div className="p-4 flex items-start gap-3 border-b border-[#f1f5f9]" data-pa-section="brand">
             <CompetitorLogo
               sources={{

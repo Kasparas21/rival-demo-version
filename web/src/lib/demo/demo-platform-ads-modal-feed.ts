@@ -49,18 +49,40 @@ function expandDemoPlatformAds(baseAds: DemoAd[], targetTotal: number): DemoAd[]
   return result;
 }
 
+function isDemoAdVideo(ad: DemoAd): boolean {
+  if (ad.isVideo === true) return true;
+  const format = (ad.format ?? "").toLowerCase();
+  return format.includes("video") || format === "reels" || format === "story";
+}
+
+function isDemoAdKilled(ad: DemoAd): boolean {
+  const lifespan = ad.lifespanDays ?? ad.activeDays;
+  return ad.activeDays < Math.floor(lifespan * 0.85);
+}
+
 function filterDemoAds(ads: DemoAd[], toolbar: PlatformAdsToolbarState, nowMs: number): DemoAd[] {
   let window =
     toolbar.datePreset === "custom" && toolbar.customRangeStart != null && toolbar.customRangeEnd != null
       ? { start: toolbar.customRangeStart, end: toolbar.customRangeEnd }
       : datePresetWindow(toolbar.datePreset, nowMs);
 
-  if (!window) return ads;
-
   return ads.filter((ad) => {
-    const start = demoAdStartedAtMs(ad, nowMs);
-    const end = nowMs;
-    return end >= window!.start && start <= window!.end;
+    if (window) {
+      const start = demoAdStartedAtMs(ad, nowMs);
+      const end = nowMs;
+      if (!(end >= window.start && start <= window.end)) return false;
+    }
+
+    if (toolbar.statusFilter === "active" && isDemoAdKilled(ad)) return false;
+    if (toolbar.statusFilter === "retired" && !isDemoAdKilled(ad)) return false;
+
+    if (toolbar.formatFilter === "video" && !isDemoAdVideo(ad)) return false;
+    if (toolbar.formatFilter === "image" && isDemoAdVideo(ad)) return false;
+
+    if (toolbar.ultimateOnly && ad.activeDays < 30) return false;
+    if (toolbar.impressionsOnly && ad.activeDays < 14) return false;
+
+    return true;
   });
 }
 
@@ -103,6 +125,10 @@ function toolbarQueryKey(toolbar: PlatformAdsToolbarState): string {
     customRangeEnd: toolbar.customRangeEnd,
     sort: toolbar.sort,
     groupDuplicates: toolbar.groupDuplicates,
+    statusFilter: toolbar.statusFilter,
+    formatFilter: toolbar.formatFilter,
+    ultimateOnly: toolbar.ultimateOnly,
+    impressionsOnly: toolbar.impressionsOnly,
   });
 }
 

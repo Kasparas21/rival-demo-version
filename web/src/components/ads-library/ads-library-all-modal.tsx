@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, X } from "lucide-react";
 
 import { PlatformAdsModalToolbar } from "@/components/ads-library/platform-ads-modal-toolbar";
+import { PlatformAdsMasonryFeed } from "@/components/ads-library/platform-ads-masonry-feed";
 import {
   DEFAULT_PLATFORM_ADS_TOOLBAR,
   platformAdsVisibilityClass,
@@ -98,7 +99,7 @@ export function AdsLibraryAllModal<T>({
   useEffect(() => {
     if (!open) return;
     scrollBodyRef.current?.scrollTo(0, 0);
-  }, [open, toolbar.datePreset, toolbar.customRangeStart, toolbar.customRangeEnd, toolbar.sort, toolbar.groupDuplicates]);
+  }, [open, toolbar.datePreset, toolbar.customRangeStart, toolbar.customRangeEnd, toolbar.sort, toolbar.groupDuplicates, toolbar.statusFilter, toolbar.formatFilter, toolbar.ultimateOnly, toolbar.impressionsOnly]);
 
   useEffect(() => {
     const root = scrollBodyRef.current;
@@ -215,28 +216,46 @@ export function AdsLibraryAllModal<T>({
                   </button>
                 </div>
               ) : loading && ads.length === 0 ? (
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                  {[0, 1, 2, 3].map((k) => (
-                    <div key={k} className="h-[320px] animate-pulse rounded-2xl border border-[#e5e7eb] bg-[#f3f4f6]" />
-                  ))}
-                </div>
+                viewMode === "list" ? (
+                  <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+                    {[0, 1, 2].map((k) => (
+                      <div key={k} className="h-[220px] animate-pulse rounded-2xl border border-[#e5e7eb] bg-[#f3f4f6]" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-4">
+                    {[0, 1].map((col) => (
+                      <div key={col} className="flex min-w-0 flex-1 flex-col gap-4">
+                        {[0, 1].map((k) => (
+                          <div
+                            key={k}
+                            className={`animate-pulse rounded-2xl border border-[#e5e7eb] bg-[#f3f4f6] ${k === 0 ? "h-[280px]" : "h-[360px]"}`}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : ads.length === 0 ? (
                 <p className="py-8 text-center text-[14px] text-[#6b7280]">No ads match the current filters.</p>
               ) : (
                 <>
-                  <div
-                    className={cn(
-                      "grid items-stretch gap-6",
-                      viewMode === "list" ? "mx-auto w-full max-w-2xl grid-cols-1" : "grid-cols-1 sm:grid-cols-2",
-                      visibilityClass,
-                    )}
-                  >
-                    {(ads as T[]).map((ad) => (
-                      <div key={getKey(ad)} className="h-full min-h-0 flex flex-col">
-                        {renderItem(ad, { metaScrapeAtMs })}
-                      </div>
-                    ))}
-                  </div>
+                  {viewMode === "list" ? (
+                    <div className={cn("mx-auto grid w-full max-w-2xl grid-cols-1 gap-4", visibilityClass)}>
+                      {(ads as T[]).map((ad) => (
+                        <div key={getKey(ad)} className="min-w-0">
+                          {renderItem(ad, { metaScrapeAtMs })}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <PlatformAdsMasonryFeed
+                      items={ads as T[]}
+                      getKey={getKey}
+                      className={visibilityClass}
+                      renderItem={(ad) => renderItem(ad, { metaScrapeAtMs })}
+                    />
+                  )}
 
                   <div ref={sentinelRef} className="h-1 w-full" aria-hidden />
 

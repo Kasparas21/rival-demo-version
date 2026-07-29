@@ -5,7 +5,9 @@ import { PLATFORM_ADS_MODAL_BATCH_SIZE } from "@/lib/ad-library/constants";
 import {
   loadPlatformAdsPage,
   type PlatformAdsDatePreset,
+  type PlatformAdsFormatFilter,
   type PlatformAdsSort,
+  type PlatformAdsStatusFilter,
 } from "@/lib/ad-library/platform-ads-page";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -40,6 +42,18 @@ function parseMs(raw: string | null): number | null {
   if (!raw?.trim()) return null;
   const n = Number.parseInt(raw, 10);
   return Number.isFinite(n) ? n : null;
+}
+
+function parseStatusFilter(raw: string | null): PlatformAdsStatusFilter {
+  const v = (raw ?? "all").trim().toLowerCase();
+  if (v === "active" || v === "retired") return v;
+  return "all";
+}
+
+function parseFormatFilter(raw: string | null): PlatformAdsFormatFilter {
+  const v = (raw ?? "all").trim().toLowerCase();
+  if (v === "video" || v === "image") return v;
+  return "all";
 }
 
 /** GET — paginated platform ads for expanded Ad Library modal (cursor = offset). */
@@ -81,6 +95,10 @@ export async function GET(req: Request): Promise<NextResponse> {
     customStartMs: parseMs(url.searchParams.get("customStartMs")),
     customEndMs: parseMs(url.searchParams.get("customEndMs")),
     groupDuplicates: url.searchParams.get("groupDuplicates") === "1",
+    statusFilter: parseStatusFilter(url.searchParams.get("statusFilter")),
+    formatFilter: parseFormatFilter(url.searchParams.get("formatFilter")),
+    ultimateOnly: url.searchParams.get("ultimateOnly") === "1",
+    impressionsOnly: url.searchParams.get("impressionsOnly") === "1",
   });
 
   if (!result.ok) {

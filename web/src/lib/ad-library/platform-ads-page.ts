@@ -1,12 +1,13 @@
 import {
   computeUltimateWinnerScore,
   extractImpressionsIndex,
+  passesUltimateWinnersFeedFilter,
   type AdPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
 import type { AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { PLATFORM_ADS_MODAL_BATCH_SIZE } from "@/lib/ad-library/constants";
-import { googleRowLastShownYmd } from "@/lib/ad-library/count-active-ads";
+import { googleRowLastShownYmd, isAdKilledForLibraryCard } from "@/lib/ad-library/count-active-ads";
 import { pickBestAdsCacheRowMapByPlatform, type AdsCachePickRow } from "@/lib/ad-library/ads-cache-pick";
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
@@ -32,6 +33,8 @@ import type { Database } from "@/lib/supabase/types";
 
 export type PlatformAdsDatePreset = "7d" | "14d" | "30d" | "90d" | "365d" | "all" | "custom";
 export type PlatformAdsSort = AdPerformanceSort;
+export type PlatformAdsStatusFilter = "all" | "active" | "retired";
+export type PlatformAdsFormatFilter = "all" | "video" | "image";
 
 export type PlatformAdsPageQuery = {
   domain: string;
@@ -43,6 +46,10 @@ export type PlatformAdsPageQuery = {
   customStartMs: number | null;
   customEndMs: number | null;
   groupDuplicates: boolean;
+  statusFilter: PlatformAdsStatusFilter;
+  formatFilter: PlatformAdsFormatFilter;
+  ultimateOnly: boolean;
+  impressionsOnly: boolean;
 };
 
 export type PlatformAdsPageResult = {
@@ -191,6 +198,66 @@ function impressionsIndexForPlatformAd(platform: AdsLibraryPlatform, ad: unknown
     return card.impressionsIndex ?? extractImpressionsIndex(card);
   }
   return extractImpressionsIndex(ad);
+}
+
+function isPlatformAdVideo(platform: AdsLibraryPlatform, ad: unknown): boolean {
+  if (!ad || typeof ad !== "object") return false;
+  switch (platform) {
+    case "meta":
+      return Boolean((ad as MetaAdCard).isVideo);
+    case "google": {
+      const row = ad as GoogleAdRow;
+      if (row.type === "youtube") return true;
+      return (row.format ?? "").toLowerCase().includes("video");
+    }
+    case "tiktok":
+      return Boolean((ad as TikTokAdCard).videoUrl?.trim());
+    case "linkedin":
+      return Boolean((ad as LinkedInAdCard).videoUrl?.trim());
+    case "pinterest":
+      return Boolean((ad as PinterestAdCard).videoUrl?.trim());
+    case "snapchat":
+      return Boolean((ad as SnapchatAdCard).videoUrl?.trim());
+    default:
+      return false;
+  }
+}
+
+function adMatchesPlatformAdsFilters(
+  platform: AdsLibraryPlatform,
+  ad: unknown,
+  query: Pick<
+    PlatformAdsPageQuery,
+    "statusFilter" | "formatFilter" | "ultimateOnly" | "impressionsOnly"
+  >,
+  metaScrapeAtMs: number | null,
+  nowMs: number,
+): boolean {
+  if (query.statusFilter !== "all") {
+    const killed = isAdKilledForLibraryCard(platform, ad, metaScrapeAtMs ?? undefined, nowMs);
+    if (query.statusFilter === "active" && killed) return false;
+    if (query.statusFilter === "retired" && !killed) return false;
+  }
+
+  if (query.formatFilter !== "all") {
+    const isVideo = isPlatformAdVideo(platform, ad);
+    if (query.formatFilter === "video" && !isVideo) return false;
+    if (query.formatFilter === "image" && isVideo) return false;
+  }
+
+  if (query.ultimateOnly && platform === "meta") {
+    const span = getSpan(platform, ad, nowMs);
+    const daysRunning = Math.max(0, Math.floor(span.lifespanMs / DAY_MS));
+    const impressionsIndex = impressionsIndexForPlatformAd(platform, ad);
+    if (!passesUltimateWinnersFeedFilter(impressionsIndex, daysRunning)) return false;
+  }
+
+  if (query.impressionsOnly && platform === "meta") {
+    const impressionsIndex = impressionsIndexForPlatformAd(platform, ad);
+    if (impressionsIndex == null || !Number.isFinite(impressionsIndex)) return false;
+  }
+
+  return true;
 }
 
 function sortPlatformAds<T>(platform: AdsLibraryPlatform, ads: T[], sort: PlatformAdsSort, nowMs: number): T[] {
@@ -371,6 +438,16 @@ export async function loadPlatformAdsPage(
   if (query.platform === "meta" && query.groupDuplicates) {
     ads = groupMetaDuplicateAds(ads as MetaAdCard[], nowMs);
   }
+
+  ads = ads.filter((ad) =>
+    adMatchesPlatformAdsFilters(
+      query.platform,
+      ad,
+      query,
+      metaScrapeAtMs,
+      nowMs,
+    ),
+  );
 
   ads = sortPlatformAds(query.platform, ads, query.sort, nowMs);
 

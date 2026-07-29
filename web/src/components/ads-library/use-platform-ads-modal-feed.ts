@@ -28,6 +28,10 @@ function toolbarQueryKey(toolbar: PlatformAdsToolbarState): string {
     customRangeEnd: toolbar.customRangeEnd,
     sort: toolbar.sort,
     groupDuplicates: toolbar.groupDuplicates,
+    statusFilter: toolbar.statusFilter,
+    formatFilter: toolbar.formatFilter,
+    ultimateOnly: toolbar.ultimateOnly,
+    impressionsOnly: toolbar.impressionsOnly,
   });
 }
 
@@ -75,7 +79,11 @@ export function usePlatformAdsModalFeed({
         sort: toolbar.sort,
         datePreset: toolbar.datePreset,
         groupDuplicates: toolbar.groupDuplicates ? "1" : "0",
+        statusFilter: toolbar.statusFilter,
+        formatFilter: toolbar.formatFilter,
       });
+      if (toolbar.ultimateOnly) params.set("ultimateOnly", "1");
+      if (toolbar.impressionsOnly) params.set("impressionsOnly", "1");
       if (toolbar.datePreset === "custom" && toolbar.customRangeStart != null && toolbar.customRangeEnd != null) {
         params.set("customStartMs", String(toolbar.customRangeStart));
         params.set("customEndMs", String(toolbar.customRangeEnd));

@@ -5,7 +5,11 @@ import {
   ArrowUpDown,
   Calendar,
   Eye,
+  Filter,
+  Globe,
+  Image as ImageIcon,
   Layers,
+  Video,
 } from "lucide-react";
 
 import {
@@ -71,6 +75,7 @@ export function PlatformAdsModalToolbar({
   glass = false,
 }: Props) {
   const menu = useMenuState();
+  const [filterPane, setFilterPane] = useState<"root" | "status" | "format">("root");
   const [draftStart, setDraftStart] = useState(toDateInputValue(state.customRangeStart));
   const [draftEnd, setDraftEnd] = useState(toDateInputValue(state.customRangeEnd));
 
@@ -91,6 +96,20 @@ export function PlatformAdsModalToolbar({
 
   const sortLabel = sortOptions.find((o) => o.id === state.sort)?.label ?? "Newest";
 
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (state.statusFilter !== "all") n += 1;
+    if (state.formatFilter !== "all") n += 1;
+    if (state.ultimateOnly) n += 1;
+    if (state.impressionsOnly) n += 1;
+    return n;
+  }, [state]);
+
+  const openFilterMenu = useCallback(() => {
+    setFilterPane("root");
+    menu.toggle("filter");
+  }, [menu]);
+
   const applyCustomRange = useCallback(() => {
     const start = fromDateInputValue(draftStart);
     const end = fromDateInputValue(draftEnd);
@@ -100,6 +119,7 @@ export function PlatformAdsModalToolbar({
   }, [draftStart, draftEnd, menu, onChange]);
 
   const showGroupDuplicates = platform === "meta";
+  const showMetaAdvancedFilters = platform === "meta";
 
   return (
     <div
@@ -110,6 +130,108 @@ export function PlatformAdsModalToolbar({
           : "border-gray-100 bg-[#fafafa]/90",
       )}
     >
+      <div className="relative">
+        <TimelineMenuButton
+          label={activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+          icon={<Filter className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
+          active={menu.isOpen("filter") || activeFilterCount > 0}
+          onClick={openFilterMenu}
+        />
+        <TimelineMenuPanel open={menu.isOpen("filter")} onClose={menu.close} className="w-56">
+          {filterPane === "root" ? (
+            <>
+              <TimelineMenuItem
+                label="Status"
+                icon={<Filter className="h-4 w-4" />}
+                onClick={() => setFilterPane("status")}
+                trailing={<span className="text-slate-400">›</span>}
+              />
+              <TimelineMenuItem
+                label="Format"
+                icon={<Video className="h-4 w-4" />}
+                onClick={() => setFilterPane("format")}
+                trailing={<span className="text-slate-400">›</span>}
+              />
+              {showMetaAdvancedFilters ? (
+                <div className="border-t border-slate-100">
+                  <TimelineToggleRow
+                    label="Ultimate winners only"
+                    description="High Meta impression band plus 30+ days live."
+                    checked={state.ultimateOnly}
+                    onChange={(ultimateOnly) => onChange({ ultimateOnly })}
+                  />
+                  <TimelineToggleRow
+                    label="Has impression data"
+                    description="Meta ads with a reported impression band."
+                    checked={state.impressionsOnly}
+                    onChange={(impressionsOnly) => onChange({ impressionsOnly })}
+                  />
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {filterPane === "status" ? (
+            <>
+              <button
+                type="button"
+                className="w-full border-b border-slate-100 px-3 py-2 text-left text-[11px] font-semibold text-slate-500"
+                onClick={() => setFilterPane("root")}
+              >
+                ← Status
+              </button>
+              {(
+                [
+                  { id: "all", label: "All statuses" },
+                  { id: "active", label: "Active" },
+                  { id: "retired", label: "Inactive" },
+                ] as const
+              ).map((opt) => (
+                <TimelineMenuItem
+                  key={opt.id}
+                  label={opt.label}
+                  selected={state.statusFilter === opt.id}
+                  onClick={() => {
+                    onChange({ statusFilter: opt.id });
+                    menu.close();
+                  }}
+                />
+              ))}
+            </>
+          ) : null}
+
+          {filterPane === "format" ? (
+            <>
+              <button
+                type="button"
+                className="w-full border-b border-slate-100 px-3 py-2 text-left text-[11px] font-semibold text-slate-500"
+                onClick={() => setFilterPane("root")}
+              >
+                ← Format
+              </button>
+              {(
+                [
+                  { id: "all", label: "All formats", icon: <Globe className="h-4 w-4" /> },
+                  { id: "video", label: "Video", icon: <Video className="h-4 w-4" /> },
+                  { id: "image", label: "Image", icon: <ImageIcon className="h-4 w-4" /> },
+                ] as const
+              ).map((opt) => (
+                <TimelineMenuItem
+                  key={opt.id}
+                  label={opt.label}
+                  icon={opt.icon}
+                  selected={state.formatFilter === opt.id}
+                  onClick={() => {
+                    onChange({ formatFilter: opt.id });
+                    menu.close();
+                  }}
+                />
+              ))}
+            </>
+          ) : null}
+        </TimelineMenuPanel>
+      </div>
+
       <div className="relative">
         <TimelineMenuButton
           label={dateButtonLabel}

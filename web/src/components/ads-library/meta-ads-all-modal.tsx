@@ -49,6 +49,7 @@ export function MetaAdsAllModal({
             ad={ad}
             viewMode={viewMode}
             brand={brand}
+            gridCreativeSizing="natural"
             onClick={() => onAdActivate?.(ad)}
             scrapedAdId={extras?.scrapedAdId}
             isSaved={extras?.isSaved}
