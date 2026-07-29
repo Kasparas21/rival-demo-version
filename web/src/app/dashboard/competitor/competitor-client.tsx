@@ -40,6 +40,7 @@ import { AdCreativeVideoOrImage } from "@/components/ads-library/ad-creative-vid
 import { MetaAdCard } from "@/components/ads-library/meta-ad-card";
 import { AdsLibraryAllModal } from "@/components/ads-library/ads-library-all-modal";
 import { MetaAdsAllModal } from "@/components/ads-library/meta-ads-all-modal";
+import { PlatformAdsLibraryStatsBar } from "@/components/ads-library/platform-ads-library-stats-bar";
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
 import { buildLibraryCardDetailSeed } from "@/lib/ad-detail/library-ad-seed";
 import type { AdDetailOpenSeed } from "@/lib/ad-detail/ad-detail-cache";
@@ -2638,6 +2639,16 @@ function CompetitorDashboardBody({
     return Number.isFinite(t) ? t : Date.now();
   }, [lastScrapedAtForPlatform]);
 
+  const scrapeAtMsForPlatform = useCallback(
+    (platform: AdsLibraryPlatform): number | null => {
+      const iso = lastScrapedAtForPlatform(platform);
+      if (!iso) return null;
+      const t = Date.parse(iso);
+      return Number.isFinite(t) ? t : null;
+    },
+    [lastScrapedAtForPlatform],
+  );
+
   const displayMetaAds = useMemo(
     () =>
       sortMetaAdsActiveFirst(
@@ -4218,6 +4229,14 @@ function CompetitorDashboardBody({
                   </div>
                 ) : null}
                 <div className={platformAdsBodyShellClass}>
+                  {!metaSectionBusy && filteredMetaAds.length > 0 ? (
+                    <PlatformAdsLibraryStatsBar
+                      platform="meta"
+                      ads={filteredMetaAds}
+                      scrapeAtMs={metaScrapeAtMs}
+                      className="mb-5"
+                    />
+                  ) : null}
                   {metaSectionBusy ? (
                     <div className={META_ADS_GRID_CLASS}>
                       {[0, 1, 2].map((k) => (
@@ -4337,6 +4356,14 @@ function CompetitorDashboardBody({
                   </div>
                 ) : null}
                 <div className={platformAdsBodyShellClass}>
+                  {!googleSectionBusy && filteredGoogleRows.length > 0 ? (
+                    <PlatformAdsLibraryStatsBar
+                      platform="google"
+                      ads={filteredGoogleRows}
+                      scrapeAtMs={scrapeAtMsForPlatform("google")}
+                      className="mb-5"
+                    />
+                  ) : null}
                   {googleSectionBusy ? (
                     <div className={ADS_GRID_CLASS}>
                       {[0, 1, 2].map((k) => (
@@ -4454,6 +4481,14 @@ function CompetitorDashboardBody({
                   </div>
                 ) : null}
                 <div className={platformAdsBodyShellClass}>
+                  {!linkedinSectionBusy && filteredLinkedInAds.length > 0 ? (
+                    <PlatformAdsLibraryStatsBar
+                      platform="linkedin"
+                      ads={filteredLinkedInAds}
+                      scrapeAtMs={scrapeAtMsForPlatform("linkedin")}
+                      className="mb-5"
+                    />
+                  ) : null}
                   {linkedinSectionBusy ? (
                     <div className={ADS_GRID_CLASS}>
                       {[0, 1, 2].map((k) => (
@@ -4566,6 +4601,14 @@ function CompetitorDashboardBody({
                   </div>
                 ) : null}
                 <div className={platformAdsBodyShellClass}>
+                  {!tiktokSectionBusy && filteredTikTokAds.length > 0 ? (
+                    <PlatformAdsLibraryStatsBar
+                      platform="tiktok"
+                      ads={filteredTikTokAds}
+                      scrapeAtMs={scrapeAtMsForPlatform("tiktok")}
+                      className="mb-5"
+                    />
+                  ) : null}
                   {tiktokSectionBusy ? (
                     <div className={ADS_GRID_CLASS}>
                       {[0, 1, 2].map((k) => (
@@ -4678,6 +4721,14 @@ function CompetitorDashboardBody({
                   </div>
                 ) : null}
                 <div className={platformAdsBodyShellClass}>
+                  {!pinterestSectionBusy && filteredPinterestAds.length > 0 ? (
+                    <PlatformAdsLibraryStatsBar
+                      platform="pinterest"
+                      ads={filteredPinterestAds}
+                      scrapeAtMs={scrapeAtMsForPlatform("pinterest")}
+                      className="mb-5"
+                    />
+                  ) : null}
                   {pinterestSectionBusy ? (
                     <div className={ADS_GRID_CLASS}>
                       {[0, 1, 2].map((k) => (
@@ -4801,6 +4852,14 @@ function CompetitorDashboardBody({
                   </div>
                 ) : null}
                 <div className={platformAdsBodyShellClass}>
+                  {!snapchatSectionBusy && filteredSnapchatAds.length > 0 ? (
+                    <PlatformAdsLibraryStatsBar
+                      platform="snapchat"
+                      ads={filteredSnapchatAds}
+                      scrapeAtMs={scrapeAtMsForPlatform("snapchat")}
+                      className="mb-5"
+                    />
+                  ) : null}
                   {snapchatSectionBusy ? (
                     <div className={ADS_GRID_CLASS}>
                       {[0, 1, 2].map((k) => (
