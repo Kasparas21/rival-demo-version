@@ -1,6 +1,8 @@
 import type {
   DiscoveryDatePreset,
   DiscoveryFormatFilter,
+  DiscoveryLandingPageChangeFilter,
+  DiscoveryLandingPageSort,
   DiscoverySort,
   DiscoveryStatusFilter,
   DiscoveryDateFilterMode,
@@ -19,6 +21,10 @@ export type DiscoveryToolbarState = {
   selectedCompetitorIds: Set<string>;
   /** Checked client workspaces to include. Empty = active workspace only. */
   selectedClientBrandIds: Set<string>;
+  /** Landing pages tab: filter by change confidence. */
+  changeFilter: DiscoveryLandingPageChangeFilter;
+  /** Landing pages tab: sort order for detected changes. */
+  landingPageSort: DiscoveryLandingPageSort;
 };
 
 export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
@@ -32,6 +38,8 @@ export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
   selectedPlatforms: new Set(),
   selectedCompetitorIds: new Set(),
   selectedClientBrandIds: new Set(),
+  changeFilter: "all",
+  landingPageSort: "newest",
 };
 
 export function resolveDiscoveryClientBrandIds(
@@ -164,7 +172,27 @@ export function setDiscoveryAllCompetitors(
   return competitors.length > 0 ? new Set([competitors[0]!.id]) : new Set();
 }
 
-export type DiscoveryFeedTab = "explore" | "trending" | "ultimate" | "whats_new" | "patterns";
+export type DiscoveryFeedTab =
+  | "explore"
+  | "trending"
+  | "ultimate"
+  | "whats_new"
+  | "patterns"
+  | "landing_pages";
+
+export const DISCOVERY_LANDING_PAGES_WINDOWS: {
+  id: Extract<DiscoveryDatePreset, "today" | "3d" | "4d" | "7d" | "30d" | "90d" | "all">;
+  label: string;
+  description: string;
+}[] = [
+  { id: "today", label: "Today", description: "Detected since midnight" },
+  { id: "3d", label: "Last 3 days", description: "Detected in the past 72 hours" },
+  { id: "4d", label: "Last 4 days", description: "Detected in the past 4 days" },
+  { id: "7d", label: "This week", description: "Detected in the past 7 days" },
+  { id: "30d", label: "Last 30 days", description: "Detected in the past 30 days" },
+  { id: "90d", label: "Last 90 days", description: "Detected in the past 90 days" },
+  { id: "all", label: "All time", description: "Every tracked change" },
+];
 
 export const DISCOVERY_WHATS_NEW_WINDOWS: {
   id: Extract<DiscoveryDatePreset, "today" | "3d" | "4d" | "7d">;
@@ -185,6 +213,13 @@ export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarSt
       return { sort: "ultimate_winner", ultimateOnly: false, dateFilterMode: "live", datePreset: "all" };
     case "whats_new":
       return { sort: "newest", ultimateOnly: false, dateFilterMode: "launched", datePreset: "7d" };
+    case "landing_pages":
+      return {
+        datePreset: "7d",
+        dateFilterMode: "live",
+        changeFilter: "all",
+        landingPageSort: "newest",
+      };
     case "patterns":
       return {};
     case "explore":

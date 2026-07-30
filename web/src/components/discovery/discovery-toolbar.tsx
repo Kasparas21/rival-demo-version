@@ -36,6 +36,12 @@ import {
   type DiscoveryToolbarState,
 } from "./discovery-types";
 
+const LANDING_PAGE_SORT_OPTIONS: { id: DiscoveryToolbarState["landingPageSort"]; label: string }[] = [
+  { id: "newest", label: "Newest" },
+  { id: "oldest", label: "Oldest" },
+  { id: "threat", label: "Threat score" },
+];
+
 const SORT_OPTIONS: { id: DiscoveryToolbarState["sort"]; label: string }[] = [
   { id: "shuffle", label: "Shuffle mix" },
   { id: "newest", label: "Newest" },
@@ -109,11 +115,16 @@ export function DiscoveryToolbar({
 }: Props) {
   const menu = useMenuState();
   const isWhatsNew = tab === "whats_new";
+  const isLandingPages = tab === "landing_pages";
 
-  const visibleSortOptions = isWhatsNew
-    ? SORT_OPTIONS.filter((o) => o.id !== "shuffle")
-    : SORT_OPTIONS;
-  const sortLabel = visibleSortOptions.find((o) => o.id === state.sort)?.label ?? "Shuffle mix";
+  const visibleSortOptions = isLandingPages
+    ? LANDING_PAGE_SORT_OPTIONS
+    : isWhatsNew
+      ? SORT_OPTIONS.filter((o) => o.id !== "shuffle")
+      : SORT_OPTIONS;
+  const sortLabel = isLandingPages
+    ? (LANDING_PAGE_SORT_OPTIONS.find((o) => o.id === state.landingPageSort)?.label ?? "Newest")
+    : (visibleSortOptions.find((o) => o.id === state.sort)?.label ?? "Shuffle mix");
   const dateLabel = DATE_OPTIONS.find((o) => o.id === state.datePreset)?.label ?? "All time";
 
   const showClientFilter = clientBrands.length > 1;
@@ -148,16 +159,21 @@ export function DiscoveryToolbar({
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
-    if (state.status !== "all") n += 1;
-    if (state.format !== "all") n += 1;
-    if (state.ultimateOnly) n += 1;
+    if (!isLandingPages) {
+      if (state.status !== "all") n += 1;
+      if (state.format !== "all") n += 1;
+      if (state.ultimateOnly) n += 1;
+    } else if (state.changeFilter !== "all") {
+      n += 1;
+    }
     if (!isDiscoveryDefaultCompetitorSelection(state.selectedCompetitorIds, competitors)) n += 1;
-    if (state.datePreset !== "all") n += 1;
+    if (!isLandingPages && state.datePreset !== "all") n += 1;
+    if (isLandingPages && state.datePreset !== "7d") n += 1;
     if (!isDiscoveryDefaultClientSelection(state.selectedClientBrandIds, activeBrand.id, clientBrands)) {
       n += 1;
     }
     return n;
-  }, [activeBrand.id, clientBrands, competitors, state]);
+  }, [activeBrand.id, clientBrands, competitors, isLandingPages, state]);
 
   return (
     <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:px-4">
@@ -168,12 +184,16 @@ export function DiscoveryToolbar({
             <input
               value={state.search}
               onChange={(e) => onChange({ search: e.target.value })}
-              placeholder="Search ads, hooks, or brands…"
+              placeholder={
+                isLandingPages
+                  ? "Search pages, URLs, competitors, or changes…"
+                  : "Search ads, hooks, or brands…"
+              }
               className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none ring-[color:var(--rival-accent-blue)]/30 transition focus:border-[color:var(--rival-accent-blue)] focus:ring-2"
             />
           </div>
           <span className="hidden text-xs font-medium tabular-nums text-slate-500 sm:inline">
-            {total.toLocaleString()} ads
+            {total.toLocaleString()} {isLandingPages ? "changes" : "ads"}
           </span>
         </div>
 
@@ -234,14 +254,15 @@ export function DiscoveryToolbar({
             </div>
           ) : null}
 
-          <div className="relative">
-            <TimelineMenuButton
-              label={activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
-              icon={<Filter className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
-              active={menu.isOpen("filters")}
-              onClick={() => menu.toggle("filters")}
-            />
-            <TimelineMenuPanel open={menu.isOpen("filters")} onClose={menu.close} className="min-w-[240px] py-1">
+          {!isLandingPages ? (
+            <div className="relative">
+              <TimelineMenuButton
+                label={activeFilterCount > 0 ? `Filters (${activeFilterCount})` : "Filters"}
+                icon={<Filter className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
+                active={menu.isOpen("filters")}
+                onClick={() => menu.toggle("filters")}
+              />
+              <TimelineMenuPanel open={menu.isOpen("filters")} onClose={menu.close} className="min-w-[240px] py-1">
               <p className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 Status
               </p>
@@ -283,8 +304,9 @@ export function DiscoveryToolbar({
               />
             </TimelineMenuPanel>
           </div>
+          ) : null}
 
-          {!isWhatsNew ? (
+          {!isWhatsNew && !isLandingPages ? (
             <div className="relative">
               <TimelineMenuButton
                 label={dateLabel}
@@ -320,9 +342,17 @@ export function DiscoveryToolbar({
                 <TimelineMenuItem
                   key={opt.id}
                   label={opt.label}
-                  selected={state.sort === opt.id}
+                  selected={
+                    isLandingPages
+                      ? state.landingPageSort === opt.id
+                      : state.sort === opt.id
+                  }
                   onClick={() => {
-                    onChange({ sort: opt.id });
+                    if (isLandingPages) {
+                      onChange({ landingPageSort: opt.id as DiscoveryToolbarState["landingPageSort"] });
+                    } else {
+                      onChange({ sort: opt.id as DiscoveryToolbarState["sort"] });
+                    }
                     menu.close();
                   }}
                 />

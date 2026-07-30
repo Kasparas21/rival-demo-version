@@ -9,6 +9,7 @@ import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { DiscoveryAssistant } from "@/components/discovery/discovery-assistant-panel";
 import { DiscoveryMarketStatsBar } from "@/components/discovery/discovery-market-stats";
+import { DiscoveryLandingPagesView } from "@/components/discovery/discovery-landing-pages-view";
 import { DiscoveryPatternsView } from "@/components/discovery/discovery-patterns-view";
 import { DiscoveryWhatsNewToolbar } from "@/components/discovery/discovery-whats-new-toolbar";
 import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
@@ -76,14 +77,16 @@ export function DiscoveryPageClient() {
         title="Discovery"
         description="Meta ads from every competitor you track. Shuffle for inspiration or rank by impressions, recency, and ultimate winners."
         actions={
-          <button
-            type="button"
-            onClick={reshuffle}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-          >
-            <RefreshCw className="h-4 w-4" aria-hidden />
-            Reshuffle
-          </button>
+          tab !== "landing_pages" && tab !== "patterns" ? (
+            <button
+              type="button"
+              onClick={reshuffle}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              Reshuffle
+            </button>
+          ) : undefined
         }
       />
 
@@ -94,6 +97,7 @@ export function DiscoveryPageClient() {
             ["trending", "Trending"],
             ["ultimate", "Ultimate winners"],
             ["whats_new", "What's new"],
+            ["landing_pages", "Landing pages"],
             ["patterns", "Patterns"],
           ] as const
         ).map(([id, label]) => (
@@ -108,6 +112,14 @@ export function DiscoveryPageClient() {
           brandId={activeBrand.id}
           brandName={activeBrand.name}
           onOpenAd={openAd}
+        />
+      ) : tab === "landing_pages" ? (
+        <DiscoveryLandingPagesView
+          brandId={activeBrand.id}
+          toolbar={toolbar}
+          onToolbarChange={patchToolbar}
+          clientBrands={clientBrands}
+          activeBrand={{ id: activeBrand.id, name: activeBrand.name }}
         />
       ) : (
         <>

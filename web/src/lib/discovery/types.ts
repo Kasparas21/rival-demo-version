@@ -206,3 +206,55 @@ export type DiscoveryPatternReportDto = {
   created_at: string;
   updated_at: string;
 };
+
+export type DiscoveryLandingPageSort = "newest" | "oldest" | "threat";
+
+export type DiscoveryLandingPageChangeFilter = "all" | "permanent" | "ab_test" | "unknown";
+
+export type DiscoveryLandingPageChangeDto = {
+  id: string;
+  landing_page_id: string;
+  competitor_id: string;
+  competitor_name: string;
+  competitor_domain: string | null;
+  competitor_logo_url: string | null;
+  client_brand_name?: string | null;
+  url: string;
+  label: string;
+  page_type: string;
+  taken_at: string;
+  screenshot_url: string;
+  hero_screenshot_url: string | null;
+  page_text: Json;
+  pixel_diff_pct: number | null;
+  change_analysis: Json;
+  prev_screenshot_url: string | null;
+  prev_hero_screenshot_url: string | null;
+  prev_page_text: Json | null;
+  prev_taken_at: string | null;
+};
+
+export type DiscoveryLandingPagesQuery = {
+  brandId: string;
+  clientBrandIds: string[];
+  offset: number;
+  limit: number;
+  sort: DiscoveryLandingPageSort;
+  query: string;
+  competitorFilterIds: string[];
+  datePreset: DiscoveryDatePreset;
+  changeFilter: DiscoveryLandingPageChangeFilter;
+};
+
+export type DiscoveryLandingPagesResult =
+  | {
+      ok: true;
+      changes: DiscoveryLandingPageChangeDto[];
+      total: number;
+      offset: number;
+      limit: number;
+      has_more: boolean;
+      competitors: DiscoveryCompetitorChip[];
+      filter_counts: Record<DiscoveryLandingPageChangeFilter, number>;
+    }
+  | { ok: false; error: string };

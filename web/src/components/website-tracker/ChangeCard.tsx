@@ -26,7 +26,21 @@ type Props = {
   };
   prevScreenshotUrl?: string | null;
   prevHeroScreenshotUrl?: string | null;
+  competitorName?: string | null;
+  competitorLogoUrl?: string | null;
+  capturedAtLabel?: string | null;
 };
+
+function fmtCapturedAt(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 function ElementChangeRow({
   item,
@@ -139,7 +153,14 @@ function VisualChangeRow({ item }: { item: VisualChangeRegion }) {
   );
 }
 
-export function ChangeCard({ change, prevScreenshotUrl, prevHeroScreenshotUrl }: Props) {
+export function ChangeCard({
+  change,
+  prevScreenshotUrl,
+  prevHeroScreenshotUrl,
+  competitorName,
+  competitorLogoUrl,
+  capturedAtLabel,
+}: Props) {
   const [compareOpen, setCompareOpen] = useState(false);
   const [compareMode, setCompareMode] = useState<"hero" | "full">("full");
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -166,15 +187,37 @@ export function ChangeCard({ change, prevScreenshotUrl, prevHeroScreenshotUrl }:
   const visualChanges = analysis.visual_changes ?? [];
   const canCompare = Boolean(fullBefore && fullAfter);
 
+  const capturedDate = fmtCapturedAt(capturedAtLabel ?? change.taken_at);
+
   return (
     <>
       <article className={`${alertGlassCardClass} overflow-hidden p-4 sm:p-5`}>
+        {competitorName ? (
+          <div className="mb-3 flex items-center gap-2">
+            {competitorLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={competitorLogoUrl}
+                alt=""
+                className="h-6 w-6 rounded-md border border-slate-200 object-cover"
+              />
+            ) : (
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-500">
+                {competitorName.slice(0, 1).toUpperCase()}
+              </span>
+            )}
+            <span className="text-sm font-semibold text-slate-800">{competitorName}</span>
+          </div>
+        ) : null}
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full shadow-sm", status.dotClass)} />
               <h3 className="text-base font-semibold text-slate-900">{label}</h3>
-              <span className="text-xs text-slate-500">{fmtRelative(change.taken_at)}</span>
+              <span className="text-xs text-slate-500">
+                {capturedDate ? `${capturedDate} · ` : ""}
+                {fmtRelative(change.taken_at)}
+              </span>
             </div>
             {displayUrl ? (
               <p className="mt-0.5 truncate font-mono text-[11px] text-slate-500">{displayUrl}</p>

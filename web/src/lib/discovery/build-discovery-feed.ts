@@ -181,7 +181,7 @@ export async function loadCompetitorIdsForBrandIds(
   return { ids: [...allIds] };
 }
 
-async function loadCompetitorClientBrandLabels(
+export async function loadCompetitorClientBrandLabels(
   supabase: SupabaseClient<Database>,
   userId: string,
   competitorIds: string[],
@@ -215,7 +215,7 @@ async function loadCompetitorClientBrandLabels(
   return labels;
 }
 
-async function loadCompetitorsById(
+export async function loadCompetitorsById(
   supabase: SupabaseClient<Database>,
   userId: string,
   competitorIds: string[],
