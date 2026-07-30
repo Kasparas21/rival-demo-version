@@ -32,6 +32,7 @@ import {
   setDiscoveryAllCompetitors,
   toggleDiscoveryClientBrand,
   toggleDiscoveryCompetitor,
+  type DiscoveryFeedTab,
   type DiscoveryToolbarState,
 } from "./discovery-types";
 
@@ -63,6 +64,7 @@ type Props = {
   total: number;
   activeBrand: ClientBrandOption;
   clientBrands: ClientBrandOption[];
+  tab?: DiscoveryFeedTab;
 };
 
 function ClientCheckboxRow({
@@ -103,10 +105,15 @@ export function DiscoveryToolbar({
   total,
   activeBrand,
   clientBrands,
+  tab = "explore",
 }: Props) {
   const menu = useMenuState();
+  const isWhatsNew = tab === "whats_new";
 
-  const sortLabel = SORT_OPTIONS.find((o) => o.id === state.sort)?.label ?? "Shuffle mix";
+  const visibleSortOptions = isWhatsNew
+    ? SORT_OPTIONS.filter((o) => o.id !== "shuffle")
+    : SORT_OPTIONS;
+  const sortLabel = visibleSortOptions.find((o) => o.id === state.sort)?.label ?? "Shuffle mix";
   const dateLabel = DATE_OPTIONS.find((o) => o.id === state.datePreset)?.label ?? "All time";
 
   const showClientFilter = clientBrands.length > 1;
@@ -277,27 +284,29 @@ export function DiscoveryToolbar({
             </TimelineMenuPanel>
           </div>
 
-          <div className="relative">
-            <TimelineMenuButton
-              label={dateLabel}
-              icon={<Calendar className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
-              active={menu.isOpen("date")}
-              onClick={() => menu.toggle("date")}
-            />
-            <TimelineMenuPanel open={menu.isOpen("date")} onClose={menu.close} className="min-w-[168px] py-1">
-              {DATE_OPTIONS.map((opt) => (
-                <TimelineMenuItem
-                  key={opt.id}
-                  label={opt.label}
-                  selected={state.datePreset === opt.id}
-                  onClick={() => {
-                    onChange({ datePreset: opt.id });
-                    menu.close();
-                  }}
-                />
-              ))}
-            </TimelineMenuPanel>
-          </div>
+          {!isWhatsNew ? (
+            <div className="relative">
+              <TimelineMenuButton
+                label={dateLabel}
+                icon={<Calendar className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
+                active={menu.isOpen("date")}
+                onClick={() => menu.toggle("date")}
+              />
+              <TimelineMenuPanel open={menu.isOpen("date")} onClose={menu.close} className="min-w-[168px] py-1">
+                {DATE_OPTIONS.map((opt) => (
+                  <TimelineMenuItem
+                    key={opt.id}
+                    label={opt.label}
+                    selected={state.datePreset === opt.id}
+                    onClick={() => {
+                      onChange({ datePreset: opt.id });
+                      menu.close();
+                    }}
+                  />
+                ))}
+              </TimelineMenuPanel>
+            </div>
+          ) : null}
 
           <div className="relative">
             <TimelineMenuButton
@@ -307,7 +316,7 @@ export function DiscoveryToolbar({
               onClick={() => menu.toggle("sort")}
             />
             <TimelineMenuPanel open={menu.isOpen("sort")} onClose={menu.close} className="min-w-[200px] py-1">
-              {SORT_OPTIONS.map((opt) => (
+              {visibleSortOptions.map((opt) => (
                 <TimelineMenuItem
                   key={opt.id}
                   label={opt.label}

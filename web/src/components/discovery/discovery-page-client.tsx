@@ -10,6 +10,7 @@ import { FeatureSectionHeader } from "@/components/dashboard/feature-section-hea
 import { DiscoveryAssistant } from "@/components/discovery/discovery-assistant-panel";
 import { DiscoveryMarketStatsBar } from "@/components/discovery/discovery-market-stats";
 import { DiscoveryPatternsView } from "@/components/discovery/discovery-patterns-view";
+import { DiscoveryWhatsNewToolbar } from "@/components/discovery/discovery-whats-new-toolbar";
 import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
@@ -92,6 +93,7 @@ export function DiscoveryPageClient() {
             ["explore", "Explore"],
             ["trending", "Trending"],
             ["ultimate", "Ultimate winners"],
+            ["whats_new", "What's new"],
             ["patterns", "Patterns"],
           ] as const
         ).map(([id, label]) => (
@@ -111,6 +113,7 @@ export function DiscoveryPageClient() {
         <>
           <div className="mt-4">
             <DiscoveryToolbar
+              tab={tab}
               state={toolbar}
               onChange={patchToolbar}
               competitors={competitors}
@@ -120,7 +123,16 @@ export function DiscoveryPageClient() {
             />
           </div>
 
-          {!loading && !error && marketStats && marketStats.total_ads > 0 ? (
+          {tab === "whats_new" ? (
+            <DiscoveryWhatsNewToolbar
+              state={toolbar}
+              onChange={patchToolbar}
+              total={total}
+              className="mt-4"
+            />
+          ) : null}
+
+          {!loading && !error && marketStats && marketStats.total_ads > 0 && tab !== "whats_new" ? (
             <DiscoveryMarketStatsBar stats={marketStats} />
           ) : null}
 
@@ -136,9 +148,13 @@ export function DiscoveryPageClient() {
           ) : ads.length === 0 ? (
             <div className="mt-10 rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-14 text-center">
               <Compass className="mx-auto h-10 w-10 text-slate-300" aria-hidden />
-              <p className="mt-3 text-base font-semibold text-slate-900">No ads match these filters</p>
+              <p className="mt-3 text-base font-semibold text-slate-900">
+                {tab === "whats_new" ? "No new launches in this window" : "No ads match these filters"}
+              </p>
               <p className="mt-1 text-sm text-slate-500">
-                Track competitors and run a scrape to populate your discovery feed.
+                {tab === "whats_new"
+                  ? "Try a wider time window or check back after your next competitor scrape."
+                  : "Track competitors and run a scrape to populate your discovery feed."}
               </p>
               <Link
                 href="/dashboard/spy"

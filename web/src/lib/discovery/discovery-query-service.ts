@@ -8,6 +8,7 @@ import { loadPatternReportHistory } from "@/lib/discovery/generate-pattern-repor
 import type {
   DiscoveryAdDto,
   DiscoveryCompetitorChip,
+  DiscoveryDateFilterMode,
   DiscoveryDatePreset,
   DiscoveryFeedQuery,
   DiscoveryFeedResult,
@@ -33,6 +34,7 @@ export type DiscoveryQueryFilters = {
   status?: DiscoveryStatusFilter;
   ultimateOnly?: boolean;
   datePreset?: DiscoveryDatePreset;
+  dateFilterMode?: DiscoveryDateFilterMode;
   competitorIds?: string[];
   competitorNames?: string[];
   limit?: number;
@@ -214,6 +216,7 @@ function buildFeedQuery(
     query: filters.query?.trim() ?? "",
     competitorFilterIds,
     datePreset: filters.datePreset ?? "all",
+    dateFilterMode: filters.dateFilterMode ?? "live",
   };
 }
 

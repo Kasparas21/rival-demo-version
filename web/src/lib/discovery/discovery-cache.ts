@@ -26,6 +26,7 @@ export function serializeDiscoveryQuery(
   return [
     toolbar.sort,
     toolbar.datePreset,
+    toolbar.dateFilterMode,
     toolbar.format,
     toolbar.status,
     toolbar.ultimateOnly ? "1" : "0",
@@ -45,7 +46,7 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v6:${day}:${query}`;
+  return `${brandId}:discovery:v7:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
@@ -80,6 +81,7 @@ export function buildDiscoveryFeedUrl(
     format: toolbar.format,
     status: toolbar.status,
     datePreset: toolbar.datePreset,
+    dateFilterMode: toolbar.dateFilterMode,
     q: search,
   });
   if (toolbar.ultimateOnly) params.set("ultimateOnly", "1");

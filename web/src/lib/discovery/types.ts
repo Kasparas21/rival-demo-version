@@ -7,7 +7,10 @@ export type DiscoveryStatusFilter = "all" | "active" | "retired";
 
 export type DiscoveryFormatFilter = "all" | "video" | "image";
 
-export type DiscoveryDatePreset = "7d" | "30d" | "90d" | "all";
+export type DiscoveryDatePreset = "today" | "3d" | "4d" | "7d" | "30d" | "90d" | "all";
+
+/** Whether date presets filter by ads live in window or ads that launched in window. */
+export type DiscoveryDateFilterMode = "live" | "launched";
 
 export type DiscoveryAdDto = {
   id: string;
@@ -78,6 +81,7 @@ export type DiscoveryFeedQuery = {
   query: string;
   competitorFilterIds: string[];
   datePreset: DiscoveryDatePreset;
+  dateFilterMode: DiscoveryDateFilterMode;
 };
 
 export type DiscoveryFeedResult = {

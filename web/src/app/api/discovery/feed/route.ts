@@ -30,8 +30,22 @@ function parseSort(raw: string | null): DiscoverySort {
 
 function parseDatePreset(raw: string | null): DiscoveryDatePreset {
   const v = (raw ?? "all").trim().toLowerCase();
-  if (v === "7d" || v === "30d" || v === "90d" || v === "all") return v;
+  if (
+    v === "today" ||
+    v === "3d" ||
+    v === "4d" ||
+    v === "7d" ||
+    v === "30d" ||
+    v === "90d" ||
+    v === "all"
+  ) {
+    return v;
+  }
   return "all";
+}
+
+function parseDateFilterMode(raw: string | null): "live" | "launched" {
+  return raw?.trim().toLowerCase() === "launched" ? "launched" : "live";
 }
 
 function parseFormat(raw: string | null): DiscoveryFormatFilter {
@@ -107,6 +121,7 @@ export async function GET(request: Request) {
       query: url.searchParams.get("q") ?? "",
       competitorFilterIds: competitorIds,
       datePreset: parseDatePreset(url.searchParams.get("datePreset")),
+      dateFilterMode: parseDateFilterMode(url.searchParams.get("dateFilterMode")),
     });
 
     if (!result.ok) {

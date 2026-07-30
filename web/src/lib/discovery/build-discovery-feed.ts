@@ -80,7 +80,21 @@ function isVideoFormat(format: string | null | undefined): boolean {
 
 function datePresetStart(preset: DiscoveryFeedQuery["datePreset"], nowMs: number): number | null {
   if (preset === "all") return null;
-  const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 90;
+  if (preset === "today") {
+    const d = new Date(nowMs);
+    d.setUTCHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  const days =
+    preset === "3d"
+      ? 3
+      : preset === "4d"
+        ? 4
+        : preset === "7d"
+          ? 7
+          : preset === "30d"
+            ? 30
+            : 90;
   return nowMs - days * DAY_MS;
 }
 
@@ -311,7 +325,14 @@ function hydrateDiscoveryRow(
   if (input.ultimateOnly && !passesUltimateWinnersFeedFilter(impressions_index, daysRunning)) return null;
   if (input.format === "video" && !isVideoFormat(row.format)) return null;
   if (input.format === "image" && isVideoFormat(row.format)) return null;
-  if (dateStart != null && endMs < dateStart) return null;
+  if (dateStart != null) {
+    if (input.dateFilterMode === "launched") {
+      const firstMs = new Date(row.first_seen_at).getTime();
+      if (!Number.isFinite(firstMs) || firstMs < dateStart) return null;
+    } else if (endMs < dateStart) {
+      return null;
+    }
+  }
   if (needle) {
     const hay = `${row.ad_text ?? ""} ${comp.brand_name ?? ""} ${comp.name ?? ""}`.toLowerCase();
     if (!hay.includes(needle)) return null;

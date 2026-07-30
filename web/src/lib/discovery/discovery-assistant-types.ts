@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { DiscoveryToolbarState } from "@/components/discovery/discovery-types";
 import type {
+  DiscoveryDateFilterMode,
   DiscoveryDatePreset,
   DiscoveryFormatFilter,
   DiscoveryMarketStats,
@@ -27,12 +28,13 @@ export type DiscoveryFilterPatch = {
   search?: string;
   sort?: DiscoverySort;
   datePreset?: DiscoveryDatePreset;
+  dateFilterMode?: DiscoveryDateFilterMode;
   format?: DiscoveryFormatFilter;
   status?: DiscoveryStatusFilter;
   ultimateOnly?: boolean;
   competitorNames?: string[];
   competitorIds?: string[];
-  tab?: "explore" | "trending" | "ultimate" | "patterns";
+  tab?: "explore" | "trending" | "ultimate" | "whats_new" | "patterns";
 };
 
 export type DiscoveryAssistantAdRef = {
@@ -69,12 +71,13 @@ export const discoveryFilterPatchSchema = z.object({
   sort: z
     .enum(["shuffle", "newest", "oldest", "longest_running", "impressions", "ultimate_winner"])
     .optional(),
-  datePreset: z.enum(["all", "7d", "30d", "90d"]).optional(),
+  datePreset: z.enum(["all", "today", "3d", "4d", "7d", "30d", "90d"]).optional(),
+  dateFilterMode: z.enum(["live", "launched"]).optional(),
   format: z.enum(["all", "video", "image"]).optional(),
   status: z.enum(["all", "active", "retired"]).optional(),
   ultimateOnly: z.boolean().optional(),
   competitorNames: z.array(z.string()).optional(),
-  tab: z.enum(["explore", "trending", "ultimate", "patterns"]).optional(),
+  tab: z.enum(["explore", "trending", "ultimate", "whats_new", "patterns"]).optional(),
 });
 
 export const discoveryAssistantResponseSchema = z.object({
@@ -118,6 +121,7 @@ export function applyDiscoveryFilterPatch(
   if (patch.search !== undefined) next.search = patch.search;
   if (patch.sort !== undefined) next.sort = patch.sort;
   if (patch.datePreset !== undefined) next.datePreset = patch.datePreset;
+  if (patch.dateFilterMode !== undefined) next.dateFilterMode = patch.dateFilterMode;
   if (patch.format !== undefined) next.format = patch.format;
   if (patch.status !== undefined) next.status = patch.status;
   if (patch.ultimateOnly !== undefined) next.ultimateOnly = patch.ultimateOnly;

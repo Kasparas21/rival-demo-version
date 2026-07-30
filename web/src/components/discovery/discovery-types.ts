@@ -3,12 +3,14 @@ import type {
   DiscoveryFormatFilter,
   DiscoverySort,
   DiscoveryStatusFilter,
+  DiscoveryDateFilterMode,
 } from "@/lib/discovery/types";
 
 export type DiscoveryToolbarState = {
   search: string;
   sort: DiscoverySort;
   datePreset: DiscoveryDatePreset;
+  dateFilterMode: DiscoveryDateFilterMode;
   format: DiscoveryFormatFilter;
   status: DiscoveryStatusFilter;
   ultimateOnly: boolean;
@@ -23,6 +25,7 @@ export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
   search: "",
   sort: "shuffle",
   datePreset: "all",
+  dateFilterMode: "live",
   format: "all",
   status: "all",
   ultimateOnly: false,
@@ -161,18 +164,31 @@ export function setDiscoveryAllCompetitors(
   return competitors.length > 0 ? new Set([competitors[0]!.id]) : new Set();
 }
 
-export type DiscoveryFeedTab = "explore" | "trending" | "ultimate" | "patterns";
+export type DiscoveryFeedTab = "explore" | "trending" | "ultimate" | "whats_new" | "patterns";
+
+export const DISCOVERY_WHATS_NEW_WINDOWS: {
+  id: Extract<DiscoveryDatePreset, "today" | "3d" | "4d" | "7d">;
+  label: string;
+  description: string;
+}[] = [
+  { id: "today", label: "Today", description: "Launched since midnight" },
+  { id: "3d", label: "Last 3 days", description: "Launched in the past 72 hours" },
+  { id: "4d", label: "Last 4 days", description: "Launched in the past 4 days" },
+  { id: "7d", label: "This week", description: "Launched in the past 7 days" },
+];
 
 export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarState> {
   switch (tab) {
     case "trending":
-      return { sort: "newest", ultimateOnly: false };
+      return { sort: "newest", ultimateOnly: false, dateFilterMode: "live", datePreset: "all" };
     case "ultimate":
-      return { sort: "ultimate_winner", ultimateOnly: false };
+      return { sort: "ultimate_winner", ultimateOnly: false, dateFilterMode: "live", datePreset: "all" };
+    case "whats_new":
+      return { sort: "newest", ultimateOnly: false, dateFilterMode: "launched", datePreset: "7d" };
     case "patterns":
       return {};
     case "explore":
     default:
-      return { sort: "shuffle", ultimateOnly: false };
+      return { sort: "shuffle", ultimateOnly: false, dateFilterMode: "live", datePreset: "all" };
   }
 }
