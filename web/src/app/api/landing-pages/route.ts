@@ -228,7 +228,7 @@ export async function GET(request: Request) {
   const landingPagesAll = Array.from(groups.values()).sort((a, b) => b.totalAds - a.totalAds);
   const landingPagesSlice = landingPagesAll.slice(0, limit);
 
-  const metaByGroupKey = await loadPageMetaByGroupKey(supabase, competitorId, user.id);
+  const metaByGroupKey = await loadPageMetaByGroupKey(admin, competitorId, user.id);
   const snapshotByGroupKey = new Map<string, LandingPageSnapshotRef>();
   for (const [key, meta] of metaByGroupKey) {
     if (meta.snapshot) snapshotByGroupKey.set(key, meta.snapshot);
@@ -269,7 +269,7 @@ export async function GET(request: Request) {
   });
 }
 
-type SnapshotLoaderClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
+type SnapshotLoaderClient = ReturnType<typeof createSupabaseAdminClient>;
 
 type LandingPageGroupMeta = {
   snapshot: LandingPageSnapshotRef | null;

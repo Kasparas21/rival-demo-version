@@ -117,11 +117,7 @@ export async function GET(
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
 
   const trackedPages = (pages ?? [])
-    .filter((page) => {
-      if (page.page_type === "pricing" || page.page_type === "features") return false;
-      if (page.is_active || page.page_type === "homepage") return true;
-      return page.auto_detected_from === "ads";
-    })
+    .filter((page) => page.page_type !== "pricing" && page.page_type !== "features")
     .map((page) => {
       const groupKey = landingPageGroupKey(page.url);
       const raw = latestByPage.get(page.id) ?? null;

@@ -95,7 +95,7 @@ export type LandingPagesApiResponse = {
   error?: string;
 };
 
-export const LANDING_PAGES_LIST_CACHE_VERSION = "v2";
+export const LANDING_PAGES_LIST_CACHE_VERSION = "v3";
 
 export function isLandingPagesListCacheValid(c: LandingPagesApiResponse): boolean {
   if (!c.ok || !Array.isArray(c.landingPages)) return false;
@@ -637,39 +637,46 @@ function LandingPageListRow({
           : "hover:bg-slate-50",
       ].join(" ")}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center self-center overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
-        {thumbUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL
-          <img src={thumbUrl} alt="" className="h-full w-full object-cover object-top" />
-        ) : faviconFailed ? (
-          <Globe className="h-4 w-4 text-slate-400" />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element -- remote favicons; sizes unknown
-          <img
-            src={row.faviconUrl}
-            alt=""
-            width={20}
-            height={20}
-            className="h-5 w-5 object-contain"
-            onError={() => setFaviconFailed(true)}
-          />
-        )}
+      <span className="relative flex h-8 w-8 shrink-0 items-center justify-center self-center">
+        <span className="flex h-8 w-8 overflow-hidden rounded-md border border-slate-200/80 bg-slate-100">
+          {thumbUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element -- stored screenshot URL
+            <img src={thumbUrl} alt="" className="h-full w-full object-cover object-top" />
+          ) : faviconFailed ? (
+            <Globe className="m-auto h-4 w-4 text-slate-400" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- remote favicons; sizes unknown
+            <img
+              src={row.faviconUrl}
+              alt=""
+              width={20}
+              height={20}
+              className="m-auto h-5 w-5 object-contain"
+              onError={() => setFaviconFailed(true)}
+            />
+          )}
+        </span>
+        {row.isTracking ? (
+          <span
+            className="absolute -bottom-1 -right-1 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm ring-2 ring-white"
+            title="Spying on this page"
+            aria-label="Spying on this page"
+          >
+            <Check className="h-3 w-3" strokeWidth={3} />
+          </span>
+        ) : null}
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {row.isTracking ? (
+            <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-800">
+              Spying
+            </span>
+          ) : null}
           <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-900" title={row.url}>
             {display}
           </span>
-          {row.isTracking ? (
-            <span
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
-              title="Spying on this page"
-              aria-label="Spying on this page"
-            >
-              <Check className="h-3 w-3" strokeWidth={3} />
-            </span>
-          ) : null}
           <span className="shrink-0 text-[13px] font-bold text-[color:var(--rival-primary)]">{row.count}</span>
         </div>
         <div className="mt-1 flex items-center gap-2">

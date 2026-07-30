@@ -57,7 +57,7 @@ export function TrackedPagesPanel({
   } | null>(null);
 
   const stamp = lastScrapedAt ?? "none";
-  const pagesCacheKey = `${cacheDomainNorm}:tracked-pages:${competitorId}:${stamp}`;
+  const pagesCacheKey = `${cacheDomainNorm}:tracked-pages:${competitorId}:${stamp}:v2`;
 
   const fetchPages = useCallback(async (): Promise<PagesResponse> => {
     const res = await fetch(`/api/competitor/${encodeURIComponent(competitorId)}/landing-pages`);

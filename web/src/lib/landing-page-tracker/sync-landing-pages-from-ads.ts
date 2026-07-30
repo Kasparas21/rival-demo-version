@@ -56,7 +56,23 @@ function extractUrlFromAd(ad: AdRow): string | null {
   return extractGoogleHostnameLandingKey(ad.platform, ad.raw_payload);
 }
 
-/** Canonical landing-page keys currently referenced by active scraped ads. */
+/** Every canonical landing-page key referenced by active scraped ads (no host filter). */
+export function collectAllAdLandingPageKeys(ads: AdRow[]): Set<string> {
+  const keys = new Set<string>();
+  const seen = new Set<string>();
+  for (const ad of ads) {
+    const rawUrl = extractUrlFromAd(ad);
+    if (!rawUrl) continue;
+
+    const groupKey = landingPageGroupKey(rawUrl);
+    if (!groupKey || seen.has(groupKey)) continue;
+    seen.add(groupKey);
+    keys.add(groupKey);
+  }
+  return keys;
+}
+
+/** Canonical landing-page keys on the competitor's domain (or subdomains) from active ads. */
 export function collectAdLandingPageKeys(
   ads: AdRow[],
   competitorWebsite: string,
@@ -152,12 +168,13 @@ export async function syncLandingPagesFromAds(
       .filter((k): k is string => Boolean(k)),
   );
 
-  const activeAdUrlKeys = collectAdLandingPageKeys(ads, competitorWebsite);
+  const activeAdUrlKeys = collectAllAdLandingPageKeys(ads);
   const autoSpy = options?.autoSpyNewLandingPages === true;
   const now = new Date().toISOString();
   const newAutoSpyPageIds: string[] = [];
 
   for (const groupKey of activeAdUrlKeys) {
+    if (homeKey && groupKey === homeKey) continue;
     if (existingUrls.has(groupKey)) continue;
 
     const row: Database["public"]["Tables"]["landing_pages"]["Insert"] = {
@@ -229,7 +246,7 @@ export async function syncLandingPagesFromCompetitorAds(
     .limit(2000);
 
   const activeAds = ads ?? [];
-  const activeAdUrlKeys = collectAdLandingPageKeys(activeAds, competitorWebsite);
+  const activeAdUrlKeys = collectAllAdLandingPageKeys(activeAds);
 
   const newAutoSpyPageIds = await syncLandingPagesFromAds(
     admin,
