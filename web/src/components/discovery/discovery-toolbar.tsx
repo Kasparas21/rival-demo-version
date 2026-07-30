@@ -116,6 +116,7 @@ export function DiscoveryToolbar({
   const menu = useMenuState();
   const isWhatsNew = tab === "whats_new";
   const isLandingPages = tab === "landing_pages";
+  const isStats = tab === "stats";
 
   const visibleSortOptions = isLandingPages
     ? LANDING_PAGE_SORT_OPTIONS
@@ -159,39 +160,52 @@ export function DiscoveryToolbar({
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
-    if (!isLandingPages) {
+    if (!isLandingPages && !isStats) {
       if (state.status !== "all") n += 1;
       if (state.format !== "all") n += 1;
       if (state.ultimateOnly) n += 1;
-    } else if (state.changeFilter !== "all") {
+    } else if (isLandingPages && state.changeFilter !== "all") {
       n += 1;
     }
     if (!isDiscoveryDefaultCompetitorSelection(state.selectedCompetitorIds, competitors)) n += 1;
-    if (!isLandingPages && state.datePreset !== "all") n += 1;
+    if (!isLandingPages && !isStats && state.datePreset !== "all") n += 1;
     if (isLandingPages && state.datePreset !== "7d") n += 1;
+    if (isStats && (state.statsDateFrom || state.statsDateTo || state.datePreset !== "7d")) n += 1;
     if (!isDiscoveryDefaultClientSelection(state.selectedClientBrandIds, activeBrand.id, clientBrands)) {
       n += 1;
     }
     return n;
-  }, [activeBrand.id, clientBrands, competitors, isLandingPages, state]);
+  }, [activeBrand.id, clientBrands, competitors, isLandingPages, isStats, state]);
 
   return (
     <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl sm:px-4">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={state.search}
-              onChange={(e) => onChange({ search: e.target.value })}
-              placeholder={
-                isLandingPages
-                  ? "Search pages, URLs, competitors, or changes…"
-                  : "Search ads, hooks, or brands…"
-              }
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none ring-[color:var(--rival-accent-blue)]/30 transition focus:border-[color:var(--rival-accent-blue)] focus:ring-2"
-            />
-          </div>
+          {!isLandingPages && !isStats ? (
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={state.search}
+                onChange={(e) => onChange({ search: e.target.value })}
+                placeholder="Search ads, hooks, or brands…"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none ring-[color:var(--rival-accent-blue)]/30 transition focus:border-[color:var(--rival-accent-blue)] focus:ring-2"
+              />
+            </div>
+          ) : isLandingPages ? (
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={state.search}
+                onChange={(e) => onChange({ search: e.target.value })}
+                placeholder="Search pages, URLs, competitors, or changes…"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-900 outline-none ring-[color:var(--rival-accent-blue)]/30 transition focus:border-[color:var(--rival-accent-blue)] focus:ring-2"
+              />
+            </div>
+          ) : (
+            <div className="min-w-[220px] flex-1 text-sm font-medium text-slate-600">
+              Competitor stats for your selected period
+            </div>
+          )}
           <span className="hidden text-xs font-medium tabular-nums text-slate-500 sm:inline">
             {total.toLocaleString()} {isLandingPages ? "changes" : "ads"}
           </span>
@@ -296,17 +310,21 @@ export function DiscoveryToolbar({
                 selected={state.format === "image"}
                 onClick={() => onChange({ format: "image" })}
               />
-              <div className="my-1 h-px bg-slate-100" />
-              <TimelineToggleRow
-                label="Ultimate winners only"
-                checked={state.ultimateOnly}
-                onChange={(checked) => onChange({ ultimateOnly: checked })}
-              />
+              {!isStats ? (
+                <>
+                  <div className="my-1 h-px bg-slate-100" />
+                  <TimelineToggleRow
+                    label="Ultimate winners only"
+                    checked={state.ultimateOnly}
+                    onChange={(checked) => onChange({ ultimateOnly: checked })}
+                  />
+                </>
+              ) : null}
             </TimelineMenuPanel>
           </div>
           ) : null}
 
-          {!isWhatsNew && !isLandingPages ? (
+          {!isWhatsNew && !isLandingPages && !isStats ? (
             <div className="relative">
               <TimelineMenuButton
                 label={dateLabel}
@@ -330,13 +348,14 @@ export function DiscoveryToolbar({
             </div>
           ) : null}
 
-          <div className="relative">
-            <TimelineMenuButton
-              label={sortLabel}
-              icon={<ArrowUpDown className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
-              active={menu.isOpen("sort")}
-              onClick={() => menu.toggle("sort")}
-            />
+          {!isLandingPages && !isStats ? (
+            <div className="relative">
+              <TimelineMenuButton
+                label={sortLabel}
+                icon={<ArrowUpDown className="h-3.5 w-3.5 text-slate-500" aria-hidden />}
+                active={menu.isOpen("sort")}
+                onClick={() => menu.toggle("sort")}
+              />
             <TimelineMenuPanel open={menu.isOpen("sort")} onClose={menu.close} className="min-w-[200px] py-1">
               {visibleSortOptions.map((opt) => (
                 <TimelineMenuItem
@@ -359,6 +378,7 @@ export function DiscoveryToolbar({
               ))}
             </TimelineMenuPanel>
           </div>
+          ) : null}
 
           {competitors.length > 0 ? (
             <div className="relative">

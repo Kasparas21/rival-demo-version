@@ -10,6 +10,7 @@ import { FeatureSectionHeader } from "@/components/dashboard/feature-section-hea
 import { DiscoveryAssistant } from "@/components/discovery/discovery-assistant-panel";
 import { DiscoveryMarketStatsBar } from "@/components/discovery/discovery-market-stats";
 import { DiscoveryLandingPagesView } from "@/components/discovery/discovery-landing-pages-view";
+import { DiscoveryStatsView } from "@/components/discovery/discovery-stats-view";
 import { DiscoveryPatternsView } from "@/components/discovery/discovery-patterns-view";
 import { DiscoveryWhatsNewToolbar } from "@/components/discovery/discovery-whats-new-toolbar";
 import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
@@ -77,7 +78,7 @@ export function DiscoveryPageClient() {
         title="Discovery"
         description="Meta ads from every competitor you track. Shuffle for inspiration or rank by impressions, recency, and ultimate winners."
         actions={
-          tab !== "landing_pages" && tab !== "patterns" ? (
+          tab !== "landing_pages" && tab !== "patterns" && tab !== "stats" ? (
             <button
               type="button"
               onClick={reshuffle}
@@ -98,6 +99,7 @@ export function DiscoveryPageClient() {
             ["ultimate", "Ultimate winners"],
             ["whats_new", "What's new"],
             ["landing_pages", "Landing pages"],
+            ["stats", "Stats"],
             ["patterns", "Patterns"],
           ] as const
         ).map(([id, label]) => (
@@ -120,6 +122,19 @@ export function DiscoveryPageClient() {
           onToolbarChange={patchToolbar}
           clientBrands={clientBrands}
           activeBrand={{ id: activeBrand.id, name: activeBrand.name }}
+        />
+      ) : tab === "stats" ? (
+        <DiscoveryStatsView
+          brandId={activeBrand.id}
+          toolbar={toolbar}
+          onToolbarChange={patchToolbar}
+          clientBrands={clientBrands}
+          activeBrand={{ id: activeBrand.id, name: activeBrand.name }}
+          onOpenAd={openAd}
+          onNavigateToFeed={(patch, feedTab = "explore") => {
+            patchToolbar(patch);
+            selectTab(feedTab);
+          }}
         />
       ) : (
         <>

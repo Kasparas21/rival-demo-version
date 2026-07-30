@@ -25,6 +25,10 @@ export type DiscoveryToolbarState = {
   changeFilter: DiscoveryLandingPageChangeFilter;
   /** Landing pages tab: sort order for detected changes. */
   landingPageSort: DiscoveryLandingPageSort;
+  /** Stats tab: custom range start (YYYY-MM-DD). Overrides preset when set. */
+  statsDateFrom: string | null;
+  /** Stats tab: custom range end (YYYY-MM-DD). */
+  statsDateTo: string | null;
 };
 
 export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
@@ -40,6 +44,8 @@ export const DEFAULT_DISCOVERY_TOOLBAR: DiscoveryToolbarState = {
   selectedClientBrandIds: new Set(),
   changeFilter: "all",
   landingPageSort: "newest",
+  statsDateFrom: null,
+  statsDateTo: null,
 };
 
 export function resolveDiscoveryClientBrandIds(
@@ -178,7 +184,8 @@ export type DiscoveryFeedTab =
   | "ultimate"
   | "whats_new"
   | "patterns"
-  | "landing_pages";
+  | "landing_pages"
+  | "stats";
 
 export const DISCOVERY_LANDING_PAGES_WINDOWS: {
   id: Extract<DiscoveryDatePreset, "today" | "3d" | "4d" | "7d" | "30d" | "90d" | "all">;
@@ -219,6 +226,13 @@ export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarSt
         dateFilterMode: "live",
         changeFilter: "all",
         landingPageSort: "newest",
+      };
+    case "stats":
+      return {
+        datePreset: "7d",
+        dateFilterMode: "live",
+        statsDateFrom: null,
+        statsDateTo: null,
       };
     case "patterns":
       return {};

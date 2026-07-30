@@ -258,3 +258,117 @@ export type DiscoveryLandingPagesResult =
       filter_counts: Record<DiscoveryLandingPageChangeFilter, number>;
     }
   | { ok: false; error: string };
+
+export type DiscoveryStatsDrilldownKind =
+  | "launched"
+  | "killed"
+  | "active"
+  | "ultimate_winners"
+  | "longest_running"
+  | "fast_kills"
+  | "competitor_launched"
+  | "competitor_killed"
+  | "competitor_active"
+  | "competitor_winners"
+  | "single_ad";
+
+export type DiscoveryStatsDrilldownRef = {
+  kind: DiscoveryStatsDrilldownKind;
+  competitor_id?: string;
+  ad_id?: string;
+  ad_ids?: string[];
+};
+
+export type DiscoveryStatsRangeMeta = {
+  label: string;
+  date_from: string;
+  date_to: string;
+  start_ms: number;
+  end_ms: number;
+};
+
+export type DiscoveryStatsMarket = {
+  total_ads: number;
+  active_ads: number;
+  launched_in_period: number;
+  killed_in_period: number;
+  net_change: number;
+  ultimate_winners: number;
+  video_share_pct: number;
+  avg_impressions_index: number | null;
+  fast_kills_in_period: number;
+};
+
+export type DiscoveryStatsHighlight = {
+  id: string;
+  label: string;
+  value: string;
+  hint?: string;
+  drilldown: DiscoveryStatsDrilldownRef;
+};
+
+export type DiscoveryStatsCompetitorRow = {
+  competitor_id: string;
+  name: string;
+  domain: string | null;
+  logo_url: string | null;
+  active_ads: number;
+  launched_in_period: number;
+  killed_in_period: number;
+  net_change: number;
+  ultimate_winners: number;
+  video_share_pct: number;
+  total_days_running: number;
+  avg_days_running: number;
+  longest_ad_days: number;
+  longest_ad_id: string | null;
+  aggression_score: number;
+};
+
+export type DiscoveryStatsLongestAd = {
+  ad_id: string;
+  competitor_id: string;
+  competitor_name: string;
+  days_running: number;
+  preview: string;
+  is_ultimate_winner: boolean;
+  impressions_index: number | null;
+};
+
+export type DiscoveryStatsDto = {
+  range: DiscoveryStatsRangeMeta;
+  market: DiscoveryStatsMarket;
+  highlights: DiscoveryStatsHighlight[];
+  competitors: DiscoveryStatsCompetitorRow[];
+  longest_running: DiscoveryStatsLongestAd[];
+};
+
+export type DiscoveryStatsQuery = {
+  brandId: string;
+  clientBrandIds: string[];
+  competitorFilterIds: string[];
+  datePreset: DiscoveryDatePreset;
+  statsDateFrom: string | null;
+  statsDateTo: string | null;
+  format: DiscoveryFormatFilter;
+  status: DiscoveryStatusFilter;
+};
+
+export type DiscoveryStatsResult =
+  | { ok: true; stats: DiscoveryStatsDto; competitors: DiscoveryCompetitorChip[] }
+  | { ok: false; error: string };
+
+export type DiscoveryStatsDrilldownQuery = {
+  brandId: string;
+  clientBrandIds: string[];
+  competitorFilterIds: string[];
+  datePreset: DiscoveryDatePreset;
+  statsDateFrom: string | null;
+  statsDateTo: string | null;
+  kind: DiscoveryStatsDrilldownKind;
+  competitorId?: string;
+  adIds?: string[];
+  title?: string;
+};
+
+export type DiscoveryStatsDrilldownResult = PatternDrilldownResult;
