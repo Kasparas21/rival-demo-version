@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
+
+import { authorizeAdminRequest } from "@/lib/admin/auth";
 import { ApifyRunnerError, runApifyActor } from "@/lib/apify/client";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -17,10 +20,18 @@ type Body = {
  * POST /api/apify/run
  * Body: { actorId, input?, waitSecs?, memoryMbytes?, maxItems? }
  *
- * Security: this uses your Apify credits. Protect this route (auth) before production,
- * or call `runApifyActor` only from other server code with a fixed allowlist of actors.
+ * Admin-only escape hatch for manual Apify runs. Production scrapes use server libs directly.
  */
 export async function POST(req: Request) {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const adminAuth = await authorizeAdminRequest(req, supabase, user);
+  if (!adminAuth.ok) {
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     let body: Body;
     try {

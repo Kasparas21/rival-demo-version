@@ -6,6 +6,7 @@ import { syncWorkspaceBrandLibraryContextFromSetup } from "@/lib/account/sync-wo
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import type { Json } from "@/lib/supabase/types";
 import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { purgeOrphanedSavedCompetitorsForUser } from "@/lib/account/purge-orphaned-saved-competitors";
 import { tierAllowsMultipleBrandWorkspaces } from "@/lib/billing/plan-limits";
 
 const MISSING_ADS_PROFILE_SETUP_HELP =
@@ -303,6 +304,15 @@ export async function DELETE(req: Request) {
   const { error: deleteError } = await admin.from("brands").delete().eq("id", targetId).eq("user_id", user.id);
   if (deleteError) {
     return brandsDbErrorResponse(deleteError.message);
+  }
+
+  try {
+    await purgeOrphanedSavedCompetitorsForUser(admin, user.id);
+  } catch (purgeErr) {
+    console.error(
+      "[account/brands DELETE] orphan saved_competitors cleanup",
+      purgeErr instanceof Error ? purgeErr.message : purgeErr,
+    );
   }
 
   if (target.is_primary && replacement?.id) {

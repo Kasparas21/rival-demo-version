@@ -29,6 +29,7 @@ import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { loadOrderedWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidate-order";
+import { filterWeeklyScrapeRowsWithBrandMapping } from "@/lib/ad-library/weekly-scrape-brand-mapping";
 import { resolveScheduledScrapeRegions } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
 import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
@@ -487,7 +488,8 @@ async function runWeeklyScrape(req: Request) {
   let skipped = 0;
   let timeBoxed = 0;
 
-  const candidateRows = await loadOrderedCandidateRows(admin, savedRows, runDayYmd, {
+  const mappedSavedRows = await filterWeeklyScrapeRowsWithBrandMapping(admin, savedRows);
+  const candidateRows = await loadOrderedCandidateRows(admin, mappedSavedRows, runDayYmd, {
     skipDoneTodayForCompetitorId: forceRun ? onlyCompetitorId : null,
   });
   const rowsToProcess = onlyCompetitorId

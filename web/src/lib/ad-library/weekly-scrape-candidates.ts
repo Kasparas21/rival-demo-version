@@ -6,6 +6,7 @@ type SavedCompetitorRow = Database["public"]["Tables"]["saved_competitors"]["Row
 export function isEligibleWeeklyScrapeCandidate(
   _row: Pick<SavedCompetitorRow, "is_workspace_brand">,
 ): boolean {
+  // Brand-mapping filter runs in weekly-scrape-brand-mapping.ts before ordering.
   return true;
 }
 
