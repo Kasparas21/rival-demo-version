@@ -124,6 +124,38 @@ export function landingPageGroupKey(rawUrl: string): string | null {
   }
 }
 
+/** All keys that should resolve to the same landing-page group (legacy URL variants). */
+export function landingPageGroupKeyAliases(rawUrl: string): string[] {
+  const aliases = new Set<string>();
+  const normalized = normalizeLandingPageUrl(rawUrl);
+  const primary = landingPageGroupKey(rawUrl);
+
+  if (primary) aliases.add(primary);
+  if (normalized) {
+    aliases.add(normalized);
+    const fromNorm = landingPageGroupKey(normalized);
+    if (fromNorm) aliases.add(fromNorm);
+    try {
+      const url = new URL(normalized);
+      if (url.search) {
+        url.search = "";
+        url.hash = "";
+        const withoutQuery = landingPageGroupKey(url.toString());
+        if (withoutQuery) aliases.add(withoutQuery);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return [...aliases];
+}
+
+export function landingPageKeysMatch(a: string, b: string): boolean {
+  const aAliases = new Set(landingPageGroupKeyAliases(a));
+  return landingPageGroupKeyAliases(b).some((key) => aAliases.has(key));
+}
+
 /** Hostname for favicon / display; uses same unwrap as extraction for tracker URLs. */
 export function hostFromLandingPageUrl(url: string): string | null {
   const unwrapped = unwrapOutboundRedirectUrl(url);

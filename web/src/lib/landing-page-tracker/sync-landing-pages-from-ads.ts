@@ -1,6 +1,7 @@
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import {
   hostFromLandingPageUrl,
+  landingPageGroupKeyAliases,
   landingPageGroupKey,
   normalizeLandingPageUrl,
 } from "@/lib/landing-pages/normalize-url";
@@ -121,8 +122,9 @@ export async function deactivateAdLandingPagesNotInActiveAds(
 
   const staleIds = spiedPages
     .filter((page) => {
-      const key = landingPageGroupKey(page.url);
-      return key && !activeAdUrlKeys.has(key);
+      const aliases = landingPageGroupKeyAliases(page.url);
+      const stillInAds = aliases.some((key) => activeAdUrlKeys.has(key));
+      return !stillInAds;
     })
     .map((page) => page.id);
 
@@ -142,6 +144,53 @@ export async function deactivateAdLandingPagesNotInActiveAds(
   }
 
   return staleIds.length;
+}
+
+/**
+ * Re-enable ad landing pages that were mistakenly deactivated but still appear in ads
+ * and had recurring screenshots (not one-off previews).
+ */
+export async function repairMistakenlyDeactivatedAdTracking(
+  admin: AdminClient,
+  competitorId: string,
+  userId: string,
+  activeAdUrlKeys: Set<string>,
+): Promise<number> {
+  const { data: pages } = await admin
+    .from("landing_pages")
+    .select("id, url, is_active, last_screenshotted_at")
+    .eq("competitor_id", competitorId)
+    .eq("user_id", userId)
+    .eq("is_active", false)
+    .not("last_screenshotted_at", "is", null);
+
+  if (!pages?.length) return 0;
+
+  const now = new Date().toISOString();
+  const toReactivate = pages.filter((page) => {
+    const aliases = landingPageGroupKeyAliases(page.url);
+    return aliases.some((key) => activeAdUrlKeys.has(key));
+  });
+
+  if (!toReactivate.length) return 0;
+
+  const { error } = await admin
+    .from("landing_pages")
+    .update({
+      is_active: true,
+      next_screenshot_at: now,
+    })
+    .in(
+      "id",
+      toReactivate.map((p) => p.id),
+    );
+
+  if (error) {
+    console.error("[landing-page-sync] repair deactivated tracking failed", error.message);
+    return 0;
+  }
+
+  return toReactivate.length;
 }
 
 export async function syncLandingPagesFromAds(
@@ -258,6 +307,7 @@ export async function syncLandingPagesFromCompetitorAds(
   );
 
   await deactivateAdLandingPagesNotInActiveAds(admin, competitorId, userId, activeAdUrlKeys);
+  await repairMistakenlyDeactivatedAdTracking(admin, competitorId, userId, activeAdUrlKeys);
 
   if (newAutoSpyPageIds.length) {
     void captureAutoSpyPages(admin, newAutoSpyPageIds);

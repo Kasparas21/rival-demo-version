@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { buildBlockedHostsIndex, resolveSnapshotWithBlockedInheritance } from "@/lib/landing-pages/blocked-inheritance";
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
-import { displayUrlShort, hostFromLandingPageUrl, landingPageGroupKey } from "@/lib/landing-pages/normalize-url";
+import { displayUrlShort, hostFromLandingPageUrl, landingPageGroupKey, landingPageGroupKeyAliases } from "@/lib/landing-pages/normalize-url";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
 import { ensureDefaultLandingPagesForCompetitor } from "@/lib/landing-page-tracker/create-defaults";
 import { syncLandingPagesFromCompetitorAds } from "@/lib/landing-page-tracker/sync-landing-pages-from-ads";
@@ -229,15 +229,15 @@ export async function GET(request: Request) {
   const landingPagesSlice = landingPagesAll.slice(0, limit);
 
   const metaByGroupKey = await loadPageMetaByGroupKey(admin, competitorId, user.id);
+  const trackedGroupKeys = buildTrackedGroupKeys(metaByGroupKey);
   const snapshotByGroupKey = new Map<string, LandingPageSnapshotRef>();
   for (const [key, meta] of metaByGroupKey) {
     if (meta.snapshot) snapshotByGroupKey.set(key, meta.snapshot);
   }
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
   for (const group of landingPagesSlice) {
-    const meta = metaByGroupKey.get(group.groupId);
     group.snapshot = resolveSnapshotWithBlockedInheritance(group.groupId, snapshotByGroupKey, blockedHosts);
-    group.isTracking = meta?.isTracking ?? false;
+    group.isTracking = isGroupActivelyTracked(group.groupId, trackedGroupKeys);
   }
 
   const landingPages = landingPagesSlice;
@@ -276,6 +276,22 @@ type LandingPageGroupMeta = {
   isTracking: boolean;
 };
 
+function buildTrackedGroupKeys(metaByGroupKey: Map<string, LandingPageGroupMeta>): Set<string> {
+  const tracked = new Set<string>();
+  for (const [key, meta] of metaByGroupKey) {
+    if (!meta.isTracking) continue;
+    for (const alias of landingPageGroupKeyAliases(key)) {
+      tracked.add(alias);
+    }
+    tracked.add(key);
+  }
+  return tracked;
+}
+
+function isGroupActivelyTracked(groupId: string, trackedGroupKeys: Set<string>): boolean {
+  return landingPageGroupKeyAliases(groupId).some((key) => trackedGroupKeys.has(key));
+}
+
 async function loadPageMetaByGroupKey(
   supabase: SnapshotLoaderClient,
   competitorId: string,
@@ -293,15 +309,17 @@ async function loadPageMetaByGroupKey(
 
   const pageIdToKey = new Map<string, string>();
   for (const page of pages) {
-    const key = landingPageGroupKey(page.url);
-    if (!key) continue;
-    pageIdToKey.set(page.id, key);
-    const existing = result.get(key);
+    const primaryKey = landingPageGroupKey(page.url);
+    if (!primaryKey) continue;
+    pageIdToKey.set(page.id, primaryKey);
     const isTracking = page.is_active === true;
-    if (existing) {
-      result.set(key, { ...existing, isTracking: existing.isTracking || isTracking });
-    } else {
-      result.set(key, { snapshot: null, isTracking });
+    for (const alias of landingPageGroupKeyAliases(page.url)) {
+      const existing = result.get(alias);
+      if (existing) {
+        result.set(alias, { ...existing, isTracking: existing.isTracking || isTracking });
+      } else {
+        result.set(alias, { snapshot: null, isTracking });
+      }
     }
   }
 

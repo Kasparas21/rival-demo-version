@@ -95,7 +95,7 @@ export type LandingPagesApiResponse = {
   error?: string;
 };
 
-export const LANDING_PAGES_LIST_CACHE_VERSION = "v3";
+export const LANDING_PAGES_LIST_CACHE_VERSION = "v4";
 
 export function isLandingPagesListCacheValid(c: LandingPagesApiResponse): boolean {
   if (!c.ok || !Array.isArray(c.landingPages)) return false;
