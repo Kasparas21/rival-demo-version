@@ -80,4 +80,29 @@ describe("computeDiscoveryMarketStats", () => {
     expect(stats.hottest_competitor_name).toBe("Alpha");
     expect(stats.hottest_competitor_new_this_week).toBe(2);
   });
+
+  it("counts unique landing pages from ad destination URLs", () => {
+    const stats = computeDiscoveryMarketStats(
+      [
+        ad({
+          platform: "meta",
+          raw_payload: { destinationUrl: "https://offer.example.com/a" },
+          first_seen_at: new Date(NOW - 1 * 86_400_000).toISOString(),
+        }),
+        ad({
+          platform: "meta",
+          raw_payload: { destinationUrl: "https://offer.example.com/b" },
+          first_seen_at: new Date(NOW - 2 * 86_400_000).toISOString(),
+        }),
+        ad({
+          platform: "meta",
+          raw_payload: { destinationUrl: "https://offer.example.com/a" },
+          first_seen_at: new Date(NOW - 3 * 86_400_000).toISOString(),
+        }),
+      ],
+      NOW,
+    );
+
+    expect(stats.unique_landing_pages).toBe(2);
+  });
 });

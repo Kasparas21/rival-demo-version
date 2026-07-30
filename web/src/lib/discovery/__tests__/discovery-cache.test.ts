@@ -61,6 +61,7 @@ describe("discovery-cache", () => {
           avg_impressions_index: null,
           hottest_competitor_name: null,
           hottest_competitor_new_this_week: 0,
+          unique_landing_pages: 0,
         },
         shuffle_seed: "seed",
         offset: 1,

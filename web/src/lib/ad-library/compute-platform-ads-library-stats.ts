@@ -2,6 +2,7 @@ import {
   extractImpressionsIndex,
   qualifiesAsUltimateWinner,
 } from "@/lib/ad-library/ad-performance-ranking";
+import { landingPageKeyFromLibraryAd } from "@/lib/landing-pages/count-unique-landing-pages";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
 import {
   computeAdRunDays,
@@ -41,6 +42,7 @@ export type PlatformAdsLibraryStats = {
   longest_running_days: number;
   youtube_count: number;
   text_ad_count: number;
+  unique_landing_pages: number;
 };
 
 type NormalizedStatsAd = {
@@ -232,6 +234,7 @@ const EMPTY_STATS: PlatformAdsLibraryStats = {
   longest_running_days: 0,
   youtube_count: 0,
   text_ad_count: 0,
+  unique_landing_pages: 0,
 };
 
 export function computePlatformAdsLibraryStats(
@@ -257,6 +260,7 @@ export function computePlatformAdsLibraryStats(
   let youtubeCount = 0;
   let textAdCount = 0;
   const daysRunningValues: number[] = [];
+  const landingPageKeys = new Set<string>();
 
   for (const ad of ads) {
     const normalized = normalizeAdForStats(platform, ad, scrapeAtMs ?? null, nowMs);
@@ -294,6 +298,9 @@ export function computePlatformAdsLibraryStats(
         retiredThisWeek += 1;
       }
     }
+
+    const lpKey = landingPageKeyFromLibraryAd(platform, ad);
+    if (lpKey) landingPageKeys.add(lpKey);
   }
 
   const total = ads.length;
@@ -332,5 +339,6 @@ export function computePlatformAdsLibraryStats(
     longest_running_days: daysRunningValues.length > 0 ? Math.max(...daysRunningValues) : 0,
     youtube_count: youtubeCount,
     text_ad_count: textAdCount,
+    unique_landing_pages: landingPageKeys.size,
   };
 }

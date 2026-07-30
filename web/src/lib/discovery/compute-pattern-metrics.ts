@@ -28,6 +28,7 @@ export type PatternMetricsAd = {
   is_ultimate_winner: boolean;
   ai_extracted_angle: string | null;
   ai_extracted_launch_date: string | null;
+  landing_page_key: string | null;
 };
 
 function isVideoFormat(format: string | null | undefined): boolean {
@@ -132,6 +133,7 @@ const EMPTY_METRICS = (weekStart: string): DiscoveryPatternMetrics => ({
   avg_impressions_index: null,
   median_run_days_of_killed: null,
   fast_kills_this_week: 0,
+  unique_landing_pages: 0,
   weekly_series: [],
   competitors: [],
   format_mix: [
@@ -171,6 +173,7 @@ export function computeDiscoveryPatternMetrics(
   let impressionsCount = 0;
   let fastKillsThisWeek = 0;
   const killedRunDays: number[] = [];
+  const marketLandingKeys = new Set<string>();
 
   const competitorMap = new Map<
     string,
@@ -181,6 +184,7 @@ export function computeDiscoveryPatternMetrics(
       killed: number;
       winners: number;
       videoActive: number;
+      landingKeys: Set<string>;
     }
   >();
   type AngleStats = {
@@ -239,7 +243,12 @@ export function computeDiscoveryPatternMetrics(
       killed: 0,
       winners: 0,
       videoActive: 0,
+      landingKeys: new Set<string>(),
     };
+    if (ad.landing_page_key) {
+      marketLandingKeys.add(ad.landing_page_key);
+      comp.landingKeys.add(ad.landing_page_key);
+    }
     if (!ad.is_killed) comp.active += 1;
     if (launchedThisWeek) comp.launched += 1;
     if (ad.is_killed) {
@@ -284,6 +293,7 @@ export function computeDiscoveryPatternMetrics(
       killed_this_week: c.killed,
       ultimate_winners: c.winners,
       video_share_pct: c.active > 0 ? Math.round((c.videoActive / c.active) * 100) : 0,
+      unique_landing_pages: c.landingKeys.size,
       aggression_score: Math.round(c.launched * 2 + c.active / 10),
     }))
     .sort((a, b) => b.aggression_score - a.aggression_score || a.name.localeCompare(b.name));
@@ -321,6 +331,7 @@ export function computeDiscoveryPatternMetrics(
       impressionsCount > 0 ? Math.round((impressionsSum / impressionsCount) * 10) / 10 : null,
     median_run_days_of_killed: median(killedRunDays),
     fast_kills_this_week: fastKillsThisWeek,
+    unique_landing_pages: marketLandingKeys.size,
     weekly_series: buildWeeklySeries(ads, weekStartMs, 8),
     competitors,
     format_mix: [

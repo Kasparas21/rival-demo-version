@@ -1,3 +1,6 @@
+import { landingPageKeyFromAd } from "@/lib/landing-pages/count-unique-landing-pages";
+import type { Json } from "@/lib/supabase/types";
+
 import type { DiscoveryMarketStats } from "./types";
 
 const WEEK_MS = 7 * 86_400_000;
@@ -5,12 +8,14 @@ const WEEK_MS = 7 * 86_400_000;
 export type DiscoveryMarketStatsAd = {
   competitor_id: string;
   competitor_name: string;
+  platform?: string;
   format: string;
   first_seen_at: string;
   last_seen_at: string;
   is_killed: boolean;
   impressions_index: number | null;
   is_ultimate_winner: boolean;
+  raw_payload?: Json;
 };
 
 function isVideoFormat(format: string | null | undefined): boolean {
@@ -45,6 +50,7 @@ export function computeDiscoveryMarketStats(
     avg_impressions_index: null,
     hottest_competitor_name: null,
     hottest_competitor_new_this_week: 0,
+    unique_landing_pages: 0,
   };
 
   if (!ads.length) return empty;
@@ -64,6 +70,7 @@ export function computeDiscoveryMarketStats(
 
   const adsByCompetitor = new Map<string, { name: string; count: number }>();
   const launchesThisWeekByCompetitor = new Map<string, { name: string; count: number }>();
+  const landingPageKeys = new Set<string>();
 
   for (const ad of ads) {
     if (ad.is_killed) retiredAds += 1;
@@ -105,6 +112,12 @@ export function computeDiscoveryMarketStats(
         retiredThisWeek += 1;
       }
     }
+
+    const lpKey = landingPageKeyFromAd({
+      platform: ad.platform ?? "meta",
+      raw_payload: ad.raw_payload ?? null,
+    });
+    if (lpKey) landingPageKeys.add(lpKey);
   }
 
   let topCompetitorName: string | null = null;
@@ -148,5 +161,6 @@ export function computeDiscoveryMarketStats(
       impressionsCount > 0 ? Math.round((impressionsSum / impressionsCount) * 10) / 10 : null,
     hottest_competitor_name: hottestName,
     hottest_competitor_new_this_week: hottestCount,
+    unique_landing_pages: landingPageKeys.size,
   };
 }

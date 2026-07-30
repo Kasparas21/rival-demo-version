@@ -64,6 +64,8 @@ export type DiscoveryMarketStats = {
   avg_impressions_index: number | null;
   hottest_competitor_name: string | null;
   hottest_competitor_new_this_week: number;
+  /** Distinct landing page URLs across ads in the current feed filter. */
+  unique_landing_pages: number;
 };
 
 export type DiscoveryFeedQuery = {
@@ -112,6 +114,7 @@ export type DiscoveryPatternCompetitorMetrics = {
   killed_this_week: number;
   ultimate_winners: number;
   video_share_pct: number;
+  unique_landing_pages: number;
   aggression_score: number;
 };
 
@@ -186,6 +189,7 @@ export type DiscoveryPatternMetrics = {
   avg_impressions_index: number | null;
   median_run_days_of_killed: number | null;
   fast_kills_this_week: number;
+  unique_landing_pages: number;
   weekly_series: DiscoveryPatternWeeklyPoint[];
   competitors: DiscoveryPatternCompetitorMetrics[];
   format_mix: DiscoveryPatternFormatMix[];
@@ -297,6 +301,7 @@ export type DiscoveryStatsMarket = {
   video_share_pct: number;
   avg_impressions_index: number | null;
   fast_kills_in_period: number;
+  unique_landing_pages: number;
 };
 
 export type DiscoveryStatsHighlight = {
@@ -322,6 +327,7 @@ export type DiscoveryStatsCompetitorRow = {
   avg_days_running: number;
   longest_ad_days: number;
   longest_ad_id: string | null;
+  unique_landing_pages: number;
   aggression_score: number;
 };
 

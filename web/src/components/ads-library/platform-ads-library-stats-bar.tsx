@@ -4,6 +4,7 @@ import { useMemo, type ReactNode } from "react";
 import {
   Activity,
   Clock,
+  Link2,
   Minus,
   Sparkles,
   TrendingDown,
@@ -178,6 +179,14 @@ export function PlatformAdsLibraryStatsBar({ platform, ads, scrapeAtMs, classNam
           value={`${stats.median_days_running}d`}
           hint={<span className="text-[11px] text-slate-500">{runtimeHint}</span>}
           icon={<Clock className="h-3 w-3" aria-hidden />}
+        />
+        <StatCell
+          label="Landing pages"
+          value={stats.unique_landing_pages.toLocaleString()}
+          hint={
+            <span className="text-[11px] text-slate-500">Distinct destination URLs in ads</span>
+          }
+          icon={<Link2 className="h-3 w-3" aria-hidden />}
         />
         {isMeta && stats.retired_ads > 0 ? (
           <StatCell

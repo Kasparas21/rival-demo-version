@@ -70,6 +70,7 @@ export function computeDiscoveryStats(
         video_share_pct: 0,
         avg_impressions_index: null,
         fast_kills_in_period: 0,
+        unique_landing_pages: 0,
       },
       highlights: emptyHighlights,
       competitors: [],
@@ -85,6 +86,7 @@ export function computeDiscoveryStats(
   let impressionsSum = 0;
   let impressionsCount = 0;
   let fastKills = 0;
+  const marketLandingKeys = new Set<string>();
 
   const competitorMap = new Map<
     string,
@@ -100,6 +102,7 @@ export function computeDiscoveryStats(
       totalDaysRunning: number;
       longestDays: number;
       longestAdId: string | null;
+      landingKeys: Set<string>;
     }
   >();
 
@@ -127,6 +130,10 @@ export function computeDiscoveryStats(
       globalLongest = ad;
     }
 
+    if (ad.landing_page_key) {
+      marketLandingKeys.add(ad.landing_page_key);
+    }
+
     const meta = competitorMeta.get(ad.competitor_id);
     const comp = competitorMap.get(ad.competitor_id) ?? {
       name: ad.competitor_name,
@@ -140,7 +147,12 @@ export function computeDiscoveryStats(
       totalDaysRunning: 0,
       longestDays: 0,
       longestAdId: null,
+      landingKeys: new Set<string>(),
     };
+
+    if (ad.landing_page_key) {
+      comp.landingKeys.add(ad.landing_page_key);
+    }
 
     if (!ad.is_killed) {
       comp.active += 1;
@@ -174,6 +186,7 @@ export function computeDiscoveryStats(
       avg_days_running: c.active > 0 ? Math.round(c.totalDaysRunning / c.active) : 0,
       longest_ad_days: c.longestDays,
       longest_ad_id: c.longestAdId,
+      unique_landing_pages: c.landingKeys.size,
       aggression_score: Math.round(c.launched * 2 + c.active / 10),
     }))
     .sort((a, b) => b.aggression_score - a.aggression_score || a.name.localeCompare(b.name));
@@ -198,6 +211,7 @@ export function computeDiscoveryStats(
   const mostWinners = topBy(compRows, (c) => c.ultimate_winners, (c) => c.name);
   const mostRuntime = topBy(compRows, (c) => c.total_days_running, (c) => c.name);
   const longestCompetitor = topBy(compRows, (c) => c.longest_ad_days, (c) => c.name);
+  const mostLandingPages = topBy(compRows, (c) => c.unique_landing_pages, (c) => c.name);
 
   const highlights: DiscoveryStatsHighlight[] = [
     {
@@ -262,6 +276,15 @@ export function computeDiscoveryStats(
         ? { kind: "competitor_active", competitor_id: mostActive.competitor_id }
         : { kind: "active" },
     },
+    {
+      id: "landing_pages",
+      label: "Landing pages",
+      value: marketLandingKeys.size.toLocaleString(),
+      hint: mostLandingPages
+        ? `${mostLandingPages.name} uses ${mostLandingPages.unique_landing_pages}`
+        : "Distinct destination URLs",
+      drilldown: { kind: "active" },
+    },
   ];
 
   if (longestCompetitor?.longest_ad_id) {
@@ -290,6 +313,7 @@ export function computeDiscoveryStats(
       avg_impressions_index:
         impressionsCount > 0 ? Math.round((impressionsSum / impressionsCount) * 10) / 10 : null,
       fast_kills_in_period: fastKills,
+      unique_landing_pages: marketLandingKeys.size,
     },
     highlights,
     competitors,

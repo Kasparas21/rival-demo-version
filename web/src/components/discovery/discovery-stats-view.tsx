@@ -39,7 +39,8 @@ type LeaderboardSortKey =
   | "net_change"
   | "ultimate_winners"
   | "longest_ad_days"
-  | "total_days_running";
+  | "total_days_running"
+  | "unique_landing_pages";
 
 function SortableHeader({
   label,
@@ -227,6 +228,9 @@ function LeaderboardRow({
         )}
       </td>
       <td className="px-2 py-3 text-center text-sm tabular-nums text-slate-600">{row.total_days_running}d</td>
+      <td className="px-2 py-3 text-center text-sm font-medium tabular-nums text-slate-700">
+        {row.unique_landing_pages}
+      </td>
     </tr>
   );
 }
@@ -416,6 +420,14 @@ export function DiscoveryStatsView({
                     <SortableHeader
                       label="Total runtime"
                       sortKey="total_days_running"
+                      activeSortKey={sortKey}
+                      sortDesc={sortDesc}
+                      onSort={handleSort}
+                      align="center"
+                    />
+                    <SortableHeader
+                      label="Landing pages"
+                      sortKey="unique_landing_pages"
                       activeSortKey={sortKey}
                       sortDesc={sortDesc}
                       onSort={handleSort}

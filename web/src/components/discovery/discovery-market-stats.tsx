@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import {
   Activity,
+  Link2,
   Minus,
   Sparkles,
   TrendingDown,
@@ -167,6 +168,14 @@ export function DiscoveryMarketStatsBar({ stats, className }: Props) {
             ) : null
           }
           icon={<Users className="h-3 w-3" aria-hidden />}
+        />
+        <StatCell
+          label="Landing pages"
+          value={stats.unique_landing_pages.toLocaleString()}
+          hint={
+            <span className="text-[11px] text-slate-500">Distinct destination URLs in ads</span>
+          }
+          icon={<Link2 className="h-3 w-3" aria-hidden />}
         />
       </div>
     </section>

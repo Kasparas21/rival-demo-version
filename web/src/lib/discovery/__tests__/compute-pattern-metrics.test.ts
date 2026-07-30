@@ -24,6 +24,7 @@ function ad(overrides: Partial<PatternMetricsAd> & Pick<PatternMetricsAd, "id">)
     is_ultimate_winner: false,
     ai_extracted_angle: "free consult",
     ai_extracted_launch_date: null,
+    landing_page_key: null,
     ...overrides,
   };
 }

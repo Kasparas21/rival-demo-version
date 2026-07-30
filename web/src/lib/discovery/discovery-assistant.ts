@@ -436,6 +436,13 @@ function buildVisualStatsFromMarket(stats: DiscoveryMarketStats): DiscoveryVisua
       tone: "hot",
     });
   }
+  if (stats.unique_landing_pages > 0) {
+    chips.push({
+      label: "Landing pages",
+      value: String(stats.unique_landing_pages),
+      tone: "neutral",
+    });
+  }
   return chips.slice(0, 5);
 }
 

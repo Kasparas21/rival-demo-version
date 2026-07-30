@@ -9,6 +9,7 @@ import { stripJsonFences } from "@/lib/email-intelligence/analyze";
 import { resolveModelForTask } from "@/lib/llm/model-routing";
 import { openRouterChatText } from "@/lib/llm/openrouter";
 import { resolveTimelineAdKilled } from "@/lib/timeline/resolve-timeline-ad-killed";
+import { landingPageKeyFromAd } from "@/lib/landing-pages/count-unique-landing-pages";
 import type { Database, Json } from "@/lib/supabase/types";
 
 import { loadCompetitorIdsForBrandIds } from "./build-discovery-feed";
@@ -164,6 +165,10 @@ function hydratePatternAd(row: ScrapedRow, comp: CompetitorRow, nowMs: number): 
     is_ultimate_winner: qualifiesAsUltimateWinner(impressions_index, days_running),
     ai_extracted_angle: row.ai_extracted_angle ?? null,
     ai_extracted_launch_date: row.ai_extracted_launch_date ?? null,
+    landing_page_key: landingPageKeyFromAd({
+      platform,
+      raw_payload: row.raw_payload ?? null,
+    }),
   };
 }
 
