@@ -46,7 +46,7 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v7:${day}:${query}`;
+  return `${brandId}:discovery:v8:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
@@ -56,6 +56,7 @@ export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey(
 export function validateDiscoveryFeedCache(cached: DiscoveryFeedPageCache): boolean {
   if (!Array.isArray(cached.ads) || typeof cached.total !== "number") return false;
   if (!cached.market_stats || typeof cached.market_stats.total_ads !== "number") return false;
+  if (typeof cached.market_stats.unique_landing_pages !== "number") return false;
   return cached.ads.every((ad) => Boolean(ad && typeof ad.id === "string"));
 }
 
