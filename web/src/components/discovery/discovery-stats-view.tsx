@@ -426,7 +426,7 @@ export function DiscoveryStatsView({
                       align="center"
                     />
                     <SortableHeader
-                      label="Landing pages"
+                      label="Active LPs"
                       sortKey="unique_landing_pages"
                       activeSortKey={sortKey}
                       sortDesc={sortDesc}

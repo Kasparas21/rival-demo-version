@@ -35,6 +35,19 @@ function killedInRange(ad: PatternMetricsAd, range: DiscoveryStatsRange): boolea
   return lastMs != null && inStatsRange(lastMs, range);
 }
 
+/** Ad run window overlaps the stats period (was live at least once in range). */
+export function wasRunningInStatsRange(ad: PatternMetricsAd, range: DiscoveryStatsRange): boolean {
+  if (range.dateFrom === "all") return true;
+
+  const launchMs = effectiveLaunchMs(ad);
+  if (launchMs == null || launchMs > range.endMs) return false;
+
+  if (!ad.is_killed) return true;
+
+  const lastMs = parseMs(ad.last_seen_at);
+  return lastMs != null && lastMs >= range.startMs;
+}
+
 function topBy<T>(items: T[], pick: (item: T) => number, name: (item: T) => string): T | null {
   if (!items.length) return null;
   return [...items].sort((a, b) => pick(b) - pick(a) || name(a).localeCompare(name(b)))[0] ?? null;
@@ -130,7 +143,8 @@ export function computeDiscoveryStats(
       globalLongest = ad;
     }
 
-    if (ad.landing_page_key) {
+    const runningInPeriod = wasRunningInStatsRange(ad, range);
+    if (runningInPeriod && ad.landing_page_key) {
       marketLandingKeys.add(ad.landing_page_key);
     }
 
@@ -150,7 +164,7 @@ export function computeDiscoveryStats(
       landingKeys: new Set<string>(),
     };
 
-    if (ad.landing_page_key) {
+    if (runningInPeriod && ad.landing_page_key) {
       comp.landingKeys.add(ad.landing_page_key);
     }
 
@@ -278,11 +292,11 @@ export function computeDiscoveryStats(
     },
     {
       id: "landing_pages",
-      label: "Landing pages",
+      label: "Active landing pages",
       value: marketLandingKeys.size.toLocaleString(),
       hint: mostLandingPages
-        ? `${mostLandingPages.name} uses ${mostLandingPages.unique_landing_pages}`
-        : "Distinct destination URLs",
+        ? `${mostLandingPages.name} ran ${mostLandingPages.unique_landing_pages} in period`
+        : "Distinct URLs on ads running in period",
       drilldown: { kind: "active" },
     },
   ];
