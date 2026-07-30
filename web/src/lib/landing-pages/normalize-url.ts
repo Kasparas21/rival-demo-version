@@ -124,28 +124,17 @@ export function landingPageGroupKey(rawUrl: string): string | null {
   }
 }
 
-/** All keys that should resolve to the same landing-page group (legacy URL variants). */
+/** Legacy URL variants that share the same canonical group key (not query-param variants). */
 export function landingPageGroupKeyAliases(rawUrl: string): string[] {
   const aliases = new Set<string>();
-  const normalized = normalizeLandingPageUrl(rawUrl);
   const primary = landingPageGroupKey(rawUrl);
+  const normalized = normalizeLandingPageUrl(rawUrl);
 
   if (primary) aliases.add(primary);
   if (normalized) {
     aliases.add(normalized);
     const fromNorm = landingPageGroupKey(normalized);
     if (fromNorm) aliases.add(fromNorm);
-    try {
-      const url = new URL(normalized);
-      if (url.search) {
-        url.search = "";
-        url.hash = "";
-        const withoutQuery = landingPageGroupKey(url.toString());
-        if (withoutQuery) aliases.add(withoutQuery);
-      }
-    } catch {
-      /* ignore */
-    }
   }
 
   return [...aliases];

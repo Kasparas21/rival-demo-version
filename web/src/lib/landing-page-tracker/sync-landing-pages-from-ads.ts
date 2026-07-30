@@ -1,7 +1,6 @@
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import {
   hostFromLandingPageUrl,
-  landingPageGroupKeyAliases,
   landingPageGroupKey,
   normalizeLandingPageUrl,
 } from "@/lib/landing-pages/normalize-url";
@@ -122,9 +121,8 @@ export async function deactivateAdLandingPagesNotInActiveAds(
 
   const staleIds = spiedPages
     .filter((page) => {
-      const aliases = landingPageGroupKeyAliases(page.url);
-      const stillInAds = aliases.some((key) => activeAdUrlKeys.has(key));
-      return !stillInAds;
+      const key = landingPageGroupKey(page.url);
+      return key != null && !activeAdUrlKeys.has(key);
     })
     .map((page) => page.id);
 
@@ -148,7 +146,7 @@ export async function deactivateAdLandingPagesNotInActiveAds(
 
 /**
  * Re-enable ad landing pages that were mistakenly deactivated but still appear in ads
- * and had recurring screenshots (not one-off previews).
+ * and completed the full spying setup (not one-off previews).
  */
 export async function repairMistakenlyDeactivatedAdTracking(
   admin: AdminClient,
@@ -158,18 +156,19 @@ export async function repairMistakenlyDeactivatedAdTracking(
 ): Promise<number> {
   const { data: pages } = await admin
     .from("landing_pages")
-    .select("id, url, is_active, last_screenshotted_at")
+    .select("id, url, is_active, last_screenshotted_at, animation_calibration_status")
     .eq("competitor_id", competitorId)
     .eq("user_id", userId)
     .eq("is_active", false)
+    .eq("animation_calibration_status", "done")
     .not("last_screenshotted_at", "is", null);
 
   if (!pages?.length) return 0;
 
   const now = new Date().toISOString();
   const toReactivate = pages.filter((page) => {
-    const aliases = landingPageGroupKeyAliases(page.url);
-    return aliases.some((key) => activeAdUrlKeys.has(key));
+    const key = landingPageGroupKey(page.url);
+    return key != null && activeAdUrlKeys.has(key);
   });
 
   if (!toReactivate.length) return 0;
