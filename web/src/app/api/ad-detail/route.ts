@@ -249,7 +249,7 @@ export async function GET(request: Request): Promise<NextResponse<AdDetailRespon
     isKilled =
       ad.is_active === false ||
       (platformNorm === "meta"
-        ? resolveMetaAdKilledForDetail(ad.raw_payload, ad.last_seen_at, null)
+        ? resolveMetaAdKilledForDetail(ad.raw_payload, ad.last_seen_at, lastScrapedAt)
         : false);
   } else {
     isKilled = isScrapedAdKilled(ad.last_seen_at, lastScrapedAt);
