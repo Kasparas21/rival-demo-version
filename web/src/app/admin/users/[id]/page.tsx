@@ -467,6 +467,61 @@ export default function AdminUserDetailPage() {
         </div>
       ) : null}
 
+      <section className="rounded-xl border border-sky-200 bg-sky-50/60 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">Ads scraping schedule</h2>
+            <p className="mt-1 text-sm text-zinc-600">
+              Control whether this user&apos;s competitors are refreshed automatically by the weekly cron or only
+              when they trigger a manual scrape.
+            </p>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+              adsScrapeMode === "manual"
+                ? "bg-amber-100 text-amber-900"
+                : "bg-emerald-100 text-emerald-900"
+            }`}
+          >
+            {adsScrapeMode === "manual" ? "Manual only" : "Automatic"}
+          </span>
+        </div>
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="min-w-[240px] flex-1 text-sm">
+            <span className="text-zinc-500">Mode</span>
+            <select
+              value={adsScrapeMode}
+              onChange={(e) => {
+                setAdsScrapeMode(e.target.value as AdminAdsScrapeMode);
+                setAdsScrapeModeSuccess(false);
+              }}
+              className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2"
+            >
+              {ADS_SCRAPE_MODE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={
+              savingAdsScrapeMode ||
+              adsScrapeMode === (data.adsScrapeMode ?? data.billing.adminAdsScrapeMode ?? "auto")
+            }
+            onClick={() => void saveAdsScrapeMode()}
+            className="rounded-lg bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {savingAdsScrapeMode ? "Saving…" : "Save"}
+          </button>
+        </div>
+        {adsScrapeModeError ? <p className="mt-2 text-sm text-red-600">{adsScrapeModeError}</p> : null}
+        {adsScrapeModeSuccess ? (
+          <p className="mt-2 text-sm text-emerald-700">Ads scraping mode updated.</p>
+        ) : null}
+      </section>
+
       <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-xl border border-zinc-200 bg-white p-4">
           <h2 className="text-sm font-semibold text-zinc-700">Identity</h2>
@@ -548,44 +603,6 @@ export default function AdminUserDetailPage() {
             <div>
               <dt className="text-zinc-500">Custom price</dt>
               <dd>{data.billing.customPriceLabel ?? "—"}</dd>
-            </div>
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-              <p className="text-sm text-zinc-500">Ads scraping</p>
-              <div className="mt-2 space-y-2 text-sm">
-                <select
-                  value={adsScrapeMode}
-                  onChange={(e) => {
-                    setAdsScrapeMode(e.target.value as AdminAdsScrapeMode);
-                    setAdsScrapeModeSuccess(false);
-                  }}
-                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                >
-                  {ADS_SCRAPE_MODE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-zinc-500">
-                  Automatic runs the weekly ads-library cron. Manual only skips scheduled scrapes; the user can
-                  still trigger on-demand refreshes when billing allows.
-                </p>
-                {adsScrapeModeError ? <p className="text-xs text-red-600">{adsScrapeModeError}</p> : null}
-                {adsScrapeModeSuccess ? (
-                  <p className="text-xs text-emerald-700">Ads scraping mode updated.</p>
-                ) : null}
-                <button
-                  type="button"
-                  disabled={
-                    savingAdsScrapeMode ||
-                    adsScrapeMode === (data.adsScrapeMode ?? data.billing.adminAdsScrapeMode ?? "auto")
-                  }
-                  onClick={() => void saveAdsScrapeMode()}
-                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50"
-                >
-                  {savingAdsScrapeMode ? "Saving…" : "Save ads scraping mode"}
-                </button>
-              </div>
             </div>
           </dl>
         </section>
