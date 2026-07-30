@@ -22,6 +22,7 @@ function proBilling(): BillingEntitlement {
     canUseDevPlanSwitcher: false,
     devPlanOverride: null,
     adminPlanOverride: null,
+    adminAdsScrapeMode: "auto",
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,

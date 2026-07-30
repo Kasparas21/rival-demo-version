@@ -146,9 +146,14 @@ async function readPreservedAdminPayloadKeys(
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return {};
 
   const preserved: Record<string, unknown> = {};
-  const override = (payload as Record<string, unknown>).admin_plan_override;
+  const record = payload as Record<string, unknown>;
+  const override = record.admin_plan_override;
   if (typeof override === "string" && override.trim()) {
     preserved.admin_plan_override = override;
+  }
+  const adsScrapeMode = record.admin_ads_scrape_mode;
+  if (adsScrapeMode === "auto" || adsScrapeMode === "manual") {
+    preserved.admin_ads_scrape_mode = adsScrapeMode;
   }
   return preserved;
 }

@@ -89,17 +89,22 @@ export async function getUserScrapeEligibility(
   return resolveScrapeEligibility({ activity, billing });
 }
 
-/** Scheduled ads-library cron: active paid plan with auto-refresh, or admin. */
+/** Scheduled ads-library cron: active paid plan with auto-refresh, or admin (unless manual-only). */
+export function resolveScheduledAdsScrapeAllowed(eligibility: ScrapeEligibility): boolean {
+  if (!eligibility.allowed) return false;
+
+  const { billing } = eligibility;
+  if (billing.adminAdsScrapeMode === "manual") return false;
+  if (!hasActivePaidSubscription(billing) && !billing.isUnlimited) return false;
+  return billing.limits.allowAutoRefresh || billing.isUnlimited;
+}
+
 export async function userAllowsScheduledAdsScrape(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<boolean> {
   const eligibility = await getUserScrapeEligibility(supabase, userId);
-  if (!eligibility.allowed) return false;
-
-  const { billing } = eligibility;
-  if (!hasActivePaidSubscription(billing) && !billing.isUnlimited) return false;
-  return billing.limits.allowAutoRefresh || billing.isUnlimited;
+  return resolveScheduledAdsScrapeAllowed(eligibility);
 }
 
 /** Any scrape that incurs Apify / capture cost for a user. */

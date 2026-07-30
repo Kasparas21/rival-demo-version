@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { BillingEntitlement } from "@/lib/billing/entitlements";
 import { limitsForTier } from "@/lib/billing/plan-limits";
-import { isScrapingPausedForInactiveUser, resolveScrapeEligibility } from "@/lib/billing/scrape-eligibility";
+import {
+  isScrapingPausedForInactiveUser,
+  resolveScrapeEligibility,
+  resolveScheduledAdsScrapeAllowed,
+} from "@/lib/billing/scrape-eligibility";
 import { isLapsedPaidSubscription } from "@/lib/billing/entitlements";
 import {
   daysSinceUtcDateYmd,
@@ -29,6 +33,7 @@ function billingForTier(tier: BillingEntitlement["planTier"], overrides: Partial
     canUseDevPlanSwitcher: false,
     devPlanOverride: null,
     adminPlanOverride: null,
+    adminAdsScrapeMode: "auto",
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,
@@ -151,5 +156,59 @@ describe("resolveScrapeEligibility", () => {
       polarProductId: null,
     });
     expect(resolveScrapeEligibility({ activity: recentActivity, billing, now }).allowed).toBe(true);
+  });
+});
+
+describe("resolveScheduledAdsScrapeAllowed", () => {
+  const now = new Date("2026-07-07T15:00:00.000Z");
+  const recentActivity = { lastActiveDate: ymdDaysAgo(1, now), updatedAt: null, createdAt: null };
+
+  function eligibilityFor(
+    tier: BillingEntitlement["planTier"],
+    overrides: Partial<BillingEntitlement> = {},
+  ) {
+    const billing = billingForTier(tier, overrides);
+    return resolveScrapeEligibility({ activity: recentActivity, billing, now });
+  }
+
+  it("blocks scheduled scrapes when admin mode is manual", () => {
+    const eligibility = eligibilityFor("pro", { adminAdsScrapeMode: "manual" });
+    expect(eligibility.allowed).toBe(true);
+    expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(false);
+  });
+
+  it("still allows fresh scrape eligibility for manual mode users", () => {
+    const eligibility = eligibilityFor("pro", { adminAdsScrapeMode: "manual" });
+    expect(eligibility.allowed).toBe(true);
+  });
+
+  it("allows scheduled scrapes for paid pro users on auto mode", () => {
+    const eligibility = eligibilityFor("pro", { adminAdsScrapeMode: "auto" });
+    expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(true);
+  });
+
+  it("allows scheduled scrapes when admin mode is absent (defaults to auto)", () => {
+    const eligibility = eligibilityFor("pro");
+    expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(true);
+  });
+
+  it("allows scheduled scrapes for unlimited admin users on auto mode", () => {
+    const eligibility = eligibilityFor("admin", { isUnlimited: true, adminAdsScrapeMode: "auto" });
+    expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(true);
+  });
+
+  it("blocks scheduled scrapes for unlimited admin users on manual mode", () => {
+    const eligibility = eligibilityFor("admin", { isUnlimited: true, adminAdsScrapeMode: "manual" });
+    expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(false);
+  });
+
+  it("blocks scheduled scrapes for inactive users regardless of mode", () => {
+    const billing = billingForTier("pro", { adminAdsScrapeMode: "auto" });
+    const eligibility = resolveScrapeEligibility({
+      activity: { lastActiveDate: ymdDaysAgo(30, now), updatedAt: null, createdAt: null },
+      billing,
+      now,
+    });
+    expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(false);
   });
 });

@@ -23,6 +23,8 @@ export type { PlanLimits, PlanTier, DevPlanOverride };
 
 export const BILLING_PLAN_NAME = "Rival";
 
+export type AdminAdsScrapeMode = "auto" | "manual";
+
 export type BillingEntitlement = {
   hasAccess: boolean;
   status: string;
@@ -30,6 +32,8 @@ export type BillingEntitlement = {
   planName: string;
   /** Manually set from the admin dashboard; wins over Polar-derived tier. */
   adminPlanOverride: PlanTier | null;
+  /** Admin-controlled ads scrape scheduling; defaults to automatic weekly cron. */
+  adminAdsScrapeMode: AdminAdsScrapeMode;
   polarProductId: string | null;
   polarCustomerId: string | null;
   polarSubscriptionId: string | null;
@@ -73,6 +77,17 @@ export function readAdminPlanOverride(rawPayload: unknown): PlanTier | null {
   const v = readRawPayload(rawPayload).admin_plan_override;
   if (typeof v !== "string") return null;
   return normalizePlanTier(v);
+}
+
+/** Admin dashboard: scheduled ads-library cron on (auto) or off (manual only). Defaults to auto. */
+export function readAdminAdsScrapeMode(rawPayload: unknown): AdminAdsScrapeMode {
+  const v = readRawPayload(rawPayload).admin_ads_scrape_mode;
+  return v === "manual" ? "manual" : "auto";
+}
+
+export function normalizeAdminAdsScrapeMode(value: unknown): AdminAdsScrapeMode | null {
+  if (value === "auto" || value === "manual") return value;
+  return null;
 }
 
 export function isDevPlanOverrideEnabled(): boolean {
@@ -381,6 +396,7 @@ export async function getBillingEntitlement(
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
   const adminPlanOverride = readAdminPlanOverride(rawPayload);
+  const adminAdsScrapeMode = readAdminAdsScrapeMode(rawPayload);
   const isUnlimited = isManualAdminUnlimited(rawPayload) || adminPlanOverride === "admin";
   const devPlanOverride = readDevPlanOverride(rawPayload);
   const applyDevOverride = isUnlimited || isDevPlanOverrideEnabled();
@@ -424,6 +440,7 @@ export async function getBillingEntitlement(
     planTier,
     planName,
     adminPlanOverride,
+    adminAdsScrapeMode,
     polarProductId: data?.polar_product_id ?? null,
     polarCustomerId: data?.polar_customer_id ?? null,
     polarSubscriptionId: data?.polar_subscription_id ?? null,

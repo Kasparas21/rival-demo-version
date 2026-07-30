@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import type { AdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
+import type { AdminAdsScrapeMode } from "@/lib/billing/entitlements";
 import { formatQuotePrice } from "@/lib/billing/custom-quotes";
 
 type UserDetail = {
@@ -24,9 +25,11 @@ type UserDetail = {
     planTier: string;
     status: string;
     adminPlanOverride: string | null;
+    adminAdsScrapeMode: AdminAdsScrapeMode;
     isUnlimited: boolean;
     customPriceLabel: string | null;
   };
+  adsScrapeMode: AdminAdsScrapeMode;
   usage: {
     month: string;
     adsScraped: number;
@@ -55,6 +58,11 @@ type UserDetail = {
   } | null;
   usageDetail: AdminUserUsageDetail;
 };
+
+const ADS_SCRAPE_MODE_OPTIONS: { value: AdminAdsScrapeMode; label: string }[] = [
+  { value: "auto", label: "Automatic (weekly cron)" },
+  { value: "manual", label: "Manual only" },
+];
 
 const PLAN_OVERRIDE_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "No override (Polar-managed)" },
@@ -123,12 +131,19 @@ export default function AdminUserDetailPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [form, setForm] = useState<EditForm | null>(null);
   const [expandedCompetitorId, setExpandedCompetitorId] = useState<string | null>(null);
+  const [adsScrapeMode, setAdsScrapeMode] = useState<AdminAdsScrapeMode>("auto");
+  const [savingAdsScrapeMode, setSavingAdsScrapeMode] = useState(false);
+  const [adsScrapeModeError, setAdsScrapeModeError] = useState<string | null>(null);
+  const [adsScrapeModeSuccess, setAdsScrapeModeSuccess] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/admin/users/${userId}`);
     const json = (await res.json()) as UserDetail & { ok?: boolean };
-    if (json.profile) setData(json);
+    if (json.profile) {
+      setData(json);
+      setAdsScrapeMode(json.adsScrapeMode ?? json.billing.adminAdsScrapeMode ?? "auto");
+    }
     setLoading(false);
   }, [userId]);
 
@@ -253,6 +268,34 @@ export default function AdminUserDetailPage() {
       setDeleteError(e instanceof Error ? e.message : "Delete failed");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function saveAdsScrapeMode() {
+    if (!data) return;
+    const currentMode = data.adsScrapeMode ?? data.billing.adminAdsScrapeMode ?? "auto";
+    if (adsScrapeMode === currentMode) return;
+
+    setSavingAdsScrapeMode(true);
+    setAdsScrapeModeError(null);
+    setAdsScrapeModeSuccess(false);
+    try {
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adsScrapeMode }),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setAdsScrapeModeError(json.error ?? `Update failed (${res.status})`);
+        return;
+      }
+      setAdsScrapeModeSuccess(true);
+      await load();
+    } catch (e) {
+      setAdsScrapeModeError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setSavingAdsScrapeMode(false);
     }
   }
 
@@ -505,6 +548,44 @@ export default function AdminUserDetailPage() {
             <div>
               <dt className="text-zinc-500">Custom price</dt>
               <dd>{data.billing.customPriceLabel ?? "—"}</dd>
+            </div>
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <p className="text-sm text-zinc-500">Ads scraping</p>
+              <div className="mt-2 space-y-2 text-sm">
+                <select
+                  value={adsScrapeMode}
+                  onChange={(e) => {
+                    setAdsScrapeMode(e.target.value as AdminAdsScrapeMode);
+                    setAdsScrapeModeSuccess(false);
+                  }}
+                  className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
+                >
+                  {ADS_SCRAPE_MODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-zinc-500">
+                  Automatic runs the weekly ads-library cron. Manual only skips scheduled scrapes; the user can
+                  still trigger on-demand refreshes when billing allows.
+                </p>
+                {adsScrapeModeError ? <p className="text-xs text-red-600">{adsScrapeModeError}</p> : null}
+                {adsScrapeModeSuccess ? (
+                  <p className="text-xs text-emerald-700">Ads scraping mode updated.</p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={
+                    savingAdsScrapeMode ||
+                    adsScrapeMode === (data.adsScrapeMode ?? data.billing.adminAdsScrapeMode ?? "auto")
+                  }
+                  onClick={() => void saveAdsScrapeMode()}
+                  className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50"
+                >
+                  {savingAdsScrapeMode ? "Saving…" : "Save ads scraping mode"}
+                </button>
+              </div>
             </div>
           </dl>
         </section>

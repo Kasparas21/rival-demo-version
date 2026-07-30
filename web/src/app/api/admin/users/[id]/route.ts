@@ -5,7 +5,7 @@ import { deleteUserAccount } from "@/lib/account/delete-user-account";
 import { adminCanWrite, authorizeAdminRequest } from "@/lib/admin/auth";
 import { loadAdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import { rebuildAdminUserSnapshot } from "@/lib/admin/rebuild-snapshots";
-import { getBillingEntitlement } from "@/lib/billing/entitlements";
+import { getBillingEntitlement, type AdminAdsScrapeMode } from "@/lib/billing/entitlements";
 import { normalizePlanTier, type PlanTier } from "@/lib/billing/plan-limits";
 import { loadLifetimeScrapeOperations, loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { getUserActivitySnapshot } from "@/lib/billing/user-activity";
@@ -65,6 +65,7 @@ export async function GET(req: Request, context: RouteContext) {
     ok: true,
     profile: profileRes.data,
     billing,
+    adsScrapeMode: billing.adminAdsScrapeMode,
     activity,
     usage: { month: yearMonth, ...usage, lifetimeScrapeOperations: lifetimeScrapes },
     competitors: competitorsRes.data ?? [],
@@ -103,6 +104,7 @@ type UpdateUserBody = {
   };
   /** Plan tier to force for this user; `null` clears the override (back to Polar-derived plan). */
   planTier?: string | null;
+  adsScrapeMode?: AdminAdsScrapeMode;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -157,6 +159,38 @@ async function applyAdminPlanOverride(
       user_id: userId,
       polar_product_id: existing?.polar_product_id ?? "admin-override",
       status,
+      raw_payload: payload as Json,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" },
+  );
+
+  return error?.message ?? null;
+}
+
+async function applyAdminAdsScrapeMode(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  mode: AdminAdsScrapeMode,
+): Promise<string | null> {
+  const { data: existing } = await admin
+    .from("billing_subscriptions")
+    .select("raw_payload, polar_product_id, status")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const payload =
+    typeof existing?.raw_payload === "object" && existing.raw_payload !== null && !Array.isArray(existing.raw_payload)
+      ? { ...(existing.raw_payload as Record<string, unknown>) }
+      : {};
+
+  payload.admin_ads_scrape_mode = mode;
+
+  const { error } = await admin.from("billing_subscriptions").upsert(
+    {
+      user_id: userId,
+      polar_product_id: existing?.polar_product_id ?? "admin-override",
+      status: existing?.status ?? "none",
       raw_payload: payload as Json,
       updated_at: new Date().toISOString(),
     },
@@ -270,6 +304,17 @@ export async function PATCH(req: Request, context: RouteContext) {
     changes.plan_override = tier;
   }
 
+  if (body.adsScrapeMode !== undefined) {
+    if (body.adsScrapeMode !== "auto" && body.adsScrapeMode !== "manual") {
+      return NextResponse.json({ error: "Invalid ads scrape mode" }, { status: 400 });
+    }
+    const modeErr = await applyAdminAdsScrapeMode(admin, userId, body.adsScrapeMode);
+    if (modeErr) {
+      return NextResponse.json({ error: `Ads scrape mode update failed: ${modeErr}` }, { status: 500 });
+    }
+    changes.ads_scrape_mode = body.adsScrapeMode;
+  }
+
   if (Object.keys(changes).length === 0) {
     return NextResponse.json({ error: "No changes provided" }, { status: 400 });
   }
@@ -296,7 +341,13 @@ export async function PATCH(req: Request, context: RouteContext) {
     getBillingEntitlement(admin, userId),
   ]);
 
-  return NextResponse.json({ ok: true, changes, profile: updatedProfile.data, billing });
+  return NextResponse.json({
+    ok: true,
+    changes,
+    profile: updatedProfile.data,
+    billing,
+    adsScrapeMode: billing.adminAdsScrapeMode,
+  });
 }
 
 type DeleteUserBody = { confirm?: unknown };
