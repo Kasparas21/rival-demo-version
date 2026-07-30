@@ -9,6 +9,7 @@ export type AdminRole = "admin" | "viewer";
 export const DEFAULT_ADMIN_EMAILS = [
   "attributo@yahoo.com",
   "freecardsbf2@gmail.com",
+  "margentura@gmail.com",
 ] as const;
 
 export type AdminUser = {
@@ -144,6 +145,14 @@ export async function resolveAdminUser(
   user: { id: string; email?: string | null },
 ): Promise<AdminUser | null> {
   const email = await resolveAccountEmail(admin, user.id, user.email);
+
+  try {
+    const existing = await getAdminUserById(admin, user.id);
+    if (existing) return existing;
+  } catch (e) {
+    console.warn("[admin] admin_users lookup", e);
+  }
+
   const allowlisted = isAllowlistedAdminEmail(email);
   const billingAdmin = await hasAdminUnlimitedBilling(admin, user.id);
 
@@ -160,15 +169,12 @@ export async function resolveAdminUser(
   }
 
   try {
-    const existing = await getAdminUserById(admin, user.id);
-    if (existing) return existing;
-
     if (allowlisted && email) {
       const ensured = await ensureAdminUserForAccount(admin, user.id, email);
       if (ensured) return ensured;
     }
   } catch (e) {
-    console.warn("[admin] admin_users lookup", e);
+    console.warn("[admin] ensureAdminUserForAccount", e);
   }
 
   // Allowlisted email or complimentary admin billing — even if admin_users table is not migrated yet.

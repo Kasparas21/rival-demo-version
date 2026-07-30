@@ -113,7 +113,8 @@ select u.id, lower(trim(u.email)), 'admin'
 from auth.users u
 where lower(trim(u.email)) in (
   lower(trim('attributo@yahoo.com')),
-  lower(trim('freecardsbf2@gmail.com'))
+  lower(trim('freecardsbf2@gmail.com')),
+  lower(trim('margentura@gmail.com'))
 )
 on conflict (user_id) do update set
   email = excluded.email,
