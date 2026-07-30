@@ -7,6 +7,7 @@
  */
 
 import {
+  Check,
   Copy,
   ExternalLink,
   Globe,
@@ -79,6 +80,7 @@ type LandingPageRow = {
   totalAds: number;
   platformBreakdown: Record<string, number>;
   snapshot: LandingPageSnapshotRef | null;
+  isTracking: boolean;
 };
 
 export type LandingPagesApiResponse = {
@@ -567,6 +569,15 @@ function LandingPageListRow({
           <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-slate-900" title={row.url}>
             {display}
           </span>
+          {row.isTracking ? (
+            <span
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+              title="Spying on this page"
+              aria-label="Spying on this page"
+            >
+              <Check className="h-3 w-3" strokeWidth={3} />
+            </span>
+          ) : null}
           <span className="shrink-0 text-[13px] font-bold text-[color:var(--rival-primary)]">{row.count}</span>
         </div>
         <div className="mt-1 flex items-center gap-2">

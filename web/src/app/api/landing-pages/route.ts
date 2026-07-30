@@ -48,6 +48,8 @@ type LandingPageGroup = {
   platformBreakdown: Record<string, number>;
   topAds: AdReference[];
   snapshot: LandingPageSnapshotRef | null;
+  /** User opted into ongoing landing-page screenshots for this URL. */
+  isTracking: boolean;
 };
 
 type LandingPageRow = {
@@ -173,6 +175,7 @@ export async function GET(request: Request) {
           platformBreakdown: {},
           topAds: [],
           snapshot: null,
+          isTracking: false,
         };
         groups.set(groupId, group);
       }
@@ -209,6 +212,7 @@ export async function GET(request: Request) {
           platformBreakdown: {},
           topAds: [],
           snapshot: null,
+          isTracking: false,
         };
         groups.set(groupId, group);
       }
@@ -224,10 +228,16 @@ export async function GET(request: Request) {
   const landingPagesAll = Array.from(groups.values()).sort((a, b) => b.totalAds - a.totalAds);
   const landingPagesSlice = landingPagesAll.slice(0, limit);
 
-  const snapshotByGroupKey = await loadSnapshotsByGroupKey(supabase, competitorId, user.id);
+  const metaByGroupKey = await loadPageMetaByGroupKey(supabase, competitorId, user.id);
+  const snapshotByGroupKey = new Map<string, LandingPageSnapshotRef>();
+  for (const [key, meta] of metaByGroupKey) {
+    if (meta.snapshot) snapshotByGroupKey.set(key, meta.snapshot);
+  }
   const blockedHosts = buildBlockedHostsIndex(snapshotByGroupKey);
   for (const group of landingPagesSlice) {
+    const meta = metaByGroupKey.get(group.groupId);
     group.snapshot = resolveSnapshotWithBlockedInheritance(group.groupId, snapshotByGroupKey, blockedHosts);
+    group.isTracking = meta?.isTracking ?? false;
   }
 
   const landingPages = landingPagesSlice;
@@ -260,16 +270,21 @@ export async function GET(request: Request) {
 
 type SnapshotLoaderClient = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
-async function loadSnapshotsByGroupKey(
+type LandingPageGroupMeta = {
+  snapshot: LandingPageSnapshotRef | null;
+  isTracking: boolean;
+};
+
+async function loadPageMetaByGroupKey(
   supabase: SnapshotLoaderClient,
   competitorId: string,
   userId: string,
-): Promise<Map<string, LandingPageSnapshotRef>> {
-  const result = new Map<string, LandingPageSnapshotRef>();
+): Promise<Map<string, LandingPageGroupMeta>> {
+  const result = new Map<string, LandingPageGroupMeta>();
 
   const { data: pages } = await supabase
     .from("landing_pages")
-    .select("id, url")
+    .select("id, url, is_active")
     .eq("competitor_id", competitorId)
     .eq("user_id", userId);
 
@@ -278,7 +293,15 @@ async function loadSnapshotsByGroupKey(
   const pageIdToKey = new Map<string, string>();
   for (const page of pages) {
     const key = landingPageGroupKey(page.url);
-    if (key) pageIdToKey.set(page.id, key);
+    if (!key) continue;
+    pageIdToKey.set(page.id, key);
+    const existing = result.get(key);
+    const isTracking = page.is_active === true;
+    if (existing) {
+      result.set(key, { ...existing, isTracking: existing.isTracking || isTracking });
+    } else {
+      result.set(key, { snapshot: null, isTracking });
+    }
   }
 
   const pageIds = pages.map((p) => p.id);
@@ -297,13 +320,18 @@ async function loadSnapshotsByGroupKey(
 
   for (const [pageId, snap] of latestByPageId) {
     const groupKey = pageIdToKey.get(pageId);
-    if (!groupKey || result.has(groupKey)) continue;
+    if (!groupKey) continue;
     const status = snap.status === "blocked" ? "blocked" : "ok";
-    result.set(groupKey, {
+    const snapshot: LandingPageSnapshotRef = {
       hero_screenshot_url: snap.hero_screenshot_url,
       screenshot_url: snap.screenshot_url,
       status,
       taken_at: snap.taken_at,
+    };
+    const existing = result.get(groupKey);
+    result.set(groupKey, {
+      snapshot,
+      isTracking: existing?.isTracking ?? false,
     });
   }
 
