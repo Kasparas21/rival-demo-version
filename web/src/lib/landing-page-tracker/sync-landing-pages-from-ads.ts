@@ -4,6 +4,7 @@ import {
   landingPageGroupKey,
   normalizeLandingPageUrl,
 } from "@/lib/landing-pages/normalize-url";
+import { scrapeSingleLandingPage } from "./scrape-single";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/supabase/types";
 
@@ -22,6 +23,13 @@ function homepageGroupKey(competitorWebsite: string): string | null {
   const normalized = normalizeLandingPageUrl(competitorWebsite);
   if (!normalized) return null;
   return landingPageGroupKey(normalized);
+}
+
+/** True when an ad destination host is the competitor domain or a subdomain of it. */
+export function adHostMatchesCompetitor(adHost: string, rootHost: string): boolean {
+  const ad = adHost.toLowerCase();
+  const root = rootHost.toLowerCase();
+  return ad === root || ad.endsWith(`.${root}`);
 }
 
 /** Derive a human label from URL path, e.g. /pricing → "Pricing". */
@@ -70,7 +78,7 @@ export function collectAdLandingPageKeys(
     if (homeKey && groupKey === homeKey) continue;
 
     const adHost = hostFromLandingPageUrl(groupKey);
-    if (!adHost || adHost !== rootHost) continue;
+    if (!adHost || !adHostMatchesCompetitor(adHost, rootHost)) continue;
 
     keys.add(groupKey);
   }
@@ -126,10 +134,11 @@ export async function syncLandingPagesFromAds(
   userId: string,
   competitorWebsite: string,
   ads: AdRow[],
-): Promise<void> {
+  options?: { autoSpyNewLandingPages?: boolean },
+): Promise<string[]> {
   const rootHost = competitorRootHost(competitorWebsite);
   const homeKey = homepageGroupKey(competitorWebsite);
-  if (!rootHost) return;
+  if (!rootHost) return [];
 
   const { data: existingPages } = await admin
     .from("landing_pages")
@@ -144,6 +153,9 @@ export async function syncLandingPagesFromAds(
   );
 
   const activeAdUrlKeys = collectAdLandingPageKeys(ads, competitorWebsite);
+  const autoSpy = options?.autoSpyNewLandingPages === true;
+  const now = new Date().toISOString();
+  const newAutoSpyPageIds: string[] = [];
 
   for (const groupKey of activeAdUrlKeys) {
     if (existingUrls.has(groupKey)) continue;
@@ -155,12 +167,40 @@ export async function syncLandingPagesFromAds(
       label: labelFromLandingPageUrl(groupKey),
       page_type: "custom",
       auto_detected_from: "ads",
-      is_active: false,
-      next_screenshot_at: null,
+      is_active: autoSpy,
+      next_screenshot_at: autoSpy ? now : null,
     };
 
-    await admin.from("landing_pages").insert(row);
+    const { data: inserted, error } = await admin
+      .from("landing_pages")
+      .insert(row)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      console.error("[landing-page-sync] insert ad landing page failed", error.message);
+      continue;
+    }
+
+    if (inserted?.id && autoSpy) {
+      newAutoSpyPageIds.push(inserted.id);
+    }
+
     existingUrls.add(groupKey);
+  }
+
+  return newAutoSpyPageIds;
+}
+
+async function captureAutoSpyPages(admin: AdminClient, pageIds: string[]): Promise<void> {
+  for (const pageId of pageIds) {
+    const { data: page } = await admin.from("landing_pages").select("*").eq("id", pageId).maybeSingle();
+    if (!page?.is_active) continue;
+    try {
+      await scrapeSingleLandingPage(admin, page, { previewOnly: false });
+    } catch (err) {
+      console.error("[landing-page-sync] auto-spy capture failed", pageId, err);
+    }
   }
 }
 
@@ -171,6 +211,15 @@ export async function syncLandingPagesFromCompetitorAds(
   userId: string,
   competitorWebsite: string,
 ): Promise<void> {
+  const { data: competitor } = await admin
+    .from("saved_competitors")
+    .select("auto_spy_new_landing_pages")
+    .eq("id", competitorId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const autoSpyNewLandingPages = competitor?.auto_spy_new_landing_pages === true;
+
   const { data: ads } = await admin
     .from("scraped_ads")
     .select("platform, raw_payload")
@@ -182,6 +231,18 @@ export async function syncLandingPagesFromCompetitorAds(
   const activeAds = ads ?? [];
   const activeAdUrlKeys = collectAdLandingPageKeys(activeAds, competitorWebsite);
 
-  await syncLandingPagesFromAds(admin, competitorId, userId, competitorWebsite, activeAds);
+  const newAutoSpyPageIds = await syncLandingPagesFromAds(
+    admin,
+    competitorId,
+    userId,
+    competitorWebsite,
+    activeAds,
+    { autoSpyNewLandingPages },
+  );
+
   await deactivateAdLandingPagesNotInActiveAds(admin, competitorId, userId, activeAdUrlKeys);
+
+  if (newAutoSpyPageIds.length) {
+    void captureAutoSpyPages(admin, newAutoSpyPageIds);
+  }
 }

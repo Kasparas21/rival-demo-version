@@ -91,7 +91,7 @@ export async function GET(request: Request) {
 
   const { data: competitor, error: compErr } = await supabase
     .from("saved_competitors")
-    .select("id, brand_name, name, last_scraped_at, brand_domain, slug")
+    .select("id, brand_name, name, last_scraped_at, brand_domain, slug, auto_spy_new_landing_pages")
     .eq("id", competitorId)
     .eq("user_id", user.id)
     .single();
@@ -257,6 +257,7 @@ export async function GET(request: Request) {
       id: competitor.id,
       name: displayName,
       lastScrapedAt: competitor.last_scraped_at,
+      autoSpyNewLandingPages: competitor.auto_spy_new_landing_pages === true,
     },
     landingPages,
     summary: {

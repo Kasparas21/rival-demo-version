@@ -240,6 +240,8 @@ import { TimelineTab } from "@/components/competitor/tests-timeline/timeline-tab
 import {
   type LandingPagesApiResponse,
   type SharedLandingPagesListCache,
+  isLandingPagesListCacheValid,
+  landingPagesListCacheKey,
 } from "@/components/competitor/landing-pages-tab";
 import { WebsiteTab } from "@/components/website-tracker/WebsiteTab";
 import { StrategyOverviewApp } from "@/components/strategy-overview/strategy-overview-app";
@@ -2913,13 +2915,17 @@ function CompetitorDashboardBody({
 
   const landingPagesListStamp = accountLastScrapedAt ?? "none";
   const landingPagesListDomainKey = cacheDomainNorm.trim().toLowerCase();
-  const landingPagesListCacheKey = `${landingPagesListDomainKey}:landing-pages:${competitorDbIdForSaved}:${landingPagesListStamp}:100`;
+  const landingPagesListCacheKeyValue = landingPagesListCacheKey(
+    landingPagesListDomainKey,
+    competitorDbIdForSaved,
+    landingPagesListStamp,
+  );
 
   const landingPagesListHook = useScrapeKeyedCache<LandingPagesApiResponse>({
-    cacheKey: landingPagesListCacheKey,
+    cacheKey: landingPagesListCacheKeyValue,
     enabled: landingPagesFetchEnabled,
     persistAcrossTabs: true,
-    validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
+    validateCached: isLandingPagesListCacheValid,
     fetcher: async () => {
       const res = await fetch(
         `/api/landing-pages?competitorId=${encodeURIComponent(competitorDbIdForSaved)}&limit=100`

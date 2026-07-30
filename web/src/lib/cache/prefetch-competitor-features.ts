@@ -1,4 +1,8 @@
 import { prefetchScrapeKeyedCache } from "@/lib/cache/use-scrape-keyed-cache";
+import {
+  isLandingPagesListCacheValid,
+  landingPagesListCacheKey,
+} from "@/components/competitor/landing-pages-tab";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 
@@ -134,15 +138,15 @@ export async function prefetchAllCompetitorFeatureCaches(params: PrefetchParams)
       }),
 
       prefetchScrapeKeyedCache({
-        cacheKey: `${dom}:landing-pages:${id}:${stamp}:100`,
+        cacheKey: landingPagesListCacheKey(dom, id, stamp),
         fetcher: async () => {
           const res = await fetch(
             `/api/landing-pages?competitorId=${encodeURIComponent(id)}&limit=100`,
             { credentials: "include" },
           );
-          return (await res.json()) as { ok?: boolean; landingPages?: unknown[] };
+          return (await res.json()) as import("@/components/competitor/landing-pages-tab").LandingPagesApiResponse;
         },
-        validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
+        validateCached: isLandingPagesListCacheValid,
       }),
 
       prefetchScrapeKeyedCache({

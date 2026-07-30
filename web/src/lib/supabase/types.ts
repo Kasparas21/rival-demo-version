@@ -197,6 +197,7 @@ export type Database = {
           organic_next_scrape_at: string | null;
           baseline_metrics: Json;
           agent_scrape_cycles: Json;
+          auto_spy_new_landing_pages: boolean;
         };
         Insert: {
           id?: string;
@@ -225,6 +226,7 @@ export type Database = {
           organic_next_scrape_at?: string | null;
           baseline_metrics?: Json;
           agent_scrape_cycles?: Json;
+          auto_spy_new_landing_pages?: boolean;
         };
         Update: {
           id?: string;
@@ -253,6 +255,7 @@ export type Database = {
           organic_next_scrape_at?: string | null;
           baseline_metrics?: Json;
           agent_scrape_cycles?: Json;
+          auto_spy_new_landing_pages?: boolean;
         };
         Relationships: [];
       };

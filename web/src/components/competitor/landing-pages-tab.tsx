@@ -85,10 +85,27 @@ type LandingPageRow = {
 
 export type LandingPagesApiResponse = {
   ok: boolean;
-  competitor?: { id: string; name: string; lastScrapedAt: string | null };
+  competitor?: {
+    id: string;
+    name: string;
+    lastScrapedAt: string | null;
+    autoSpyNewLandingPages?: boolean;
+  };
   landingPages?: LandingPageRow[];
   error?: string;
 };
+
+export const LANDING_PAGES_LIST_CACHE_VERSION = "v2";
+
+export function isLandingPagesListCacheValid(c: LandingPagesApiResponse): boolean {
+  if (!c.ok || !Array.isArray(c.landingPages)) return false;
+  if (c.landingPages.length === 0) return true;
+  return typeof c.landingPages[0]?.isTracking === "boolean";
+}
+
+export function landingPagesListCacheKey(domainKey: string, competitorId: string, stamp: string): string {
+  return `${domainKey}:landing-pages:${competitorId}:${stamp}:${LANDING_PAGES_LIST_CACHE_VERSION}`;
+}
 
 export type SharedLandingPagesListCache = {
   data: LandingPagesApiResponse | null;
@@ -175,12 +192,12 @@ export function LandingPagesTab({
 }: LandingPagesTabProps) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
-  const listCacheKey = `${domainKey}:landing-pages:${competitorId}:${stamp}:100`;
+  const listCacheKey = landingPagesListCacheKey(domainKey, competitorId, stamp);
 
   const internalList = useScrapeKeyedCache<LandingPagesApiResponse>({
     cacheKey: listCacheKey,
     enabled: landingPagesListCache == null && Boolean(competitorId && domainKey && fetchEnabled),
-    validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
+    validateCached: isLandingPagesListCacheValid,
     fetcher: async () => {
       const res = await fetch(
         `/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}&limit=100`
@@ -213,6 +230,12 @@ export function LandingPagesTab({
   const [adsExpanded, setAdsExpanded] = useState(false);
   const [adsPlatformFilter, setAdsPlatformFilter] = useState("all");
   const [captureAction, setCaptureAction] = useState<"trace" | "preview" | null>(null);
+  const [autoSpyEnabled, setAutoSpyEnabled] = useState(false);
+  const [autoSpySaving, setAutoSpySaving] = useState(false);
+
+  useEffect(() => {
+    setAutoSpyEnabled(meta?.autoSpyNewLandingPages === true);
+  }, [meta?.autoSpyNewLandingPages]);
 
   const adsCacheKey = `${domainKey}:landing-pages-ads:${competitorId}:${encodeURIComponent(selectedUrl || "__none__")}:${stamp}:${pageAdsLimit}:${adsPlatformFilter}`;
 
@@ -350,6 +373,39 @@ export function LandingPagesTab({
     }
   }, []);
 
+  const toggleAutoSpy = useCallback(
+    async (enabled: boolean) => {
+      if (!competitorId) return;
+      setAutoSpySaving(true);
+      try {
+        const res = await fetch(
+          `/api/competitor/${encodeURIComponent(competitorId)}/landing-pages/auto-spy`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled }),
+          },
+        );
+        const json = (await res.json()) as { ok?: boolean; error?: string };
+        if (!res.ok || !json.ok) {
+          throw new Error(json.error ?? "Failed to save setting");
+        }
+        setAutoSpyEnabled(enabled);
+        toast.success(
+          enabled
+            ? "New ad landing pages will be spied automatically"
+            : "Auto-spy for new landing pages is off",
+        );
+        await refetchList();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not save setting");
+      } finally {
+        setAutoSpySaving(false);
+      }
+    },
+    [competitorId, refetchList],
+  );
+
   const dataSince = formatDataSinceLabel(meta?.lastScrapedAt);
 
   if (!competitorId) {
@@ -396,6 +452,9 @@ export function LandingPagesTab({
         dataSince={dataSince}
         title="Landing Pages"
         subtitle={competitorLabel}
+        autoSpyEnabled={autoSpyEnabled}
+        autoSpySaving={autoSpySaving}
+        onAutoSpyChange={(enabled) => void toggleAutoSpy(enabled)}
       />
 
       <div className="mt-6 flex flex-col-reverse gap-6 lg:flex-row">
@@ -493,10 +552,16 @@ function HeaderBar({
   title,
   subtitle,
   dataSince,
+  autoSpyEnabled,
+  autoSpySaving,
+  onAutoSpyChange,
 }: {
   title: string;
   subtitle: string;
   dataSince: string | null;
+  autoSpyEnabled: boolean;
+  autoSpySaving: boolean;
+  onAutoSpyChange: (enabled: boolean) => void;
 }) {
   return (
     <div className="border-b border-slate-100 pb-4">
@@ -515,6 +580,33 @@ function HeaderBar({
           </>
         }
       />
+      <div className="mt-4 flex items-start justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-slate-900">Auto-spy new landing pages</p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-slate-600">
+            When this brand starts using a new URL in ads, Rival will begin spying on it automatically.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoSpyEnabled}
+          aria-label="Auto-spy new landing pages"
+          disabled={autoSpySaving}
+          onClick={() => onAutoSpyChange(!autoSpyEnabled)}
+          className={cn(
+            "relative mt-0.5 inline-flex h-[22px] w-[40px] shrink-0 items-center rounded-full p-[2px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-50",
+            autoSpyEnabled ? "bg-emerald-500" : "bg-slate-300",
+          )}
+        >
+          <span
+            className={cn(
+              "block h-[18px] w-[18px] rounded-full bg-white shadow transition-transform",
+              autoSpyEnabled ? "translate-x-[18px]" : "translate-x-0",
+            )}
+          />
+        </button>
+      </div>
     </div>
   );
 }
@@ -622,7 +714,6 @@ function PreviewPane({
   onCopy: () => void;
 }) {
   const displayPath = url.replace(/^https?:\/\//, "");
-  const displayUrlShortText = displayPath.length > 42 ? `${displayPath.slice(0, 41)}…` : displayPath;
   const snapshot = row?.snapshot ?? null;
   const previewUrl = snapshotPreviewUrl(snapshot);
   const isBlocked = snapshot?.status === "blocked";
@@ -630,7 +721,7 @@ function PreviewPane({
   if (isBlocked) {
     return (
       <div className="flex w-full flex-col items-stretch">
-        <PreviewUrlBar url={url} displayUrlShortText={displayUrlShortText} onCopy={onCopy} />
+        <PreviewUrlBar url={url} onCopy={onCopy} />
         <div className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 px-6 py-10">
           <LandingPagePreviewFallbackCard
             url={url}
@@ -648,7 +739,7 @@ function PreviewPane({
   if (!previewUrl) {
     return (
       <div className="flex w-full flex-col items-stretch">
-        <PreviewUrlBar url={url} displayUrlShortText={displayUrlShortText} onCopy={onCopy} />
+        <PreviewUrlBar url={url} onCopy={onCopy} />
         <div className="flex min-h-[400px] w-full items-center justify-center rounded-xl border border-slate-200 bg-slate-50/50 px-6 py-10">
           <LandingPagePreviewStartCard
             url={url}
@@ -667,7 +758,7 @@ function PreviewPane({
 
   return (
     <div className="flex w-full flex-col items-stretch">
-      <PreviewUrlBar url={url} displayUrlShortText={displayUrlShortText} onCopy={onCopy} />
+      <PreviewUrlBar url={url} onCopy={onCopy} />
 
       <div className="flex w-full min-w-0 justify-center">
         <div
@@ -688,19 +779,19 @@ function PreviewPane({
 
 function PreviewUrlBar({
   url,
-  displayUrlShortText,
   onCopy,
 }: {
   url: string;
-  displayUrlShortText: string;
   onCopy: () => void;
 }) {
+  const displayPath = url.replace(/^https?:\/\//, "");
+
   return (
-    <div className="mb-4 flex w-full flex-wrap items-center gap-2">
-      <div className="flex min-w-0 flex-1 basis-[200px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-        <Link2 className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
-        <span className="truncate font-mono text-[11px] text-slate-700" title={url}>
-          {displayUrlShortText}
+    <div className="mb-4 flex w-full flex-wrap items-start gap-2">
+      <div className="flex min-w-0 flex-1 basis-[200px] items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+        <Link2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
+        <span className="min-w-0 flex-1 break-all font-mono text-[11px] leading-relaxed text-slate-700" title={url}>
+          {displayPath}
         </span>
       </div>
 

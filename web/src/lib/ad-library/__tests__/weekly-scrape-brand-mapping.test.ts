@@ -29,7 +29,7 @@ describe("filterWeeklyScrapeRowsWithBrandMapping", () => {
 
     const filtered = await filterWeeklyScrapeRowsWithBrandMapping(
       makeAdmin([]) as never,
-      [...rows],
+      [...rows] as never,
     );
 
     expect(filtered.map((row) => row.id)).toEqual(["ws"]);
@@ -43,7 +43,7 @@ describe("filterWeeklyScrapeRowsWithBrandMapping", () => {
 
     const filtered = await filterWeeklyScrapeRowsWithBrandMapping(
       makeAdmin(["mapped"]) as never,
-      [...rows],
+      [...rows] as never,
     );
 
     expect(filtered.map((row) => row.id)).toEqual(["mapped"]);
@@ -57,7 +57,7 @@ describe("filterWeeklyScrapeRowsWithBrandMapping", () => {
 
     const filtered = await filterWeeklyScrapeRowsWithBrandMapping(
       makeAdmin(null, "relation brand_competitors does not exist") as never,
-      [...rows],
+      [...rows] as never,
     );
 
     expect(filtered).toHaveLength(2);

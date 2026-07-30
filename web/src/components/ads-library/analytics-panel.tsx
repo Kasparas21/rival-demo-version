@@ -8,6 +8,10 @@ import { allocateGaugeSegmentSweeps } from "@/lib/charts/gauge-segments";
 import { ActivityScorePanel } from "@/components/competitor/activity-score-panel";
 import type { SharedLandingPagesListCache } from "@/components/competitor/landing-pages-tab";
 import {
+  isLandingPagesListCacheValid,
+  landingPagesListCacheKey,
+} from "@/components/competitor/landing-pages-tab";
+import {
   brandWorkspaceFeatureTileClass,
   brandWorkspaceLeftAccentClass,
   brandWorkspaceShellClass,
@@ -122,7 +126,7 @@ export function AdLibraryAnalyticsPanel({
 
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
-  const lpCacheKey = `${domainKey}:landing-pages:${competitorId}:${stamp}:100`;
+  const lpCacheKey = landingPagesListCacheKey(domainKey, competitorId, stamp);
 
   const [activityScoreLoading, setActivityScoreLoading] = useState(() => Boolean(competitorId));
   const onActivityScoreLoadingChange = useCallback((v: boolean) => {
@@ -143,7 +147,7 @@ export function AdLibraryAnalyticsPanel({
   const internalLp = useScrapeKeyedCache<LandingPagesResponse>({
     cacheKey: lpCacheKey,
     enabled: !sharedLandingPagesActive && Boolean(competitorId && domainKey),
-    validateCached: (c) => c.ok === true && Array.isArray(c.landingPages),
+    validateCached: (c) => isLandingPagesListCacheValid(c as import("@/components/competitor/landing-pages-tab").LandingPagesApiResponse),
     fetcher: async () => {
       const r = await fetch(`/api/landing-pages?competitorId=${encodeURIComponent(competitorId)}&limit=100`);
       return (await r.json()) as LandingPagesResponse;
