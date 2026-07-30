@@ -46,7 +46,7 @@ export function discoveryFeedCacheKey(
   day = discoveryDayKey(),
 ): string {
   const query = serializeDiscoveryQuery(toolbar, search, shuffleSeed);
-  return `${brandId}:discovery:v8:${day}:${query}`;
+  return `${brandId}:discovery:v9:${day}:${query}`;
 }
 
 export function discoveryShuffleCacheKey(brandId: string, day = discoveryDayKey()): string {
