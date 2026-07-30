@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CacheRevalidatingDot } from "@/components/competitor/data-freshness-badge";
+import type { SharedLandingPagesListCache } from "@/components/competitor/landing-pages-tab";
 import { COMPETITOR_PAGE_SHELL, COMPETITOR_PAGE_X } from "@/components/dashboard/competitor/competitor-page-layout";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
 import { hostKeyFromUrl } from "@/lib/landing-pages/blocked-inheritance";
@@ -29,6 +30,7 @@ type Props = {
   cacheDomainNorm: string;
   lastScrapedAt?: string | null;
   fetchEnabled?: boolean;
+  landingPagesListCache?: SharedLandingPagesListCache | null;
 };
 
 export function TrackedPagesPanel({
@@ -37,6 +39,7 @@ export function TrackedPagesPanel({
   cacheDomainNorm,
   lastScrapedAt,
   fetchEnabled = true,
+  landingPagesListCache = null,
 }: Props) {
   const [detailPage, setDetailPage] = useState<TrackedPageRow | null>(null);
   const [capturingPageId, setCapturingPageId] = useState<string | null>(null);
@@ -125,6 +128,10 @@ export function TrackedPagesPanel({
     setRemovedPageIds(new Set());
     void pagesCache.refetch();
   }, [pagesCache]);
+
+  const refreshLandingPagesList = useCallback(() => {
+    void landingPagesListCache?.refetch();
+  }, [landingPagesListCache]);
 
   useEffect(() => {
     if (!pendingDelete || removingPageId) return;
@@ -238,6 +245,7 @@ export function TrackedPagesPanel({
         }
         toast.success("Spying activated — first screenshot queued");
         await pagesCache.refetch();
+        refreshLandingPagesList();
         void runCapture(pageId);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Could not activate spying");
@@ -245,7 +253,7 @@ export function TrackedPagesPanel({
         setActivatingPageId(null);
       }
     },
-    [competitorId, pagesCache, runCapture],
+    [competitorId, pagesCache, refreshLandingPagesList, runCapture],
   );
 
   const activateAllSpying = useCallback(async () => {
@@ -267,13 +275,14 @@ export function TrackedPagesPanel({
       }
       toast.success(`Spying started on ${count} URL${count === 1 ? "" : "s"}`);
       await pagesCache.refetch();
+      refreshLandingPagesList();
       void runCapture();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not track all URLs");
     } finally {
       setActivatingAll(false);
     }
-  }, [activatableCandidates.length, competitorId, inactiveAdCandidates.length, pagesCache, runCapture]);
+  }, [activatableCandidates.length, competitorId, inactiveAdCandidates.length, pagesCache, refreshLandingPagesList, runCapture]);
 
   return (
     <div className={`${COMPETITOR_PAGE_SHELL} ${COMPETITOR_PAGE_X}`}>

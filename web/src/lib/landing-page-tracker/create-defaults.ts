@@ -1,4 +1,4 @@
-import { normalizeLandingPageUrl } from "@/lib/landing-pages/normalize-url";
+import { landingPageGroupKey, normalizeLandingPageUrl } from "@/lib/landing-pages/normalize-url";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 
@@ -33,7 +33,7 @@ export async function createDefaultLandingPages(
   ];
 
   for (const page of defaults) {
-    const normalized = normalizeLandingPageUrl(page.url);
+    const normalized = landingPageGroupKey(page.url) ?? normalizeLandingPageUrl(page.url);
     if (!normalized) continue;
     const row: Database["public"]["Tables"]["landing_pages"]["Insert"] = {
       competitor_id: competitorId,

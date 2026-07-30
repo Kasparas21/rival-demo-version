@@ -81,6 +81,7 @@ export function WebsiteTab({
       cacheDomainNorm={cacheDomainNorm}
       lastScrapedAt={lastScrapedAt}
       fetchEnabled={fetchEnabled && subTab === "tracked"}
+      landingPagesListCache={sharedLandingPagesListCache}
     />
   );
 }
