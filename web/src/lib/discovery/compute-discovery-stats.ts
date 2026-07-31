@@ -48,6 +48,12 @@ export function wasRunningInStatsRange(ad: PatternMetricsAd, range: DiscoverySta
   return lastMs != null && lastMs >= range.startMs;
 }
 
+/** Unique landing pages on ads that are still running (matches landing-pages "From ads" tab). */
+function countsAsActiveLandingPage(ad: PatternMetricsAd, range: DiscoveryStatsRange): boolean {
+  if (ad.is_killed || !ad.landing_page_key) return false;
+  return wasRunningInStatsRange(ad, range);
+}
+
 function topBy<T>(items: T[], pick: (item: T) => number, name: (item: T) => string): T | null {
   if (!items.length) return null;
   return [...items].sort((a, b) => pick(b) - pick(a) || name(a).localeCompare(name(b)))[0] ?? null;
@@ -143,9 +149,9 @@ export function computeDiscoveryStats(
       globalLongest = ad;
     }
 
-    const runningInPeriod = wasRunningInStatsRange(ad, range);
-    if (runningInPeriod && ad.landing_page_key) {
-      marketLandingKeys.add(ad.landing_page_key);
+    const activeLandingPage = countsAsActiveLandingPage(ad, range);
+    if (activeLandingPage) {
+      marketLandingKeys.add(ad.landing_page_key!);
     }
 
     const meta = competitorMeta.get(ad.competitor_id);
@@ -164,8 +170,8 @@ export function computeDiscoveryStats(
       landingKeys: new Set<string>(),
     };
 
-    if (runningInPeriod && ad.landing_page_key) {
-      comp.landingKeys.add(ad.landing_page_key);
+    if (activeLandingPage) {
+      comp.landingKeys.add(ad.landing_page_key!);
     }
 
     if (!ad.is_killed) {
@@ -295,8 +301,8 @@ export function computeDiscoveryStats(
       label: "Active landing pages",
       value: marketLandingKeys.size.toLocaleString(),
       hint: mostLandingPages
-        ? `${mostLandingPages.name} ran ${mostLandingPages.unique_landing_pages} in period`
-        : "Distinct URLs on ads running in period",
+        ? `${mostLandingPages.name} runs ${mostLandingPages.unique_landing_pages} active URLs`
+        : "Distinct URLs on currently running ads",
       drilldown: { kind: "active" },
     },
   ];

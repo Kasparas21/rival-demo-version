@@ -299,8 +299,10 @@ export function computePlatformAdsLibraryStats(
       }
     }
 
-    const lpKey = landingPageKeyFromLibraryAd(platform, ad);
-    if (lpKey) landingPageKeys.add(lpKey);
+    if (!normalized.isKilled) {
+      const lpKey = landingPageKeyFromLibraryAd(platform, ad);
+      if (lpKey) landingPageKeys.add(lpKey);
+    }
   }
 
   const total = ads.length;

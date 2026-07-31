@@ -45,7 +45,7 @@ function statsCacheKey(
   )].sort().join(",");
   const competitorIds = [...toolbar.selectedCompetitorIds].sort().join(",");
   return [
-    "discovery-stats:v2",
+    "discovery-stats:v3",
     brandId,
     toolbar.datePreset,
     toolbar.statsDateFrom ?? "",

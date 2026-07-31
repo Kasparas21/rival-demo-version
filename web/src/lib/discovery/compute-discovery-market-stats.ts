@@ -113,11 +113,13 @@ export function computeDiscoveryMarketStats(
       }
     }
 
-    const lpKey = landingPageKeyFromAd({
-      platform: ad.platform ?? "meta",
-      raw_payload: ad.raw_payload ?? null,
-    });
-    if (lpKey) landingPageKeys.add(lpKey);
+    if (!ad.is_killed) {
+      const lpKey = landingPageKeyFromAd({
+        platform: ad.platform ?? "meta",
+        raw_payload: ad.raw_payload ?? null,
+      });
+      if (lpKey) landingPageKeys.add(lpKey);
+    }
   }
 
   let topCompetitorName: string | null = null;

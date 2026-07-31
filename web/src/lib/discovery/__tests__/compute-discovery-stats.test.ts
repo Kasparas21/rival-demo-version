@@ -78,7 +78,7 @@ describe("wasRunningInStatsRange", () => {
 });
 
 describe("computeDiscoveryStats landing pages", () => {
-  it("counts unique landing pages only among ads running in the period", () => {
+  it("counts unique landing pages only on currently running ads in the period", () => {
     const stats = computeDiscoveryStats(
       [
         ad({
@@ -92,6 +92,13 @@ describe("computeDiscoveryStats landing pages", () => {
         ad({
           id: "running-c",
           landing_page_key: "https://offer.example.com/a",
+        }),
+        ad({
+          id: "killed-in-period",
+          first_seen_at: "2026-07-05T00:00:00.000Z",
+          last_seen_at: "2026-07-20T00:00:00.000Z",
+          is_killed: true,
+          landing_page_key: "https://offer.example.com/retired",
         }),
         ad({
           id: "ended-before",

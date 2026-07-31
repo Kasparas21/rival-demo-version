@@ -81,7 +81,7 @@ describe("computeDiscoveryMarketStats", () => {
     expect(stats.hottest_competitor_new_this_week).toBe(2);
   });
 
-  it("counts unique landing pages from ad destination URLs", () => {
+  it("counts unique landing pages on currently running ads only", () => {
     const stats = computeDiscoveryMarketStats(
       [
         ad({
@@ -98,6 +98,13 @@ describe("computeDiscoveryMarketStats", () => {
           platform: "meta",
           raw_payload: { destinationUrl: "https://offer.example.com/a" },
           first_seen_at: new Date(NOW - 3 * 86_400_000).toISOString(),
+        }),
+        ad({
+          platform: "meta",
+          raw_payload: { destinationUrl: "https://offer.example.com/retired" },
+          first_seen_at: new Date(NOW - 40 * 86_400_000).toISOString(),
+          last_seen_at: new Date(NOW - 1 * 86_400_000).toISOString(),
+          is_killed: true,
         }),
       ],
       NOW,

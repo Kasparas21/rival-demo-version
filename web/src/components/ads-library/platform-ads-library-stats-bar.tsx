@@ -184,7 +184,7 @@ export function PlatformAdsLibraryStatsBar({ platform, ads, scrapeAtMs, classNam
           label="Landing pages"
           value={(stats.unique_landing_pages ?? 0).toLocaleString()}
           hint={
-            <span className="text-[11px] text-slate-500">Distinct destination URLs in ads</span>
+            <span className="text-[11px] text-slate-500">Distinct URLs on currently running ads</span>
           }
           icon={<Link2 className="h-3 w-3" aria-hidden />}
         />
