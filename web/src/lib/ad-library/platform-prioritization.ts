@@ -5,6 +5,7 @@ import {
   HIGH_COVERAGE_MIN_PLATFORMS,
   INACTIVE_PROBE_ADS_PER_PLATFORM,
   INACTIVE_PROBE_INTERVAL_DAYS,
+  META_SCHEDULED_REFRESH_INTERVAL_DAYS,
   MINIMAL_REFRESH_INTERVAL_DAYS,
   PRIMARY_SECONDARY_REFRESH_INTERVAL_DAYS,
   REFRESH_ADS_PER_PLATFORM,
@@ -37,12 +38,43 @@ export function refreshIntervalDaysForClassification(
   platform: InitialScrapePlatform,
   classification: PlatformClassification
 ): number {
+  if (platform === "meta") return META_SCHEDULED_REFRESH_INTERVAL_DAYS;
   if (classification === "INACTIVE") return INACTIVE_PROBE_INTERVAL_DAYS;
   const table =
     classification === "MINIMAL"
       ? MINIMAL_REFRESH_INTERVAL_DAYS
       : PRIMARY_SECONDARY_REFRESH_INTERVAL_DAYS;
   return table[platform];
+}
+
+export type PlatformScrapeScheduleRow = {
+  platform: string;
+  classification?: PlatformClassification;
+  next_scrape_at: string | null;
+  last_scrape_at?: string | null;
+};
+
+/** True when a platform should run on the next scheduled cron pass. */
+export function isPlatformDueForScheduledScrape(
+  row: PlatformScrapeScheduleRow,
+  nowMs = Date.now(),
+): boolean {
+  if (!row.next_scrape_at) return true;
+
+  const nextMs = Date.parse(row.next_scrape_at);
+  if (Number.isNaN(nextMs) || nextMs <= nowMs) return true;
+
+  const lastScrapeAt = row.last_scrape_at?.trim();
+  if (!lastScrapeAt) return false;
+
+  const lastMs = Date.parse(lastScrapeAt);
+  if (Number.isNaN(lastMs)) return false;
+
+  const intervalDays = refreshIntervalDaysForClassification(
+    row.platform as InitialScrapePlatform,
+    row.classification ?? "INACTIVE",
+  );
+  return nowMs - lastMs >= intervalDays * 86_400_000;
 }
 
 export function computeNextScrapeAt(
@@ -104,6 +136,7 @@ export function platformsEligibleForScheduledScrape(
     platform: string;
     classification: PlatformClassification;
     next_scrape_at: string | null;
+    last_scrape_at?: string | null;
     high_coverage_demoted?: boolean;
   }[],
   smartPrioritizationDisabled: boolean,
@@ -148,22 +181,13 @@ export function scrapeLimitForClassification(
 }
 
 export function platformsDueForScrape(
-  rows: {
-    platform: string;
-    classification: PlatformClassification;
-    next_scrape_at: string | null;
-  }[],
-  nowMs = Date.now()
+  rows: PlatformScrapeScheduleRow[],
+  nowMs = Date.now(),
 ): InitialScrapePlatform[] {
   const due: InitialScrapePlatform[] = [];
   for (const row of rows) {
-    const pl = row.platform as InitialScrapePlatform;
-    if (!row.next_scrape_at) {
-      due.push(pl);
-      continue;
-    }
-    const t = Date.parse(row.next_scrape_at);
-    if (Number.isNaN(t) || t <= nowMs) due.push(pl);
+    if (!isPlatformDueForScheduledScrape(row, nowMs)) continue;
+    due.push(row.platform as InitialScrapePlatform);
   }
   return due;
 }

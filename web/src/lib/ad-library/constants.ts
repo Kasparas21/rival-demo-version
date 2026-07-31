@@ -69,6 +69,9 @@ export const CLASSIFICATION_REVIEW_INTERVAL_DAYS = 30;
 /** Days between INACTIVE monthly probes. */
 export const INACTIVE_PROBE_INTERVAL_DAYS = 30;
 
+/** Meta Ad Library rescrape cadence for all scheduled refreshes (independent of classification). */
+export const META_SCHEDULED_REFRESH_INTERVAL_DAYS = 3;
+
 type CadencePlatform = InitialScrapePlatform;
 
 export const PRIMARY_SECONDARY_REFRESH_INTERVAL_DAYS: Record<CadencePlatform, number> = {

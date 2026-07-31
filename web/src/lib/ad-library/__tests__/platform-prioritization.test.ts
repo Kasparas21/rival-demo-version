@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeNextScrapeAt,
   computePlatformTracking,
+  isPlatformDueForScheduledScrape,
   reclassifyPlatform,
   refreshIntervalDaysForClassification,
 } from "@/lib/ad-library/platform-prioritization";
@@ -16,13 +17,50 @@ describe("refreshIntervalDaysForClassification", () => {
     expect(refreshIntervalDaysForClassification("pinterest", "PRIMARY")).toBe(21);
   });
 
-  it("doubles interval for MINIMAL", () => {
-    expect(refreshIntervalDaysForClassification("meta", "MINIMAL")).toBe(6);
+  it("keeps Meta on a fixed 3-day cadence regardless of classification", () => {
+    expect(refreshIntervalDaysForClassification("meta", "MINIMAL")).toBe(3);
+    expect(refreshIntervalDaysForClassification("meta", "INACTIVE")).toBe(3);
+  });
+
+  it("doubles interval for MINIMAL on non-Meta platforms", () => {
+    expect(refreshIntervalDaysForClassification("google", "MINIMAL")).toBe(6);
     expect(refreshIntervalDaysForClassification("tiktok", "MINIMAL")).toBe(14);
   });
 
-  it("uses monthly probe for INACTIVE", () => {
-    expect(refreshIntervalDaysForClassification("meta", "INACTIVE")).toBe(30);
+  it("uses monthly probe for INACTIVE non-Meta platforms", () => {
+    expect(refreshIntervalDaysForClassification("google", "INACTIVE")).toBe(30);
+  });
+});
+
+describe("isPlatformDueForScheduledScrape", () => {
+  it("treats Meta as due when last scrape was 3+ days ago even if next_scrape_at is later", () => {
+    const nowMs = Date.parse("2026-07-31T12:00:00.000Z");
+    expect(
+      isPlatformDueForScheduledScrape(
+        {
+          platform: "meta",
+          classification: "INACTIVE",
+          last_scrape_at: "2026-07-27T12:00:00.000Z",
+          next_scrape_at: "2026-08-26T12:00:00.000Z",
+        },
+        nowMs,
+      ),
+    ).toBe(true);
+  });
+
+  it("does not treat Meta as due when last scrape was within 3 days", () => {
+    const nowMs = Date.parse("2026-07-31T12:00:00.000Z");
+    expect(
+      isPlatformDueForScheduledScrape(
+        {
+          platform: "meta",
+          classification: "PRIMARY",
+          last_scrape_at: "2026-07-30T12:00:00.000Z",
+          next_scrape_at: "2026-08-02T12:00:00.000Z",
+        },
+        nowMs,
+      ),
+    ).toBe(false);
   });
 });
 

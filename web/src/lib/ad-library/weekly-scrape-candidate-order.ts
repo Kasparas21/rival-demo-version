@@ -1,5 +1,7 @@
 import type { Database } from "@/lib/supabase/types";
 import type { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { userAllowsScheduledAdsScrape } from "@/lib/billing/scrape-eligibility";
+import { isPlatformDueForScheduledScrape } from "./platform-prioritization";
 import { filterWeeklyScrapeCandidates } from "./weekly-scrape-candidates";
 
 type ScheduledScrapeRow = Database["public"]["Tables"]["saved_competitors"]["Row"];
@@ -15,13 +17,13 @@ export async function competitorIdsWithDuePlatforms(
 
   const { data: trackingRows } = await admin
     .from("competitor_platform_tracking")
-    .select("competitor_id, next_scrape_at")
+    .select("competitor_id, platform, classification, next_scrape_at, last_scrape_at")
     .in("competitor_id", competitorIds);
 
-  const byCompetitor = new Map<string, { next_scrape_at: string | null }[]>();
+  const byCompetitor = new Map<string, typeof trackingRows>();
   for (const row of trackingRows ?? []) {
     const list = byCompetitor.get(row.competitor_id) ?? [];
-    list.push({ next_scrape_at: row.next_scrape_at });
+    list.push(row);
     byCompetitor.set(row.competitor_id, list);
   }
 
@@ -32,14 +34,34 @@ export async function competitorIdsWithDuePlatforms(
       due.add(id);
       continue;
     }
-    const hasDue = rows.some((r) => {
-      if (!r.next_scrape_at) return true;
-      const t = Date.parse(r.next_scrape_at);
-      return Number.isNaN(t) || t <= nowMs;
-    });
+    const hasDue = rows.some((r) =>
+      isPlatformDueForScheduledScrape(
+        {
+          platform: r.platform,
+          classification: r.classification as "PRIMARY" | "SECONDARY" | "MINIMAL" | "INACTIVE",
+          next_scrape_at: r.next_scrape_at,
+          last_scrape_at: r.last_scrape_at,
+        },
+        nowMs,
+      ),
+    );
     if (hasDue) due.add(id);
   }
   return due;
+}
+
+async function filterRowsForScheduledScrapeAllowed(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  rows: ScheduledScrapeRow[],
+): Promise<ScheduledScrapeRow[]> {
+  const userIds = [...new Set(rows.map((r) => r.user_id))];
+  const allowedByUser = new Map<string, boolean>();
+  await Promise.all(
+    userIds.map(async (userId) => {
+      allowedByUser.set(userId, await userAllowsScheduledAdsScrape(admin, userId));
+    }),
+  );
+  return rows.filter((row) => allowedByUser.get(row.user_id) === true);
 }
 
 export async function loadOrderedWeeklyScrapeCandidates(
@@ -50,6 +72,8 @@ export async function loadOrderedWeeklyScrapeCandidates(
 ): Promise<ScheduledScrapeRow[]> {
   const nowMs = opts?.nowMs ?? Date.now();
   const candidates = filterWeeklyScrapeCandidates(savedRows);
+  const scheduledCandidates = await filterRowsForScheduledScrapeAllowed(admin, candidates);
+  if (scheduledCandidates.length === 0) return [];
 
   const { data: doneToday } = await admin
     .from("weekly_scrape_jobs")
@@ -75,7 +99,7 @@ export async function loadOrderedWeeklyScrapeCandidates(
 
   const runningIds = new Set((runningRecent ?? []).map((r) => r.competitor_id));
 
-  const eligible = candidates.filter((r) => !doneTodaySkipIds.has(r.id) && !runningIds.has(r.id));
+  const eligible = scheduledCandidates.filter((r) => !doneTodaySkipIds.has(r.id) && !runningIds.has(r.id));
   if (eligible.length === 0) return [];
 
   const dueEligibleIds = await competitorIdsWithDuePlatforms(

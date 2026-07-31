@@ -205,6 +205,7 @@ async function runWeeklyJobForRow(
         platform: r.platform,
         classification: r.classification as PlatformClassification,
         next_scrape_at: r.next_scrape_at,
+        last_scrape_at: r.last_scrape_at,
         high_coverage_demoted: r.high_coverage_demoted,
       })),
       spDisabled,
