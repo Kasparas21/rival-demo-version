@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import {
   applyTesterInviteCookieFromRequest,
   matchesTesterInviteCode,
@@ -40,7 +40,7 @@ function clearTesterInviteCookie(response: NextResponse): void {
   });
 }
 
-export async function updateSession(request: NextRequest) {
+export async function updateSession(request: NextRequest, event?: NextFetchEvent) {
   const testerParam = request.nextUrl.searchParams.get("tester")?.trim();
   if (testerParam && testerParam !== "1") {
     return applyTesterInviteCookieFromRequest(request, NextResponse.next({ request }));
@@ -156,19 +156,17 @@ export async function updateSession(request: NextRequest) {
       return gated;
     }
 
-    if (profile.onboarding_completed) {
-      const billing = await getBillingEntitlement(supabase, user.id);
-      const isWorkspaceBrandScrape =
-        pathname.startsWith("/dashboard/searching") &&
-        request.nextUrl.searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
-      if (shouldShowAwaitingQuotePage(billing) && !isWorkspaceBrandScrape) {
-        const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = "/awaiting-quote";
-        redirectUrl.searchParams.set("next", `${pathname}${search}`);
-        const gated = NextResponse.redirect(redirectUrl);
-        cookieJarMerge(response, gated);
-        return gated;
-      }
+    const billing = await getBillingEntitlement(supabase, user.id);
+    const isWorkspaceBrandScrape =
+      pathname.startsWith("/dashboard/searching") &&
+      request.nextUrl.searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
+    if (shouldShowAwaitingQuotePage(billing) && !isWorkspaceBrandScrape) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/awaiting-quote";
+      redirectUrl.searchParams.set("next", `${pathname}${search}`);
+      const gated = NextResponse.redirect(redirectUrl);
+      cookieJarMerge(response, gated);
+      return gated;
     }
   }
 
@@ -183,7 +181,12 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && pathname.startsWith("/dashboard")) {
-    await recordUserDailyActivity(supabase, user.id);
+    const activityPromise = recordUserDailyActivity(supabase, user.id);
+    if (event?.waitUntil) {
+      event.waitUntil(activityPromise);
+    } else {
+      await activityPromise;
+    }
   }
 
   return response;

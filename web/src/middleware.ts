@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import type { NextFetchEvent, NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 import { POSTHOG_DISTINCT_ID_HEADER } from "@/lib/analytics/posthog-config";
@@ -136,14 +136,14 @@ function isLocalePath(pathname: string) {
   return pathname.startsWith("/blog");
 }
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
 
   if (isLocalePath(pathname)) {
     return handleHomeLocale(request);
   }
 
-  return applyPostHogDistinctIdCookie(request, await updateSession(request));
+  return applyPostHogDistinctIdCookie(request, await updateSession(request, event));
 }
 
 export const config = {
