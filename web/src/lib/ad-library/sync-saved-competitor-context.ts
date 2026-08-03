@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { filterPlatformIdsToEnabledChannels } from "./channels-to-platforms";
 import type { AdsLibraryIds } from "./run-ads-library-parallel-scrape";
 import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { resolveAdsCacheDomainForUser } from "./competitor-cache-domain";
@@ -39,19 +40,23 @@ export async function syncSavedCompetitorLibraryContext(
       ? (prev.ids as Record<string, string>)
       : {};
 
-  const mergedIds = { ...prevIds };
-  if (params.ids) {
-    for (const [k, v] of Object.entries(params.ids)) {
-      if (typeof v === "string" && v.trim()) mergedIds[k] = v.trim();
-    }
-  }
-
   const channels =
     params.channels?.length
       ? params.channels
       : Array.isArray(prev.channels)
         ? (prev.channels as string[])
         : undefined;
+
+  let mergedIds = { ...prevIds };
+  if (params.ids) {
+    for (const [k, v] of Object.entries(params.ids)) {
+      if (typeof v === "string" && v.trim()) mergedIds[k] = v.trim();
+    }
+  }
+  if (channels?.length) {
+    const filtered = filterPlatformIdsToEnabledChannels(mergedIds, channels.join(","));
+    mergedIds = filtered ?? {};
+  }
 
   const nextContext: Record<string, Json> = {
     ...(Object.keys(mergedIds).length > 0 ? { ids: mergedIds as Json } : {}),

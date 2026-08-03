@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
+import { ALL_ADS_API_PLATFORMS, adsPlatformsFromLibraryContext, libraryContextChannelsCsv, filterPlatformIdsToEnabledChannels } from "@/lib/ad-library/channels-to-platforms";
 import type { AdsLibraryPlatform } from "@/lib/ad-library/api-types";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import {
@@ -200,14 +200,20 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const displayName = row.brand_name?.trim() || row.name?.trim() || domainClean;
-  const ids = idsFromAdsLibraryContext(row.ads_library_context);
+  const rawIds = idsFromAdsLibraryContext(row.ads_library_context);
+  const channelsCsv = libraryContextChannelsCsv(row.ads_library_context);
+  const ids = (
+    channelsCsv
+      ? filterPlatformIdsToEnabledChannels(rawIds, channelsCsv)
+      : rawIds
+  ) as AdsLibraryIds;
   const scrapeRegions = resolveScheduledScrapeRegions(domainClean, row.ads_library_context);
   const adsPerPlatform = Math.max(
     1,
     Math.min(billing.limits.manualRefreshAdsPerPlatform || 300, MAX_ADS),
   );
 
-  let platforms = [...ALL_ADS_API_PLATFORMS];
+  let platforms = [...adsPlatformsFromLibraryContext(row.ads_library_context)];
   const pinResolved =
     extractPinterestHandleFromUrlOrString(ids.pinterest ?? "") ||
     extractPinterestHandleFromUrlOrString(ids.pinterestAdvertiserName ?? "") ||

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_ADS_API_PLATFORMS,
+  adsPlatformsFromLibraryContext,
   channelsQueryToAdsPlatforms,
   filterPlatformIdsToEnabledChannels,
   resolveAdsPlatformsForCompetitorView,
@@ -45,6 +46,18 @@ describe("resolveCompetitorTrackedAdsPlatforms", () => {
 describe("channelsQueryToAdsPlatforms", () => {
   it("maps channel ids to API platforms", () => {
     expect(channelsQueryToAdsPlatforms(["meta", "google"])).toEqual(["meta", "google"]);
+  });
+});
+
+describe("adsPlatformsFromLibraryContext", () => {
+  it("returns only platforms listed in saved channels", () => {
+    expect(
+      adsPlatformsFromLibraryContext({ channels: ["meta"], ids: { meta: "1", google: "g" } }),
+    ).toEqual(["meta"]);
+  });
+
+  it("falls back to all platforms when channels are missing", () => {
+    expect(adsPlatformsFromLibraryContext({ ids: { google: "g" } })).toEqual(ALL_ADS_API_PLATFORMS);
   });
 });
 

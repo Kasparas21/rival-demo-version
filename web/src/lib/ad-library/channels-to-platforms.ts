@@ -38,6 +38,29 @@ export function channelsQueryToAdsPlatforms(channelIds: string[]): AdsLibraryPla
   return ALL_ADS_API_PLATFORMS.filter((p) => set.has(p));
 }
 
+/** Platforms enabled in saved `ads_library_context` (scheduled cron + manual refresh). */
+export function adsPlatformsFromLibraryContext(context: unknown): AdsLibraryPlatform[] {
+  if (context == null || typeof context !== "object" || Array.isArray(context)) {
+    return [...ALL_ADS_API_PLATFORMS];
+  }
+  const ch = (context as { channels?: unknown }).channels;
+  if (!Array.isArray(ch) || ch.length === 0) {
+    return [...ALL_ADS_API_PLATFORMS];
+  }
+  const channels = ch.filter((c): c is string => typeof c === "string" && c.trim() !== "");
+  if (channels.length === 0) return [...ALL_ADS_API_PLATFORMS];
+  return channelsQueryToAdsPlatforms(channels);
+}
+
+export function libraryContextChannelsCsv(context: unknown): string {
+  if (context == null || typeof context !== "object" || Array.isArray(context)) return "";
+  const ch = (context as { channels?: unknown }).channels;
+  if (!Array.isArray(ch)) return "";
+  return ch
+    .filter((c): c is string => typeof c === "string" && c.trim() !== "")
+    .join(",");
+}
+
 function platformHasFilledId(platform: AdsLibraryPlatform, ids: Record<string, string>): boolean {
   const pick = (key: string) => {
     const v = ids[key];

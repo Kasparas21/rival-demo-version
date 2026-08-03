@@ -1,6 +1,6 @@
 import { after } from "next/server";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
-import { ALL_ADS_API_PLATFORMS, channelsQueryToAdsPlatforms } from "@/lib/ad-library/channels-to-platforms";
+import { adsPlatformsFromLibraryContext } from "@/lib/ad-library/channels-to-platforms";
 import { classifyCompetitorPlatforms } from "@/lib/ad-library/classify-competitor-platforms";
 import type { InitialScrapePlatform } from "@/lib/ad-library/constants";
 import { finalizeAdsLibraryAfterFreshScrape } from "@/lib/ad-library/finalize-ads-library-scrape";
@@ -53,16 +53,7 @@ function cleanDomain(d: string): string {
 function platformsFromSavedContext(
   adsLibraryContext: Database["public"]["Tables"]["saved_competitors"]["Row"]["ads_library_context"]
 ): Set<AdsLibraryPlatform> {
-  if (adsLibraryContext == null || typeof adsLibraryContext !== "object" || Array.isArray(adsLibraryContext)) {
-    return new Set(ALL_ADS_API_PLATFORMS);
-  }
-  const ch = (adsLibraryContext as { channels?: unknown }).channels;
-  if (!Array.isArray(ch) || ch.length === 0) {
-    return new Set(ALL_ADS_API_PLATFORMS);
-  }
-  const channels = ch.filter((c): c is string => typeof c === "string" && c.trim() !== "");
-  if (channels.length === 0) return new Set(ALL_ADS_API_PLATFORMS);
-  return new Set(channelsQueryToAdsPlatforms(channels));
+  return new Set(adsPlatformsFromLibraryContext(adsLibraryContext));
 }
 
 function idsFromAdsContext(
