@@ -3,6 +3,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { formatToolError, formatToolResult } from "@/lib/mcp/errors";
 import { logMcpCall } from "@/lib/mcp/logging";
+import { AD_GALLERY_TOOL_META, AD_GALLERY_UI_URI, MCP_AD_GALLERY_MIME, adGalleryHtml } from "@/lib/mcp/ad-gallery-app";
+import { getMcpAppOrigin } from "@/lib/mcp/oauth/app-origin";
 import {
   mcpIncludeFullCopySchema,
   mcpIncludeVisualsSchema,
@@ -89,7 +91,7 @@ export function registerMcpTools(
     {
       title: "Get competitor ads",
       description:
-        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort: newest, oldest, longest_running, impressions (Meta impression band, high first), or ultimate_winner (combines high impressions + long runtime). Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url, platform_library_url, image_url, video_url, impressions_index (Meta), and is_ultimate_winner when it qualifies. include_visuals (default true) inlines up to 4 creative images/poster frames in the tool result so they appear in chat. Use get_ad_creative for specific ads.`,
+        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort: newest, oldest, longest_running, impressions (Meta impression band, high first), or ultimate_winner (combines high impressions + long runtime). Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url, platform_library_url, image_url, video_url, impressions_index (Meta), and is_ultimate_winner when it qualifies. include_visuals (default true) renders up to 12 creatives as an inline gallery in the chat. Use get_ad_creative to show specific ads.`,
       inputSchema: {
         competitor: z.string().min(1).describe("Competitor name, domain, or UUID"),
         platform: z.string().optional(),
@@ -102,6 +104,7 @@ export function registerMcpTools(
         include_full_copy: mcpIncludeFullCopySchema(),
         include_visuals: mcpIncludeVisualsSchema(),
       },
+      _meta: AD_GALLERY_TOOL_META,
     },
     async (input) => {
       const ctx = await buildContext();
@@ -114,19 +117,19 @@ export function registerMcpTools(
     {
       title: "Get ad creative",
       description:
-        "Download and display the actual ad creative in chat (image, or video poster/thumbnail). " +
-        "Pass ad_id from get_competitor_ads / discovery / saved ads (scraped_ads UUID or saved ad id). " +
-        "Up to 4 ads per call via ad_ids. Returns MCP image content so the creative is visible to you and the user. " +
-        "For video ads the playable video_url is included and the poster frame is inlined. " +
-        "Use this whenever the user wants to see or visually analyze an ad — do not only return the platform library URL.",
+        "Download and display ad creatives as an inline image gallery in the chat (the pictures appear in the message, not only as links). " +
+        "Pass ad_id from get_competitor_ads / discovery / saved ads. Up to 12 ads via ad_ids. " +
+        "Video ads show the poster frame in the gallery plus video_url in the JSON. " +
+        "Use this whenever the user wants to see the ads. Do not answer with library links only.",
       inputSchema: {
         ad_id: z.string().optional().describe("scraped_ads UUID, or a saved_ads UUID"),
         ad_ids: z
           .array(z.string().min(1))
-          .max(4)
+          .max(12)
           .optional()
-          .describe("Additional ad UUIDs (combined with ad_id, max 4 total)"),
+          .describe("Additional ad UUIDs (combined with ad_id, max 12 total)"),
       },
+      _meta: AD_GALLERY_TOOL_META,
     },
     async (input) => {
       const ctx = await buildContext();
@@ -401,6 +404,7 @@ export function registerMcpTools(
         include_full_copy: mcpIncludeFullCopySchema(),
         include_visuals: mcpIncludeVisualsSchema(),
       },
+      _meta: AD_GALLERY_TOOL_META,
     },
     async (input) => {
       const ctx = await buildContext();
@@ -431,6 +435,7 @@ export function registerMcpTools(
         include_full_copy: mcpIncludeFullCopySchema(),
         include_visuals: mcpIncludeVisualsSchema(),
       },
+      _meta: AD_GALLERY_TOOL_META,
     },
     async (input) => {
       const ctx = await buildContext();
@@ -515,17 +520,50 @@ export function registerMcpTools(
     {
       title: "Get discovery ad",
       description:
-        "Fetch one Meta ad from Discovery by scraped_ads UUID. Returns full copy, performance signals, links, and inlines the creative image (or video poster) in chat so you can see it. Set include_visuals=false for metadata only.",
+        "Fetch one Meta ad from Discovery by scraped_ads UUID. Renders the creative in an inline chat gallery. Set include_visuals=false for metadata only.",
       inputSchema: {
         ad_id: z.string().min(1),
         brand_id: z.string().optional(),
         include_full_copy: mcpIncludeFullCopySchema(),
         include_visuals: mcpIncludeVisualsSchema(),
       },
+      _meta: AD_GALLERY_TOOL_META,
     },
     async (input) => {
       const ctx = await buildContext();
       return runTool("get_discovery_ad", ctx, (c) => mcpGetDiscoveryAd(c, input));
+    },
+  );
+
+  server.registerResource(
+    "Ad gallery",
+    AD_GALLERY_UI_URI,
+    {
+      description: "Inline gallery of competitor ad creatives shown in the chat.",
+      mimeType: MCP_AD_GALLERY_MIME,
+    },
+    async () => {
+      let origin = "https://spy-rival.com";
+      try {
+        origin = getMcpAppOrigin();
+      } catch {
+        origin = "https://spy-rival.com";
+      }
+      return {
+        contents: [
+          {
+            uri: AD_GALLERY_UI_URI,
+            mimeType: MCP_AD_GALLERY_MIME,
+            text: adGalleryHtml(),
+            _meta: {
+              ui: {
+                csp: { resourceDomains: ["https://unpkg.com", origin] },
+                prefersBorder: true,
+              },
+            },
+          },
+        ],
+      };
     },
   );
 }

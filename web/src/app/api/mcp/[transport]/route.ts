@@ -34,9 +34,9 @@ function buildHandler(auth: McpAuthContext) {
         "Dashboard parity tools: get_organic_posts (view=insights), get_email_intelligence (view=insights|detail), " +
         "get_landing_pages (url for ads-on-page), get_journey_goal (full map terminal goal + evidence), get_competitor_moves, " +
         "get_saved_ads (your bookmarked ad snapshots).\n\n" +
-        "Ad creatives: list tools include image_url and video_url. To DISPLAY an ad in chat and visually analyze it, call get_ad_creative with the ad id (up to 4). " +
-        "That returns the actual image (poster frame for video ads) as MCP image content. get_discovery_ad and get_competitor_ads / discovery search+feed also inline up to 4 creatives by default (include_visuals=true). " +
-        "Never answer a 'show me the ad' request with only a library URL when the creative can be loaded.\n\n" +
+        "Ad creatives: get_ad_creative, get_competitor_ads, and the discovery ad tools render an inline image gallery in the chat (MCP App), the same way a media viewer shows pictures in the message. " +
+        "Pass up to 12 ad ids to get_ad_creative when the user wants to see specific ads. Video ads show the poster frame in that gallery. " +
+        "Do not answer a request to see ads with only library links — the gallery is the visual.\n\n" +
         "Discovery tools (Meta ads across all tracked competitors in a client workspace): search_discovery_ads (keyword search with filters), " +
         "get_discovery_feed (browse/sort/filter), get_discovery_market_stats (market pulse), get_discovery_patterns (weekly AI pattern report), " +
         "analyze_discovery_keywords (term frequency), get_discovery_competitors (per-competitor breakdown), get_discovery_ad (single ad by UUID, inlines creative). " +

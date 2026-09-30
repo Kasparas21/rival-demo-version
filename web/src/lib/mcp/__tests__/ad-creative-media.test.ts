@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { MCP_VISUALS_KEY, resolveMcpAdCreativeRefs, toFetchableHttpUrl } from "@/lib/mcp/ad-creative-media";
+import { MCP_STRUCTURED_KEY } from "@/lib/mcp/ad-gallery-app";
+import { signAdImageToken, verifyAdImageToken } from "@/lib/mcp/ad-image-token";
 import { formatToolResult } from "@/lib/mcp/errors";
 
 describe("toFetchableHttpUrl", () => {
@@ -57,6 +59,19 @@ describe("resolveMcpAdCreativeRefs", () => {
   });
 });
 
+describe("ad image tokens", () => {
+  it("round-trips a signed preview token", () => {
+    process.env.SUPABASE_SECRET_KEY = "test-secret";
+    const token = signAdImageToken("user-1", "ad-1", 1_700_000_000_000);
+    expect(verifyAdImageToken(token, 1_700_000_000_000)).toMatchObject({
+      u: "user-1",
+      a: "ad-1",
+    });
+    expect(verifyAdImageToken(token, 1_700_000_000_000 + 7 * 60 * 60 * 1000)).toBeNull();
+    expect(verifyAdImageToken(`${token}x`, 1_700_000_000_000)).toBeNull();
+  });
+});
+
 describe("formatToolResult", () => {
   it("keeps json-only tool results as a single text block", () => {
     const result = formatToolResult({ ok: true, ads: [{ id: "1" }] });
@@ -83,5 +98,18 @@ describe("formatToolResult", () => {
       data: "abc123",
       mimeType: "image/jpeg",
     });
+  });
+
+  it("passes gallery structured content through and strips the private key", () => {
+    const gallery = { title: "Ad creatives", ads: [{ id: "1", image_url: "https://spy-rival.com/api/mcp/ad-image?token=abc" }] };
+    const result = formatToolResult({
+      ok: true,
+      gallery: gallery.ads,
+      [MCP_STRUCTURED_KEY]: gallery,
+    });
+    expect(result.structuredContent).toEqual(gallery);
+    const parsed = JSON.parse((result.content[0] as { text: string }).text) as Record<string, unknown>;
+    expect(parsed[MCP_STRUCTURED_KEY]).toBeUndefined();
+    expect(parsed.gallery).toEqual(gallery.ads);
   });
 });

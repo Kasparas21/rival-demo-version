@@ -1,7 +1,8 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { paginateInMemory, parseMcpPage, MCP_PAGE_MAX } from "@/lib/mcp/pagination";
-import { withFetchedImageUrlVisuals } from "@/lib/mcp/ad-creative-media";
+import { MCP_AD_GALLERY_MAX, attachAdGallery, galleryCaption, type AdGalleryCard } from "@/lib/mcp/ad-gallery-app";
+import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import {
   analyzeDiscoveryKeywords,
@@ -27,15 +28,24 @@ function discoveryDashboardUrl(appOrigin: string): string {
   return `${appOrigin.replace(/\/$/, "")}/dashboard/discovery`;
 }
 
-async function withOptionalAdVisuals<T extends Record<string, unknown> & { ads?: Array<{ image_url?: string | null }> }>(
+function withOptionalAdVisuals<T extends Record<string, unknown> & { ads?: Array<{ id?: string; competitor_name?: string; ad_text?: string; format?: string; image_url?: string | null; video_url?: string | null }> }>(
+  ctx: McpToolContext,
   payload: T,
   includeVisuals: boolean | undefined,
-): Promise<T> {
+): T {
   if (includeVisuals === false) return payload;
-  return withFetchedImageUrlVisuals(
-    payload,
-    (payload.ads ?? []).map((ad) => ad.image_url),
-  ) as Promise<T>;
+  const cards: AdGalleryCard[] = [];
+  for (const ad of payload.ads ?? []) {
+    if (!ad.image_url || !ad.id || cards.length >= MCP_AD_GALLERY_MAX) continue;
+    cards.push({
+      id: ad.id,
+      competitor: ad.competitor_name ?? "Ad",
+      caption: galleryCaption(ad.ad_text),
+      format: ad.video_url ? "video" : (ad.format ?? "image"),
+      image_url: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, ad.id),
+    });
+  }
+  return attachAdGallery(payload, cards) as T;
 }
 
 function normalizeSort(sort?: string): DiscoverySortInput {
@@ -111,6 +121,7 @@ export async function mcpSearchDiscoveryAds(
   if ("error" in result) throw new McpToolError("invalid_input", result.error);
 
   return withOptionalAdVisuals(
+    ctx,
     mcpSuccess({
       brand_id: brandId,
       query: needle,
@@ -178,6 +189,7 @@ export async function mcpGetDiscoveryFeed(
   if ("error" in result) throw new McpToolError("invalid_input", result.error);
 
   return withOptionalAdVisuals(
+    ctx,
     mcpSuccess({
       brand_id: brandId,
       ads: result.ads,
@@ -320,6 +332,14 @@ export async function mcpGetDiscoveryAd(
     ad: { ...ad, ad_text: copy.ad_text, truncated: copy.truncated },
     dashboard_url: ad.spy_rival_url,
   });
-  if (input.include_visuals === false) return payload;
-  return withFetchedImageUrlVisuals(payload, [ad.image_url]);
+  if (input.include_visuals === false || !ad.image_url) return payload;
+  return attachAdGallery(payload, [
+    {
+      id: ad.id,
+      competitor: ad.competitor_name,
+      caption: galleryCaption(copy.ad_text),
+      format: ad.video_url ? "video" : ad.format,
+      image_url: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, ad.id),
+    },
+  ]);
 }

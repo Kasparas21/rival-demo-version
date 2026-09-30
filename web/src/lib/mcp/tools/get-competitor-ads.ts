@@ -10,7 +10,9 @@ import { requireCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
-import { mcpCreativeFields, withFetchedAdVisuals } from "@/lib/mcp/ad-creative-media";
+import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
+import { attachAdGallery, galleryCaption, type AdGalleryCard } from "@/lib/mcp/ad-gallery-app";
+import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import {
   extractImpressionsIndex,
@@ -77,6 +79,7 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
 
   const { items: pageRows, pagination } = paginateInMemory(sorted, limit, offset);
 
+  const gallery: AdGalleryCard[] = [];
   const rows = pageRows.map((a) => {
     const copy = formatAdCopyForMcp(a.ad_text ?? "", input.include_full_copy);
     const links = mcpAdLinksForScrapedRow(
@@ -119,6 +122,17 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
     };
   });
 
+  for (const row of rows) {
+    if (!row.image_url || gallery.length >= 12) continue;
+    gallery.push({
+      id: row.id,
+      competitor: comp.name,
+      caption: galleryCaption(row.ad_text),
+      format: row.video_url ? "video" : (row.format ?? "image"),
+      image_url: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, row.id),
+    });
+  }
+
   const payload = mcpSuccess({
     competitor: { id: comp.id, name: comp.name, domain: comp.domain },
     sort,
@@ -129,16 +143,5 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
   });
 
   if (input.include_visuals === false) return payload;
-  return withFetchedAdVisuals(
-    payload,
-    pageRows.map((a) => ({
-      id: a.id,
-      platform: a.platform,
-      format: a.format,
-      ad_creative_url: a.ad_creative_url,
-      archived_creative_url: a.archived_creative_url,
-      raw_payload: a.raw_payload,
-    })),
-    ctx.auth.appOrigin,
-  );
+  return attachAdGallery(payload, gallery);
 }

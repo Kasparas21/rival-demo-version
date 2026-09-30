@@ -1,11 +1,7 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
-import {
-  MCP_MAX_INLINE_VISUALS,
-  MCP_VISUALS_KEY,
-  fetchAdCreativeVisual,
-  type McpAdCreativeSource,
-  type McpImageContentBlock,
-} from "@/lib/mcp/ad-creative-media";
+import { MCP_AD_GALLERY_MAX, attachAdGallery, galleryCaption, type AdGalleryCard } from "@/lib/mcp/ad-gallery-app";
+import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
+import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
@@ -36,7 +32,7 @@ function uniqueIds(input: GetAdCreativeInput): string[] {
   const raw = [input.ad_id, ...(input.ad_ids ?? [])]
     .map((id) => id?.trim() ?? "")
     .filter(Boolean);
-  return [...new Set(raw)].slice(0, MCP_MAX_INLINE_VISUALS);
+  return [...new Set(raw)].slice(0, MCP_AD_GALLERY_MAX);
 }
 
 function asSource(row: {
@@ -46,7 +42,7 @@ function asSource(row: {
   ad_creative_url: string | null;
   archived_creative_url?: string | null;
   raw_payload: unknown;
-}): McpAdCreativeSource {
+}) {
   return {
     id: row.id,
     platform: row.platform,
@@ -121,7 +117,7 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
   }
 
   const ads: Array<Record<string, unknown>> = [];
-  const visuals: McpImageContentBlock[] = [];
+  const gallery: AdGalleryCard[] = [];
 
   for (const id of ids) {
     const scraped = scrapedById.get(id);
@@ -138,8 +134,19 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
     }
 
     const source = asSource(row);
-    const { refs, image } = await fetchAdCreativeVisual(source, ctx.auth.appOrigin);
-    if (image) visuals.push(image);
+    const refs = mcpCreativeFields(source, ctx.auth.appOrigin);
+    const previewUrl = refs.image_url
+      ? mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, row.id)
+      : null;
+    if (previewUrl) {
+      gallery.push({
+        id: row.id,
+        competitor: competitorById.get(row.competitor_id)?.name ?? "Ad",
+        caption: galleryCaption(row.ad_text),
+        format: refs.visual_kind === "video" ? "video" : (row.format ?? "image"),
+        image_url: previewUrl,
+      });
+    }
 
     const competitor = competitorById.get(row.competitor_id);
     const links = mcpAdLinksForScrapedRow(
@@ -162,32 +169,27 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
       platform: row.platform,
       format: row.format,
       visual_kind: refs.visual_kind,
-      image_url: refs.image_url,
+      image_url: previewUrl ?? refs.image_url,
       video_url: refs.video_url,
-      visual_inlined: Boolean(image),
+      shown_in_chat_gallery: Boolean(previewUrl),
       ad_text: copy.ad_text,
       truncated: copy.truncated,
       spy_rival_url: links.spy_rival_url,
       platform_library_url: links.platform_library_url,
-      note:
-        refs.visual_kind === "video"
-          ? image
-            ? "Video ads are inlined as the poster/thumbnail image so the creative is visible in chat. video_url is the playable file."
-            : "This is a video ad. No still image could be inlined; use video_url."
-          : image
-            ? "Creative image is attached to this tool result and visible in chat."
-            : refs.image_url
-              ? "Creative URL is known but the file could not be downloaded."
-              : "No creative image is stored for this ad.",
+      note: previewUrl
+        ? "Creative is rendered in the inline chat gallery above this tool result. Describe the image the user can see. Do not answer with links only."
+        : "No still image is stored for this ad.",
     });
   }
 
-  const payload = mcpSuccess({
-    ads,
-    inlined_count: visuals.length,
-    hint: "Attached images appear in the same order as ads where visual_inlined=true. Analyze the pixels (layout, product, on-image text, people, offer cues) — do not only read the library URL.",
-  });
-
-  if (!visuals.length) return payload;
-  return { ...payload, [MCP_VISUALS_KEY]: visuals };
+  return attachAdGallery(
+    mcpSuccess({
+      ads,
+      gallery_count: gallery.length,
+      hint: gallery.length
+        ? "An inline image gallery is rendered in the chat for these creatives. Do not replace it with a list of links."
+        : "No creative image could be resolved for these ads.",
+    }),
+    gallery,
+  );
 }

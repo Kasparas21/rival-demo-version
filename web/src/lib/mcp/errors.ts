@@ -1,4 +1,5 @@
 import { MCP_VISUALS_KEY, type McpImageContentBlock } from "@/lib/mcp/ad-creative-media";
+import { MCP_STRUCTURED_KEY } from "@/lib/mcp/ad-gallery-app";
 import type { McpErrorCode, McpToolErrorBody } from "@/lib/mcp/types";
 
 export class McpToolError extends Error {
@@ -32,33 +33,46 @@ type McpToolContent = McpTextContent | McpImageContentBlock;
 function stripMcpVisuals(data: unknown): {
   json: unknown;
   visuals: McpImageContentBlock[];
+  structuredContent?: Record<string, unknown>;
 } {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     return { json: data, visuals: [] };
   }
   const record = data as Record<string, unknown>;
+  const rawStructured = record[MCP_STRUCTURED_KEY];
+  const structuredContent =
+    rawStructured && typeof rawStructured === "object" && !Array.isArray(rawStructured)
+      ? (rawStructured as Record<string, unknown>)
+      : undefined;
   const rawVisuals = record[MCP_VISUALS_KEY];
-  if (!Array.isArray(rawVisuals) || rawVisuals.length === 0) {
+  const visuals = Array.isArray(rawVisuals)
+    ? rawVisuals.filter((block): block is McpImageContentBlock => {
+        return (
+          Boolean(block) &&
+          typeof block === "object" &&
+          (block as McpImageContentBlock).type === "image" &&
+          typeof (block as McpImageContentBlock).data === "string" &&
+          typeof (block as McpImageContentBlock).mimeType === "string"
+        );
+      })
+    : [];
+  if (!visuals.length && !structuredContent) {
     return { json: data, visuals: [] };
   }
-  const visuals = rawVisuals.filter((block): block is McpImageContentBlock => {
-    return (
-      Boolean(block) &&
-      typeof block === "object" &&
-      (block as McpImageContentBlock).type === "image" &&
-      typeof (block as McpImageContentBlock).data === "string" &&
-      typeof (block as McpImageContentBlock).mimeType === "string"
-    );
-  });
-  const { [MCP_VISUALS_KEY]: _omitted, ...rest } = record;
-  void _omitted;
-  return { json: rest, visuals };
+  const rest = { ...record };
+  delete rest[MCP_VISUALS_KEY];
+  delete rest[MCP_STRUCTURED_KEY];
+  return { json: rest, visuals, structuredContent };
 }
 
-export function formatToolResult(data: unknown): { content: McpToolContent[] } {
-  const { json, visuals } = stripMcpVisuals(data);
+export function formatToolResult(data: unknown): {
+  content: McpToolContent[];
+  structuredContent?: Record<string, unknown>;
+} {
+  const { json, visuals, structuredContent } = stripMcpVisuals(data);
   return {
     content: [{ type: "text", text: JSON.stringify(json) }, ...visuals],
+    ...(structuredContent ? { structuredContent } : {}),
   };
 }
 
