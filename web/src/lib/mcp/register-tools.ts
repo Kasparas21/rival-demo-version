@@ -558,7 +558,8 @@ export function registerMcpTools(
             _meta: {
               ui: {
                 csp: { resourceDomains: ["https://unpkg.com", origin] },
-                prefersBorder: true,
+                permissions: { clipboardWrite: {} },
+                prefersBorder: false,
               },
             },
           },

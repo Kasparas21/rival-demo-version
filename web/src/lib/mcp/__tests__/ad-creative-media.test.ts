@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MCP_VISUALS_KEY, resolveMcpAdCreativeRefs, toFetchableHttpUrl } from "@/lib/mcp/ad-creative-media";
-import { MCP_STRUCTURED_KEY } from "@/lib/mcp/ad-gallery-app";
+import { MCP_STRUCTURED_KEY, attachAdGallery } from "@/lib/mcp/ad-gallery-app";
 import { signAdImageToken, verifyAdImageToken } from "@/lib/mcp/ad-image-token";
 import { formatToolResult } from "@/lib/mcp/errors";
 
@@ -111,5 +111,37 @@ describe("formatToolResult", () => {
     const parsed = JSON.parse((result.content[0] as { text: string }).text) as Record<string, unknown>;
     expect(parsed[MCP_STRUCTURED_KEY]).toBeUndefined();
     expect(parsed.gallery).toEqual(gallery.ads);
+  });
+
+  it("gives the model vision pixels and the gallery the display jpeg", () => {
+    const result = formatToolResult(
+      attachAdGallery(
+        { ok: true },
+        [
+          {
+            id: "1",
+            competitor: "Dental P.R.O.",
+            caption: "Implantation",
+            format: "image",
+            image_data: "DISPLAY",
+            vision_data: "VISION",
+            mime: "image/jpeg",
+          },
+        ],
+      ),
+    );
+    const ads = (result.structuredContent as { ads: Array<Record<string, unknown>> }).ads;
+    expect(ads[0]?.image_data).toBe("DISPLAY");
+    expect(ads[0]?.vision_data).toBeUndefined();
+    expect(JSON.stringify(result.structuredContent)).not.toContain("VISION");
+    expect(result.content[1]).toMatchObject({
+      type: "image",
+      data: "VISION",
+      mimeType: "image/jpeg",
+      annotations: { audience: ["assistant"] },
+    });
+    const parsed = JSON.parse((result.content[0] as { text: string }).text) as Record<string, unknown>;
+    expect(parsed.creative_vision_count).toBe(1);
+    expect(parsed[MCP_VISUALS_KEY]).toBeUndefined();
   });
 });

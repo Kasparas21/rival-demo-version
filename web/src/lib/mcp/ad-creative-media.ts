@@ -173,34 +173,55 @@ async function downloadImage(url: string): Promise<{ data: Buffer; mimeType: str
   }
 }
 
-const GALLERY_THUMB_BYTES = 8_000;
-
-async function toGalleryJpeg(buf: Buffer): Promise<Buffer | null> {
+async function encodeJpeg(buf: Buffer, width: number, quality: number): Promise<Buffer | null> {
   try {
     const sharp = (await import("sharp")).default;
-    const attempts = [
-      { width: 420, quality: 58 },
-      { width: 320, quality: 46 },
-      { width: 240, quality: 38 },
-    ];
-    for (const attempt of attempts) {
-      const out = await sharp(buf)
-        .rotate()
-        .resize({ width: attempt.width, height: attempt.width, fit: "inside", withoutEnlargement: true })
-        .jpeg({ quality: attempt.quality, mozjpeg: true })
-        .toBuffer();
-      if (out.byteLength > 0 && out.byteLength <= GALLERY_THUMB_BYTES) return out;
-    }
-    return null;
+    const out = await sharp(buf)
+      .rotate()
+      .resize({
+        width,
+        height: Math.round(width * 1.4),
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality, mozjpeg: true })
+      .toBuffer();
+    return out.byteLength > 0 ? out : null;
   } catch {
     return null;
   }
 }
 
-/** Small JPEG for the in-chat gallery. Embedded in the widget so Claude does not block an outside URL. */
+async function jpegUnder(buf: Buffer, maxBytes: number, widths: number[]): Promise<Buffer | null> {
+  for (const width of widths) {
+    for (const quality of [76, 66, 56, 46]) {
+      const out = await encodeJpeg(buf, width, quality);
+      if (out && out.byteLength <= maxBytes) return out;
+    }
+  }
+  return null;
+}
+
+export type GalleryJpeg = {
+  /** Sharper JPEG the chat gallery draws, expands, copies, and downloads. */
+  data: string;
+  /** JPEG the model should look at. Empty when this card is display-only. */
+  vision: string;
+  mime: "image/jpeg";
+};
+
+/**
+ * Embedded JPEGs for the in-chat gallery. Display bytes stay in the widget.
+ * Vision bytes are a separate, smaller encode so Claude can see the creative
+ * without doubling a large file into the tool result.
+ */
 export async function fetchGalleryThumbnail(
   urls: Array<string | null | undefined>,
-): Promise<{ data: string; mime: "image/jpeg" } | null> {
+  options?: { displayMaxBytes?: number; includeVision?: boolean },
+): Promise<GalleryJpeg | null> {
+  const displayMax = options?.displayMaxBytes ?? 48_000;
+  const includeVision = options?.includeVision !== false;
+  const displayWidths = displayMax > 30_000 ? [960, 760, 560] : displayMax > 16_000 ? [720, 520, 400] : [480, 360, 280];
   const seen = new Set<string>();
   for (const raw of urls) {
     const url = toFetchableHttpUrl(raw) ?? (raw?.trim().startsWith("http") ? raw.trim() : null);
@@ -208,9 +229,17 @@ export async function fetchGalleryThumbnail(
     seen.add(url);
     const media = await downloadImage(url);
     if (!media) continue;
-    const jpeg = await toGalleryJpeg(media.data);
-    if (!jpeg) continue;
-    return { data: jpeg.toString("base64"), mime: "image/jpeg" };
+    const display = await jpegUnder(media.data, displayMax, displayWidths);
+    if (!display) continue;
+    let vision = "";
+    if (includeVision) {
+      const visionBuf =
+        display.byteLength <= 32_000
+          ? display
+          : ((await jpegUnder(media.data, 32_000, [800, 640, 480])) ?? null);
+      if (visionBuf) vision = visionBuf.toString("base64");
+    }
+    return { data: display.toString("base64"), vision, mime: "image/jpeg" };
   }
   return null;
 }

@@ -179,7 +179,7 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
       spy_rival_url: links.spy_rival_url,
       platform_library_url: links.platform_library_url,
       note: refs.image_url || row.archived_creative_url || row.ad_creative_url
-        ? "Creative is rendered in the inline chat gallery above this tool result. Describe the image the user can see. Do not answer with links only."
+        ? "Creative is in the inline chat gallery. Matching assistant-only image blocks are attached to this tool result — describe what is visible in those pixels. The user can expand, copy, and download the gallery image."
         : "No still image is stored for this ad.",
     });
   }
@@ -195,7 +195,7 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
       ads,
       gallery_count: gallery.length,
       hint: gallery.length
-        ? "An inline image gallery is rendered in the chat for these creatives. Do not replace it with a list of links."
+        ? "An inline image gallery is rendered in the chat. creative_vision_count image blocks on this result are the same creatives — describe the pixels. Do not replace the gallery with a list of links, and do not claim the image was not returned."
         : "No creative image could be resolved for these ads.",
     }),
     gallery,
