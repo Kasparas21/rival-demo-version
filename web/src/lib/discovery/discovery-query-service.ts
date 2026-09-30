@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
+import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
 import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
 import { buildDiscoveryFeed, searchDiscoveryKeywordFeed } from "@/lib/discovery/build-discovery-feed";
 import { loadPatternReportHistory } from "@/lib/discovery/generate-pattern-report";
@@ -60,6 +61,9 @@ export type DiscoveryAdSummary = {
   angle: string | null;
   spy_rival_url: string;
   platform_library_url: string | null;
+  visual_kind: "image" | "video" | "none";
+  image_url: string | null;
+  video_url: string | null;
 };
 
 export type DiscoveryQueryResult = {
@@ -176,6 +180,17 @@ function summarizeAd(
     ad.id,
     ad.raw_payload,
   );
+  const creative = mcpCreativeFields(
+    {
+      id: ad.id,
+      platform: ad.platform,
+      format: ad.format,
+      ad_creative_url: ad.ad_creative_url,
+      archived_creative_url: ad.archived_creative_url,
+      raw_payload: ad.raw_payload,
+    },
+    appOrigin,
+  );
   return {
     id: ad.id,
     competitor_id: ad.competitor_id,
@@ -194,6 +209,9 @@ function summarizeAd(
     angle: null,
     spy_rival_url: links.spy_rival_url,
     platform_library_url: links.platform_library_url,
+    visual_kind: creative.visual_kind,
+    image_url: creative.image_url,
+    video_url: creative.video_url,
   };
 }
 

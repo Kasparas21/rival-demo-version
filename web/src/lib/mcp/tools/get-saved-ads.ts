@@ -2,6 +2,7 @@ import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { mcpSuccess } from "@/lib/mcp/errors";
 import { MCP_EMPTY_NO_SAVED_ADS } from "@/lib/mcp/empty-states";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
+import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
 import {
   MCP_PAGE_MAX,
   paginateInMemory,
@@ -43,7 +44,7 @@ export async function getSavedAds(ctx: McpToolContext, input: GetSavedAdsInput) 
   let q = ctx.supabase
     .from("saved_ads")
     .select(
-      "id, competitor_id, platform, format, ad_text, ai_extracted_angle, funnel_stage, notes, saved_at, source_scraped_ad_id, raw_payload, source_first_seen_at, source_last_seen_at",
+      "id, competitor_id, platform, format, ad_text, ai_extracted_angle, funnel_stage, notes, saved_at, source_scraped_ad_id, raw_payload, source_first_seen_at, source_last_seen_at, ad_creative_url, archived_creative_url",
     )
     .eq("user_id", ctx.auth.userId)
     .order("saved_at", { ascending: false })
@@ -89,6 +90,17 @@ export async function getSavedAds(ctx: McpToolContext, input: GetSavedAdsInput) 
       row.source_scraped_ad_id ?? row.id,
       row.raw_payload,
     );
+    const creative = mcpCreativeFields(
+      {
+        id: row.source_scraped_ad_id ?? row.id,
+        platform: row.platform,
+        format: row.format,
+        ad_creative_url: row.ad_creative_url,
+        archived_creative_url: row.archived_creative_url,
+        raw_payload: row.raw_payload,
+      },
+      ctx.auth.appOrigin,
+    );
     return {
       id: row.id,
       source_scraped_ad_id: row.source_scraped_ad_id,
@@ -107,6 +119,9 @@ export async function getSavedAds(ctx: McpToolContext, input: GetSavedAdsInput) 
       saved_at: row.saved_at,
       source_first_seen_at: row.source_first_seen_at,
       source_last_seen_at: row.source_last_seen_at,
+      visual_kind: creative.visual_kind,
+      image_url: creative.image_url,
+      video_url: creative.video_url,
       spy_rival_url: links.spy_rival_url,
       platform_library_url: links.platform_library_url,
     };

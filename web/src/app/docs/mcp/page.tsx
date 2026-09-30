@@ -76,6 +76,7 @@ export default function McpDocsPage() {
       <section className="mt-10 space-y-4">
         <h2 className="text-xl font-semibold text-[#111827]">What can I ask?</h2>
         <ul className="space-y-3 text-sm leading-relaxed text-[#374151]">
+          <li>Show me the actual creative for their longest-running Meta ads so I can see the image.</li>
           <li>What are my competitors&apos; longest-running ads on Meta?</li>
           <li>What angles is Acme Corp using that I&apos;m not?</li>
           <li>Any competitor moves in the last 7 days?</li>

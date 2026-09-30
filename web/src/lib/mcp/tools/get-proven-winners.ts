@@ -10,6 +10,7 @@ import { resolveCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
+import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 
 export async function getProvenWinners(
@@ -56,7 +57,7 @@ export async function getProvenWinners(
   let q = ctx.supabase
     .from("scraped_ads")
     .select(
-      "id, competitor_id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, format, raw_payload",
+      "id, competitor_id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, format, raw_payload, ad_creative_url, archived_creative_url",
     )
     .eq("user_id", ctx.auth.userId)
     .in("competitor_id", competitorIds)
@@ -90,6 +91,17 @@ export async function getProvenWinners(
         a.id,
         a.raw_payload,
       );
+      const creative = mcpCreativeFields(
+        {
+          id: a.id,
+          platform: a.platform,
+          format: a.format,
+          ad_creative_url: a.ad_creative_url,
+          archived_creative_url: a.archived_creative_url,
+          raw_payload: a.raw_payload,
+        },
+        ctx.auth.appOrigin,
+      );
       return {
         id: a.id,
         competitor_id: a.competitor_id,
@@ -102,6 +114,9 @@ export async function getProvenWinners(
         days_running: days,
         first_seen_at: a.first_seen_at,
         last_seen_at: a.last_seen_at,
+        visual_kind: creative.visual_kind,
+        image_url: creative.image_url,
+        video_url: creative.video_url,
         spy_rival_url: links.spy_rival_url,
         platform_library_url: links.platform_library_url,
       };

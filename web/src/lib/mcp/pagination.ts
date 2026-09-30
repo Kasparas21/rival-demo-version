@@ -68,3 +68,11 @@ export const mcpIncludeFullCopySchema = () =>
     .boolean()
     .optional()
     .describe("When true, return full ad copy instead of the default 300-character preview.");
+
+export const mcpIncludeVisualsSchema = (defaultTrue = true) =>
+  z
+    .boolean()
+    .optional()
+    .describe(
+      `${defaultTrue ? "Default true. " : ""}Inline ad creative images (or video poster frames) in the tool result so they appear in chat and can be visually analyzed. Max 4 images per call.`,
+    );

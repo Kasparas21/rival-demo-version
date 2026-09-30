@@ -39,10 +39,10 @@ const PLATFORMS: { id: Platform; label: string; emoji: string; needsKey: boolean
 ];
 
 const EXAMPLE_PROMPTS = [
+  "Show me the actual creatives for my competitors' longest-running Meta ads.",
   "What are my competitors' longest-running Meta ads?",
   "What angles is Acme using that I'm not?",
   "Any competitor moves in the last 7 days?",
-  "Search my copy vault for \"free trial\" messaging.",
 ];
 
 function CopyChip({

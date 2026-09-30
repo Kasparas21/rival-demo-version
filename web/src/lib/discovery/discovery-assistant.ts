@@ -241,12 +241,16 @@ async function executeDiscoveryTool(
         return await mcpSearchDiscoveryAds(ctx, {
           ...searchArgs,
           include_full_copy: true,
+          include_visuals: false,
           sort: searchArgs.sort ?? "impressions",
           limit: Math.min(Math.max(Number(searchArgs.limit) || 50, 1), 50),
         });
       }
       case "get_discovery_feed":
-        return await mcpGetDiscoveryFeed(ctx, withBrand as Parameters<typeof mcpGetDiscoveryFeed>[1]);
+        return await mcpGetDiscoveryFeed(ctx, {
+          ...(withBrand as Parameters<typeof mcpGetDiscoveryFeed>[1]),
+          include_visuals: false,
+        });
       case "get_discovery_market_stats":
         return await mcpGetDiscoveryMarketStats(ctx, withBrand as Parameters<typeof mcpGetDiscoveryMarketStats>[1]);
       case "get_discovery_patterns":
@@ -256,7 +260,10 @@ async function executeDiscoveryTool(
       case "get_discovery_competitors":
         return await mcpGetDiscoveryCompetitors(ctx, withBrand as Parameters<typeof mcpGetDiscoveryCompetitors>[1]);
       case "get_discovery_ad":
-        return await mcpGetDiscoveryAd(ctx, withBrand as Parameters<typeof mcpGetDiscoveryAd>[1]);
+        return await mcpGetDiscoveryAd(ctx, {
+          ...(withBrand as Parameters<typeof mcpGetDiscoveryAd>[1]),
+          include_visuals: false,
+        });
       default:
         return { ok: false, error: `Unknown tool: ${name}` };
     }

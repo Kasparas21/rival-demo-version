@@ -1,6 +1,7 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { paginateInMemory, parseMcpPage, MCP_PAGE_MAX } from "@/lib/mcp/pagination";
+import { withFetchedImageUrlVisuals } from "@/lib/mcp/ad-creative-media";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import {
   analyzeDiscoveryKeywords,
@@ -24,6 +25,17 @@ type DiscoveryDateInput = DiscoveryDatePreset;
 
 function discoveryDashboardUrl(appOrigin: string): string {
   return `${appOrigin.replace(/\/$/, "")}/dashboard/discovery`;
+}
+
+async function withOptionalAdVisuals<T extends Record<string, unknown> & { ads?: Array<{ image_url?: string | null }> }>(
+  payload: T,
+  includeVisuals: boolean | undefined,
+): Promise<T> {
+  if (includeVisuals === false) return payload;
+  return withFetchedImageUrlVisuals(
+    payload,
+    (payload.ads ?? []).map((ad) => ad.image_url),
+  ) as Promise<T>;
 }
 
 function normalizeSort(sort?: string): DiscoverySortInput {
@@ -60,6 +72,7 @@ export async function mcpSearchDiscoveryAds(
     limit?: number;
     offset?: number;
     include_full_copy?: boolean;
+    include_visuals?: boolean;
   },
 ) {
   const needle = input.query.trim();
@@ -97,22 +110,25 @@ export async function mcpSearchDiscoveryAds(
 
   if ("error" in result) throw new McpToolError("invalid_input", result.error);
 
-  return mcpSuccess({
-    brand_id: brandId,
-    query: needle,
-    keywords,
-    ads: result.ads,
-    market_stats: result.market_stats,
-    pagination: {
-      total: result.total,
-      offset: result.offset,
-      limit: result.limit,
-      has_more: result.has_more,
-      next_offset: result.has_more ? result.offset + result.limit : null,
-    },
-    applied_filters: result.applied_filters,
-    dashboard_url: discoveryDashboardUrl(ctx.auth.appOrigin),
-  });
+  return withOptionalAdVisuals(
+    mcpSuccess({
+      brand_id: brandId,
+      query: needle,
+      keywords,
+      ads: result.ads,
+      market_stats: result.market_stats,
+      pagination: {
+        total: result.total,
+        offset: result.offset,
+        limit: result.limit,
+        has_more: result.has_more,
+        next_offset: result.has_more ? result.offset + result.limit : null,
+      },
+      applied_filters: result.applied_filters,
+      dashboard_url: discoveryDashboardUrl(ctx.auth.appOrigin),
+    }),
+    input.include_visuals,
+  );
 }
 
 export async function mcpGetDiscoveryFeed(
@@ -130,6 +146,7 @@ export async function mcpGetDiscoveryFeed(
     limit?: number;
     offset?: number;
     include_full_copy?: boolean;
+    include_visuals?: boolean;
   },
 ) {
   const brandId = await resolveDiscoveryBrandId(ctx.supabase, ctx.auth.userId, input.brand_id);
@@ -160,21 +177,24 @@ export async function mcpGetDiscoveryFeed(
 
   if ("error" in result) throw new McpToolError("invalid_input", result.error);
 
-  return mcpSuccess({
-    brand_id: brandId,
-    ads: result.ads,
-    competitors: result.competitors,
-    market_stats: result.market_stats,
-    pagination: {
-      total: result.total,
-      offset: result.offset,
-      limit: result.limit,
-      has_more: result.has_more,
-      next_offset: result.has_more ? result.offset + result.limit : null,
-    },
-    applied_filters: result.applied_filters,
-    dashboard_url: discoveryDashboardUrl(ctx.auth.appOrigin),
-  });
+  return withOptionalAdVisuals(
+    mcpSuccess({
+      brand_id: brandId,
+      ads: result.ads,
+      competitors: result.competitors,
+      market_stats: result.market_stats,
+      pagination: {
+        total: result.total,
+        offset: result.offset,
+        limit: result.limit,
+        has_more: result.has_more,
+        next_offset: result.has_more ? result.offset + result.limit : null,
+      },
+      applied_filters: result.applied_filters,
+      dashboard_url: discoveryDashboardUrl(ctx.auth.appOrigin),
+    }),
+    input.include_visuals,
+  );
 }
 
 export async function mcpGetDiscoveryMarketStats(
@@ -275,7 +295,7 @@ export async function mcpGetDiscoveryCompetitors(
 
 export async function mcpGetDiscoveryAd(
   ctx: McpToolContext,
-  input: { ad_id: string; brand_id?: string; include_full_copy?: boolean },
+  input: { ad_id: string; brand_id?: string; include_full_copy?: boolean; include_visuals?: boolean },
 ) {
   const adId = input.ad_id.trim();
   if (!adId) throw new McpToolError("invalid_input", "ad_id is required");
@@ -295,9 +315,11 @@ export async function mcpGetDiscoveryAd(
   }
 
   const copy = formatAdCopyForMcp(ad.ad_text, input.include_full_copy ?? true);
-  return mcpSuccess({
+  const payload = mcpSuccess({
     brand_id: brandId,
     ad: { ...ad, ad_text: copy.ad_text, truncated: copy.truncated },
     dashboard_url: ad.spy_rival_url,
   });
+  if (input.include_visuals === false) return payload;
+  return withFetchedImageUrlVisuals(payload, [ad.image_url]);
 }

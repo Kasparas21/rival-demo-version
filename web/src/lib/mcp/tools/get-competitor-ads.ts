@@ -10,6 +10,7 @@ import { requireCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
+import { mcpCreativeFields, withFetchedAdVisuals } from "@/lib/mcp/ad-creative-media";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import {
   extractImpressionsIndex,
@@ -27,6 +28,7 @@ export type GetCompetitorAdsInput = {
   offset?: number;
   sort?: AdPerformanceSort;
   include_full_copy?: boolean;
+  include_visuals?: boolean;
 };
 
 function normalizeMcpSort(sort: string | undefined): AdPerformanceSort {
@@ -53,7 +55,7 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
   let q = ctx.supabase
     .from("scraped_ads")
     .select(
-      "id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, format, is_active, raw_payload",
+      "id, platform, ad_text, first_seen_at, last_seen_at, ai_extracted_angle, format, is_active, raw_payload, ad_creative_url, archived_creative_url",
     )
     .eq("user_id", ctx.auth.userId)
     .eq("competitor_id", comp.id)
@@ -84,6 +86,17 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
       a.id,
       a.raw_payload,
     );
+    const creative = mcpCreativeFields(
+      {
+        id: a.id,
+        platform: a.platform,
+        format: a.format,
+        ad_creative_url: a.ad_creative_url,
+        archived_creative_url: a.archived_creative_url,
+        raw_payload: a.raw_payload,
+      },
+      ctx.auth.appOrigin,
+    );
     const daysRunning = lifespanDays(a.first_seen_at, a.last_seen_at);
     const impressions_index = extractImpressionsIndex(a.raw_payload);
     return {
@@ -98,12 +111,15 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
       impressions_index,
       is_ultimate_winner: qualifiesAsUltimateWinner(impressions_index, daysRunning),
       angle: a.ai_extracted_angle,
+      visual_kind: creative.visual_kind,
+      image_url: creative.image_url,
+      video_url: creative.video_url,
       spy_rival_url: links.spy_rival_url,
       platform_library_url: links.platform_library_url,
     };
   });
 
-  return mcpSuccess({
+  const payload = mcpSuccess({
     competitor: { id: comp.id, name: comp.name, domain: comp.domain },
     sort,
     ads: rows,
@@ -111,4 +127,18 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
     ...(rows.length === 0 && sorted.length === 0 ? { message: MCP_EMPTY_NO_ADS } : {}),
     dashboard_url: mcpDashboardUrl(ctx.auth.appOrigin, comp.domain, "tab=ads"),
   });
+
+  if (input.include_visuals === false) return payload;
+  return withFetchedAdVisuals(
+    payload,
+    pageRows.map((a) => ({
+      id: a.id,
+      platform: a.platform,
+      format: a.format,
+      ad_creative_url: a.ad_creative_url,
+      archived_creative_url: a.archived_creative_url,
+      raw_payload: a.raw_payload,
+    })),
+    ctx.auth.appOrigin,
+  );
 }

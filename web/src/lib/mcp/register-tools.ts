@@ -5,6 +5,7 @@ import { formatToolError, formatToolResult } from "@/lib/mcp/errors";
 import { logMcpCall } from "@/lib/mcp/logging";
 import {
   mcpIncludeFullCopySchema,
+  mcpIncludeVisualsSchema,
   mcpLimitSchema,
   mcpOffsetSchema,
   MCP_PAGE_MAX,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/mcp/pagination";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { getCompetitorAds } from "@/lib/mcp/tools/get-competitor-ads";
+import { getAdCreative } from "@/lib/mcp/tools/get-ad-creative";
 import { getCompetitorMoves } from "@/lib/mcp/tools/get-competitor-moves";
 import { getCompetitorTimeline } from "@/lib/mcp/tools/get-competitor-timeline";
 import { getEmailIntelligence } from "@/lib/mcp/tools/get-email-intelligence";
@@ -87,7 +89,7 @@ export function registerMcpTools(
     {
       title: "Get competitor ads",
       description:
-        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort: newest, oldest, longest_running, impressions (Meta impression band, high first), or ultimate_winner (combines high impressions + long runtime). Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url, platform_library_url, impressions_index (Meta), and is_ultimate_winner when it qualifies.`,
+        `Active ads for one tracked competitor. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). Sort: newest, oldest, longest_running, impressions (Meta impression band, high first), or ultimate_winner (combines high impressions + long runtime). Set include_full_copy=true for untruncated ad text. Each ad includes spy_rival_url, platform_library_url, image_url, video_url, impressions_index (Meta), and is_ultimate_winner when it qualifies. include_visuals (default true) inlines up to 4 creative images/poster frames in the tool result so they appear in chat. Use get_ad_creative for specific ads.`,
       inputSchema: {
         competitor: z.string().min(1).describe("Competitor name, domain, or UUID"),
         platform: z.string().optional(),
@@ -98,6 +100,7 @@ export function registerMcpTools(
           .optional()
           .describe("Sort order. Use impressions or ultimate_winner for Meta performance ranking."),
         include_full_copy: mcpIncludeFullCopySchema(),
+        include_visuals: mcpIncludeVisualsSchema(),
       },
     },
     async (input) => {
@@ -107,13 +110,38 @@ export function registerMcpTools(
   );
 
   server.registerTool(
+    "get_ad_creative",
+    {
+      title: "Get ad creative",
+      description:
+        "Download and display the actual ad creative in chat (image, or video poster/thumbnail). " +
+        "Pass ad_id from get_competitor_ads / discovery / saved ads (scraped_ads UUID or saved ad id). " +
+        "Up to 4 ads per call via ad_ids. Returns MCP image content so the creative is visible to you and the user. " +
+        "For video ads the playable video_url is included and the poster frame is inlined. " +
+        "Use this whenever the user wants to see or visually analyze an ad — do not only return the platform library URL.",
+      inputSchema: {
+        ad_id: z.string().optional().describe("scraped_ads UUID, or a saved_ads UUID"),
+        ad_ids: z
+          .array(z.string().min(1))
+          .max(4)
+          .optional()
+          .describe("Additional ad UUIDs (combined with ad_id, max 4 total)"),
+      },
+    },
+    async (input) => {
+      const ctx = await buildContext();
+      return runTool("get_ad_creative", ctx, (c) => getAdCreative(c, input));
+    },
+  );
+
+  server.registerTool(
     "get_saved_ads",
     {
       title: "Get saved ads",
       description:
         `Your bookmarked ad snapshots across tracked competitors. Paginate with offset + limit (max ${MCP_PAGE_MAX} per page). ` +
-        "Optional competitor filter. Each result includes ad copy, angle, notes, saved_at, spy_rival_url, and platform_library_url. " +
-        "Use this to answer questions about ads you have saved for later reference.",
+        "Optional competitor filter. Each result includes ad copy, angle, notes, saved_at, spy_rival_url, platform_library_url, image_url, and video_url. " +
+        "Call get_ad_creative with source_scraped_ad_id (or the saved ad id) to display the actual creative in chat.",
       inputSchema: {
         competitor: z.string().optional().describe("Competitor name, domain, or UUID"),
         platform: z.string().optional().describe("Filter by platform, e.g. meta"),
@@ -167,7 +195,7 @@ export function registerMcpTools(
     {
       title: "Search copy vault",
       description:
-        `Full-text search across enriched ad copy and angles. Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT} per page). Requires active subscription. Each result includes spy_rival_url and platform_library_url (direct Meta Ads Library link when available).`,
+        `Full-text search across enriched ad copy and angles. Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT} per page). Requires active subscription. Each result includes spy_rival_url, platform_library_url, image_url, and video_url. Call get_ad_creative with the ad id to display the creative in chat.`,
       inputSchema: {
         query: z.string().min(1),
         competitor: z.string().optional(),
@@ -188,7 +216,7 @@ export function registerMcpTools(
     {
       title: "Get proven winners",
       description:
-        `Longest-running active ads (30+ days). Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT}). Requires active subscription. Each winner includes spy_rival_url and platform_library_url (direct Meta Ads Library link when available).`,
+        `Longest-running active ads (30+ days). Paginate with offset + limit (max ${MCP_PAGE_MAX_VAULT}). Requires active subscription. Each winner includes spy_rival_url, platform_library_url, image_url, and video_url. Call get_ad_creative with the ad id to display the creative in chat.`,
       inputSchema: {
         competitor: z.string().optional(),
         platform: z.string().optional(),
@@ -352,7 +380,8 @@ export function registerMcpTools(
       description:
         "Keyword search across the Discovery feed for the current workspace: ad copy, hooks, and competitor names. " +
         "Supports format (video/image), status (active/retired), date_preset (7d/30d/90d), ultimate_only, competitor filter, and sort. " +
-        "Use match=all to require every keyword. Returns ads with spy_rival_url links and market_stats.",
+        "Use match=all to require every keyword. Returns ads with spy_rival_url, image_url, video_url, and market_stats. " +
+        "include_visuals (default true) inlines up to 4 creatives in chat. Use get_ad_creative for a specific ad.",
       inputSchema: {
         query: z.string().min(1).describe("Primary search text or comma-separated keywords"),
         brand_id: z.string().optional().describe("Client workspace brand UUID; defaults to primary brand"),
@@ -370,6 +399,7 @@ export function registerMcpTools(
         limit: mcpLimitSchema(MCP_PAGE_MAX, 50),
         offset: mcpOffsetSchema(),
         include_full_copy: mcpIncludeFullCopySchema(),
+        include_visuals: mcpIncludeVisualsSchema(),
       },
     },
     async (input) => {
@@ -383,7 +413,7 @@ export function registerMcpTools(
     {
       title: "Get discovery feed",
       description:
-        "Browse the Discovery feed with sort and filters (no keyword required). Returns paginated Meta ads, competitor chips, and market_stats for the workspace.",
+        "Browse the Discovery feed with sort and filters (no keyword required). Returns paginated Meta ads (with image_url/video_url), competitor chips, and market_stats. include_visuals (default true) inlines up to 4 creatives in chat.",
       inputSchema: {
         brand_id: z.string().optional(),
         query: z.string().optional(),
@@ -399,6 +429,7 @@ export function registerMcpTools(
         limit: mcpLimitSchema(MCP_PAGE_MAX, 50),
         offset: mcpOffsetSchema(),
         include_full_copy: mcpIncludeFullCopySchema(),
+        include_visuals: mcpIncludeVisualsSchema(),
       },
     },
     async (input) => {
@@ -483,11 +514,13 @@ export function registerMcpTools(
     "get_discovery_ad",
     {
       title: "Get discovery ad",
-      description: "Fetch one Meta ad from Discovery by scraped_ads UUID. Returns full copy, performance signals, and links.",
+      description:
+        "Fetch one Meta ad from Discovery by scraped_ads UUID. Returns full copy, performance signals, links, and inlines the creative image (or video poster) in chat so you can see it. Set include_visuals=false for metadata only.",
       inputSchema: {
         ad_id: z.string().min(1),
         brand_id: z.string().optional(),
         include_full_copy: mcpIncludeFullCopySchema(),
+        include_visuals: mcpIncludeVisualsSchema(),
       },
     },
     async (input) => {

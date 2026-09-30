@@ -1,3 +1,4 @@
+import { MCP_VISUALS_KEY, type McpImageContentBlock } from "@/lib/mcp/ad-creative-media";
 import type { McpErrorCode, McpToolErrorBody } from "@/lib/mcp/types";
 
 export class McpToolError extends Error {
@@ -25,9 +26,39 @@ export function mcpSuccess<T extends Record<string, unknown>>(data: T): { ok: tr
   return { ok: true, ...data };
 }
 
-export function formatToolResult(data: unknown): { content: Array<{ type: "text"; text: string }> } {
+type McpTextContent = { type: "text"; text: string };
+type McpToolContent = McpTextContent | McpImageContentBlock;
+
+function stripMcpVisuals(data: unknown): {
+  json: unknown;
+  visuals: McpImageContentBlock[];
+} {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { json: data, visuals: [] };
+  }
+  const record = data as Record<string, unknown>;
+  const rawVisuals = record[MCP_VISUALS_KEY];
+  if (!Array.isArray(rawVisuals) || rawVisuals.length === 0) {
+    return { json: data, visuals: [] };
+  }
+  const visuals = rawVisuals.filter((block): block is McpImageContentBlock => {
+    return (
+      Boolean(block) &&
+      typeof block === "object" &&
+      (block as McpImageContentBlock).type === "image" &&
+      typeof (block as McpImageContentBlock).data === "string" &&
+      typeof (block as McpImageContentBlock).mimeType === "string"
+    );
+  });
+  const { [MCP_VISUALS_KEY]: _omitted, ...rest } = record;
+  void _omitted;
+  return { json: rest, visuals };
+}
+
+export function formatToolResult(data: unknown): { content: McpToolContent[] } {
+  const { json, visuals } = stripMcpVisuals(data);
   return {
-    content: [{ type: "text", text: JSON.stringify(data) }],
+    content: [{ type: "text", text: JSON.stringify(json) }, ...visuals],
   };
 }
 

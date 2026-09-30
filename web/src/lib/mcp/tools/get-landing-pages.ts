@@ -5,6 +5,7 @@ import { requireCompetitor } from "@/lib/mcp/resolve-competitor";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { truncateAdCopy } from "@/lib/mcp/truncate";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
+import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import { extractGoogleHostnameLandingKey, extractLandingPageUrl } from "@/lib/landing-pages/extract-lp-url";
 import {
@@ -103,6 +104,16 @@ export async function getLandingPages(
         const copy = includeFull
           ? { text: a.ad_text.trim(), truncated: false }
           : truncateAdCopy(a.ad_text, 300);
+        const creative = mcpCreativeFields(
+          {
+            id: a.id,
+            platform: a.platform,
+            format: a.format,
+            ad_creative_url: a.ad_creative_url,
+            raw_payload: a.raw_payload,
+          },
+          ctx.auth.appOrigin,
+        );
         return {
           id: a.id,
           platform: a.platform,
@@ -110,6 +121,9 @@ export async function getLandingPages(
           ad_text: copy.text,
           truncated: copy.truncated,
           ad_creative_url: a.ad_creative_url,
+          visual_kind: creative.visual_kind,
+          image_url: creative.image_url,
+          video_url: creative.video_url,
           first_seen_at: a.first_seen_at,
           ai_extracted_angle: a.ai_extracted_angle,
           ...adLinksForRow(a),
