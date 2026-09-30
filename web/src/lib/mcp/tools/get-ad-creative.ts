@@ -1,7 +1,6 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
-import { MCP_AD_GALLERY_MAX, attachAdGallery, galleryCaption, type AdGalleryCard } from "@/lib/mcp/ad-gallery-app";
+import { MCP_AD_GALLERY_MAX, attachAdGallery, galleryCaption, loadGalleryCards } from "@/lib/mcp/ad-gallery-app";
 import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
-import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
@@ -117,7 +116,13 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
   }
 
   const ads: Array<Record<string, unknown>> = [];
-  const gallery: AdGalleryCard[] = [];
+  const gallerySources: Array<{
+    id: string;
+    competitor: string;
+    caption: string;
+    format: string;
+    sourceUrls: Array<string | null | undefined>;
+  }> = [];
 
   for (const id of ids) {
     const scraped = scrapedById.get(id);
@@ -135,16 +140,13 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
 
     const source = asSource(row);
     const refs = mcpCreativeFields(source, ctx.auth.appOrigin);
-    const previewUrl = refs.image_url
-      ? mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, row.id)
-      : null;
-    if (previewUrl) {
-      gallery.push({
+    if (refs.image_url || row.archived_creative_url || row.ad_creative_url) {
+      gallerySources.push({
         id: row.id,
         competitor: competitorById.get(row.competitor_id)?.name ?? "Ad",
         caption: galleryCaption(row.ad_text),
         format: refs.visual_kind === "video" ? "video" : (row.format ?? "image"),
-        image_url: previewUrl,
+        sourceUrls: [refs.image_url, row.archived_creative_url, row.ad_creative_url],
       });
     }
 
@@ -169,17 +171,23 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
       platform: row.platform,
       format: row.format,
       visual_kind: refs.visual_kind,
-      image_url: previewUrl ?? refs.image_url,
+      image_url: refs.image_url,
       video_url: refs.video_url,
-      shown_in_chat_gallery: Boolean(previewUrl),
+      shown_in_chat_gallery: Boolean(refs.image_url || row.archived_creative_url || row.ad_creative_url),
       ad_text: copy.ad_text,
       truncated: copy.truncated,
       spy_rival_url: links.spy_rival_url,
       platform_library_url: links.platform_library_url,
-      note: previewUrl
+      note: refs.image_url || row.archived_creative_url || row.ad_creative_url
         ? "Creative is rendered in the inline chat gallery above this tool result. Describe the image the user can see. Do not answer with links only."
         : "No still image is stored for this ad.",
     });
+  }
+
+  const gallery = await loadGalleryCards(gallerySources.slice(0, MCP_AD_GALLERY_MAX));
+  const shown = new Set(gallery.map((card) => card.id));
+  for (const ad of ads) {
+    if (ad.found === true) ad.shown_in_chat_gallery = shown.has(String(ad.id));
   }
 
   return attachAdGallery(

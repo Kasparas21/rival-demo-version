@@ -173,6 +173,48 @@ async function downloadImage(url: string): Promise<{ data: Buffer; mimeType: str
   }
 }
 
+const GALLERY_THUMB_BYTES = 8_000;
+
+async function toGalleryJpeg(buf: Buffer): Promise<Buffer | null> {
+  try {
+    const sharp = (await import("sharp")).default;
+    const attempts = [
+      { width: 420, quality: 58 },
+      { width: 320, quality: 46 },
+      { width: 240, quality: 38 },
+    ];
+    for (const attempt of attempts) {
+      const out = await sharp(buf)
+        .rotate()
+        .resize({ width: attempt.width, height: attempt.width, fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: attempt.quality, mozjpeg: true })
+        .toBuffer();
+      if (out.byteLength > 0 && out.byteLength <= GALLERY_THUMB_BYTES) return out;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Small JPEG for the in-chat gallery. Embedded in the widget so Claude does not block an outside URL. */
+export async function fetchGalleryThumbnail(
+  urls: Array<string | null | undefined>,
+): Promise<{ data: string; mime: "image/jpeg" } | null> {
+  const seen = new Set<string>();
+  for (const raw of urls) {
+    const url = toFetchableHttpUrl(raw) ?? (raw?.trim().startsWith("http") ? raw.trim() : null);
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    const media = await downloadImage(url);
+    if (!media) continue;
+    const jpeg = await toGalleryJpeg(media.data);
+    if (!jpeg) continue;
+    return { data: jpeg.toString("base64"), mime: "image/jpeg" };
+  }
+  return null;
+}
+
 export async function fetchMcpImageContent(
   urls: Array<string | null | undefined>,
 ): Promise<McpImageContentBlock | null> {

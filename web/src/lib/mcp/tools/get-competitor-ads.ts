@@ -11,8 +11,7 @@ import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
-import { attachAdGallery, galleryCaption, type AdGalleryCard } from "@/lib/mcp/ad-gallery-app";
-import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
+import { attachAdGallery, galleryCaption, loadGalleryCards } from "@/lib/mcp/ad-gallery-app";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import {
   extractImpressionsIndex,
@@ -79,7 +78,6 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
 
   const { items: pageRows, pagination } = paginateInMemory(sorted, limit, offset);
 
-  const gallery: AdGalleryCard[] = [];
   const rows = pageRows.map((a) => {
     const copy = formatAdCopyForMcp(a.ad_text ?? "", input.include_full_copy);
     const links = mcpAdLinksForScrapedRow(
@@ -122,16 +120,17 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
     };
   });
 
-  for (const row of rows) {
-    if (!row.image_url || gallery.length >= 12) continue;
-    gallery.push({
-      id: row.id,
-      competitor: comp.name,
-      caption: galleryCaption(row.ad_text),
-      format: row.video_url ? "video" : (row.format ?? "image"),
-      image_url: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, row.id),
-    });
-  }
+  const gallery = await loadGalleryCards(
+    rows
+      .filter((row) => row.image_url)
+      .map((row) => ({
+        id: row.id,
+        competitor: comp.name,
+        caption: galleryCaption(row.ad_text),
+        format: row.video_url ? "video" : (row.format ?? "image"),
+        sourceUrls: [row.image_url],
+      })),
+  );
 
   const payload = mcpSuccess({
     competitor: { id: comp.id, name: comp.name, domain: comp.domain },

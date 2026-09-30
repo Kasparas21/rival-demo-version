@@ -1,7 +1,9 @@
+import { fetchGalleryThumbnail } from "@/lib/mcp/ad-creative-media";
+
 export const AD_GALLERY_UI_URI = "ui://spy-rival/ad-gallery";
 export const MCP_AD_GALLERY_MIME = "text/html;profile=mcp-app";
 export const MCP_STRUCTURED_KEY = "_mcpStructuredContent";
-export const MCP_AD_GALLERY_MAX = 12;
+export const MCP_AD_GALLERY_MAX = 8;
 
 export const AD_GALLERY_TOOL_META = {
   ui: { resourceUri: AD_GALLERY_UI_URI },
@@ -13,22 +15,55 @@ export type AdGalleryCard = {
   competitor: string;
   caption: string;
   format: string;
-  image_url: string;
+  /** Base64 JPEG. Only sent in structuredContent so the widget can draw it without an outside URL. */
+  image_data: string;
+  mime: "image/jpeg";
 };
 
 export function galleryCaption(text: string | null | undefined): string {
   return (text ?? "").replace(/\s+/g, " ").trim().slice(0, 90);
 }
 
+export async function loadGalleryCards(
+  sources: Array<{
+    id: string;
+    competitor: string;
+    caption: string;
+    format: string;
+    sourceUrls: Array<string | null | undefined>;
+  }>,
+): Promise<AdGalleryCard[]> {
+  const slice = sources.slice(0, MCP_AD_GALLERY_MAX);
+  const cards = await Promise.all(
+    slice.map(async (source) => {
+      const thumb = await fetchGalleryThumbnail(source.sourceUrls);
+      if (!thumb) return null;
+      return {
+        id: source.id,
+        competitor: source.competitor,
+        caption: source.caption,
+        format: source.format,
+        image_data: thumb.data,
+        mime: thumb.mime,
+      } satisfies AdGalleryCard;
+    }),
+  );
+  return cards.filter((card): card is AdGalleryCard => Boolean(card));
+}
+
 export function attachAdGallery<T extends Record<string, unknown>>(
   payload: T,
   cards: AdGalleryCard[],
-): T & { gallery?: AdGalleryCard[]; gallery_rendered_inline?: true; [MCP_STRUCTURED_KEY]?: { title: string; ads: AdGalleryCard[] } } {
-  const ads = cards.filter((card) => card.image_url.trim()).slice(0, MCP_AD_GALLERY_MAX);
+): T & {
+  gallery?: Array<Omit<AdGalleryCard, "image_data" | "mime">>;
+  gallery_rendered_inline?: true;
+  [MCP_STRUCTURED_KEY]?: { title: string; ads: AdGalleryCard[] };
+} {
+  const ads = cards.filter((card) => card.image_data.trim()).slice(0, MCP_AD_GALLERY_MAX);
   if (!ads.length) return payload;
   return {
     ...payload,
-    gallery: ads,
+    gallery: ads.map(({ id, competitor, caption, format }) => ({ id, competitor, caption, format })),
     gallery_rendered_inline: true,
     [MCP_STRUCTURED_KEY]: { title: "Ad creatives", ads },
   };
@@ -105,7 +140,19 @@ export function adGalleryHtml(): string {
       fig.className = "card";
       const img = document.createElement("img");
       img.alt = ad.caption || ad.competitor || "Ad creative";
-      img.src = ad.image_url;
+      if (ad.image_data) {
+        try {
+          const binary = atob(ad.image_data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          img.src = URL.createObjectURL(new Blob([bytes], { type: ad.mime || "image/jpeg" }));
+        } catch {
+          fig.remove();
+          continue;
+        }
+      } else {
+        continue;
+      }
       img.addEventListener("error", () => fig.remove());
       const cap = document.createElement("figcaption");
       const who = document.createElement("div");
