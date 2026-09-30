@@ -12,6 +12,7 @@ import { lifespanDays } from "@/lib/mcp/truncate";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
 import { attachAdGallery, galleryCaption, loadGalleryCards } from "@/lib/mcp/ad-gallery-app";
+import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import { mcpDashboardUrl } from "@/lib/mcp/urls";
 import {
   extractImpressionsIndex,
@@ -129,6 +130,7 @@ export async function getCompetitorAds(ctx: McpToolContext, input: GetCompetitor
         caption: galleryCaption(row.ad_text),
         format: row.video_url ? "video" : (row.format ?? "image"),
         sourceUrls: [row.image_url],
+        openUrl: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, row.id),
       })),
   );
 

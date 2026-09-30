@@ -1,6 +1,7 @@
 import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { MCP_AD_GALLERY_MAX, attachAdGallery, galleryCaption, loadGalleryCards } from "@/lib/mcp/ad-gallery-app";
 import { mcpCreativeFields } from "@/lib/mcp/ad-creative-media";
+import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import { mcpAdLinksForScrapedRow } from "@/lib/mcp/ad-links";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
@@ -122,6 +123,7 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
     caption: string;
     format: string;
     sourceUrls: Array<string | null | undefined>;
+    openUrl?: string;
   }> = [];
 
   for (const id of ids) {
@@ -147,6 +149,7 @@ export async function getAdCreative(ctx: McpToolContext, input: GetAdCreativeInp
         caption: galleryCaption(row.ad_text),
         format: refs.visual_kind === "video" ? "video" : (row.format ?? "image"),
         sourceUrls: [refs.image_url, row.archived_creative_url, row.ad_creative_url],
+        openUrl: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, row.id),
       });
     }
 

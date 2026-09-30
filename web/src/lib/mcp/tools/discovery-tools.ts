@@ -2,6 +2,7 @@ import { McpToolError, mcpSuccess } from "@/lib/mcp/errors";
 import { formatAdCopyForMcp } from "@/lib/mcp/format-ad-copy";
 import { paginateInMemory, parseMcpPage, MCP_PAGE_MAX } from "@/lib/mcp/pagination";
 import { MCP_AD_GALLERY_MAX, attachAdGallery, galleryCaption, loadGalleryCards } from "@/lib/mcp/ad-gallery-app";
+import { mcpAdPreviewUrl } from "@/lib/mcp/ad-image-token";
 import type { McpToolContext } from "@/lib/mcp/tool-context";
 import {
   analyzeDiscoveryKeywords,
@@ -30,6 +31,7 @@ function discoveryDashboardUrl(appOrigin: string): string {
 async function withOptionalAdVisuals<T extends Record<string, unknown> & { ads?: Array<{ id?: string; competitor_name?: string; ad_text?: string; format?: string; image_url?: string | null; video_url?: string | null }> }>(
   payload: T,
   includeVisuals: boolean | undefined,
+  ctx?: McpToolContext,
 ): Promise<T> {
   if (includeVisuals === false) return payload;
   const cards = await loadGalleryCards(
@@ -42,6 +44,7 @@ async function withOptionalAdVisuals<T extends Record<string, unknown> & { ads?:
         caption: galleryCaption(ad.ad_text),
         format: ad.video_url ? "video" : (ad.format ?? "image"),
         sourceUrls: [ad.image_url],
+        openUrl: ctx ? mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, ad.id!) : null,
       })),
   );
   return attachAdGallery(payload, cards) as T;
@@ -137,6 +140,7 @@ export async function mcpSearchDiscoveryAds(
       dashboard_url: discoveryDashboardUrl(ctx.auth.appOrigin),
     }),
     input.include_visuals,
+    ctx,
   );
 }
 
@@ -203,6 +207,7 @@ export async function mcpGetDiscoveryFeed(
       dashboard_url: discoveryDashboardUrl(ctx.auth.appOrigin),
     }),
     input.include_visuals,
+    ctx,
   );
 }
 
@@ -337,6 +342,7 @@ export async function mcpGetDiscoveryAd(
       caption: galleryCaption(copy.ad_text),
       format: ad.video_url ? "video" : ad.format,
       sourceUrls: [ad.image_url],
+      openUrl: mcpAdPreviewUrl(ctx.auth.appOrigin, ctx.auth.userId, ad.id),
     },
   ]);
   return attachAdGallery(payload, cards);

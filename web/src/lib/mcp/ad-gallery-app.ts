@@ -1,6 +1,6 @@
 import { MCP_VISUALS_KEY, type McpImageContentBlock, fetchGalleryThumbnail } from "@/lib/mcp/ad-creative-media";
 
-export const AD_GALLERY_UI_URI = "ui://spy-rival/ad-gallery";
+export const AD_GALLERY_UI_URI = "ui://spy-rival/ad-gallery-v3";
 export const MCP_AD_GALLERY_MIME = "text/html;profile=mcp-app";
 export const MCP_STRUCTURED_KEY = "_mcpStructuredContent";
 export const MCP_AD_GALLERY_MAX = 8;
@@ -15,6 +15,8 @@ export type AdGalleryCard = {
   competitor: string;
   caption: string;
   format: string;
+  /** Full-size creative the host can open outside the sandbox. */
+  open_url?: string;
   /** Base64 JPEG drawn in the chat widget. */
   image_data: string;
   /** Base64 JPEG for the model. Omitted from the widget payload. */
@@ -39,6 +41,7 @@ export async function loadGalleryCards(
     caption: string;
     format: string;
     sourceUrls: Array<string | null | undefined>;
+    openUrl?: string | null;
   }>,
 ): Promise<AdGalleryCard[]> {
   const slice = sources.slice(0, MCP_AD_GALLERY_MAX);
@@ -56,6 +59,7 @@ export async function loadGalleryCards(
         competitor: source.competitor,
         caption: source.caption,
         format: source.format,
+        ...(source.openUrl ? { open_url: source.openUrl } : {}),
         image_data: thumb.data,
         ...(thumb.vision ? { vision_data: thumb.vision } : {}),
         mime: thumb.mime,
@@ -69,11 +73,11 @@ export function attachAdGallery<T extends Record<string, unknown>>(
   payload: T,
   cards: AdGalleryCard[],
 ): T & {
-  gallery?: Array<Omit<AdGalleryCard, "image_data" | "mime" | "vision_data">>;
+  gallery?: Array<Omit<AdGalleryCard, "image_data" | "mime" | "vision_data" | "open_url">>;
   gallery_rendered_inline?: true;
   creative_vision_count?: number;
   [MCP_VISUALS_KEY]?: McpImageContentBlock[];
-  [MCP_STRUCTURED_KEY]?: { title: string; ads: Array<Omit<AdGalleryCard, "vision_data">> };
+  [MCP_STRUCTURED_KEY]?: { ads: Array<Omit<AdGalleryCard, "vision_data">> };
 } {
   const ads = cards.filter((card) => card.image_data.trim()).slice(0, MCP_AD_GALLERY_MAX);
   if (!ads.length) return payload;
@@ -100,7 +104,6 @@ export function attachAdGallery<T extends Record<string, unknown>>(
       : {}),
     ...(visuals.length ? { [MCP_VISUALS_KEY]: visuals } : {}),
     [MCP_STRUCTURED_KEY]: {
-      title: "Ad creatives",
       ads: ads.map(({ vision_data: _vision, ...card }) => card),
     },
   };
@@ -112,153 +115,125 @@ export function adGalleryHtml(): string {
 <html>
 <head>
 <meta charset="utf-8">
-<meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Rival ad creatives</title>
 <style>
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; width: 100%; }
+  html, body { margin: 0; background: transparent; }
   body {
-    padding: 8px 4px 12px;
+    padding: 2px 0 8px;
     font: 14px/1.4 ui-sans-serif, system-ui, sans-serif;
     color: var(--color-text-primary, #18181b);
-    background: transparent;
   }
-  .grid {
-    display: grid;
-    gap: 20px;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  }
-  .card {
-    margin: 0;
+  .list { display: flex; flex-direction: column; gap: 28px; width: 100%; }
+  .item { margin: 0; width: 100%; }
+  .stage {
+    background: var(--color-background-secondary, #f4f4f5);
     border-radius: 22px;
-    overflow: hidden;
-    background: var(--color-background-primary, #fff);
-    border: 1px solid var(--color-border-secondary, rgba(0,0,0,0.08));
-    box-shadow: 0 10px 32px rgba(0,0,0,0.06);
-  }
-  .frame {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 240px;
     padding: 16px;
-    background:
-      radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.08), transparent 55%),
-      #161616;
   }
-  .grid.single .frame { min-height: 380px; padding: 22px 22px 18px; }
-  .frame img {
+  .stage img {
     display: block;
     width: 100%;
     height: auto;
-    max-height: 520px;
+    max-height: 680px;
     object-fit: contain;
     border-radius: 14px;
-    background: #0e0e0e;
-    box-shadow: 0 16px 40px rgba(0,0,0,0.35);
     cursor: zoom-in;
+    background: var(--color-background-primary, #fff);
   }
-  .grid.single .frame img { max-height: 640px; }
-  .actions {
-    position: absolute;
-    right: 14px;
-    bottom: 14px;
+  .row {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 0 4px;
   }
-  .actions button, .bar button {
-    border: 0;
+  .who {
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--color-text-secondary, #3f3f46);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tools { display: flex; flex: none; gap: 8px; }
+  button {
+    appearance: none;
+    border: 1px solid var(--color-border-secondary, rgba(0,0,0,0.12));
+    background: var(--color-background-primary, #fff);
+    color: var(--color-text-primary, #18181b);
     border-radius: 999px;
-    height: 34px;
-    padding: 0 12px;
-    font: 600 12px/1 ui-sans-serif, system-ui, sans-serif;
-    letter-spacing: 0.01em;
-    color: #18181b;
-    background: rgba(255,255,255,0.94);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    height: 38px;
+    padding: 0 14px;
+    font: 600 13px/1 ui-sans-serif, system-ui, sans-serif;
     cursor: pointer;
   }
-  .actions button:hover, .bar button:hover { background: #fff; }
-  figcaption { padding: 14px 16px 16px; }
-  .who { font-weight: 650; font-size: 14px; }
-  .cap {
-    margin-top: 4px;
-    color: var(--color-text-secondary, #52525b);
-    font-size: 13px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
+  button:hover { background: var(--color-background-secondary, #fafafa); }
   .badge {
-    position: absolute;
-    left: 14px;
-    top: 14px;
-    padding: 4px 8px;
+    display: inline-block;
+    margin-right: 6px;
+    padding: 2px 6px;
     border-radius: 999px;
-    background: rgba(255,255,255,0.92);
+    background: #ccfbf1;
     color: #0f766e;
     font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
   }
   .empty { color: var(--color-text-secondary, #52525b); padding: 8px; }
   .lightbox {
     position: fixed;
     inset: 0;
-    z-index: 30;
+    z-index: 20;
     display: flex;
     flex-direction: column;
-    background: rgba(8,8,8,0.94);
-    padding: 12px 12px 16px;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(9,9,11,0.94);
   }
   .lightbox img {
     flex: 1;
     min-height: 0;
     width: 100%;
     object-fit: contain;
-    border-radius: 12px;
   }
-  .bar {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 4px 0;
-  }
+  .lightbox .tools { justify-content: flex-end; }
+  .lightbox button { background: #fff; color: #18181b; }
   .toast {
     position: fixed;
     left: 50%;
-    bottom: 18px;
+    bottom: 16px;
     transform: translateX(-50%);
-    z-index: 40;
+    z-index: 30;
     padding: 8px 14px;
     border-radius: 999px;
     background: #18181b;
     color: #fff;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 650;
   }
 </style>
 </head>
 <body>
-<div id="grid" class="empty">Loading creatives…</div>
+<div id="list" class="empty">Loading creatives…</div>
 <script type="module">
   import { App } from "https://unpkg.com/@modelcontextprotocol/ext-apps@1.7.5/dist/src/app-with-deps.js";
-  const grid = document.getElementById("grid");
+  const list = document.getElementById("list");
   const app = new App(
-    { name: "Rival ad gallery", version: "1.1.0" },
+    { name: "Rival ad gallery", version: "1.3.0" },
     { availableDisplayModes: ["inline", "fullscreen"] },
   );
   const urls = new Map();
 
   function adsFrom(result) {
     const structured = result && result.structuredContent && result.structuredContent.ads;
-    if (Array.isArray(structured) && structured.length) return structured;
-    return [];
+    return Array.isArray(structured) ? structured.filter((ad) => ad && ad.image_data) : [];
   }
 
   function bytesOf(ad) {
@@ -286,7 +261,25 @@ export function adGalleryHtml(): string {
     el.className = "toast";
     el.textContent = message;
     document.body.append(el);
-    setTimeout(() => el.remove(), 1600);
+    setTimeout(() => el.remove(), 1800);
+  }
+
+  function hostWidth() {
+    const ctx = typeof app.getHostContext === "function" ? app.getHostContext() : null;
+    const dims = (ctx && ctx.containerDimensions) || {};
+    const reported = dims.maxWidth || dims.width || 0;
+    if (typeof reported === "number" && reported >= 520) return Math.min(Math.floor(reported), 960);
+    return 760;
+  }
+
+  function publishSize() {
+    const width = hostWidth();
+    document.documentElement.style.width = width + "px";
+    document.body.style.width = width + "px";
+    const height = Math.ceil(Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+    if (typeof app.sendSizeChanged === "function") {
+      app.sendSizeChanged({ width: width, height: height + 12 }).catch(() => {});
+    }
   }
 
   async function copyImage(img) {
@@ -294,14 +287,13 @@ export function adGalleryHtml(): string {
       const canvas = document.createElement("canvas");
       canvas.width = img.naturalWidth || img.width;
       canvas.height = img.naturalHeight || img.height;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
+      canvas.getContext("2d").drawImage(img, 0, 0);
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
       if (!blob || !navigator.clipboard || !window.ClipboardItem) throw new Error("clipboard");
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       toast("Copied");
     } catch {
-      toast("Couldn’t copy — use Download");
+      toast("Copy was blocked in this chat");
     }
   }
 
@@ -313,7 +305,7 @@ export function adGalleryHtml(): string {
           contents: [{
             type: "resource",
             resource: {
-              uri: "ui://spy-rival/ad-gallery/" + encodeURIComponent(ad.id || name) + ".jpg",
+              uri: "ui://spy-rival/ad-gallery-v3/" + encodeURIComponent(ad.id || name) + ".jpg",
               mimeType: "image/jpeg",
               blob: ad.image_data,
             },
@@ -324,115 +316,110 @@ export function adGalleryHtml(): string {
           return;
         }
       }
-    } catch { /* fall through */ }
-    const link = document.createElement("a");
-    link.href = blobUrl(ad);
-    link.download = name;
-    link.click();
-    toast("Download started");
+    } catch { /* try the full file next */ }
+    if (ad.open_url && typeof app.openLink === "function") {
+      try {
+        await app.openLink({ url: ad.open_url });
+        toast("Opened the full creative");
+        return;
+      } catch { /* fall through */ }
+    }
+    toast("Download was blocked in this chat");
   }
 
   function closeLightbox() {
     const open = document.querySelector(".lightbox");
     if (open) open.remove();
-    const ctx = app.getHostContext ? app.getHostContext() : null;
+    const ctx = typeof app.getHostContext === "function" ? app.getHostContext() : null;
     if (ctx && ctx.displayMode === "fullscreen" && typeof app.requestDisplayMode === "function") {
       app.requestDisplayMode({ mode: "inline" }).catch(() => {});
     }
+    publishSize();
   }
 
   async function openLightbox(ad, img) {
-    closeLightbox();
-    const ctx = app.getHostContext ? app.getHostContext() : null;
+    const existing = document.querySelector(".lightbox");
+    if (existing) existing.remove();
+    const ctx = typeof app.getHostContext === "function" ? app.getHostContext() : null;
     const modes = (ctx && ctx.availableDisplayModes) || [];
     if (modes.indexOf("fullscreen") !== -1 && typeof app.requestDisplayMode === "function") {
-      try { await app.requestDisplayMode({ mode: "fullscreen" }); } catch { /* overlay still works */ }
+      try { await app.requestDisplayMode({ mode: "fullscreen" }); } catch { /* stay inline */ }
     }
     const box = document.createElement("div");
     box.className = "lightbox";
     const big = document.createElement("img");
     big.src = img.src;
-    big.alt = img.alt;
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.textContent = "Copy";
-    copy.addEventListener("click", () => copyImage(big));
-    const save = document.createElement("button");
-    save.type = "button";
-    save.textContent = "Download";
-    save.addEventListener("click", () => downloadImage(ad));
-    const done = document.createElement("button");
-    done.type = "button";
-    done.textContent = "Close";
-    done.addEventListener("click", closeLightbox);
-    bar.append(copy, save, done);
-    box.append(big, bar);
-    box.addEventListener("click", (event) => {
-      if (event.target === box) closeLightbox();
-    });
+    big.alt = img.alt || "Ad creative";
+    const tools = document.createElement("div");
+    tools.className = "tools";
+    tools.append(
+      button("Copy", () => copyImage(big)),
+      button("Download", () => downloadImage(ad)),
+      button("Close", closeLightbox),
+    );
+    box.append(big, tools);
     document.body.append(box);
+    publishSize();
   }
 
-  function actionButton(label, onClick) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = label;
-    button.addEventListener("click", (event) => {
+  function button(label, onClick) {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.textContent = label;
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
       event.stopPropagation();
       onClick();
     });
-    return button;
+    return el;
   }
 
   function render(result) {
-    const ads = adsFrom(result).filter((ad) => ad && ad.image_data);
-    grid.className = ads.length === 1 ? "grid single" : "grid";
-    grid.replaceChildren();
+    const ads = adsFrom(result);
+    list.className = "list";
+    list.replaceChildren();
     if (!ads.length) {
-      grid.className = "empty";
-      grid.textContent = "No creative image was available for these ads.";
+      list.className = "empty";
+      list.textContent = "No creative image was available for these ads.";
+      publishSize();
       return;
     }
     for (const ad of ads) {
       let src = "";
       try { src = blobUrl(ad); } catch { continue; }
-      const fig = document.createElement("figure");
-      fig.className = "card";
-      const frame = document.createElement("div");
-      frame.className = "frame";
+      const item = document.createElement("figure");
+      item.className = "item";
+      const stage = document.createElement("div");
+      stage.className = "stage";
       const img = document.createElement("img");
       img.alt = ad.caption || ad.competitor || "Ad creative";
       img.src = src;
-      img.addEventListener("error", () => fig.remove());
+      img.addEventListener("load", publishSize);
       img.addEventListener("click", () => openLightbox(ad, img));
-      const actions = document.createElement("div");
-      actions.className = "actions";
-      actions.append(
-        actionButton("Expand", () => openLightbox(ad, img)),
-        actionButton("Copy", () => copyImage(img)),
-        actionButton("Download", () => downloadImage(ad)),
-      );
-      frame.append(img, actions);
-      if (String(ad.format || "").toLowerCase() === "video") {
-        const badge = document.createElement("div");
-        badge.className = "badge";
-        badge.textContent = "Video";
-        frame.append(badge);
-      }
-      const cap = document.createElement("figcaption");
+      stage.append(img);
+      const row = document.createElement("div");
+      row.className = "row";
       const who = document.createElement("div");
       who.className = "who";
-      who.textContent = ad.competitor || "Ad";
-      const text = document.createElement("div");
-      text.className = "cap";
-      text.textContent = ad.caption || "";
-      cap.append(who);
-      if (ad.caption) cap.append(text);
-      fig.append(frame, cap);
-      grid.append(fig);
+      if (String(ad.format || "").toLowerCase() === "video") {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = "Video";
+        who.append(badge);
+      }
+      who.append(document.createTextNode(ad.competitor || "Ad"));
+      const tools = document.createElement("div");
+      tools.className = "tools";
+      tools.append(
+        button("Expand", () => openLightbox(ad, img)),
+        button("Copy", () => copyImage(img)),
+        button("Download", () => downloadImage(ad)),
+      );
+      row.append(who, tools);
+      item.append(stage, row);
+      list.append(item);
     }
+    publishSize();
   }
 
   document.addEventListener("keydown", (event) => {
@@ -440,7 +427,9 @@ export function adGalleryHtml(): string {
   });
 
   app.ontoolresult = render;
+  app.onhostcontextchanged = publishSize;
   await app.connect();
+  publishSize();
 </script>
 </body>
 </html>`;
