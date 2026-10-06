@@ -24,6 +24,7 @@ import type { Database } from "./types";
  */
 const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/reset-password", "/api/account", "/admin"];
 const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
+const ACTIVITY_DAY_COOKIE = "rival_activity_day";
 const BILLING_EXEMPT_PREFIXES = ["/awaiting-quote", "/choose-plan", "/checkout", "/api/billing", "/auth/callback"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
@@ -64,9 +65,14 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  /**
+   * `getClaims()` verifies the session JWT locally against the project's ES256 signing key (cached JWKS), and
+   * still refreshes an expired session — `getUser()` was a network round-trip to Supabase Auth on every request.
+   * Route handlers that need the full user call `getUser()` themselves.
+   */
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : null;
+  const user = userId ? { id: userId } : null;
 
   const { pathname, search } = request.nextUrl;
   const isProtected = matchesPrefix(pathname, PROTECTED_PATHS);
@@ -87,12 +93,10 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
   }
 
   if (user && isAuthPage) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("onboarding_completed, company_url")
-      .eq("id", user.id)
-      .maybeSingle();
-    const billing = await getBillingEntitlement(supabase, user.id);
+    const [{ data: profile }, billing] = await Promise.all([
+      supabase.from("profiles").select("onboarding_completed, company_url").eq("id", user.id).maybeSingle(),
+      getBillingEntitlement(supabase, user.id),
+    ]);
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.search = "";
     if (!profile?.onboarding_completed) {
@@ -124,14 +128,13 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
     pathname.startsWith("/dashboard") &&
     !matchesPrefix(pathname, BILLING_EXEMPT_PREFIXES)
   ) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("onboarding_completed, company_url")
-      .eq("id", user.id)
-      .maybeSingle();
+    /** Profile and plan in parallel; every dashboard navigation waits on this. */
+    const [{ data: profile }, billing] = await Promise.all([
+      supabase.from("profiles").select("onboarding_completed, company_url").eq("id", user.id).maybeSingle(),
+      getBillingEntitlement(supabase, user.id),
+    ]);
 
     if (!profile?.onboarding_completed) {
-      const billing = await getBillingEntitlement(supabase, user.id);
       const targetPath = shouldShowPaywall(billing)
         ? buildPaywallHref(POST_PAYMENT_ONBOARDING_PATH)
         : billing.isUnlimited || hasActivePaidSubscription(billing)
@@ -142,7 +145,6 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
       return gated;
     }
 
-    const billing = await getBillingEntitlement(supabase, user.id);
     if (shouldShowPaywall(billing)) {
       const gated = NextResponse.redirect(new URL(buildPaywallHref(`${pathname}${search}`), request.url));
       cookieJarMerge(response, gated);
@@ -160,13 +162,23 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
     }
   }
 
-  if (user && pathname.startsWith("/dashboard")) {
+  /** Daily activity is per day — skip the RPC when this browser already recorded today. */
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const activityCookie = `${user?.id ?? ""}:${todayUtc}`;
+  if (user && pathname.startsWith("/dashboard") && request.cookies.get(ACTIVITY_DAY_COOKIE)?.value !== activityCookie) {
     const activityPromise = recordUserDailyActivity(supabase, user.id);
     if (event?.waitUntil) {
       event.waitUntil(activityPromise);
     } else {
       await activityPromise;
     }
+    response.cookies.set(ACTIVITY_DAY_COOKIE, activityCookie, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 36,
+    });
   }
 
   return response;

@@ -171,6 +171,6 @@ export const config = {
     "/invite/:path*",
     "/dashboard",
     "/dashboard/:path*",
-    "/api/account/:path*",
+    /** `/api/account/*` is not matched: routes verify the user and refresh the session cookie themselves. */
   ],
 };
