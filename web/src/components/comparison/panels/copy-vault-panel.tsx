@@ -18,6 +18,8 @@ import {
   useSavedAdsStatus,
 } from "@/lib/saved-ads/use-saved-ads";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
+import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
 
 export type VaultAdRow = {
   id: string;
@@ -61,7 +63,7 @@ const PLATFORMS: { id: string; label: string }[] = [
   { id: "linkedin", label: "LinkedIn" },
   { id: "pinterest", label: "Pinterest" },
   { id: "snapchat", label: "Snapchat" },
-];
+].filter((p) => p.id === "all" || isScrapeEnabledForPlatform(p.id as AdsLibraryPlatform));
 
 const ANGLE_CAT_VALUES: AngleCardCategory[] = [
   "price",

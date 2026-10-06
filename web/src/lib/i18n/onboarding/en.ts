@@ -30,6 +30,7 @@ const form: OnboardingCopy["form"] = {
   platforms: {
     title: "Your ad platforms",
     body: "Tell us everywhere you actively run ads. We scrape those libraries to map the angles, creatives, and offers your company's pushing right now—which powers competitive strategy inside Rival.",
+    comingSoon: "Coming soon",
   },
   markets: {
     title: "Regions for your ads",

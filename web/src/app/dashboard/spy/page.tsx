@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, KeyboardEvent } fr
 import { Search, X, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { ChannelPickerModal, CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { AVAILABLE_CHANNEL_IDS, ChannelPickerModal, type ChannelId } from "@/components/channel-picker-modal";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { saveSearchToAccount } from "@/lib/account/client";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
@@ -188,7 +188,7 @@ export default function SpyOnCompetitorPage() {
     if (termPayload.length > 0) {
       params.set("terms", JSON.stringify(termPayload));
     }
-    if (selectedChannels.length < CHANNELS.length) {
+    if (selectedChannels.length < AVAILABLE_CHANNEL_IDS.length) {
       params.set("channels", selectedChannels.join(","));
     }
     void saveSearchToAccount({

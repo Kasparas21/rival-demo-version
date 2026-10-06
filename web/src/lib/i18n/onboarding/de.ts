@@ -30,6 +30,7 @@ const form: OnboardingCopy["form"] = {
   platforms: {
     title: "Ihre Anzeigenplattformen",
     body: "Sagen Sie uns, wo Sie aktiv Werbung schalten. Wir scrapen diese Libraries, um Angles, Creatives und Angebote Ihres Unternehmens zu erfassen — die Grundlage für Wettbewerbsstrategie in Rival.",
+    comingSoon: "Bald verfügbar",
   },
   markets: {
     title: "Regionen für Ihre Anzeigen",

@@ -2,7 +2,7 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { RefreshCw, AlertCircle, ArrowRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { AVAILABLE_CHANNEL_IDS, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
 import { ManualIdentifiersForm, type PlatformIdentifier } from "@/components/manual-identifiers-form";
 import { looksLikeUrl } from "@/lib/discovery";
 import type { TermHint } from "@/lib/competitor-query";
@@ -191,14 +191,15 @@ function SearchingContent() {
   }, [termsParam]);
   /** Stable reference — new [] each render was breaking useCallback + useEffect and spamming /api/discover */
   const selectedChannels = useMemo((): ChannelId[] => {
+    /** Platforms with scraping switched off are never searched, so no identifiers are asked for them. */
     if (workspaceBrandScrape) {
-      return CHANNELS.map((c) => c.id);
+      return AVAILABLE_CHANNEL_IDS;
     }
     if (!channelsParam.trim()) {
-      return CHANNELS.map((c) => c.id);
+      return AVAILABLE_CHANNEL_IDS;
     }
     return channelsParam.split(",").filter((c): c is ChannelId =>
-      CHANNELS.some((ch) => ch.id === c)
+      CHANNELS.some((ch) => ch.id === c) && isChannelAvailable(c as ChannelId)
     );
   }, [channelsParam, workspaceBrandScrape]);
 
@@ -311,7 +312,7 @@ function SearchingContent() {
       if (selectedChannels.length <= 1) return;
       const next = selectedChannels.filter((c) => c !== channelId);
       const p = new URLSearchParams(searchParams.toString());
-      if (next.length === CHANNELS.length) {
+      if (next.length === AVAILABLE_CHANNEL_IDS.length) {
         p.delete("channels");
       } else {
         p.set("channels", next.join(","));

@@ -44,6 +44,7 @@ export type OnboardingFormCopy = {
   platforms: {
     title: string;
     body: string;
+    comingSoon: string;
   };
   markets: {
     title: string;

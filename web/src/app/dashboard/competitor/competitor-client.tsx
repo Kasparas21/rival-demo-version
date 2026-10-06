@@ -159,7 +159,13 @@ import {
 } from "@/lib/ad-library/sort-ads-active-first";
 import { googleFaviconUrlForDomain } from "@/lib/discovery";
 import { RIVAL_BRANDS_UPDATED_EVENT } from "@/lib/account/profile-events";
-import { CHANNELS, type ChannelId, DEFAULT_SELECTED_CHANNELS } from "@/components/channel-picker-modal";
+import {
+  CHANNEL_COMING_SOON_LABEL,
+  CHANNELS,
+  type ChannelId,
+  DEFAULT_SELECTED_CHANNELS,
+  isChannelAvailable,
+} from "@/components/channel-picker-modal";
 import {
   adsProfileSetupV1,
   emptyWorkspaceScrapeRow,
@@ -270,6 +276,12 @@ import {
 } from "@/components/dashboard/competitor/competitor-session-readers";
 import { toast } from "sonner";
 import type { ManualRefreshStatus } from "@/lib/billing/manual-refresh-status";
+import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+
+function availableSavedChannels(saved: readonly ChannelId[] | null | undefined): ChannelId[] {
+  const usable = (saved ?? []).filter((c) => isChannelAvailable(c));
+  return usable.length ? [...usable] : [...DEFAULT_SELECTED_CHANNELS];
+}
 
 function normalizeDomainHostForAdsEvent(input: string): string {
   return (
@@ -518,10 +530,8 @@ function WorkspaceAdSourcesPanel({
 }) {
   const router = useRouter();
   const baseDomain = normalizeCompetitorSlug(domain);
-  const [channels, setChannels] = useState<ChannelId[]>(() => {
-    const c = initialSetup?.channels;
-    return c?.length ? [...c] : [...DEFAULT_SELECTED_CHANNELS];
-  });
+  /** Saved picks minus platforms with scraping switched off (they're shown as "Coming soon"). */
+  const [channels, setChannels] = useState<ChannelId[]>(() => availableSavedChannels(initialSetup?.channels));
   const [marketsAuto, setMarketsAuto] = useState(() => workspaceInitialMarkets(initialSetup).auto);
   const [selectedMarketCodes, setSelectedMarketCodes] = useState<string[]>(() => {
     const { auto, codes } = workspaceInitialMarkets(initialSetup);
@@ -548,8 +558,7 @@ function WorkspaceAdSourcesPanel({
     process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
 
   useEffect(() => {
-    const c = initialSetup?.channels;
-    setChannels(c?.length ? [...c] : [...DEFAULT_SELECTED_CHANNELS]);
+    setChannels(availableSavedChannels(initialSetup?.channels));
     const { auto, codes } = workspaceInitialMarkets(initialSetup);
     setMarketsAuto(auto);
     setSelectedMarketCodes(auto ? [] : codes);
@@ -580,6 +589,7 @@ function WorkspaceAdSourcesPanel({
   }, [marketsAuto, selectedMarketCodes]);
 
   const toggleChannel = (id: ChannelId) => {
+    if (!isChannelAvailable(id)) return;
     setChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
@@ -1081,13 +1091,16 @@ function WorkspaceAdSourcesPanel({
           </p>
           <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-sky-200/60 bg-white/60 p-2">
             {CHANNELS.map(({ id, name, Logo }) => {
-              const on = channels.includes(id);
+              const available = isChannelAvailable(id);
+              const on = available && channels.includes(id);
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => toggleChannel(id)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
+                  disabled={!available}
+                  title={available ? undefined : CHANNEL_COMING_SOON_LABEL}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-45 ${
                     on
                       ? "border-sky-400/90 bg-sky-500/15 text-sky-950 shadow-[0_1px_0_rgba(255,255,255,0.8)_inset]"
                       : "border-transparent bg-white/90 text-sky-900/45 hover:bg-sky-50/90 hover:text-sky-900"
@@ -1095,6 +1108,7 @@ function WorkspaceAdSourcesPanel({
                 >
                   <Logo className="h-3.5 w-3.5 shrink-0 opacity-90" />
                   {name.replace(" ads", "")}
+                  {available ? null : <span className="text-[10px] font-medium opacity-80">· {CHANNEL_COMING_SOON_LABEL}</span>}
                 </button>
               );
             })}
@@ -1106,7 +1120,7 @@ function WorkspaceAdSourcesPanel({
             Per-platform identifiers
           </p>
           <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-            {CHANNELS.filter((c) => channels.includes(c.id)).map((ch) => {
+            {CHANNELS.filter((c) => channels.includes(c.id) && isChannelAvailable(c.id)).map((ch) => {
               const spec = fieldByChannel(ch.id);
               if (!spec) return null;
               const previewHref = workspacePreviewHrefForChannel(ch.id, scrape, baseDomain);
@@ -1807,12 +1821,13 @@ function CompetitorDashboardBody({
   }, [isOwnWorkspace, myBrand.adsSetup, myBrand.domain]);
 
   /** Platforms to hydrate from `ads_cache` — union saved channels, onboarding setup, and identifiers. */
+  /** Platforms with scraping switched off are left out entirely, so they never show as empty or "Failed". */
   const adsPlatforms: AdsLibraryPlatform[] = useMemo(() => {
     if (!isOwnWorkspace) {
       return resolveCompetitorTrackedAdsPlatforms(
         effectiveChannelsFromResolver,
         effectivePlatformIds,
-      );
+      ).filter(isScrapeEnabledForPlatform);
     }
     const sources: { channelsCsv?: string; ids?: Record<string, string> | null }[] = [
       { channelsCsv: effectiveChannelsFromResolver, ids: effectivePlatformIds },
@@ -1823,7 +1838,7 @@ function CompetitorDashboardBody({
         ids: workspaceAdsSetupPlatformIds,
       });
     }
-    return unionAdsPlatformsFromSources(...sources);
+    return unionAdsPlatformsFromSources(...sources).filter(isScrapeEnabledForPlatform);
   }, [
     effectiveChannelsFromResolver,
     effectivePlatformIds,

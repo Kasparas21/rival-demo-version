@@ -30,6 +30,7 @@ const form: OnboardingCopy["form"] = {
   platforms: {
     title: "Uw advertentieplatforms",
     body: "Vertel ons waar u actief advertenties draait. We scrapen die libraries om de angles, creatives en aanbiedingen van uw bedrijf in kaart te brengen — de basis voor concurrentiestrategie in Rival.",
+    comingSoon: "Binnenkort",
   },
   markets: {
     title: "Regio's voor uw advertenties",

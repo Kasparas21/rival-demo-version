@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
-import { CHANNELS, type ChannelId, DEFAULT_SELECTED_CHANNELS } from "@/components/channel-picker-modal";
+import {
+  CHANNEL_COMING_SOON_LABEL,
+  CHANNELS,
+  type ChannelId,
+  DEFAULT_SELECTED_CHANNELS,
+  isChannelAvailable,
+} from "@/components/channel-picker-modal";
 import { CollapsibleSingleSelectFlagChipRow, type RegionChipOption } from "@/components/ad-library/single-select-flag-chip-row";
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
@@ -69,12 +75,14 @@ function stableIdsFingerprint(ids: Record<string, string> | null | undefined): s
   return JSON.stringify(entries);
 }
 
+/** Saved picks minus platforms with scraping switched off (shown as "Coming soon"); falls back to the defaults. */
 function parseChannelSeed(csv: string): ChannelId[] {
   const valid = new Set(CHANNELS.map((c) => c.id));
-  return csv
+  const usable = csv
     .split(",")
     .map((s) => s.trim())
-    .filter((c): c is ChannelId => valid.has(c as ChannelId));
+    .filter((c): c is ChannelId => valid.has(c as ChannelId) && isChannelAvailable(c as ChannelId));
+  return usable.length ? usable : [...DEFAULT_SELECTED_CHANNELS];
 }
 
 function sortedRegionChipOptions(options: RegionChipOption[]): RegionChipOption[] {
@@ -181,6 +189,7 @@ export function CompetitorPaidMediaSettingsPanel({
   }, []);
 
   const toggleChannel = (id: ChannelId) => {
+    if (!isChannelAvailable(id)) return;
     setChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
@@ -614,13 +623,16 @@ export function CompetitorPaidMediaSettingsPanel({
           </p>
           <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-2">
             {CHANNELS.map(({ id, name, Logo }) => {
-              const on = channels.includes(id);
+              const available = isChannelAvailable(id);
+              const on = available && channels.includes(id);
               return (
                 <button
                   key={id}
                   type="button"
                   onClick={() => toggleChannel(id)}
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all ${
+                  disabled={!available}
+                  title={available ? undefined : CHANNEL_COMING_SOON_LABEL}
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-45 ${
                     on
                       ? "border-slate-400 bg-slate-900 text-white shadow-sm"
                       : "border-transparent bg-white text-slate-600 hover:bg-slate-100"
@@ -628,6 +640,7 @@ export function CompetitorPaidMediaSettingsPanel({
                 >
                   <Logo className="h-3.5 w-3.5 shrink-0 opacity-90" />
                   {name.replace(" ads", "")}
+                  {available ? null : <span className="text-[10px] font-medium opacity-80">· {CHANNEL_COMING_SOON_LABEL}</span>}
                 </button>
               );
             })}
@@ -637,7 +650,7 @@ export function CompetitorPaidMediaSettingsPanel({
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-slate-500">Per-platform identifiers</p>
           <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {CHANNELS.filter((c) => channels.includes(c.id)).map((ch) => {
+            {CHANNELS.filter((c) => channels.includes(c.id) && isChannelAvailable(c.id)).map((ch) => {
               const spec = PLATFORM_CONNECTION_FIELD_SPECS[ch.id];
               const value = fieldValueForChannel(ch.id, metaDisplay, identifiers);
               const previewHref = competitorPreviewHrefForChannel(ch.id, metaDisplay, identifiers);

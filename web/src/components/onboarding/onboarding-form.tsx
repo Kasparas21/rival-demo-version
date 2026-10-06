@@ -48,7 +48,7 @@ import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progre
 import type { Locale } from "@/lib/i18n/locale";
 import { buildSignupAfterOnboardingPath, PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
-import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { AVAILABLE_CHANNEL_IDS, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
 import { applyPartialOnboardingDraft } from "@/lib/onboarding/apply-draft";
 import { saveOnboardingDraft, readOnboardingDraft, clearOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
 import { resolveOnboardingCompanyHost } from "@/lib/onboarding/resolve-company-host";
@@ -138,7 +138,12 @@ const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
 const STEP_CHOOSE_PLAN = 5;
 
-const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = CHANNELS.map((c) => c.id);
+/** Every platform we can scrape today; the rest show as "Coming soon" and are never selected. */
+const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = AVAILABLE_CHANNEL_IDS;
+
+function availableChannels(channels: readonly ChannelId[]): ChannelId[] {
+  return channels.filter((id) => isChannelAvailable(id));
+}
 
 function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
   return (
@@ -150,7 +155,8 @@ function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
 function resolveInitialWorkspaceChannels(
   initialBrandSetup: AdsProfileSetup | null | undefined,
 ): ChannelId[] {
-  if (initialBrandSetup?.channels?.length) return initialBrandSetup.channels;
+  const saved = availableChannels(initialBrandSetup?.channels ?? []);
+  if (saved.length) return saved;
   /** Guest draft picks are restored after mount, keeping the first render identical on server and client. */
   return ALL_WORKSPACE_CHANNEL_IDS;
 }
@@ -449,8 +455,9 @@ export function OnboardingForm({
   useEffect(() => {
     if (!initialBrandSetup || brandSetupHydratedRef.current) return;
     brandSetupHydratedRef.current = true;
-    if (initialBrandSetup.channels.length > 0) {
-      setWorkspaceChannels(initialBrandSetup.channels);
+    const savedChannels = availableChannels(initialBrandSetup.channels);
+    if (savedChannels.length > 0) {
+      setWorkspaceChannels(savedChannels);
     }
     const codes = initialBrandSetup.adMarketCountryCodes;
     if (codes.length >= ONBOARDING_AD_MARKET_CODES.length) {
@@ -473,9 +480,10 @@ export function OnboardingForm({
   useEffect(() => {
     if (initialBrandSetup?.channels?.length) return;
     const draft = readOnboardingDraft();
-    if (!draft?.workspaceChannels?.length) return;
+    const draftChannels = availableChannels(draft?.workspaceChannels ?? []);
+    if (!draftChannels.length) return;
     setWorkspaceChannels((prev) =>
-      isAllWorkspaceChannels(prev) ? draft.workspaceChannels : prev,
+      isAllWorkspaceChannels(prev) ? draftChannels : prev,
     );
   }, [initialBrandSetup, postPaymentResume]);
 
@@ -505,6 +513,7 @@ export function OnboardingForm({
   const showFaviconSlot = showTypingSkeleton || Boolean(faviconSrc);
   const companyLooksValid = isPlausiblePublicHostname(normalizedCompany);
   const toggleWorkspaceChannel = useCallback((id: ChannelId) => {
+    if (!isChannelAvailable(id)) return;
     setWorkspaceChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }, []);
 
@@ -1213,14 +1222,16 @@ export function OnboardingForm({
             </div>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {CHANNELS.map(({ id, name, Logo }) => {
-                const on = workspaceChannels.includes(id);
+                const available = isChannelAvailable(id);
+                const on = available && workspaceChannels.includes(id);
                 return (
                   <button
                     key={id}
                     type="button"
                     aria-pressed={on}
+                    disabled={!available}
                     onClick={() => toggleWorkspaceChannel(id)}
-                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-xl border px-2.5 py-3 text-left transition sm:flex sm:items-center sm:gap-4 sm:px-4 sm:py-4 ${
+                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-xl border px-2.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 sm:flex sm:items-center sm:gap-4 sm:px-4 sm:py-4 ${
                       on
                         ? "border-[#4a7fa5]/35 bg-white/55 text-gray-900 shadow-sm ring-1 ring-[#4a7fa5]/25"
                         : "border-gray-200/70 bg-white/30 text-gray-700 hover:border-gray-300/80 hover:bg-white/45"
@@ -1229,17 +1240,26 @@ export function OnboardingForm({
                     <Logo className="size-7 shrink-0 sm:size-9" />
                     <span className="min-w-0 text-[13px] font-semibold leading-snug sm:flex-1 sm:text-[16px]">
                       {name}
+                      {available ? null : (
+                        <span className="block text-[11px] font-medium text-gray-500 sm:text-[12px]">
+                          {t.platforms.comingSoon}
+                        </span>
+                      )}
                     </span>
-                    <span
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition sm:size-7 ${
-                        on
-                          ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
-                          : "border-gray-300/80 bg-white/60"
-                      }`}
-                      aria-hidden
-                    >
-                      {on ? <Check className="size-3.5 sm:size-4" strokeWidth={2.75} /> : null}
-                    </span>
+                    {available ? (
+                      <span
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition sm:size-7 ${
+                          on
+                            ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                            : "border-gray-300/80 bg-white/60"
+                        }`}
+                        aria-hidden
+                      >
+                        {on ? <Check className="size-3.5 sm:size-4" strokeWidth={2.75} /> : null}
+                      </span>
+                    ) : (
+                      <span className="size-6 shrink-0 sm:size-7" aria-hidden />
+                    )}
                   </button>
                 );
               })}
