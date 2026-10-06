@@ -176,4 +176,38 @@ describe("detectMoves", () => {
     const moves = detectMoves(before, after);
     expect(moves.some((m) => m.event_type === "budget_shift" && m.platform === "meta")).toBe(true);
   });
+
+  describe("angles", () => {
+    const row = (angle: string, totalCount: number, platforms: ("meta" | "google")[] = ["meta"]) => ({
+      angle,
+      totalCount,
+      platforms,
+      platformCounts: {},
+      avgLifespanDays: 20,
+    });
+    const withAngles = (rows: ReturnType<typeof row>[]) =>
+      minimalPayload({ insights: { ...minimalPayload().insights, angles_by_platform: rows } });
+
+    it("flags a category that wasn't there before", () => {
+      const moves = detectMoves(
+        withAngles([row("Price", 6)]),
+        withAngles([row("Price", 6), row("Social proof", 4)]),
+      );
+      expect(moves.filter((m) => m.event_type === "new_angle").map((m) => m.after_state.angle)).toEqual(["Social proof"]);
+    });
+
+    it("flags a category moving onto another platform", () => {
+      const moves = detectMoves(withAngles([row("Price", 6)]), withAngles([row("Price", 8, ["meta", "google"])]));
+      expect(moves.some((m) => m.event_type === "angle_migration")).toBe(true);
+    });
+
+    it("treats the first category payload after an old full-label one as a baseline", () => {
+      const before = withAngles([
+        row("quality · Hook: Artfully designed · Body: Craft story", 3),
+        row("Brand awareness · Hook: Rothy's Inc. · Body: Brand presence", 12),
+      ]);
+      const after = withAngles([row("Brand awareness", 43), row("Social proof", 19), row("Quality", 14)]);
+      expect(detectMoves(before, after).filter((m) => m.event_type === "new_angle" || m.event_type === "angle_migration")).toEqual([]);
+    });
+  });
 });
