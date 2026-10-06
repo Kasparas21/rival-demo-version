@@ -46,9 +46,10 @@ import {
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
 import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progress-bar";
 import type { Locale } from "@/lib/i18n/locale";
-import { buildSignupAfterOnboardingPath } from "@/lib/auth/trial-flow";
+import { buildSignupAfterOnboardingPath, PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { applyPartialOnboardingDraft } from "@/lib/onboarding/apply-draft";
 import { saveOnboardingDraft, readOnboardingDraft, clearOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
 import { resolveOnboardingCompanyHost } from "@/lib/onboarding/resolve-company-host";
 import {
@@ -720,12 +721,20 @@ export function OnboardingForm({
       const draft = buildPrePaymentDraft();
       saveOnboardingDraft(draft);
 
-      if (!guestMode) {
-        const supabase = createSupabaseBrowserClient();
-        await supabase.auth.signOut();
+      if (guestMode) {
+        router.push(buildSignupAfterOnboardingPath(testerInviteCode));
+        router.refresh();
+        return true;
       }
 
-      router.push(buildSignupAfterOnboardingPath(testerInviteCode));
+      /** Already signed in (signed up directly): save the setup to this account and go to plans — never sign out. */
+      const saved = await applyPartialOnboardingDraft(userId, draft);
+      if (!saved.ok) {
+        console.warn("[onboarding] could not save pre-payment setup", saved.error);
+        setError(t.errors.somethingWrong);
+        return false;
+      }
+      router.push(PAYWALL_AFTER_TRIAL_PATH);
       router.refresh();
       return true;
     } catch {
@@ -1264,7 +1273,7 @@ export function OnboardingForm({
               disabled={saving || !workspaceChannelsValid}
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
-              {compactPrePaymentFlow && saving ? t.saving : t.continueToSignup}
+              {compactPrePaymentFlow && saving ? t.saving : guestMode ? t.continueToSignup : t.continue}
             </button>
           </>
         ) : null}
