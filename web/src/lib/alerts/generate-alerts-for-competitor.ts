@@ -25,6 +25,9 @@ import type { Database, Json } from "@/lib/supabase/types";
 
 type AlertInsert = Database["public"]["Tables"]["competitor_alerts"]["Insert"];
 
+/** Batches this soon after a competitor's first one belong to its first scrape. */
+const BASELINE_WINDOW_MS = 30 * 60 * 1000;
+
 export async function generateAlertsForCompetitor(params: {
   supabase: SupabaseClient<Database>;
   userId: string;
@@ -48,6 +51,52 @@ export async function generateAlertsForCompetitor(params: {
   let batchId = params.batchId ?? null;
   if (!batchId) {
     batchId = await getLatestScrapeBatchId(supabase, competitorId);
+  }
+
+  let batchCreatedAt: string | null = null;
+  let previousBatchCreatedAt: string | null = null;
+  let firstBatchCreatedAt: string | null = null;
+  if (batchId) {
+    const { data: batchRow } = await supabase
+      .from("scrape_batches")
+      .select("created_at")
+      .eq("id", batchId)
+      .maybeSingle();
+    batchCreatedAt = batchRow?.created_at ?? null;
+    if (batchCreatedAt) {
+      const [{ data: previousRow }, { data: firstRow }] = await Promise.all([
+        supabase
+          .from("scrape_batches")
+          .select("created_at")
+          .eq("competitor_id", competitorId)
+          .lt("created_at", batchCreatedAt)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("scrape_batches")
+          .select("created_at")
+          .eq("competitor_id", competitorId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      previousBatchCreatedAt = previousRow?.created_at ?? null;
+      firstBatchCreatedAt = firstRow?.created_at ?? batchCreatedAt;
+    }
+  }
+
+  /**
+   * A competitor's first scrape is the baseline: every platform and angle looks new and every long-running ad
+   * looks like a fresh winner (one new competitor produced 57 alerts). One scrape writes a batch per platform
+   * about 30s apart (later scrapes come hours or days later), so everything in that first window is baseline.
+   */
+  if (
+    batchCreatedAt &&
+    firstBatchCreatedAt &&
+    Date.parse(batchCreatedAt) - Date.parse(firstBatchCreatedAt) < BASELINE_WINDOW_MS
+  ) {
+    return;
   }
 
   const [billing, compRes, rulesRes] = await Promise.all([
@@ -201,14 +250,6 @@ export async function generateAlertsForCompetitor(params: {
   if (batchId) {
     const creativeThreshold = thresholdsFor("creative_push").creativePushCount;
 
-    let batchCreatedAt: string | null = null;
-    const { data: batchRow } = await supabase
-      .from("scrape_batches")
-      .select("created_at")
-      .eq("id", batchId)
-      .maybeSingle();
-    batchCreatedAt = batchRow?.created_at ?? null;
-
     let newAdsQuery = supabase
       .from("scraped_ads")
       .select("id", { count: "exact", head: true })
@@ -231,15 +272,21 @@ export async function generateAlertsForCompetitor(params: {
     }
 
     const lifespanDays = thresholdsFor("proven_winner").lifespanDays;
-    const cutoff = new Date(Date.now() - lifespanDays * 86400000).toISOString();
-    const { data: winnerAds, error: winnerErr } = await supabase
+    const lifespanMs = lifespanDays * 86400000;
+    const cutoff = new Date(Date.now() - lifespanMs).toISOString();
+    let winnerQuery = supabase
       .from("scraped_ads")
       .select("id, platform, ad_text, first_seen_at")
       .eq("user_id", userId)
       .eq("competitor_id", competitorId)
       .eq("is_active", true)
-      .lte("first_seen_at", cutoff)
-      .limit(50);
+      .lte("first_seen_at", cutoff);
+    /** Only ads that crossed the lifespan since the previous scrape; older ones were already winners then. */
+    if (previousBatchCreatedAt) {
+      const previousCutoff = new Date(Date.parse(previousBatchCreatedAt) - lifespanMs).toISOString();
+      winnerQuery = winnerQuery.gt("first_seen_at", previousCutoff);
+    }
+    const { data: winnerAds, error: winnerErr } = await winnerQuery.limit(50);
 
     if (!winnerErr && winnerAds?.length) {
       for (const ad of winnerAds) {
