@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.redirect(session.customerPortalUrl);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Could not open the billing portal.";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+    /** Comped and admin-granted plans have no Polar customer. Polar's error names our internal user id: log it, don't show it. */
+    console.error("[billing/portal]", e instanceof Error ? e.message : e);
+    const settings = new URL("/dashboard/settings", appOriginForRequest(request));
+    settings.searchParams.set("billing_portal", "unavailable");
+    return NextResponse.redirect(settings);
   }
 }
