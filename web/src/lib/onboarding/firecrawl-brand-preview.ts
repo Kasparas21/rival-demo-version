@@ -1,5 +1,6 @@
 import Firecrawl from "@mendable/firecrawl-js";
 import type { Document, ScrapeOptions, SearchResultWeb } from "@mendable/firecrawl-js";
+import { pickBrandName } from "@/lib/onboarding/pick-brand-name";
 import {
   extractDomain,
   extractLinksFromContent,
@@ -275,15 +276,13 @@ function documentToBrandPreview(
         ? meta.ogDescription.trim()
         : null;
 
-  const firstSeg = domain.split(".")[0] ?? "";
-  const brandName =
-    ogTitle ??
-    (typeof meta.title === "string" && meta.title.trim()
-      ? String(meta.title).replace(/\s*[|\u2014-].*$/, "").trim()
-      : null) ??
-    (firstSeg
-      ? firstSeg.charAt(0).toUpperCase() + firstSeg.slice(1).toLowerCase()
-      : domain);
+  /** Titles are often slogans ("The World's Most Comfortable Shoes"); pick the name that matches the domain. */
+  const brandName = pickBrandName({
+    domain,
+    ogSiteName: typeof meta.ogSiteName === "string" ? meta.ogSiteName : null,
+    ogTitle,
+    title: typeof meta.title === "string" ? meta.title : null,
+  });
 
   const logoRaw =
     (typeof meta.ogImage === "string" ? meta.ogImage : undefined) ??

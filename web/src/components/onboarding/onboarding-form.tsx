@@ -780,6 +780,13 @@ export function OnboardingForm({
         return false;
       }
 
+      /** An invalid Meta link used to save anyway — the scrape then showed "Connected" with 0 ads. */
+      if (workspaceChannels.includes("meta") && workspaceMetaInputError) {
+        setError(workspaceMetaInputError);
+        setStep(STEP_WORKSPACE_SCRAPE);
+        return false;
+      }
+
       if (workspaceChannels.includes("google")) {
         const gv = companyScrape.googleAdsTransparencyUrl.trim();
         if (!gv) {
@@ -1533,7 +1540,11 @@ export function OnboardingForm({
             <button
               type="button"
               onClick={() => void advanceFromAdProfiles()}
-              disabled={saving}
+              disabled={
+                saving ||
+                Boolean(workspaceChannels.includes("meta") && workspaceMetaInputError) ||
+                Boolean(workspaceChannels.includes("google") && workspaceGoogleInputError)
+              }
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
               {saving

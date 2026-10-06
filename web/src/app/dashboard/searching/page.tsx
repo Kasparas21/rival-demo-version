@@ -126,6 +126,12 @@ function channelIdToAdsLibraryPlatform(id: ChannelId): AdsLibraryPlatform | null
   return null;
 }
 
+function platformAdCount(res: AdsLibraryResponse | null, platform: AdsLibraryPlatform): number {
+  if (!res) return 0;
+  if (platform === "google") return res.google?.rows?.length ?? 0;
+  return res[platform]?.ads?.length ?? 0;
+}
+
 const CHANNEL_TO_STATUS: Record<ChannelId, "found" | "no ads found"> = {
   meta: "found",
   google: "found",
@@ -231,7 +237,7 @@ function SearchingContent() {
   /** Live ads fetch: completed platform requests vs total (for progress label). */
   const [scanFraction, setScanFraction] = useState({ done: 0, total: 0 });
   const [platformStatuses, setPlatformStatuses] = useState<
-    Partial<Record<AdsLibraryPlatform, "queued" | "running" | "cached" | "done" | "error">>
+    Partial<Record<AdsLibraryPlatform, "queued" | "running" | "cached" | "done" | "empty" | "error">>
   >({});
   const mergedAdsScanRef = useRef<AdsLibraryResponse | null>(null);
   const workspaceScrapeStartedRef = useRef(false);
@@ -516,7 +522,7 @@ function SearchingContent() {
         channelsWithFilledIdentifiers(channelsForScan, mergedIds)
       );
       const initialStatuses: Partial<
-        Record<AdsLibraryPlatform, "queued" | "running" | "cached" | "done" | "error">
+        Record<AdsLibraryPlatform, "queued" | "running" | "cached" | "done" | "empty" | "error">
       > = {};
       for (const p of adsPlatforms) initialStatuses[p] = "queued";
       setPlatformStatuses(initialStatuses);
@@ -656,12 +662,14 @@ function SearchingContent() {
               PLATFORM_SCRAPE_TIMEOUT_MS
             );
             let platformOk = false;
+            let normalizedForStatus: AdsLibraryResponse | null = null;
             try {
               const { response: json, httpOk } = await fetchAdsLibraryDeduplicated(
                 { ...payload, platforms: [p] },
                 { skipCache: true, signal: platformAbort.signal }
               );
               const normalizedPlatform = coerceAdsLibraryResponse(json);
+              normalizedForStatus = normalizedPlatform;
               platformOk = httpOk && platformScrapeSucceeded(normalizedPlatform, p);
               return { platform: p, json: normalizedPlatform, platformOk };
             } catch {
@@ -669,9 +677,10 @@ function SearchingContent() {
             } finally {
               window.clearTimeout(platformTimer);
               bumpProgress();
+              /** A run that finished but found nothing must not read as "Connected". */
               setPlatformStatuses((prev) => ({
                 ...prev,
-                [p]: platformOk ? "done" : "error",
+                [p]: !platformOk ? "error" : platformAdCount(normalizedForStatus, p) > 0 ? "done" : "empty",
               }));
             }
           })
@@ -1122,7 +1131,9 @@ function SearchingContent() {
                 runtimeStatus === "done" ||
                 (platform.status === "found" && !isActiveScanning);
               const noAdsFound =
-                runtimeStatus === "error" || (platform.status === "no ads found" && !isActiveScanning);
+                runtimeStatus === "error" ||
+                runtimeStatus === "empty" ||
+                (platform.status === "no ads found" && !isActiveScanning);
 
               return (
                 <div
@@ -1160,7 +1171,9 @@ function SearchingContent() {
                             ? "Scraping…"
                             : runtimeStatus === "done"
                               ? "Connected"
-                              : runtimeStatus === "error"
+                              : runtimeStatus === "empty"
+                                ? "No ads found"
+                                : runtimeStatus === "error"
                                 ? "Failed"
                                 : "Checking…"
                         : platform.status === "no ads found"
