@@ -33,17 +33,6 @@ const OTP_TYPES = new Set<EmailOtpType>([
   "email_change",
 ]);
 
-function safeNextPath(value: string | null | undefined): string | null {
-  if (!value) return null;
-  let decoded = value;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    decoded = value;
-  }
-  return decoded.startsWith("/") && !decoded.startsWith("//") && decoded !== "/login" ? decoded : null;
-}
-
 function postOnboardingPath(path: string): string {
   return path === "/checkout" ? "/api/billing/checkout" : path;
 }

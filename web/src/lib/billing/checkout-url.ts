@@ -1,13 +1,12 @@
 import type { BillingPeriod, PolarPlanSlug } from "@/lib/billing/config";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
 import { buildPaywallHref } from "@/lib/billing/paywall";
 import { shouldRedirectCheckoutToUpgrade } from "@/lib/billing/upgrade-plan";
 
 export function safeCheckoutNextPath(value: string | null | undefined): string | null {
-  const trimmed = value?.trim();
-  if (!trimmed || !trimmed.startsWith("/") || trimmed.startsWith("//")) return null;
-  return trimmed;
+  return safeNextPath(value);
 }
 
 function checkoutQuery(

@@ -5,6 +5,7 @@ import { getResendApiKey, getResendFromEmail } from "@/lib/email/resend-config";
 import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
+  const next = safeNextPath(nextRaw) ?? "/dashboard/spy";
 
   const origin = authLinkOriginForRequest(request);
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(next)}`;

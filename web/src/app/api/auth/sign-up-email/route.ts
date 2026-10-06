@@ -15,6 +15,7 @@ import { getSignupCopy } from "@/lib/i18n/auth";
 import { LOCALE_COOKIE, LOCALE_HEADER, parseLocale } from "@/lib/i18n/locale";
 import { getPostHogServerClient } from "@/lib/analytics/posthog-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -58,8 +59,7 @@ export async function POST(request: NextRequest) {
   }
 
   const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
-  const next =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
+  const next = safeNextPath(nextRaw) ?? "/dashboard/spy";
 
   const testerInvite = resolveSignupTesterInvite(request, body.testerInvite);
 

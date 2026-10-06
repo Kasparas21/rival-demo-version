@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AwaitingQuoteContent } from "@/components/billing/awaiting-quote-content";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 import {
   adminSkipCheckoutDestination,
   getBillingEntitlement,
@@ -19,11 +20,9 @@ function firstParam(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
-function safeNextPath(value: string | null): string {
-  if (value && value.startsWith("/") && !value.startsWith("//") && value !== "/awaiting-quote") {
-    return value;
-  }
-  return DASHBOARD_HOME_PATH;
+function resolveNextPath(value: string | null): string {
+  const safe = safeNextPath(value);
+  return safe && safe !== "/awaiting-quote" ? safe : DASHBOARD_HOME_PATH;
 }
 
 export default async function AwaitingQuotePage({
@@ -32,7 +31,7 @@ export default async function AwaitingQuotePage({
   searchParams?: Promise<SearchParams>;
 }) {
   const params = (await searchParams) ?? {};
-  const nextPath = safeNextPath(firstParam(params.next));
+  const nextPath = resolveNextPath(firstParam(params.next));
   const checkoutError = firstParam(params.checkout_error);
 
   const supabase = await createSupabaseServerClient();

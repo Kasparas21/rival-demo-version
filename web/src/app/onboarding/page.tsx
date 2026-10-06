@@ -39,6 +39,7 @@ import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getOnboardingCopy } from "@/lib/i18n/onboarding";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -47,10 +48,9 @@ function firstParam(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
-function safeNextPath(value: string | null): string | null {
-  return value && value.startsWith("/") && !value.startsWith("//") && value !== "/login" && value !== "/onboarding"
-    ? value
-    : null;
+function resolveNextPath(value: string | null): string | null {
+  const safe = safeNextPath(value);
+  return safe && safe !== "/login" && safe !== "/onboarding" ? safe : null;
 }
 
 function postOnboardingPath(path: string): string {
@@ -105,7 +105,7 @@ export default async function OnboardingPage({
   const locale = await getRequestLocale();
   const copy = getOnboardingCopy(locale);
   const params = (await searchParams) ?? {};
-  const nextPath = safeNextPath(firstParam(params.next));
+  const nextPath = resolveNextPath(firstParam(params.next));
   const replayOnboarding = firstParam(params.replay) === "1" && canReplayOnboardingInDev();
   const initialDomain = initialDomainFromParams(params);
   const explicitPostPayment = isPostPaymentOnboardingSearchParams(params);

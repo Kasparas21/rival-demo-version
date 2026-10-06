@@ -1,16 +1,11 @@
 import { buildPaywallHref } from "@/lib/billing/paywall";
 import { POST_PAYMENT_ONBOARDING_PATH } from "@/lib/onboarding/phase";
 import { OAUTH_NEXT_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
+import { safeDecodedNextPath } from "@/lib/auth/safe-next-path";
 
 function safeRelativePath(value: string | null | undefined): string | null {
-  if (!value) return null;
-  let decoded = value;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    decoded = value;
-  }
-  return decoded.startsWith("/") && !decoded.startsWith("//") && decoded !== "/login" ? decoded : null;
+  const safe = safeDecodedNextPath(value);
+  return safe && safe !== "/login" ? safe : null;
 }
 
 /** After signup: silently apply guest draft, then show the plan picker. */

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { OAUTH_NEXT_COOKIE, TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 function clearAuthBridgeCookies(response: NextResponse): void {
   const opts = {
@@ -21,9 +22,8 @@ async function signOutSession(): Promise<void> {
 
 export async function GET(request: NextRequest) {
   await signOutSession();
-  const next = request.nextUrl.searchParams.get("next")?.trim() ?? "";
-  const dest =
-    next.startsWith("/") && !next.startsWith("//") && next !== "/auth/sign-out" ? next : "/login";
+  const next = safeNextPath(request.nextUrl.searchParams.get("next"));
+  const dest = next && next !== "/auth/sign-out" ? next : "/login";
   const response = NextResponse.redirect(new URL(dest, request.url));
   clearAuthBridgeCookies(response);
   return response;
