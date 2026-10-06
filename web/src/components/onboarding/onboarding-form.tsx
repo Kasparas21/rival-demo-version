@@ -140,12 +140,6 @@ const STEP_CHOOSE_PLAN = 5;
 
 const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = CHANNELS.map((c) => c.id);
 
-function getHydrationDraft(skipDraft = false): OnboardingDraft | null {
-  if (skipDraft) return null;
-  if (typeof window === "undefined") return null;
-  return readOnboardingDraft();
-}
-
 function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
   return (
     channels.length === ALL_WORKSPACE_CHANNEL_IDS.length &&
@@ -157,10 +151,7 @@ function resolveInitialWorkspaceChannels(
   initialBrandSetup: AdsProfileSetup | null | undefined,
 ): ChannelId[] {
   if (initialBrandSetup?.channels?.length) return initialBrandSetup.channels;
-  if (typeof window !== "undefined") {
-    const draft = readOnboardingDraft();
-    if (draft?.workspaceChannels?.length) return draft.workspaceChannels;
-  }
+  /** Guest draft picks are restored after mount, keeping the first render identical on server and client. */
   return ALL_WORKSPACE_CHANNEL_IDS;
 }
 
@@ -393,18 +384,14 @@ export function OnboardingForm({
   const lastContinueFromWebsiteHostRef = useRef<string>("");
 
   const skipDraftHydration = newBrandMode;
+  /** The saved guest draft is applied after mount (see below) so server and client render the same first frame. */
   const [companyUrl, setCompanyUrl] = useState(() => {
-    const draft = getHydrationDraft(skipDraftHydration);
-    if (draft?.companyUrl?.trim()) return sanitizeCompanyUrlInput(draft.companyUrl);
     if (initialDomain) return sanitizeCompanyUrlInput(initialDomain);
     return sanitizeCompanyUrlInput(initialData?.company_url ?? "");
   });
 
   const [brandLoading, setBrandLoading] = useState(false);
-  const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(() => {
-    const draft = getHydrationDraft(skipDraftHydration);
-    return draft ? brandInsightsFromDraft(draft) : null;
-  });
+  const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(null);
 
   /** Workspace (your ads) */
   const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(() =>
@@ -420,17 +407,12 @@ export function OnboardingForm({
   const [workspaceMarketsAuto, setWorkspaceMarketsAuto] = useState(true);
   const [workspaceMarketsPickerExpanded, setWorkspaceMarketsPickerExpanded] = useState(false);
   const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => {
-    const draft = getHydrationDraft(skipDraftHydration);
-    const hostFromDraft = draft?.companyHost
-      ? normalizedWorkspaceHost(draft.companyHost)
-      : "";
     const host =
-      hostFromDraft ||
-      (initialDomain
+      initialDomain
         ? normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialDomain))
         : newBrandMode
           ? ""
-          : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? "")));
+          : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? ""));
     const base = emptyWorkspaceScrapeRow(host);
     if (!initialBrandSetup?.scrape) return base;
     return { ...base, ...initialBrandSetup.scrape };
@@ -446,12 +428,18 @@ export function OnboardingForm({
   }, [newBrandMode]);
 
   useEffect(() => {
+    if (skipDraftHydration) return;
     const draft = readOnboardingDraft();
     if (!draft) return;
-    if (!companyUrl.trim() && draft.companyUrl?.trim()) {
+    /** The draft wins over `?domain=` and the profile, as it did when it was read during render. */
+    if (draft.companyUrl?.trim()) {
       setCompanyUrl(sanitizeCompanyUrlInput(draft.companyUrl));
     }
-    if (!brandInsights && draft.brandInsights) {
+    const hostFromDraft = draft.companyHost ? normalizedWorkspaceHost(draft.companyHost) : "";
+    if (hostFromDraft) {
+      setCompanyScrape({ ...emptyWorkspaceScrapeRow(hostFromDraft), ...(initialBrandSetup?.scrape ?? {}) });
+    }
+    if (draft.brandInsights) {
       setBrandInsights(brandInsightsFromDraft(draft));
     }
     // Hydrate once on mount — guest draft survives Google OAuth redirect.
