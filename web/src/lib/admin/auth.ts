@@ -5,28 +5,27 @@ import type { Database } from "@/lib/supabase/types";
 
 export type AdminRole = "admin" | "viewer";
 
-/** Always allowed admin emails (also merged with ADMIN_EMAILS env). */
-export const DEFAULT_ADMIN_EMAILS = [
-  "attributo@yahoo.com",
-  "freecardsbf2@gmail.com",
-  "margentura@gmail.com",
-] as const;
-
 export type AdminUser = {
   userId: string;
   email: string;
   role: AdminRole;
 };
 
+/**
+ * Optional bootstrap list (`ADMIN_EMAILS`, comma-separated). Existing admins live in `admin_users`;
+ * this only promotes an account whose verified sign-in email is listed.
+ */
 export function parseAdminEmailsFromEnv(): string[] {
   const raw = process.env.ADMIN_EMAILS?.trim();
-  const fromEnv = raw
-    ? raw
+  if (!raw) return [];
+  return [
+    ...new Set(
+      raw
         .split(",")
         .map((e) => e.trim().toLowerCase())
-        .filter(Boolean)
-    : [];
-  return [...new Set([...DEFAULT_ADMIN_EMAILS, ...fromEnv])];
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export function isAllowlistedAdminEmail(email: string | null | undefined): boolean {
@@ -35,36 +34,17 @@ export function isAllowlistedAdminEmail(email: string | null | undefined): boole
   return parseAdminEmailsFromEnv().includes(normalized);
 }
 
-async function resolveAccountEmail(
-  admin: SupabaseClient<Database>,
-  userId: string,
-  authEmail: string | null | undefined,
-): Promise<string | null> {
-  if (authEmail?.trim()) return authEmail.trim().toLowerCase();
+/** Session user from `supabase.auth.getUser()` — never `profiles`, which users can edit. */
+export type AdminCandidate = {
+  id: string;
+  email?: string | null;
+  email_confirmed_at?: string | null;
+};
 
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("email")
-    .eq("id", userId)
-    .maybeSingle();
-
-  return profile?.email?.trim().toLowerCase() ?? null;
-}
-
-async function hasAdminUnlimitedBilling(
-  admin: SupabaseClient<Database>,
-  userId: string,
-): Promise<boolean> {
-  const { data } = await admin
-    .from("billing_subscriptions")
-    .select("raw_payload")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (!data?.raw_payload || typeof data.raw_payload !== "object" || Array.isArray(data.raw_payload)) {
-    return false;
-  }
-  return (data.raw_payload as Record<string, unknown>).admin_unlimited === true;
+/** The sign-in email, only once Supabase Auth has verified it. */
+export function verifiedAuthEmail(user: AdminCandidate): string | null {
+  if (!user.email_confirmed_at) return null;
+  return user.email?.trim().toLowerCase() || null;
 }
 
 function syntheticAdminUser(userId: string, email: string): AdminUser {
@@ -140,12 +120,14 @@ export async function ensureAdminUserForAccount(
   }
 }
 
+/**
+ * Admin access comes only from an `admin_users` row, or from `ADMIN_EMAILS` matching the verified
+ * sign-in email. Billing flags such as `admin_unlimited` (also set for tester invites) grant usage, not the panel.
+ */
 export async function resolveAdminUser(
   admin: SupabaseClient<Database>,
-  user: { id: string; email?: string | null },
+  user: AdminCandidate,
 ): Promise<AdminUser | null> {
-  const email = await resolveAccountEmail(admin, user.id, user.email);
-
   try {
     const existing = await getAdminUserById(admin, user.id);
     if (existing) return existing;
@@ -153,32 +135,10 @@ export async function resolveAdminUser(
     console.warn("[admin] admin_users lookup", e);
   }
 
-  const allowlisted = isAllowlistedAdminEmail(email);
-  const billingAdmin = await hasAdminUnlimitedBilling(admin, user.id);
+  const email = verifiedAuthEmail(user);
+  if (!email || !isAllowlistedAdminEmail(email)) return null;
 
-  if (!allowlisted && !billingAdmin) {
-    return null;
-  }
-
-  const displayEmail = email ?? user.email?.trim().toLowerCase() ?? "admin";
-
-  try {
-    await ensureAdminUsersFromEnv(admin);
-  } catch (e) {
-    console.warn("[admin] ensureAdminUsersFromEnv", e);
-  }
-
-  try {
-    if (allowlisted && email) {
-      const ensured = await ensureAdminUserForAccount(admin, user.id, email);
-      if (ensured) return ensured;
-    }
-  } catch (e) {
-    console.warn("[admin] ensureAdminUserForAccount", e);
-  }
-
-  // Allowlisted email or complimentary admin billing — even if admin_users table is not migrated yet.
-  return syntheticAdminUser(user.id, displayEmail);
+  return ensureAdminUserForAccount(admin, user.id, email);
 }
 
 export async function requireAdminUser(
@@ -188,43 +148,11 @@ export async function requireAdminUser(
   return getAdminUser(supabase, userId);
 }
 
-export async function ensureAdminUsersFromEnv(
-  admin: SupabaseClient<Database>,
-): Promise<void> {
-  const emails = parseAdminEmailsFromEnv();
-  if (emails.length === 0) return;
-
-  for (const email of emails) {
-    try {
-      const { data: profile } = await admin
-        .from("profiles")
-        .select("id, email")
-        .ilike("email", email)
-        .maybeSingle();
-      if (!profile?.id) continue;
-
-      const { error } = await admin.from("admin_users").upsert(
-        {
-          user_id: profile.id,
-          email: profile.email ?? email,
-          role: "admin",
-        },
-        { onConflict: "user_id" },
-      );
-      if (error) {
-        console.warn("[admin] ensureAdminUsersFromEnv upsert", email, error.message);
-      }
-    } catch (e) {
-      console.warn("[admin] ensureAdminUsersFromEnv", email, e);
-    }
-  }
-}
-
-/** Bearer ADMIN_SECRET or session admin_users row / allowlisted email. */
+/** Bearer ADMIN_SECRET or session admin_users row / allowlisted verified email. */
 export async function authorizeAdminRequest(
   req: Request,
   supabase: SupabaseClient<Database>,
-  user: { id: string; email?: string | null } | null,
+  user: AdminCandidate | null,
 ): Promise<{ ok: true; admin: AdminUser } | { ok: false }> {
   const adminSecret = process.env.ADMIN_SECRET?.trim();
   if (adminSecret && req.headers.get("authorization") === `Bearer ${adminSecret}`) {
