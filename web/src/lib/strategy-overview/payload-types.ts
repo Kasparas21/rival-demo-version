@@ -426,7 +426,10 @@ export type VoiceToneByPlatformInsight = {
 
 /** Angle × platform rollups for comparison panels. */
 export type AnglesByPlatformInsight = {
+  /** Category name (e.g. "Social proof"); see `lib/strategy-overview/ad-angles`. */
   angle: string;
+  /** Full enrichment label of the category's longest-running ad, for showing a concrete hook. */
+  exampleAngle?: string;
   totalCount: number;
   platforms: StrategyPlatform[];
   platformCounts: Partial<Record<StrategyPlatform, number>>;

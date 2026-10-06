@@ -1,3 +1,4 @@
+import { angleLabelOf, angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
 import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
 import { deriveSidebarInsights } from "@/lib/strategy-overview/derive-sidebar-insights";
@@ -334,7 +335,9 @@ function angleTokens(ads: ScrapedAdInput[]): Map<string, Set<string>> {
   for (const a of adsForEdgeAngles(ads)) {
     const pl = normalizePlatform(a.platform);
     if (!pl) continue;
-    const ang = (a.ai_extracted_angle ?? "general").trim().toLowerCase() || "general";
+    /** Category only: the stored label's hook/body made every ad unique, so platforms never overlapped. */
+    const ang = angleSlugOf(a.ai_extracted_angle);
+    if (!ang || ang === "other") continue;
     if (!byPlat.has(pl)) byPlat.set(pl, new Set());
     byPlat.get(pl)!.add(ang);
   }
@@ -426,7 +429,8 @@ function angleTokensByCell(
       const stage = parseStage(a.funnel_stage);
       if (!stage) continue;
       const id = `${platform}:${stage}` as FunnelCellId;
-      const ang = (a.ai_extracted_angle ?? "general").trim().toLowerCase() || "general";
+      const ang = angleSlugOf(a.ai_extracted_angle);
+      if (!ang || ang === "other") continue;
       if (!byCell.has(id)) byCell.set(id, new Set());
       byCell.get(id)!.add(ang);
     }
@@ -689,15 +693,20 @@ export function computeVoiceToneByPlatform(ads: ScrapedAdInput[]): VoiceToneByPl
 export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatformInsight[] {
   const angleMap = new Map<
     string,
-    { count: number; platforms: Map<StrategyPlatform, number>; lifespanDays: number[] }
+    {
+      count: number;
+      platforms: Map<StrategyPlatform, number>;
+      lifespanDays: number[];
+      example: { label: string; days: number } | null;
+    }
   >();
 
   for (const ad of ads) {
-    const angle = (ad.ai_extracted_angle ?? "").trim();
-    if (!angle || angle === "Unclassified") continue;
+    const angle = angleLabelOf(ad.ai_extracted_angle);
+    if (!angle) continue;
 
     if (!angleMap.has(angle)) {
-      angleMap.set(angle, { count: 0, platforms: new Map(), lifespanDays: [] });
+      angleMap.set(angle, { count: 0, platforms: new Map(), lifespanDays: [], example: null });
     }
     const entry = angleMap.get(angle)!;
     entry.count += 1;
@@ -708,7 +717,11 @@ export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatform
 
     const firstSeen = new Date(ad.first_seen_at).getTime();
     const lastSeen = ad.last_seen_at ? new Date(ad.last_seen_at).getTime() : Date.now();
-    entry.lifespanDays.push(Math.max(1, Math.floor((lastSeen - firstSeen) / 86_400_000)));
+    const days = Math.max(1, Math.floor((lastSeen - firstSeen) / 86_400_000));
+    entry.lifespanDays.push(days);
+    if (!entry.example || days > entry.example.days) {
+      entry.example = { label: (ad.ai_extracted_angle ?? "").trim(), days };
+    }
   }
 
   return Array.from(angleMap.entries())
@@ -719,6 +732,7 @@ export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatform
       }
       return {
         angle,
+        ...(data.example ? { exampleAngle: data.example.label } : {}),
         totalCount: data.count,
         platforms: Array.from(data.platforms.keys()).sort(),
         platformCounts,
@@ -985,7 +999,7 @@ export function deriveStrategyOverviewPayload(
 
   const angleAgg = new Map<string, number>();
   for (const a of activeAds) {
-    const k = (a.ai_extracted_angle ?? "Unclassified").trim() || "Unclassified";
+    const k = angleLabelOf(a.ai_extracted_angle) ?? "Unclassified";
     angleAgg.set(k, (angleAgg.get(k) ?? 0) + 1);
   }
 
@@ -1139,7 +1153,7 @@ export function deriveStrategyOverviewPayload(
       title: "Angle Clustering",
       subtitle: "Top creative angles by ad count",
       tooltip:
-        "Creative angles from enrichment (`ai_extracted_angle`). Each classified ad receives one label. “Unclassified” means missing or broad extraction.",
+        "Creative angle category from enrichment: each classified ad gets one of a fixed set (Price, Social proof, Urgency, …). “Unclassified” means the ad has not been labelled (or has no copy to label).",
       aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
@@ -1149,7 +1163,7 @@ export function deriveStrategyOverviewPayload(
         sharePct: activeAds.length > 0 ? Math.round((count / activeAds.length) * 100) : 0,
         exampleSnippet:
           activeAds.find((ad) => {
-            const label = (ad.ai_extracted_angle ?? "").trim() || "Unclassified";
+            const label = angleLabelOf(ad.ai_extracted_angle) ?? "Unclassified";
             return label === angleName;
           })?.ad_text?.slice(0, 120) ?? null,
       })),

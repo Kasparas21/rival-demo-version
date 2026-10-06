@@ -13,6 +13,7 @@ import {
   startOfUtcWeekMonday,
   utcWeekStartYmd,
 } from "./pattern-week-utils";
+import { angleLabelOf } from "@/lib/strategy-overview/ad-angles";
 
 export type PatternMetricsAd = {
   id: string;
@@ -259,8 +260,9 @@ export function computeDiscoveryPatternMetrics(
     if (isVideoFormat(ad.format) && !ad.is_killed) comp.videoActive += 1;
     competitorMap.set(ad.competitor_id, comp);
 
-    const angle = ad.ai_extracted_angle?.trim();
-    if (angle && angle.toLowerCase() !== "unclassified") {
+    /** Group by category: the full stored label (with hook and body) is unique per ad. */
+    const angle = angleLabelOf(ad.ai_extracted_angle);
+    if (angle) {
       const stats = angleCounts.get(angle) ?? {
         count: 0,
         ad_ids: [],

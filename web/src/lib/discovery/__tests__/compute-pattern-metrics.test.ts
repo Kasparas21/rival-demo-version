@@ -122,27 +122,22 @@ describe("computeDiscoveryPatternMetrics", () => {
     expect(metrics.weekly_series[7]!.week_start).toBe(WEEK_START);
   });
 
-  it("skips unclassified angles in angle_mix", () => {
+  it("groups angle_mix by category and skips unclassified ads", () => {
     const metrics = computeDiscoveryPatternMetrics(
       [
         ad({ id: "a1", ai_extracted_angle: "unclassified" }),
-        ad({ id: "a2", ai_extracted_angle: "financing" }),
-        ad({ id: "a3", ai_extracted_angle: "financing" }),
+        ad({ id: "a2", ai_extracted_angle: "price · Hook: Implants from €999 · Body: Price-led offer" }),
+        ad({ id: "a3", ai_extracted_angle: "price · Hook: Fixed price aligners · Body: Transparent pricing" }),
+        ad({ id: "a4", ai_extracted_angle: "financing · Hook: Pay monthly" }),
       ],
       weekStartMs,
       nowMs,
     );
 
-    expect(metrics.angle_mix).toEqual([
-      {
-        angle: "financing",
-        count: 2,
-        ad_ids: ["a2", "a3"],
-        active_count: 2,
-        killed_count: 0,
-        new_this_week: 2,
-        killed_this_week: 0,
-      },
+    expect(metrics.angle_mix.map((a) => [a.angle, a.ad_ids])).toEqual([
+      ["Price", ["a2", "a3"]],
+      ["Other", ["a4"]],
     ]);
+    expect(metrics.angle_mix[0]).toMatchObject({ count: 2, active_count: 2, new_this_week: 2 });
   });
 });

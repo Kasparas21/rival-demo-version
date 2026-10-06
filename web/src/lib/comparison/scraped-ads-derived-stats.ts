@@ -1,4 +1,5 @@
 import type { createSupabaseServerClient } from "@/lib/supabase/server";
+import { angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 
 type SupabaseServer = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
@@ -71,8 +72,9 @@ export async function computeScrapedAdsDerivedStats(
       videoCt += 1;
     }
 
-    const ang = (row.ai_extracted_angle ?? "").trim();
-    if (ang && ang.toLowerCase() !== "unclassified") {
+    /** Distinct angle categories, not distinct labels (labels carry each ad's own hook, so ≈ ad count). */
+    const ang = angleSlugOf(row.ai_extracted_angle);
+    if (ang && ang !== "other") {
       angleSet.add(ang);
     }
   }

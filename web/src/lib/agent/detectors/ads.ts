@@ -3,6 +3,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { calculateThreatScore } from "@/lib/agent/threat-score";
 import type { AgentAdInput, AgentBaselineMetrics, DetectedAgentSignal } from "@/lib/agent/types";
 import type { Database } from "@/lib/supabase/types";
+import { angleSlugOf } from "@/lib/strategy-overview/ad-angles";
+
+/** "New angle" means a category this competitor hasn't used on another ad; "other" isn't a category. */
+function angleCategoryForSignal(aiExtractedAngle: string | null | undefined): string | null {
+  const slug = angleSlugOf(aiExtractedAngle);
+  return slug && slug !== "other" ? slug : null;
+}
 
 function extractCtaFromAd(
   ad: Pick<AgentAdInput, "ad_text" | "raw_payload"> & { cta?: AgentAdInput["cta"] },
@@ -107,7 +114,7 @@ async function loadDetectionContext(
     cta: string | null;
     call_to_action: string | null;
   }>) {
-    addToIndex(anglesByKey, row.ai_extracted_angle, row.stable_ad_key);
+    addToIndex(anglesByKey, angleCategoryForSignal(row.ai_extracted_angle), row.stable_ad_key);
     const cta = extractCtaFromAd({
       ad_text: row.ad_text ?? "",
       raw_payload: { cta: row.cta, call_to_action: row.call_to_action },
@@ -143,7 +150,7 @@ export async function detectAdsSignals(params: {
     const platforms = ad.platforms ?? [ad.platform];
     const headline = extractHeadline(ad);
     const cta = extractCtaFromAd(ad);
-    const angle = ad.ai_extracted_angle?.trim();
+    const angle = angleCategoryForSignal(ad.ai_extracted_angle);
     const isNewAngleFlag = Boolean(angle) && !seenOnOtherAd(ctx.anglesByKey, angle!, ad.stable_ad_key);
 
     if (daysRunning >= 7) {

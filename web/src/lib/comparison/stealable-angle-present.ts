@@ -1,3 +1,4 @@
+import { angleSlugOf, type AdAngleSlug } from "@/lib/strategy-overview/ad-angles";
 import type { AnglesByPlatformInsight } from "@/lib/strategy-overview/payload-types";
 
 const BLOCKED_SUBSTRINGS = [
@@ -76,7 +77,21 @@ const CATEGORY_STYLES: Record<AngleCardCategory, { label: string; className: str
   other: { label: "ANGLE", className: "bg-slate-50 text-slate-800 ring-1 ring-slate-200/80" },
 };
 
+const PILL_FOR_SLUG: Partial<Record<AdAngleSlug, AngleCardCategory>> = {
+  price: "price",
+  discount: "discount",
+  fear: "fear",
+  urgency: "urgency",
+  social_proof: "social_proof",
+  speed: "speed",
+  curiosity: "curiosity",
+  brand: "brand",
+};
+
 export function classifyAngleCategory(angleRaw: string): AngleCardCategory {
+  /** Enrichment categories (and their display names) map directly; only old free text needs guessing. */
+  const slug = angleSlugOf(angleRaw);
+  if (slug && slug !== "other") return PILL_FOR_SLUG[slug] ?? "other";
   const s = angleRaw.toLowerCase();
   if (/\b(brand|branded|direct navigation|official|\.com\/)\b/i.test(s)) return "brand";
   if (/\b(€|\$|eur|price|kaina|nuo\s+\d|fixed price|implant|from\s+\d)/i.test(s)) {

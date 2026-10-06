@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import type { Database, Json } from "@/lib/supabase/types";
 import { llmFast, modelLabelForTask } from "@/lib/llm/anthropic";
+import { googleAdCopy } from "@/lib/ad-library/google-ad-copy";
+import { AD_ANGLE_SLUGS, normalizeAngleSlug, type AdAngleSlug } from "@/lib/strategy-overview/ad-angles";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 import {
   SCRAPED_ADS_DERIVATION_SELECT,
@@ -80,18 +82,6 @@ const BATCH_MAX = 15;
 
 const MIN_AD_TEXT_CHARS = 10;
 
-const ALLOWED_ANGLES = new Set([
-  "discount",
-  "social_proof",
-  "urgency",
-  "quality",
-  "price",
-  "speed",
-  "transformation",
-  "fear",
-  "curiosity",
-  "identity",
-]);
 
 const voiceToneSchema = z.object({
   formal: z.number().min(0).max(1),
@@ -108,6 +98,16 @@ const modelRowSchema = z.object({
   headline_guess: z.string().optional(),
   body_theme: z.string().optional(),
 });
+
+/**
+ * Text the model should label. Google/YouTube rows drop the generated "Advertiser — domain · Shown …"
+ * scaffolding, so a row with no real copy ends up empty and is skipped instead of labelled from metadata.
+ */
+export function enrichmentTextForAd(adText: string | null | undefined, platform: string): string {
+  const p = platform.trim().toLowerCase();
+  const text = p === "google" || p === "youtube" ? googleAdCopy(adText) : (adText ?? "");
+  return prepareAdTextForEnrichment(text);
+}
 
 /** First letter or digit (any Unicode script) — strips emoji, stray slashes, ZWSP, etc. */
 export function prepareAdTextForEnrichment(raw: string): string {
@@ -177,17 +177,9 @@ export function normalizeFunnel(raw: string): "TOF" | "MOF" | "BOF" | null {
   return null;
 }
 
-/** Canonical angle slug, free-text label, or best-effort from headline/body fields. */
-export function resolveAngle(r: z.infer<typeof modelRowSchema>): string | null {
-  const raw = typeof r.angle === "string" ? r.angle.trim().toLowerCase().replace(/\s+/g, "_") : "";
-  if (raw && ALLOWED_ANGLES.has(raw)) return raw;
-  const ft = typeof r.angle_free_text === "string" ? r.angle_free_text.trim() : "";
-  if (ft.length >= 2) return ft.slice(0, 80);
-  const hook = typeof r.headline_guess === "string" ? r.headline_guess.trim() : "";
-  if (hook.length >= 3) return hook.slice(0, 80);
-  const body = typeof r.body_theme === "string" ? r.body_theme.trim() : "";
-  if (body.length >= 3) return body.slice(0, 80);
-  return null;
+/** Always one of {@link AD_ANGLE_SLUGS}: anything off the list (or missing) becomes "other". */
+export function resolveAngle(r: z.infer<typeof modelRowSchema>): AdAngleSlug {
+  return normalizeAngleSlug(r.angle) ?? normalizeAngleSlug(r.angle_free_text) ?? "other";
 }
 
 function buildEnrichmentUserPrompt(items: EnrichItem[]): string {
@@ -201,7 +193,9 @@ Fields:
 - headline_guess: main hook (≤100 chars). Use the ad's language or English if mixed — short and specific.
 - body_theme: what the ad does in one phrase (≤100 chars).
 
-- angle: exactly one of: discount, social_proof, urgency, quality, price, speed, transformation, fear, curiosity, identity — **only** if it clearly fits. Else use "" and put a short label in angle_free_text (≤80 chars, any language).
+- angle: **exactly one** of: ${AD_ANGLE_SLUGS.join(", ")}. Never invent another label.
+  - education = teaches or explains (how-to, Q&A, tips); brand = awareness, launches, product showcase or story with no other hook
+  - other = only when none of the above fits at all
 
 - funnel_stage: **exactly one string**, must be one of: **TOF**, **MOF**, **BOF** (Latin letters only).
   - TOF = awareness / brand / reach / story, light CTA
@@ -213,25 +207,26 @@ Fields:
 Worked examples (format only — your ids come from Ads):
 
 1) English long Meta:
-{"id":"ex1","angle":"urgency","angle_free_text":"","funnel_stage":"MOF","voice_tone":{"formal":0.55,"emotional":0.5,"confidence":0.82},"headline_guess":"Limited-time playoff watch party","body_theme":"Drive tune-in with countdown energy"}
+{"id":"ex1","angle":"urgency","funnel_stage":"MOF","voice_tone":{"formal":0.55,"emotional":0.5,"confidence":0.82},"headline_guess":"Limited-time playoff watch party","body_theme":"Drive tune-in with countdown energy"}
 
 2) Lithuanian short Google Search:
-{"id":"ex2","angle":"price","angle_free_text":"","funnel_stage":"BOF","voice_tone":{"formal":0.65,"emotional":0.35,"confidence":0.55},"headline_guess":"Implantai nuo 999€","body_theme":"Price-led dental offer"}
+{"id":"ex2","angle":"price","funnel_stage":"BOF","voice_tone":{"formal":0.65,"emotional":0.35,"confidence":0.55},"headline_guess":"Implantai nuo 999€","body_theme":"Price-led dental offer"}
 
 3) German image ad:
-{"id":"ex3","angle":"quality","angle_free_text":"","funnel_stage":"MOF","voice_tone":{"formal":0.7,"emotional":0.4,"confidence":0.68},"headline_guess":"Zahnimplantate mit Garantie","body_theme":"Trust and quality positioning"}
+{"id":"ex3","angle":"quality","funnel_stage":"MOF","voice_tone":{"formal":0.7,"emotional":0.4,"confidence":0.68},"headline_guess":"Zahnimplantate mit Garantie","body_theme":"Trust and quality positioning"}
 
 4) French awareness:
-{"id":"ex4","angle":"curiosity","angle_free_text":"","funnel_stage":"TOF","voice_tone":{"formal":0.5,"emotional":0.55,"confidence":0.72},"headline_guess":"Découvrez une nouvelle routine sourire","body_theme":"Soft brand / discovery"}
+{"id":"ex4","angle":"curiosity","funnel_stage":"TOF","voice_tone":{"formal":0.5,"emotional":0.55,"confidence":0.72},"headline_guess":"Découvrez une nouvelle routine sourire","body_theme":"Soft brand / discovery"}
 
 Ads:
 ${JSON.stringify(items)}
 
 Return **only** a valid JSON array (no markdown):
-[{"id":"uuid","angle":"","angle_free_text":"...","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.5,"confidence":0.5},"headline_guess":"...","body_theme":"..."},...]`;
+[{"id":"uuid","angle":"price","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.5,"confidence":0.5},"headline_guess":"...","body_theme":"..."},...]`;
 }
 
-async function enrichBatchWithLlm(
+/** Exported for one-off checks against the live model; production code goes through enrichScrapedAdsIfNeeded. */
+export async function enrichBatchWithLlm(
   items: EnrichItem[]
 ): Promise<{ rows: z.infer<typeof modelRowSchema>[] | null; costUsd: number; preZodCount: number }> {
   console.log("[enrich-trace] enrichBatch called, items=", items.length, "model=", modelLabelForTask("ad_enrichment"));
@@ -390,7 +385,7 @@ export async function enrichScrapedAdsIfNeeded(
   const textCandidates: TextCandidate[] = [];
 
   for (const r of need) {
-    const prepared = prepareAdTextForEnrichment(r.ad_text ?? "");
+    const prepared = enrichmentTextForAd(r.ad_text, r.platform);
     if (prepared.length < MIN_AD_TEXT_CHARS) {
       skippedNoText += 1;
       skippedNoTextIds.push(r.id);
@@ -451,7 +446,7 @@ export async function enrichScrapedAdsIfNeeded(
     console.log("[enrich-trace] batch index=", i, "batch size=", batch.length);
 
     const items: EnrichItem[] = batch.map((r) => {
-      const cleaned = prepareAdTextForEnrichment(r.ad_text ?? "");
+      const cleaned = enrichmentTextForAd(r.ad_text, r.platform);
       return {
         id: r.id,
         ad_text: cleaned.slice(0, 4000),
@@ -526,7 +521,7 @@ export async function enrichScrapedAdsIfNeeded(
 
       const fs = normalizeFunnel(r.funnel_stage);
       const angleResolved = resolveAngle(r);
-      if (!fs || !angleResolved) {
+      if (!fs) {
         failedInvalid += 1;
         batchFailed += 1;
         console.warn(

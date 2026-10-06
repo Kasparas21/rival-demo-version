@@ -20,6 +20,7 @@ import {
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { sharedFetch } from "@/lib/client/shared-fetch";
+import { angleLabelOf, angleSlugFromName, angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 
 export type VaultAdRow = {
   id: string;
@@ -245,7 +246,8 @@ export function CopyVaultPanel({
   const angleCounts = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of rawAds ?? []) {
-      const ang = a.ai_extracted_angle?.trim();
+      /** Chips are angle categories; full labels carry each ad's own hook, so every chip was one ad. */
+      const ang = angleLabelOf(a.ai_extracted_angle);
       if (!ang) continue;
       m.set(ang, (m.get(ang) ?? 0) + 1);
     }
@@ -263,7 +265,10 @@ export function CopyVaultPanel({
     if (filterFunnel) {
       rows = rows.filter((a) => normalizeFunnel(a.funnel_stage) === filterFunnel);
     }
-    if (urlAngleExact) {
+    const exactCategory = angleSlugFromName(urlAngleExact);
+    if (exactCategory) {
+      rows = rows.filter((a) => angleSlugOf(a.ai_extracted_angle) === exactCategory);
+    } else if (urlAngleExact) {
       const exactRows = rows.filter((a) => a.ai_extracted_angle === urlAngleExact);
       rows =
         exactRows.length > 0
@@ -276,7 +281,7 @@ export function CopyVaultPanel({
         const q = urlAngleQ.toLowerCase();
         rows = rows.filter((a) => (a.ai_extracted_angle ?? "").toLowerCase().includes(q));
       } else if (urlAnglePick && urlAnglePick !== "all") {
-        rows = rows.filter((a) => a.ai_extracted_angle === urlAnglePick);
+        rows = rows.filter((a) => angleLabelOf(a.ai_extracted_angle) === urlAnglePick);
       }
     }
     if (urlAngleCat) {

@@ -13,6 +13,7 @@ import { runBenchmarkLlm } from "@/lib/benchmark/run-benchmark-llm";
 import { DEFAULT_ENABLED_AD_PLATFORMS } from "@/lib/ad-library/disabled-scrape-platforms";
 import { computeActiveAdsFingerprint } from "@/lib/strategy-overview/active-ads-fingerprint";
 import type { Database } from "@/lib/supabase/types";
+import { angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 
 /**
  * Denominator for "X of N platforms": the platforms every account scrapes, plus any platform where
@@ -189,8 +190,8 @@ async function loadEntityMetrics(
   for (const ad of (ads ?? []) as AdRow[]) {
     const pl = normalizePlatform(ad.platform);
     if (pl) platformsActive[pl] = true;
-    const angle = ad.ai_extracted_angle?.trim();
-    if (angle) angles.add(angle);
+    const angle = angleSlugOf(ad.ai_extracted_angle);
+    if (angle && angle !== "other") angles.add(angle);
     const firstMs = Date.parse(ad.first_seen_at);
     if (Number.isFinite(firstMs)) {
       if (firstMs >= periodCutoff) newAdsThisPeriod += 1;
