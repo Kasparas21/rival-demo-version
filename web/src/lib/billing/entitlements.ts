@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/types";
 import { TESTER_FULL_PRO_PAYLOAD_KEY } from "@/lib/billing/claim-tester-access-core";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { getPolarProductIds, isPolarCustomProductId } from "@/lib/billing/config";
+import { PAYWALL_PATH } from "@/lib/billing/paywall";
 import {
   getActiveCustomQuoteForUser,
   getSentCustomQuoteForUser,
@@ -300,9 +301,9 @@ export function shouldUsePolarSubscriptionUi(
 }
 
 /**
- * Post-onboarding: user needs a custom quote / checkout (replaces plan picker).
+ * Post-onboarding paywall: no admin access and no active plan (paid, comped quote, or admin override).
  */
-export function shouldShowAwaitingQuotePage(
+export function shouldShowPaywall(
   billing: Pick<
     BillingEntitlement,
     "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
@@ -313,14 +314,14 @@ export function shouldShowAwaitingQuotePage(
   return true;
 }
 
-/** @deprecated Use shouldShowAwaitingQuotePage */
+/** @deprecated Use shouldShowPaywall */
 export function shouldShowPostOnboardingPlanPicker(
   billing: Pick<
     BillingEntitlement,
     "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
   >,
 ): boolean {
-  return shouldShowAwaitingQuotePage(billing);
+  return shouldShowPaywall(billing);
 }
 
 export function isTesterInviteBillingAccount(
@@ -485,7 +486,7 @@ export function remainingMonthlyAdsProcessed(
 
 export function billingRequiredResponseBody(
   message = "A custom subscription is required to continue.",
-  checkoutUrl = "/awaiting-quote",
+  checkoutUrl = PAYWALL_PATH,
 ) {
   return {
     ok: false,
@@ -510,7 +511,7 @@ export function quotaExceededResponseBody(params: {
     used,
     requested,
     remaining: remainingMonthlyAdsProcessed(used, requested, limit),
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -520,7 +521,7 @@ export function freeTrialScrapeUsedResponseBody() {
     code: "free_trial_scrape_used",
     error:
       "Your free trial includes one competitor discovery scrape. Subscribe with your custom plan for ongoing refreshes.",
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -530,7 +531,7 @@ export function inactiveUserScrapePausedResponseBody() {
     code: "inactive_scrape_paused",
     error:
       "Automatic competitor tracking is paused because you have not opened Rival in the last week. Open the app to resume.",
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -540,7 +541,7 @@ export function subscriptionEndedScrapePausedResponseBody() {
     code: "subscription_ended_scrape_paused",
     error:
       "Your subscription has ended. Contact us or complete checkout with your custom plan to resume automatic tracking.",
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -563,6 +564,6 @@ export function featureNotAvailableResponseBody(feature: string, requiredTier: P
     code: "feature_not_available",
     error: `${feature} is not included in your current plan.`,
     requiredTier,
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }

@@ -1,6 +1,7 @@
 import type { BillingPeriod, PolarPlanSlug } from "@/lib/billing/config";
 import type { PlanTier } from "@/lib/billing/plan-limits";
 import { hasActivePaidSubscription } from "@/lib/billing/entitlements";
+import { buildPaywallHref } from "@/lib/billing/paywall";
 import { shouldRedirectCheckoutToUpgrade } from "@/lib/billing/upgrade-plan";
 
 export function safeCheckoutNextPath(value: string | null | undefined): string | null {
@@ -28,15 +29,15 @@ export function buildAwaitingQuoteHref(next?: string | null): string {
   return `/awaiting-quote?next=${encodeURIComponent(safeNext)}`;
 }
 
-/** @deprecated Use buildAwaitingQuoteHref */
+/** Plan picker (paywall); optional `next` preserved through checkout return. */
 export function buildChoosePlanHref(next?: string | null): string {
-  return buildAwaitingQuoteHref(next);
+  return buildPaywallHref(next);
 }
 
-/** Polar hosted checkout back button — return to awaiting-quote page. */
+/** Polar hosted checkout back button — return to the plan picker (it forwards pending quotes). */
 export function buildPolarCheckoutReturnUrl(appUrl: string, next?: string | null): string {
   const base = appUrl.replace(/\/+$/, "");
-  return `${base}${buildAwaitingQuoteHref(next)}`;
+  return `${base}${buildPaywallHref(next)}`;
 }
 
 function quoteQueryParams(checkoutToken: string, next?: string | null): URLSearchParams {

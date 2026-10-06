@@ -1,3 +1,4 @@
+import { buildPaywallHref } from "@/lib/billing/paywall";
 import { POST_PAYMENT_ONBOARDING_PATH } from "@/lib/onboarding/phase";
 import { OAUTH_NEXT_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
 
@@ -12,15 +13,13 @@ function safeRelativePath(value: string | null | undefined): string | null {
   return decoded.startsWith("/") && !decoded.startsWith("//") && decoded !== "/login" ? decoded : null;
 }
 
-/** After signup: silently apply guest draft, then await custom quote. */
+/** After signup: silently apply guest draft, then show the plan picker. */
 export const TRIAL_COMPLETE_PATH = "/trial/complete";
 
-export const AWAITING_QUOTE_AFTER_TRIAL_PATH = `/awaiting-quote?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
+/** Plan picker after signup; checkout success continues into post-payment onboarding. */
+export const PAYWALL_AFTER_TRIAL_PATH = buildPaywallHref(POST_PAYMENT_ONBOARDING_PATH);
 
-/** @deprecated Use AWAITING_QUOTE_AFTER_TRIAL_PATH */
-export const CHOOSE_PLAN_AFTER_TRIAL_PATH = AWAITING_QUOTE_AFTER_TRIAL_PATH;
-
-export const SIGNUP_AFTER_ONBOARDING_PATH = `/signup?next=${encodeURIComponent(AWAITING_QUOTE_AFTER_TRIAL_PATH)}`;
+export const SIGNUP_AFTER_ONBOARDING_PATH = `/signup?next=${encodeURIComponent(PAYWALL_AFTER_TRIAL_PATH)}`;
 
 /** Signup URL after guest pre-payment onboarding, preserving tester invite attribution. */
 export function buildSignupAfterOnboardingPath(testerCode?: string | null): string {
@@ -49,12 +48,12 @@ export function isOnboardingResumePath(path: string): boolean {
 
 export function isPostGuestSignupPath(path: string): boolean {
   if (isTrialCompletePath(path) || isOnboardingResumePath(path)) return true;
-  if (path === AWAITING_QUOTE_AFTER_TRIAL_PATH || path.startsWith("/awaiting-quote?")) return true;
-  if (path === CHOOSE_PLAN_AFTER_TRIAL_PATH || path.startsWith("/choose-plan?")) return true;
+  if (path === PAYWALL_AFTER_TRIAL_PATH || path.startsWith("/choose-plan?")) return true;
+  if (path.startsWith("/awaiting-quote?")) return true;
   return false;
 }
 
-/** OAuth/email signup should land on trial complete (apply draft → awaiting quote), not onboarding again. */
+/** OAuth/email signup should land on trial complete (apply draft → plan picker), not onboarding again. */
 export function shouldRedirectToTrialComplete(
   requestedNext: string | null | undefined,
   trialPendingCookie: string | undefined,

@@ -12,7 +12,7 @@ import { DevLocalAuthPanel } from "@/components/auth/dev-local-auth-panel";
 import { buildAuthCallbackPath } from "@/lib/auth/build-email-token-callback-url";
 import { rememberOAuthNext, rememberOAuthTesterInvite } from "@/lib/auth/oauth-bridge-cookies";
 import { safeAuthNextPath } from "@/lib/auth/auth-page-helpers";
-import { CHOOSE_PLAN_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
+import { PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { hasOnboardingDraft } from "@/lib/onboarding/draft";
 import { TESTER_INVITE_METADATA_KEY } from "@/lib/billing/tester-invite-user";
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
@@ -45,7 +45,7 @@ export function SignupForm({
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const next =
     safeAuthNextPath(searchParams.get("next"), "/signup") ??
-    (hasOnboardingDraft() ? CHOOSE_PLAN_AFTER_TRIAL_PATH : "/dashboard/spy");
+    (hasOnboardingDraft() ? PAYWALL_AFTER_TRIAL_PATH : "/dashboard/spy");
   const urlAuthError = searchParams.get("error");
   const rawNextQuery = searchParams.get("next");
   const rawTesterQuery = searchParams.get("tester");

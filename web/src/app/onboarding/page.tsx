@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
-import { AWAITING_QUOTE_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
+import { PAYWALL_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { OnboardingDevHints } from "@/components/onboarding/onboarding-dev-hints";
 import { TrialSetupBackgroundSync } from "@/components/onboarding/trial-setup-background-sync";
 import { OnboardingForm } from "@/components/onboarding/onboarding-form";
@@ -12,8 +12,9 @@ import {
   adminSkipCheckoutDestination,
   getBillingEntitlement,
   hasActivePaidSubscription,
-  shouldShowAwaitingQuotePage,
+  shouldShowPaywall,
 } from "@/lib/billing/entitlements";
+import { buildPaywallHref } from "@/lib/billing/paywall";
 import { canReplayOnboardingInDev } from "@/lib/auth/local-dev";
 import { OnboardingFlowHeader } from "@/components/onboarding/onboarding-flow-header";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
@@ -174,19 +175,21 @@ export default async function OnboardingPage({
 
   const billing = await getBillingEntitlement(supabase, user.id);
   const testerInviteActive = await isTesterInviteFlowEligibleForUser(user.id);
-  const postPaymentResume = shouldResumePostPaymentOnboarding(profile, billing) || explicitPostPayment;
+  const needsPaywall = shouldShowPaywall(billing);
+  /** `?phase=post_payment` only resumes for accounts with access — the ad-profile step starts paid scrapes. */
+  const postPaymentResume =
+    !needsPaywall && (shouldResumePostPaymentOnboarding(profile, billing) || explicitPostPayment);
   const rawDestination = nextPath ? postOnboardingPath(nextPath) : DASHBOARD_HOME_PATH;
   const destinationAfterOnboarding = adminSkipCheckoutDestination(rawDestination, billing.isUnlimited);
-  const needsAwaitingQuote = shouldShowAwaitingQuotePage(billing);
   const postOnboardingDestination = postPaymentResume
     ? buildWorkspaceBrandScrapeHref()
-    : needsAwaitingQuote
-      ? `/awaiting-quote?next=${encodeURIComponent(destinationAfterOnboarding)}`
+    : needsPaywall
+      ? buildPaywallHref(destinationAfterOnboarding)
       : destinationAfterOnboarding;
 
   if (profile?.onboarding_completed && !replayOnboarding) {
-    if (needsAwaitingQuote) {
-      redirect(`/awaiting-quote?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+    if (needsPaywall) {
+      redirect(buildPaywallHref(destinationAfterOnboarding));
     }
     redirect(destinationAfterOnboarding);
   }
@@ -201,11 +204,11 @@ export default async function OnboardingPage({
       (await cookies()).get(TRIAL_PENDING_COOKIE)?.value,
     )
   ) {
-    redirect(AWAITING_QUOTE_AFTER_TRIAL_PATH);
+    redirect(PAYWALL_AFTER_TRIAL_PATH);
   }
 
-  if (hasPrePaymentSetup(profile) && needsAwaitingQuote && !replayOnboarding && !postPaymentResume) {
-    redirect(`/awaiting-quote?next=${encodeURIComponent(destinationAfterOnboarding)}`);
+  if (hasPrePaymentSetup(profile) && needsPaywall && !replayOnboarding && !postPaymentResume) {
+    redirect(buildPaywallHref(destinationAfterOnboarding));
   }
 
   if (

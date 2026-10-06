@@ -7,11 +7,14 @@ import posthog from "posthog-js";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { RivalVideoShell } from "@/components/ui/rival-video-shell";
 import { glassPanelClass } from "@/components/ui/glass-styles";
+import { PAYWALL_PATH } from "@/lib/billing/paywall";
 import { POST_PAYMENT_ONBOARDING_PATH } from "@/lib/onboarding/phase";
 
 type SyncState = "idle" | "syncing" | "ready" | "pending" | "error";
 
-const SETUP_MESSAGE = "We're setting up your account — this usually takes a few seconds.";
+const SETUP_MESSAGE = "We're confirming your payment with Polar — this usually takes a few seconds.";
+const CONFIRM_FAILED_MESSAGE =
+  "We couldn't confirm your payment yet. If you were charged, wait a minute and try again — your plan activates as soon as Polar confirms it.";
 
 export default function CheckoutSuccessClient() {
   const router = useRouter();
@@ -48,8 +51,9 @@ export default function CheckoutSuccessClient() {
         if (cancelled) return;
 
         if (!res.ok || !json.ok) {
+          console.warn("[checkout-success] sync failed", json.error);
           setSyncState("error");
-          setSyncMessage(json.error ?? "Could not activate subscription.");
+          setSyncMessage(CONFIRM_FAILED_MESSAGE);
           return;
         }
 
@@ -71,8 +75,8 @@ export default function CheckoutSuccessClient() {
           return;
         }
 
-        setSyncState("ready");
-        setSyncMessage(null);
+        setSyncState("error");
+        setSyncMessage(CONFIRM_FAILED_MESSAGE);
       } catch {
         if (!cancelled && attempts < maxAttempts) {
           setSyncState("pending");
@@ -82,7 +86,7 @@ export default function CheckoutSuccessClient() {
         }
         if (!cancelled) {
           setSyncState("error");
-          setSyncMessage("Network error while activating subscription.");
+          setSyncMessage(CONFIRM_FAILED_MESSAGE);
         }
       }
     };
@@ -95,7 +99,7 @@ export default function CheckoutSuccessClient() {
   }, [checkoutId]);
 
   const activating = syncState === "syncing" || syncState === "pending";
-  const canContinue = !activating;
+  const confirmFailed = syncState === "error";
 
   const continueSetup = useCallback(() => {
     router.push(POST_PAYMENT_ONBOARDING_PATH);
@@ -112,19 +116,27 @@ export default function CheckoutSuccessClient() {
         </Link>
 
         <div className={`w-full max-w-[520px] text-center ${glassPanelClass}`}>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2d5a1f]">
-            <span className="size-1.5 rounded-full bg-[#95C14B]" aria-hidden />
-            Payment successful
-          </span>
+          {syncState === "ready" ? (
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#95C14B]/35 bg-[#95C14B]/12 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#2d5a1f]">
+              <span className="size-1.5 rounded-full bg-[#95C14B]" aria-hidden />
+              Payment successful
+            </span>
+          ) : null}
 
           <h1 className="mt-5 text-[clamp(1.45rem,4vw,1.85rem)] font-semibold leading-tight tracking-tight text-gray-900">
-            You&apos;re subscribed — finish your setup
+            {activating
+              ? "Confirming your payment…"
+              : confirmFailed
+                ? "Payment not confirmed yet"
+                : "You're subscribed — finish your setup"}
           </h1>
 
-          <p className="mx-auto mt-3 max-w-md text-[14px] leading-relaxed text-gray-600">
-            Choose your ad regions and add your Meta, Google, and other ad library URLs so we can map your live
-            creatives.
-          </p>
+          {!confirmFailed ? (
+            <p className="mx-auto mt-3 max-w-md text-[14px] leading-relaxed text-gray-600">
+              Next, choose your ad regions and add your Meta, Google, and other ad library URLs so we can map your
+              live creatives.
+            </p>
+          ) : null}
 
           {activating ? (
             <div
@@ -150,14 +162,29 @@ export default function CheckoutSuccessClient() {
             </p>
           ) : null}
 
-          <button
-            type="button"
-            onClick={continueSetup}
-            disabled={!canContinue}
-            className="mt-8 inline-flex w-full max-w-sm justify-center rounded-full bg-gray-900 px-6 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-gray-900 disabled:active:scale-100"
-          >
-            {activating ? "Setting up your account…" : "Continue setup →"}
-          </button>
+          {confirmFailed ? (
+            <div className="mt-8 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex w-full max-w-sm justify-center rounded-full bg-gray-900 px-6 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98]"
+              >
+                Try again
+              </button>
+              <Link href={PAYWALL_PATH} className="text-[13px] font-semibold text-gray-700 underline-offset-2 hover:underline">
+                Back to plans
+              </Link>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={continueSetup}
+              disabled={activating}
+              className="mt-8 inline-flex w-full max-w-sm justify-center rounded-full bg-gray-900 px-6 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:bg-gray-900 disabled:active:scale-100"
+            >
+              {activating ? "Confirming payment…" : "Continue setup →"}
+            </button>
+          )}
         </div>
       </div>
     </RivalVideoShell>
