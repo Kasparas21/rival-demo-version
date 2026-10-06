@@ -27,6 +27,7 @@ import {
   stripPublicDiscoverSuggestions,
   stripDiscoverFieldUiMetadata,
 } from "@/lib/competitor-discover-firecrawl";
+import { clientIp, hitRateLimit, PUBLIC_PAID_LOOKUP_LIMITS } from "@/lib/rate-limit";
 
 /** Vercel / long-running discovery (optional; ignored locally) */
 export const maxDuration = 60;
@@ -126,6 +127,14 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { success: false, error: "Missing or invalid query" },
         { status: 400 }
+      );
+    }
+
+    /** Public and spends Firecrawl credits per call — cap per IP. */
+    if (!(await hitRateLimit(`discover:ip:${clientIp(req)}`, PUBLIC_PAID_LOOKUP_LIMITS.perIp))) {
+      return NextResponse.json(
+        { success: false, error: "Too many searches. Please wait a minute and try again." },
+        { status: 429, headers: { "Retry-After": "60" } }
       );
     }
 

@@ -6,6 +6,7 @@ import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { safeNextPath } from "@/lib/auth/safe-next-path";
+import { clientIp, hitRateLimit, PUBLIC_EMAIL_LIMITS } from "@/lib/rate-limit";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -28,6 +29,18 @@ export async function POST(request: NextRequest) {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email || !emailRe.test(email)) {
     return NextResponse.json({ error: "Valid email required" }, { status: 400 });
+  }
+
+  /** Public and sends email via the admin API (bypasses Supabase's own throttling) — cap per IP and per address. */
+  const [ipOk, emailOk] = await Promise.all([
+    hitRateLimit(`magic-link:ip:${clientIp(request)}`, PUBLIC_EMAIL_LIMITS.perIp),
+    hitRateLimit(`magic-link:email:${email}`, PUBLIC_EMAIL_LIMITS.perEmail),
+  ]);
+  if (!ipOk || !emailOk) {
+    return NextResponse.json(
+      { error: "Too many attempts. Please wait a few minutes and try again." },
+      { status: 429, headers: { "Retry-After": "600" } },
+    );
   }
 
   const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
