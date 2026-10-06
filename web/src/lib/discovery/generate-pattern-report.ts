@@ -52,7 +52,7 @@ type CompetitorRow = {
   last_scraped_at: string | null;
 };
 
-const SYSTEM_PROMPT = `You are a senior paid-social strategist analyzing a competitive market for an agency. You receive structured data about every Meta ad tracked in this market: launches, kills, long-running winners, and pre-computed aggregate metrics. Your job is to find PATTERNS — what creative approaches, offers, hooks, and formats are winning or dying in this specific market, and what that implies for an advertiser entering it this week. The market vertical must be inferred from the competitor names and ad texts (e.g. footwear, dental clinics, B2B software); use vertical-appropriate language. Never invent numbers — every numeric claim must come from the provided metrics. Reference evidence ads by their id. Write in clear, punchy English. Return ONLY valid JSON matching the requested schema. No markdown, no preamble.`;
+const SYSTEM_PROMPT = `You are a senior paid-social strategist analyzing a competitive market for an agency. You receive structured data about every Meta ad tracked in this market: launches, kills, long-running winners, and pre-computed aggregate metrics. Your job is to find PATTERNS — what creative approaches, offers, hooks, and formats are winning or dying in this specific market, and what that implies for an advertiser entering it this week. The market vertical must be inferred from the competitor names and ad texts (e.g. dental clinics); use vertical-appropriate language. Never invent numbers — every numeric claim must come from the provided metrics. Reference evidence ads by their id. Write in clear, punchy English. Return ONLY valid JSON matching the requested schema. No markdown, no preamble.`;
 
 const OUTPUT_SCHEMA = `{
   headline: string;

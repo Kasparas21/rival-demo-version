@@ -613,7 +613,7 @@ function ReportDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Competitor activity" subtitle="Tap a bar to drill into ads">
+        <ChartCard title="Clinic activity" subtitle="Tap a bar to drill into ads">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={competitorChart} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
               <CartesianGrid stroke={GRID} horizontal={false} />
@@ -698,7 +698,7 @@ function ReportDashboard({
         </ChartCard>
 
         {metrics.angle_mix.length > 0 ? (
-          <ChartCard title="Creative themes" subtitle="Tap to expand ads by competitor" className="lg:col-span-2">
+          <ChartCard title="Creative themes" subtitle="Tap to expand ads by clinic" className="lg:col-span-2">
             <AngleMixPanel
               angles={metrics.angle_mix}
               maxCount={angleMaxCount}

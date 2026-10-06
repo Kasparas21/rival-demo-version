@@ -141,9 +141,9 @@ export function applyDiscoveryFilterPatch(
 }
 
 export const DISCOVERY_ASSISTANT_SUGGESTIONS = [
-  "Show video ads with a discount offer",
+  "Show video ads mentioning implants",
   "Which competitor launched the most ads this week?",
-  "Which hooks do the ultimate winners use?",
+  "Find ultimate winners with free consultation hooks",
   "What keywords appear most in active ads?",
   "Show retired ads from the last 30 days",
   "Compare competitor ad volume in my market",
