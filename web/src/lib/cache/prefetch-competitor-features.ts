@@ -5,6 +5,7 @@ import {
 } from "@/components/competitor/landing-pages-tab";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 type PrefetchParams = {
   cacheDomainNorm: string;
@@ -131,7 +132,7 @@ export async function prefetchAllCompetitorFeatureCaches(params: PrefetchParams)
           u.searchParams.set("limit", "400");
           u.searchParams.set("offset", "0");
           u.searchParams.set("sort", "lifespan_desc");
-          const res = await fetch(u.toString(), { credentials: "include" });
+          const res = await sharedFetch(`${u.pathname}${u.search}`);
           return (await res.json()) as { ok?: boolean; ads?: unknown[] };
         },
         validateCached: (c) => c.ok === true && Array.isArray(c.ads),
@@ -180,9 +181,7 @@ export async function prefetchAllCompetitorFeatureCaches(params: PrefetchParams)
         cacheKey: `${brandId}:${dom}:comparison-payload:v2:${stamp}`,
         fetcher: async () => {
           const q = new URLSearchParams({ competitorDomain: domain, brandId });
-          const res = await fetch(`/api/comparison/payload?${q.toString()}`, {
-            credentials: "include",
-          });
+          const res = await sharedFetch(`/api/comparison/payload?${q.toString()}`);
           return (await res.json()) as { ok?: boolean; competitor?: { payload?: { map?: unknown } } };
         },
         validateCached: (c) =>

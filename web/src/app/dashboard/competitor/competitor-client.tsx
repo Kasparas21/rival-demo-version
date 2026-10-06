@@ -2757,10 +2757,7 @@ function CompetitorDashboardBody({
     fetcher: async () => {
       const params = new URLSearchParams({ competitorDomain: brand.domain });
       if (myBrand.id && myBrand.id !== "_workspace") params.set("brandId", myBrand.id);
-      const res = await fetch(
-        `/api/comparison/payload?${params.toString()}`,
-        { credentials: "include" }
-      );
+      const res = await sharedFetch(`/api/comparison/payload?${params.toString()}`);
       const json = (await res.json()) as ComparisonPayloadJson;
       if (!res.ok || !json.ok) {
         throw new Error(json.error ?? `comparison/payload failed (${res.status})`);
@@ -3271,9 +3268,7 @@ function CompetitorDashboardBody({
       return;
     }
     let cancelled = false;
-    void fetch(`/api/competitor/library-lifecycle?competitorId=${encodeURIComponent(cid)}`, {
-      credentials: "include",
-    })
+    void sharedFetch(`/api/competitor/library-lifecycle?competitorId=${encodeURIComponent(cid)}`)
       .then((r) => r.json())
       .then(
         (res: {

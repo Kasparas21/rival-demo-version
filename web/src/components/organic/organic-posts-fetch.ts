@@ -1,5 +1,6 @@
 import type { OrganicPostCardData } from "@/components/organic/OrganicPostCard";
 import type { OrganicPostSort } from "@/lib/organic-content/types";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 export type OrganicPostsApiResponse = {
   ok?: boolean;
@@ -27,7 +28,7 @@ export async function fetchOrganicPosts(
     page: String(opts.page),
     pageSize: String(opts.pageSize),
   });
-  const res = await fetch(`/api/competitor/${competitorId}/organic/posts?${params.toString()}`);
+  const res = await sharedFetch(`/api/competitor/${competitorId}/organic/posts?${params.toString()}`);
   const data = (await res.json()) as OrganicPostsApiResponse;
   if (!res.ok || !data.ok) {
     throw new Error(data.error ?? "Failed to load posts");

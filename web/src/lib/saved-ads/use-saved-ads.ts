@@ -8,6 +8,7 @@ export type SavedMap = Record<string, string>;
 
 import { invalidateSavedAdsCaches } from "@/lib/cache/cache-invalidator";
 import { emitSavedItemsChanged } from "@/lib/saved-items/saved-items-events";
+import { checkSavedAdsBatched } from "@/lib/saved-ads/batched-check";
 
 /** Placeholder row id while POST /api/saved-ads is in flight — UI treats as saved */
 export const PENDING_SAVED_AD_ID = "__pending__";
@@ -193,17 +194,20 @@ export function useSavedAdsStatus(
     let cancelled = false;
     setLoading(true);
 
-    void fetch("/api/saved-ads/check", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        competitorId: cid,
-        libraryItems: dedupedItemsRef.current,
-        scrapedAdIds: dedupedScrapedIdsRef.current,
-      }),
+    /** Merged with other sections' checks for this competitor made at the same moment. */
+    void checkSavedAdsBatched<{
+          ok?: boolean;
+          savedMap?: SavedMap;
+          resolvedToScraped?: Record<string, string>;
+          libraryLifecycle?: Record<string, { isRunning: boolean; archivedCreativeUrl?: string }>;
+          libraryPreviewUrls?: Record<string, string>;
+          winnerScrapedAdIds?: string[];
+          winnerLibraryKeys?: string[];
+        }>({
+      competitorId: cid,
+      libraryItems: dedupedItemsRef.current,
+      scrapedAdIds: dedupedScrapedIdsRef.current,
     })
-      .then((r) => r.json())
       .then(
         (res: {
           ok?: boolean;

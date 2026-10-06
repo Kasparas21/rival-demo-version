@@ -19,6 +19,7 @@ import {
 } from "@/lib/saved-ads/use-saved-ads";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 export type VaultAdRow = {
   id: string;
@@ -163,7 +164,7 @@ export function CopyVaultPanel({
     u.searchParams.set("limit", "400");
     u.searchParams.set("offset", "0");
     u.searchParams.set("sort", "lifespan_desc");
-    const res = await fetch(u.toString(), { credentials: "include" });
+    const res = await sharedFetch(`${u.pathname}${u.search}`);
     const json = (await res.json()) as VaultApiResponse & { checkoutUrl?: string };
     if (res.status === 402) {
       const msg = json.error ?? "Subscription required for Copy Vault.";

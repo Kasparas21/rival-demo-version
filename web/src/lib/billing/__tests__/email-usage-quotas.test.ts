@@ -23,6 +23,7 @@ function billingForTier(tier: BillingEntitlement["planTier"], unlimited = false)
     devPlanOverride: null,
     adminPlanOverride: null,
     adminAdsScrapeMode: "auto",
+    enabledAdPlatforms: ["meta", "google"],
     customQuote: null,
     pendingQuote: null,
     customPriceLabel: null,

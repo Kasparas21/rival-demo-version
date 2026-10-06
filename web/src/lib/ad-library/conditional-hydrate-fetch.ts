@@ -18,6 +18,45 @@ type ConditionalHydrateOptions = {
   clientMeta?: AdsCacheHydrateClientMeta | null;
 };
 
+type HydrateHttpResult = { status: number; ok: boolean; text: string };
+
+/** Identical hydrate requests already on the wire (the hook asks again while the first is pending). */
+const inFlight = new Map<string, Promise<HydrateHttpResult>>();
+
+function postHydrateShared(bodyJson: string): Promise<HydrateHttpResult> {
+  const hit = inFlight.get(bodyJson);
+  if (hit) return hit;
+  const promise = fetch("/api/competitor/ads-library/hydrate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: bodyJson,
+  })
+    .then(async (res) => ({ status: res.status, ok: res.ok, text: await res.text() }))
+    .finally(() => inFlight.delete(bodyJson));
+  inFlight.set(bodyJson, promise);
+  return promise;
+}
+
+/** Rejects with AbortError when this caller's signal fires; the shared request keeps going for the others. */
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
  * POST /api/competitor/ads-library/hydrate — metadata check first when `clientMeta` is present.
  */
@@ -34,17 +73,12 @@ export async function fetchHydratedAdsLibraryConditional(
   }
 
   try {
-    const res = await fetch("/api/competitor/ads-library/hydrate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: options.signal,
-    });
+    const res = await untilAborted(postHydrateShared(JSON.stringify(body)), options.signal);
 
     if (res.status === 404) return { kind: "miss" };
     if (!res.ok) return { kind: "miss" };
 
-    const json = (await res.json()) as {
+    const json = JSON.parse(res.text) as {
       ok?: boolean;
       status?: string;
       response?: AdsLibraryResponse;
