@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import {
   getRecomputeLockRow,
   loadSavedCompetitorForUser,
@@ -42,8 +41,6 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (!domain) {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
-
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, domain);
 
   const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
   if (!meta) {

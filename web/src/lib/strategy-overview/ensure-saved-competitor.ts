@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { resolveAdsCacheDomainForUser } from "@/lib/ad-library/competitor-cache-domain";
+import { countWatchedCompetitorSlotsForUser } from "@/lib/billing/brand-competitor-slots";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import type { Database } from "@/lib/supabase/types";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
 
@@ -12,8 +14,9 @@ function brandLabelFromDomain(domainHint: string): string {
 }
 
 /**
- * Dashboard competitors usually sync here via the client, but direct loads / race conditions can
- * leave no `saved_competitors` row. Strategy routes require it for FK + RLS — upsert a minimal record.
+ * Creates a minimal `saved_competitors` row when a scrape runs for a domain the user hasn't saved yet
+ * (the search flow scrapes before the client saves). Only write paths may call this — GET routes reply
+ * "not found" instead — and it never creates past the plan's competitor limit.
  */
 export async function ensureSavedCompetitorForStrategyOverview(
   supabase: SupabaseClient<Database>,
@@ -25,6 +28,15 @@ export async function ensureSavedCompetitorForStrategyOverview(
 
   const { competitorId } = await resolveAdsCacheDomainForUser(supabase, userId, domainHint);
   if (competitorId) return;
+
+  const billing = await getBillingEntitlement(supabase, userId);
+  if (!billing.isUnlimited) {
+    const { count } = await countWatchedCompetitorSlotsForUser(supabase, userId);
+    if (count >= billing.limits.maxWatchedCompetitors) {
+      console.warn("[ensure-saved-competitor] competitor limit reached, not creating", userId, cleaned);
+      return;
+    }
+  }
 
   const slug = cleaned;
   const name = brandLabelFromDomain(domainHint);

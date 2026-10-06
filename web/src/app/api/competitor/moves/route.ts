@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { loadSavedCompetitorForUser } from "@/lib/strategy-overview/recompute-strategy-overview";
 
 export const runtime = "nodejs";
@@ -26,7 +25,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, competitorDomain);
   const meta = await loadSavedCompetitorForUser(supabase, user.id, competitorDomain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });

@@ -2,7 +2,6 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
   isStrategyRecomputeRunning,
@@ -77,8 +76,6 @@ export async function GET(req: Request): Promise<NextResponse> {
   if (!domain) {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
-
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, domain);
 
   const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
   if (!meta) {

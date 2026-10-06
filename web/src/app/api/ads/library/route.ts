@@ -269,13 +269,17 @@ export async function POST(req: Request): Promise<NextResponse> {
     const libraryChannels = Array.isArray(body.libraryChannels)
       ? body.libraryChannels.filter((c): c is string => typeof c === "string" && c.trim() !== "")
       : undefined;
-    const syncedId = await syncSavedCompetitorLibraryContext(supabase, {
-      userId,
-      domainHint: domainNorm,
-      ids,
-      channels: libraryChannels,
-      confirmed: true,
-    });
+    /** Only a real scrape saves the competitor and its ids; cache reads (every competitor page load) just look it up. */
+    const isScrape = skipCache && !cacheOnly;
+    const syncedId = isScrape
+      ? await syncSavedCompetitorLibraryContext(supabase, {
+          userId,
+          domainHint: domainNorm,
+          ids,
+          channels: libraryChannels,
+          confirmed: true,
+        })
+      : null;
     const resolved = await resolveAdsCacheDomainForUser(supabase, userId, domainNorm);
     adsCacheDomain = resolved.cacheDomain;
     adsCacheReadDomains = resolved.readDomains;

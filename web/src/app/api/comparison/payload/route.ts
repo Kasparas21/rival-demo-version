@@ -5,7 +5,6 @@ import { maybeDetectMoves } from "@/lib/comparison/maybe-detect-moves";
 import type { ComparisonMoveRow } from "@/lib/comparison/comparison-move-types";
 import { computeScrapedAdsDerivedStats, type ComparisonDerivedStats } from "@/lib/comparison/scraped-ads-derived-stats";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import type { CompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/payload-types";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
@@ -381,7 +380,6 @@ export async function GET(req: Request): Promise<NextResponse> {
   const wsDomainHint = (wsRow.brand_domain?.trim() || wsRow.slug || "").toLowerCase();
   const wsMeta = metaFromSavedRow(wsRow, wsDomainHint || "workspace");
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, competitorDomain);
   const rivalMeta = await loadSavedCompetitorForUser(supabase, user.id, competitorDomain);
   if (!rivalMeta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
