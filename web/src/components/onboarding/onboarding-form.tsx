@@ -63,6 +63,7 @@ import {
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { OnboardingCopy } from "@/lib/i18n/onboarding/types";
+import { invalidateSharedFetch } from "@/lib/client/shared-fetch";
 
 /** Workspace ad-profile step (2-column grid): label + input only */
 const workspaceAdProfileInputClass = `${glassInputClass} rounded-xl px-3 py-2.5 text-[14px]`;
@@ -885,6 +886,7 @@ export function OnboardingForm({
             color: "#343434",
           }),
         });
+        invalidateSharedFetch("/api/");
         const created = (await createRes.json()) as {
           ok?: boolean;
           brand?: { id: string };
@@ -923,6 +925,7 @@ export function OnboardingForm({
           ...brandPatchBody,
         }),
       });
+      invalidateSharedFetch("/api/");
       let brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
 
       if (
@@ -940,6 +943,7 @@ export function OnboardingForm({
             ...coreOnly,
           }),
         });
+        invalidateSharedFetch("/api/");
         brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
       }
 

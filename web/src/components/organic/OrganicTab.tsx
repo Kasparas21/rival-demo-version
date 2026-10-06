@@ -21,6 +21,7 @@ import type { OrganicPostCardData } from "./OrganicPostCard";
 import { OrganicSettingsPanel } from "./OrganicSettingsPanel";
 
 import { dispatchStrategyChannelDataUpdated } from "@/lib/strategy-overview/ads-library-strategy-bridge";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 type OrganicTabProps = {
   competitorId?: string;
@@ -72,7 +73,7 @@ export function OrganicTab({
     }
     setLoadingSocials(true);
     try {
-      const res = await fetch(`/api/competitor/${competitorId}/organic/socials`);
+      const res = await sharedFetch(`/api/competitor/${competitorId}/organic/socials`);
       if (res.ok) {
         const data = (await res.json()) as { socials?: OrganicSocials };
         setSocials(parseOrganicSocials(data.socials));

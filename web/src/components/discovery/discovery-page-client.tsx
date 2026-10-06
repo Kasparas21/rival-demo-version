@@ -18,6 +18,7 @@ import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/disc
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
 import { useDiscoverySavedAds } from "@/components/discovery/use-discovery-saved-ads";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 export function DiscoveryPageClient() {
   const activeBrand = useActiveBrand();
@@ -25,7 +26,7 @@ export function DiscoveryPageClient() {
   const [clientBrands, setClientBrands] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
-    void fetch("/api/account/brands", { credentials: "include", cache: "no-store" })
+    void sharedFetch("/api/account/brands")
       .then((r) => r.json())
       .then((d: { ok?: boolean; brands?: { id: string; name: string }[] }) => {
         if (!d.ok || !d.brands?.length) return;

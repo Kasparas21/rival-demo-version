@@ -34,6 +34,7 @@ import {
   subscriptionStatusBadgeClassName,
 } from "@/lib/billing/entitlements";
 import type { PlanTier } from "@/lib/billing/plan-limits";
+import { invalidateSharedFetch, sharedFetch } from "@/lib/client/shared-fetch";
 
 type ProfileState = {
   company_name: string;
@@ -246,8 +247,8 @@ export default function SettingsPage() {
     }
     try {
       const [profileRes, usageRes] = await Promise.all([
-        fetch("/api/account/profile", { cache: "no-store", credentials: "include" }),
-        fetch("/api/account/usage", { cache: "no-store", credentials: "include" }),
+        sharedFetch("/api/account/profile"),
+        sharedFetch("/api/account/usage"),
       ]);
 
       const profileJson = (await profileRes.json()) as {
@@ -453,6 +454,7 @@ export default function SettingsPage() {
           brand_context: profile.brand_context,
         }),
       });
+      invalidateSharedFetch("/api/");
       const json = (await res.json()) as {
         ok?: boolean;
         error?: string;

@@ -8,6 +8,7 @@ import { alertGlassButtonClass, alertGlassPanelClass } from "@/components/compet
 import { cn } from "@/lib/utils";
 
 import { EmailTrackerBarSkeleton } from "./EmailMarketingSkeleton";
+import { invalidateSharedFetch, sharedFetch } from "@/lib/client/shared-fetch";
 
 type TrackerState = {
   id: string;
@@ -42,7 +43,7 @@ export function EmailTrackerBar({
     setSetupState("checking");
     onCheckingChange?.(true);
     try {
-      const res = await fetch(`/api/email-trackers/${competitorId}`);
+      const res = await sharedFetch(`/api/email-trackers/${competitorId}`);
       if (!res.ok) {
         setSetupState("idle");
         onTrackerReady?.(false);
@@ -83,6 +84,7 @@ export function EmailTrackerBar({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ competitor_id: competitorId }),
       });
+      invalidateSharedFetch("/api/");
       const data = (await res.json()) as TrackerState & { error?: string };
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to generate tracker");
@@ -106,6 +108,7 @@ export function EmailTrackerBar({
     setActionLoading(true);
     try {
       const res = await fetch(`/api/email-trackers/${competitorId}/activate`, { method: "POST" });
+      invalidateSharedFetch("/api/");
       const data = (await res.json()) as { tracker?: TrackerState; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to activate");
       if (data.tracker) setTracker(data.tracker);
@@ -127,6 +130,7 @@ export function EmailTrackerBar({
     setMenuOpen(false);
     try {
       const res = await fetch(`/api/email-trackers/${competitorId}/deactivate`, { method: "POST" });
+      invalidateSharedFetch("/api/");
       const data = (await res.json()) as { tracker?: TrackerState; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to stop tracking");
       if (data.tracker) setTracker(data.tracker);
@@ -152,6 +156,7 @@ export function EmailTrackerBar({
     setMenuOpen(false);
     try {
       const res = await fetch(`/api/email-trackers/${competitorId}/regenerate`, { method: "POST" });
+      invalidateSharedFetch("/api/");
       const data = (await res.json()) as { tracker?: TrackerState; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to regenerate");
       if (data.tracker) setTracker(data.tracker);

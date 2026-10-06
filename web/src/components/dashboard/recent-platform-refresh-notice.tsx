@@ -8,6 +8,7 @@ import {
   recentRefreshNoticeStorageKey,
 } from "@/lib/ad-library/recent-platform-refresh-copy";
 import { competitorHostFromDashboardPathname } from "@/lib/competitor-dashboard-url";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 /** Once per session, toast when ad platforms were recently auto-refreshed. */
 export function RecentPlatformRefreshNotice() {
@@ -24,10 +25,7 @@ export function RecentPlatformRefreshNotice() {
     void (async () => {
       try {
         const qs = host ? `?domain=${encodeURIComponent(host)}` : "";
-        const res = await fetch(`/api/account/recent-platform-refreshes${qs}`, {
-          credentials: "include",
-          cache: "no-store",
-        });
+        const res = await sharedFetch(`/api/account/recent-platform-refreshes${qs}`);
         if (!res.ok || cancelled) return;
 
         const json = (await res.json()) as {

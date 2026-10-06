@@ -14,6 +14,7 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { isMissingDbColumnError } from "@/lib/supabase/postgrest-schema-error";
 import { validateIdentifierField } from "@/lib/validate-identifier-field";
+import { invalidateSharedFetch } from "@/lib/client/shared-fetch";
 
 function defaultWorkspaceAdMarketCodes(hostname: string): string[] {
   const inferred = inferAdMarketFromHostname(hostname);
@@ -114,6 +115,7 @@ async function persistOnboardingSetup(options: PersistSetupOptions): Promise<{ o
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(brandPatchBody),
   });
+  invalidateSharedFetch("/api/");
   let brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
 
   if (
@@ -128,6 +130,7 @@ async function persistOnboardingSetup(options: PersistSetupOptions): Promise<{ o
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(coreOnly),
     });
+    invalidateSharedFetch("/api/");
     brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
   }
 

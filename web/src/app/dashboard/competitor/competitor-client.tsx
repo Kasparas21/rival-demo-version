@@ -278,6 +278,7 @@ import { toast } from "sonner";
 import type { ManualRefreshStatus } from "@/lib/billing/manual-refresh-status";
 import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
+import { invalidateSharedFetch, sharedFetch } from "@/lib/client/shared-fetch";
 
 function availableSavedChannels(
   saved: readonly ChannelId[] | null | undefined,
@@ -691,6 +692,7 @@ function WorkspaceAdSourcesPanel({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    invalidateSharedFetch("/api/");
     const json = (await res.json()) as { ok?: boolean; error?: string };
     if (!res.ok || !json.ok) {
       setError(json.error ?? "Save failed");
@@ -1912,7 +1914,7 @@ function CompetitorDashboardBody({
 
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/account/usage", { cache: "no-store", credentials: "include" })
+    void sharedFetch("/api/account/usage")
       .then((r) => r.json())
       .then((j: {
         billing?: {
@@ -1946,7 +1948,7 @@ function CompetitorDashboardBody({
   }, []);
 
   const refreshAlertsUnreadCount = useCallback(() => {
-    void fetch("/api/alerts/unread-count", { cache: "no-store", credentials: "include" })
+    void sharedFetch("/api/alerts/unread-count")
       .then((r) => r.json())
       .then((j: { ok?: boolean; count?: number }) => {
         if (j.ok) setAlertsUnreadCount(j.count ?? 0);
@@ -2085,9 +2087,9 @@ function CompetitorDashboardBody({
     void (async () => {
       try {
         const [socialsRes, pagesRes, emailRes] = await Promise.all([
-          fetch(`/api/competitor/${cid}/organic/socials`),
+          sharedFetch(`/api/competitor/${cid}/organic/socials`),
           fetch(`/api/competitor/${cid}/landing-pages`),
-          fetch(`/api/email-trackers/${cid}`),
+          sharedFetch(`/api/email-trackers/${cid}`),
         ]);
         if (cancelled) return;
 
