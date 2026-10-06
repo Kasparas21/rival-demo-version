@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import { interpretCompetitorQuery, type TermHint } from "@/lib/competitor-query";
 import {
   looksLikeUrl,

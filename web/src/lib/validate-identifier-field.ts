@@ -1,4 +1,4 @@
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import type { IdentifierValidationCopy } from "@/lib/i18n/onboarding/types";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";

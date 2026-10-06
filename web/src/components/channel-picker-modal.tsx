@@ -14,6 +14,9 @@ import {
 } from "./platform-logos";
 import { DEFAULT_ENABLED_AD_PLATFORMS, isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
+import { DEFAULT_SELECTED_CHANNELS, type ChannelId } from "@/lib/channels";
+
+export { DEFAULT_SELECTED_CHANNELS, type ChannelId };
 
 export const CHANNELS = [
   { id: "meta", name: "Meta ads", Logo: MetaLogo },
@@ -22,9 +25,7 @@ export const CHANNELS = [
   { id: "linkedin", name: "LinkedIn ads", Logo: LinkedInLogo },
   { id: "pinterest", name: "Pinterest ads", Logo: PinterestLogo },
   { id: "snapchat", name: "Snapchat ads", Logo: SnapchatLogo },
-] as const;
-
-export type ChannelId = (typeof CHANNELS)[number]["id"];
+] as const satisfies readonly { id: ChannelId; name: string; Logo: unknown }[];
 
 /**
  * False for platforms not switched on for the account (admin setting; pass `useEnabledAdPlatforms().enabled`).
@@ -43,8 +44,6 @@ export function availableChannelIds(enabled: readonly string[] = DEFAULT_ENABLED
 
 export const CHANNEL_COMING_SOON_LABEL = "Coming soon";
 
-/** Default when opening the picker — exported for ads-library defaults */
-export const DEFAULT_SELECTED_CHANNELS: ChannelId[] = ["meta", "google"];
 
 interface ChannelPickerModalProps {
   isOpen: boolean;

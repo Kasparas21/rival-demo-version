@@ -1,4 +1,4 @@
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import {
   canonicalLinkedInAdLibraryUrl,
   canonicalMetaAdsLibraryUrl,

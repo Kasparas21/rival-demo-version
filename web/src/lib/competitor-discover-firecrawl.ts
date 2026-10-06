@@ -1,6 +1,6 @@
 import Firecrawl from "@mendable/firecrawl-js";
 import type { Document, ScrapeOptions } from "@mendable/firecrawl-js";
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import {
   looksLikeUrl,
   toFullUrl,
