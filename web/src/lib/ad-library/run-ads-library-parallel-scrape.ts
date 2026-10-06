@@ -158,6 +158,7 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
         out.meta.ads = await scrapeFacebookAds({
           ids,
           brandName,
+          brandDomain: domain,
           activeStatus: metaStatus,
           maxAds: metaMaxAds,
           countryCode: metaCountry,

@@ -80,6 +80,8 @@ const form: OnboardingCopy["form"] = {
       "Der Link enthält keine Transparency-Advertiser-ID (…/advertiser/AR…). Öffnen Sie das Google Ads Transparency Center, suchen Sie die Marke, öffnen Sie eine Anzeige und kopieren Sie die URL aus der Adressleiste. Keine reine Shop-Domain oder ?domain=-Suchseite.",
     linkedInKeyword:
       "Das wirkt wie eine Stichwortsuche — Ergebnisse können andere Unternehmen enthalten",
+    metaKeywordSearch:
+      "Das ist eine Stichwortsuche, nicht die Seite der Marke — nur Anzeigen einer gleichnamigen Seite werden übernommen. Am besten die Seite der Marke in der Ads Library öffnen und diesen Link kopieren (er enthält view_all_page_id).",
   },
 };
 

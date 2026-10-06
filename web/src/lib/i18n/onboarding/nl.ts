@@ -80,6 +80,8 @@ const form: OnboardingCopy["form"] = {
       "Deze link bevat geen Transparency-adverteerders-ID (…/advertiser/AR…). Open Google Ads Transparency Center, zoek het merk, open een creative of advertentie en kopieer de URL uit de adresbalk. Geen alleen shopdomein of ?domain=-zoekpagina.",
     linkedInKeyword:
       "Dit lijkt op een zoekopdracht op trefwoord — resultaten kunnen andere bedrijven bevatten",
+    metaKeywordSearch:
+      "Dit is een zoekopdracht op trefwoord, niet de pagina van het merk — alleen advertenties van een pagina met de merknaam worden bewaard. Open voor het beste resultaat de pagina van het merk in de Ads Library en kopieer die link (met view_all_page_id).",
   },
 };
 

@@ -5,6 +5,8 @@ import {
   ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM,
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
+import { advertiserNameMatchesBrand, brandMatchCandidates, domainBrandLabel } from "@/lib/ad-library/advertiser-name-match";
+import { isMetaKeywordSearchUrl } from "@/lib/ad-library/meta-keyword-search-url";
 import {
   alignMetaLibraryUrlActiveStatus,
   buildMetaAdLibraryUrl,
@@ -129,6 +131,8 @@ export async function scrapeFacebookAds(
   params: {
     ids: { meta?: string; metaPageUrl?: string };
     brandName: string;
+    /** Competitor domain — a brand-name fallback when keyword-search results are filtered by page name. */
+    brandDomain?: string;
     activeStatus?: "ACTIVE" | "ALL";
     maxAds?: number;
     /** ISO 3166-1 alpha-2 or `ALL` */
@@ -150,7 +154,7 @@ export async function scrapeFacebookAds(
     1,
     Math.min(params.maxAds ?? DEFAULT_MAX_ADS, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM)
   );
-  const actorCount = Math.max(ACTOR_MINIMUM_COUNT, maxAds);
+  const target = metaScrapeTarget(params.ids);
   const country = workspaceBrandInitial
     ? "ALL"
     : (params.countryCode ?? "US").trim().toUpperCase() || "US";
@@ -169,6 +173,13 @@ export async function scrapeFacebookAds(
   if (urls.length === 0) {
     throw new Error("No valid Meta search URL or Facebook page URL was provided");
   }
+
+  const keywordSearch = !target.pageId && urls.some(({ url }) => isMetaKeywordSearchUrl(url));
+  /** Keyword searches return many advertisers that get filtered out, so ask for more. */
+  const actorCount = Math.max(
+    ACTOR_MINIMUM_COUNT,
+    keywordSearch ? Math.min(maxAds * 3, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM) : maxAds,
+  );
 
   const cc = country === "ALL" ? "ALL" : country;
   const period = resolveScrapePageAdsPeriod({
@@ -203,8 +214,35 @@ export async function scrapeFacebookAds(
     }
   );
 
-  return items
-    .slice(0, maxAds)
-    .map((item, index) => facebookItemToMetaCard(item, index))
+  const cards = items
+    .map((item, index) => facebookItemToMetaCard(item, index, target.pageId ? { confirmedPageId: target.pageId } : undefined))
     .filter((item): item is MetaAdCard => item !== null);
+
+  /**
+   * Only the competitor's own ads: with a page id, drop rows from other pages; with a keyword search
+   * (pasted `?q=` link or the brand-name fallback), keep pages whose name is the brand.
+   */
+  const candidates = brandMatchCandidates(params.brandName, domainBrandLabel(params.brandDomain));
+  const own = target.pageId
+    ? cards.filter((c) => !c.advertiserMismatch)
+    : keywordSearch
+      ? cards.filter((c) => advertiserNameMatchesBrand(c.pageName, candidates))
+      : cards;
+
+  return own.slice(0, maxAds);
+}
+
+/** The Meta page the saved identifiers point at, if any (Ad Library `view_all_page_id` or a bare page id). */
+function metaScrapeTarget(ids: { meta?: string; metaPageUrl?: string }): { pageId?: string } {
+  for (const raw of [ids.metaPageUrl, ids.meta]) {
+    const t = raw?.trim();
+    if (!t) continue;
+    const fromUrl = extractMetaAdsLibraryPageId(t);
+    if (fromUrl) return { pageId: fromUrl };
+    if (/^[\d\s-]+$/.test(t)) {
+      const digits = t.replace(/\D/g, "");
+      if (digits.length >= 10 && digits.length <= 22) return { pageId: digits };
+    }
+  }
+  return {};
 }
