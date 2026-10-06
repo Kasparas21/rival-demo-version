@@ -51,31 +51,34 @@ async function insertSignals(
   competitorId: string | null,
   signals: DetectedAgentSignal[],
 ): Promise<Array<DetectedAgentSignal & { id: string }>> {
-  const inserted: Array<DetectedAgentSignal & { id: string }> = [];
+  if (signals.length === 0) return [];
+  const rows = signals.map((signal) => ({
+    user_id: userId,
+    competitor_id: competitorId,
+    signal_type: signal.signal_type,
+    source: signal.source,
+    threat_score: signal.threat_score,
+    payload: signal.payload as Json,
+    screenshot_urls: signal.screenshot_urls ?? [],
+  }));
 
-  for (const signal of signals) {
-    const { data, error } = await admin
-      .from("agent_signals")
-      .insert({
-        user_id: userId,
-        competitor_id: competitorId,
-        signal_type: signal.signal_type,
-        source: signal.source,
-        threat_score: signal.threat_score,
-        payload: signal.payload as Json,
-        screenshot_urls: signal.screenshot_urls ?? [],
-      })
-      .select("id")
-      .single();
-
-    if (error || !data) {
-      console.error("[rival-agent] signal insert failed", error?.message);
-      continue;
-    }
-
-    inserted.push({ ...signal, id: data.id });
+  /** One insert for the batch; rows come back in input order. */
+  const { data, error } = await admin.from("agent_signals").insert(rows).select("id");
+  if (!error) {
+    return (data ?? []).map((row, i) => ({ ...signals[i]!, id: row.id }));
   }
 
+  /** A bad row fails the whole batch — retry one by one so the good signals still land. */
+  console.error("[rival-agent] batch signal insert failed, retrying individually", error?.message);
+  const inserted: Array<DetectedAgentSignal & { id: string }> = [];
+  for (let i = 0; i < signals.length; i++) {
+    const { data: one, error: oneErr } = await admin.from("agent_signals").insert(rows[i]!).select("id").single();
+    if (oneErr || !one) {
+      console.error("[rival-agent] signal insert failed", oneErr?.message);
+      continue;
+    }
+    inserted.push({ ...signals[i]!, id: one.id });
+  }
   return inserted;
 }
 
