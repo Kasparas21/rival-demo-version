@@ -1,9 +1,10 @@
-import { runApifyActor } from "@/lib/apify/client";
+import { ApifyRunnerError, runApifyActor } from "@/lib/apify/client";
 import { APIFY_LIGHT_ACTOR_MEMORY_MBYTES, readApifyActorMemoryMbytes } from "@/lib/apify/memory";
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import { canonicalLinkedInAdLibraryUrl } from "@/lib/ad-library/canonical-library-url";
 import type { LinkedInAdItem } from "@/lib/ad-library/apify-raw-types";
 import { linkedInApifyItemToLegacyItem } from "@/lib/ad-library/normalize";
+import { advertiserNameMatchesBrand, brandMatchCandidates } from "@/lib/ad-library/advertiser-name-match";
 
 const DEFAULT_LINKEDIN_ACTOR = "data_xplorer/linkedin-ad-library-scraper";
 const MAX_TIMEOUT_SECS = 600;
@@ -43,6 +44,7 @@ function buildDataXplorerLinkedInInput(params: {
   dateRange?: string;
   countryCode?: string;
   decodeUrls?: boolean;
+  ownerOnly?: boolean;
 }): Record<string, unknown> {
   const maxItems = Math.max(1, Math.min(params.maxAds, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
   const searchUrl = buildLinkedInAdLibraryRequestUrl({
@@ -51,6 +53,7 @@ function buildDataXplorerLinkedInInput(params: {
     keywordFallback: params.keywordFallback,
     dateRange: params.dateRange,
     countryCode: params.countryCode,
+    ownerOnly: params.ownerOnly,
   });
   return {
     searchUrl,
@@ -73,6 +76,7 @@ function buildIvanVsLinkedInInput(params: {
   maxAds: number;
   dateRange?: string;
   countryCode?: string;
+  ownerOnly?: boolean;
 }): Record<string, unknown> {
   const maxResults = Math.max(1, Math.min(params.maxAds, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
   const url = buildLinkedInAdLibraryRequestUrl({
@@ -81,6 +85,7 @@ function buildIvanVsLinkedInInput(params: {
     keywordFallback: params.keywordFallback,
     dateRange: params.dateRange,
     countryCode: params.countryCode,
+    ownerOnly: params.ownerOnly,
   });
   return {
     urls: [{ url, method: "GET" }],
@@ -101,6 +106,11 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
    * (e.g. domain label "Acme" instead of user display name "Admin").
    */
   keywordFallback?: string;
+  /**
+   * Advertiser-only search. The default also sets `keyword`, which finds big brands' own ads first but misses
+   * advertisers whose ad text never says their name — the fallback pass uses this.
+   */
+  ownerOnly?: boolean;
 }): string {
   const keywordSeed = linkedInKeywordSeed(params.brandName, params.keywordFallback);
   const liRaw = params.linkedinUrl?.trim();
@@ -131,11 +141,11 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
       }
     }
     if (/linkedin\.com\/company\//i.test(full)) {
-      const m = full.match(/linkedin\.com\/company\/([^/?#]+)/i);
-      const slug = m?.[1] ? decodeURIComponent(m[1].replace(/\/$/, "")) : "";
-      const keyword = slug ? slug.replace(/-/g, " ") : keywordSeed;
+      const keyword = linkedInCompanySlugLabel(full) ?? keywordSeed;
       const u = new URL("https://www.linkedin.com/ad-library/search");
-      u.searchParams.set("keyword", keyword);
+      /** `keyword` alone matches ad text (any advertiser); `accountOwner` narrows to advertisers with that name. */
+      u.searchParams.set("accountOwner", keyword);
+      if (!params.ownerOnly) u.searchParams.set("keyword", keyword);
       if (cc && cc.length === 2) u.searchParams.set("countries", cc.toUpperCase());
       applyLinkedInDateOptionParam(u, dr);
       return u.toString();
@@ -143,10 +153,23 @@ export function buildLinkedInAdLibraryRequestUrl(params: {
   }
 
   const u = new URL("https://www.linkedin.com/ad-library/search");
-  u.searchParams.set("keyword", keywordSeed);
+  u.searchParams.set("accountOwner", keywordSeed);
+  if (!params.ownerOnly) u.searchParams.set("keyword", keywordSeed);
   if (cc && cc.length === 2) u.searchParams.set("countries", cc.toUpperCase());
   applyLinkedInDateOptionParam(u, dr);
   return u.toString();
+}
+
+/** `linkedin.com/company/allbirds-inc` → "allbirds inc". */
+function linkedInCompanySlugLabel(url: string): string | null {
+  const m = url.match(/linkedin\.com\/company\/([^/?#]+)/i);
+  const slug = m?.[1] ? decodeURIComponent(m[1].replace(/\/$/, "")) : "";
+  return slug ? slug.replace(/-/g, " ") : null;
+}
+
+/** A pasted Ad Library search/detail URL is trusted as-is; anything else is a name search that needs filtering. */
+function isUserSuppliedLinkedInLibraryUrl(linkedinUrl: string | undefined): boolean {
+  return /linkedin\.com\/ad-library\//i.test(linkedinUrl ?? "");
 }
 
 /** Documented example uses `dateOption=current-year`; only map values we know work in the public UI. */
@@ -222,47 +245,74 @@ export async function scrapeLinkedInAdLibrary(params: {
   dateRange?: string;
   countryCode?: string;
 }): Promise<LinkedInAdItem[]> {
-  const actorId =
-    process.env.APIFY_LINKEDIN_ADS_ACTOR?.trim() || DEFAULT_LINKEDIN_ACTOR;
-  const maxAds = Math.max(1, Math.min(params.maxItems, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
+  const wanted = Math.max(1, Math.min(params.maxItems, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
+  if (isUserSuppliedLinkedInLibraryUrl(params.linkedinUrl)) {
+    return (await runLinkedInSearch(params, wanted)).slice(0, wanted);
+  }
+
+  /**
+   * Name search, in two passes: advertiser + keyword finds a big brand's own ads first (advertiser-only returns
+   * "Nikenza…" lookalikes ahead of Nike); advertiser-only catches brands whose ad text never names them. Each pass
+   * keeps only advertisers that really match. data_xplorer fails the run instead of returning [] on an empty search.
+   */
+  const candidates = brandMatchCandidates(
+    params.brandName,
+    params.keywordFallback,
+    params.linkedinUrl ? linkedInCompanySlugLabel(params.linkedinUrl) : null,
+  );
+  const fetchCount = Math.min(wanted * 2, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM);
+  let lastError: unknown = null;
+  for (const ownerOnly of [false, true]) {
+    try {
+      const ads = await runLinkedInSearch(params, fetchCount, ownerOnly);
+      const matched = ads.filter((ad) => advertiserNameMatchesBrand(ad.advertiser, candidates));
+      if (matched.length > 0) return matched.slice(0, wanted);
+      lastError = null;
+    } catch (e) {
+      if (!(e instanceof ApifyRunnerError)) throw e;
+      lastError = e;
+    }
+  }
+  if (lastError) throw lastError;
+  return [];
+}
+
+async function runLinkedInSearch(
+  params: {
+    brandName: string;
+    linkedinUrl?: string;
+    keywordFallback?: string;
+    dateRange?: string;
+    countryCode?: string;
+  },
+  maxAds: number,
+  ownerOnly = false,
+): Promise<LinkedInAdItem[]> {
+  const actorId = process.env.APIFY_LINKEDIN_ADS_ACTOR?.trim() || DEFAULT_LINKEDIN_ACTOR;
+  const shared = {
+    brandName: params.brandName,
+    linkedinUrl: params.linkedinUrl,
+    keywordFallback: params.keywordFallback,
+    maxAds,
+    dateRange: params.dateRange,
+    countryCode: params.countryCode,
+  };
   const input = usesIvanVsLinkedInActor(actorId)
-    ? buildIvanVsLinkedInInput({
-        brandName: params.brandName,
-        linkedinUrl: params.linkedinUrl,
-        keywordFallback: params.keywordFallback,
-        maxAds,
-        dateRange: params.dateRange,
-        countryCode: params.countryCode,
-      })
+    ? buildIvanVsLinkedInInput({ ...shared, ownerOnly })
     : usesDataXplorerLinkedInActor(actorId)
       ? buildDataXplorerLinkedInInput({
-          brandName: params.brandName,
-          linkedinUrl: params.linkedinUrl,
-          keywordFallback: params.keywordFallback,
-          maxAds,
-          dateRange: params.dateRange,
-          countryCode: params.countryCode,
+          ...shared,
+          ownerOnly,
           decodeUrls: process.env.APIFY_LINKEDIN_DECODE_URLS?.trim() === "1",
         })
-      : buildAutomationLabLinkedInInput({
-          brandName: params.brandName,
-          linkedinUrl: params.linkedinUrl,
-          keywordFallback: params.keywordFallback,
-          maxAds,
-          dateRange: params.dateRange,
-          countryCode: params.countryCode,
-        });
+      : buildAutomationLabLinkedInInput(shared);
 
-  const { items } = await runApifyActor<Record<string, unknown>>(
-    actorId,
-    input,
-    {
-      waitSecs: MAX_TIMEOUT_SECS,
-      timeoutSecs: MAX_TIMEOUT_SECS,
-      maxItems: maxAds,
-      memoryMbytes: readApifyActorMemoryMbytes("LINKEDIN_ADS_MEMORY_MBYTES", APIFY_LIGHT_ACTOR_MEMORY_MBYTES),
-    }
-  );
+  const { items } = await runApifyActor<Record<string, unknown>>(actorId, input, {
+    waitSecs: MAX_TIMEOUT_SECS,
+    timeoutSecs: MAX_TIMEOUT_SECS,
+    maxItems: maxAds,
+    memoryMbytes: readApifyActorMemoryMbytes("LINKEDIN_ADS_MEMORY_MBYTES", APIFY_LIGHT_ACTOR_MEMORY_MBYTES),
+  });
 
   return items.map((raw, i) => linkedInApifyItemToLegacyItem(raw, i));
 }

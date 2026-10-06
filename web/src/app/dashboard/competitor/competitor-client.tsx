@@ -277,9 +277,13 @@ import {
 import { toast } from "sonner";
 import type { ManualRefreshStatus } from "@/lib/billing/manual-refresh-status";
 import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 
-function availableSavedChannels(saved: readonly ChannelId[] | null | undefined): ChannelId[] {
-  const usable = (saved ?? []).filter((c) => isChannelAvailable(c));
+function availableSavedChannels(
+  saved: readonly ChannelId[] | null | undefined,
+  enabled: readonly string[],
+): ChannelId[] {
+  const usable = (saved ?? []).filter((c) => isChannelAvailable(c, enabled));
   return usable.length ? [...usable] : [...DEFAULT_SELECTED_CHANNELS];
 }
 
@@ -530,8 +534,11 @@ function WorkspaceAdSourcesPanel({
 }) {
   const router = useRouter();
   const baseDomain = normalizeCompetitorSlug(domain);
-  /** Saved picks minus platforms with scraping switched off (they're shown as "Coming soon"). */
-  const [channels, setChannels] = useState<ChannelId[]>(() => availableSavedChannels(initialSetup?.channels));
+  const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
+  /** Saved picks minus platforms not switched on for this account (they're shown as "Coming soon"). */
+  const [channels, setChannels] = useState<ChannelId[]>(() =>
+    availableSavedChannels(initialSetup?.channels, enabledAdPlatforms),
+  );
   const [marketsAuto, setMarketsAuto] = useState(() => workspaceInitialMarkets(initialSetup).auto);
   const [selectedMarketCodes, setSelectedMarketCodes] = useState<string[]>(() => {
     const { auto, codes } = workspaceInitialMarkets(initialSetup);
@@ -558,7 +565,7 @@ function WorkspaceAdSourcesPanel({
     process.env.NEXT_PUBLIC_DEBUG_PLATFORM_CLASSIFICATION === "true";
 
   useEffect(() => {
-    setChannels(availableSavedChannels(initialSetup?.channels));
+    setChannels(availableSavedChannels(initialSetup?.channels, enabledAdPlatforms));
     const { auto, codes } = workspaceInitialMarkets(initialSetup);
     setMarketsAuto(auto);
     setSelectedMarketCodes(auto ? [] : codes);
@@ -572,7 +579,7 @@ function WorkspaceAdSourcesPanel({
           }
         : emptyWorkspaceScrapeRow(baseDomain),
     );
-  }, [initialSetup, baseDomain]);
+  }, [initialSetup, baseDomain, enabledAdPlatforms]);
 
   const marketSummaryLabel = useMemo(() => {
     if (marketsAuto) {
@@ -589,7 +596,7 @@ function WorkspaceAdSourcesPanel({
   }, [marketsAuto, selectedMarketCodes]);
 
   const toggleChannel = (id: ChannelId) => {
-    if (!isChannelAvailable(id)) return;
+    if (!isChannelAvailable(id, enabledAdPlatforms)) return;
     setChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
@@ -1091,7 +1098,7 @@ function WorkspaceAdSourcesPanel({
           </p>
           <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-sky-200/60 bg-white/60 p-2">
             {CHANNELS.map(({ id, name, Logo }) => {
-              const available = isChannelAvailable(id);
+              const available = isChannelAvailable(id, enabledAdPlatforms);
               const on = available && channels.includes(id);
               return (
                 <button
@@ -1120,7 +1127,7 @@ function WorkspaceAdSourcesPanel({
             Per-platform identifiers
           </p>
           <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
-            {CHANNELS.filter((c) => channels.includes(c.id) && isChannelAvailable(c.id)).map((ch) => {
+            {CHANNELS.filter((c) => channels.includes(c.id) && isChannelAvailable(c.id, enabledAdPlatforms)).map((ch) => {
               const spec = fieldByChannel(ch.id);
               if (!spec) return null;
               const previewHref = workspacePreviewHrefForChannel(ch.id, scrape, baseDomain);
@@ -1284,6 +1291,7 @@ function CompetitorDashboardBody({
   channelsQuery,
   confirmedParam,
 }: CompetitorDashboardBodyProps) {
+  const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
   const myBrand = useActiveBrand();
   const [sidebarSnapshot, setSidebarSnapshot] = useState<SidebarCompetitor[] | undefined>(undefined);
   const [sidebarSnapshotBrandId, setSidebarSnapshotBrandId] = useState<string | null>(null);
@@ -1827,7 +1835,7 @@ function CompetitorDashboardBody({
       return resolveCompetitorTrackedAdsPlatforms(
         effectiveChannelsFromResolver,
         effectivePlatformIds,
-      ).filter(isScrapeEnabledForPlatform);
+      ).filter((p) => isScrapeEnabledForPlatform(p, enabledAdPlatforms));
     }
     const sources: { channelsCsv?: string; ids?: Record<string, string> | null }[] = [
       { channelsCsv: effectiveChannelsFromResolver, ids: effectivePlatformIds },
@@ -1838,13 +1846,14 @@ function CompetitorDashboardBody({
         ids: workspaceAdsSetupPlatformIds,
       });
     }
-    return unionAdsPlatformsFromSources(...sources).filter(isScrapeEnabledForPlatform);
+    return unionAdsPlatformsFromSources(...sources).filter((p) => isScrapeEnabledForPlatform(p, enabledAdPlatforms));
   }, [
     effectiveChannelsFromResolver,
     effectivePlatformIds,
     isOwnWorkspace,
     myBrand.adsSetup?.channels,
     workspaceAdsSetupPlatformIds,
+    enabledAdPlatforms,
   ]);
 
   /** Never pass an empty platform list after a scrape — cache reads would no-op. */

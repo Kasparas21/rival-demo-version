@@ -48,7 +48,8 @@ import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progre
 import type { Locale } from "@/lib/i18n/locale";
 import { buildSignupAfterOnboardingPath, PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
-import { AVAILABLE_CHANNEL_IDS, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
+import { availableChannelIds, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { applyPartialOnboardingDraft } from "@/lib/onboarding/apply-draft";
 import { saveOnboardingDraft, readOnboardingDraft, clearOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
 import { resolveOnboardingCompanyHost } from "@/lib/onboarding/resolve-company-host";
@@ -138,11 +139,11 @@ const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
 const STEP_CHOOSE_PLAN = 5;
 
-/** Every platform we can scrape today; the rest show as "Coming soon" and are never selected. */
-const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = AVAILABLE_CHANNEL_IDS;
+/** Default picks: the platforms every account has (Meta + Google). Others show as "Coming soon" unless switched on. */
+const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = availableChannelIds();
 
-function availableChannels(channels: readonly ChannelId[]): ChannelId[] {
-  return channels.filter((id) => isChannelAvailable(id));
+function availableChannels(channels: readonly ChannelId[], enabled?: readonly string[]): ChannelId[] {
+  return channels.filter((id) => isChannelAvailable(id, enabled));
 }
 
 function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
@@ -390,6 +391,7 @@ export function OnboardingForm({
   const lastContinueFromWebsiteHostRef = useRef<string>("");
 
   const skipDraftHydration = newBrandMode;
+  const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
   /** The saved guest draft is applied after mount (see below) so server and client render the same first frame. */
   const [companyUrl, setCompanyUrl] = useState(() => {
     if (initialDomain) return sanitizeCompanyUrlInput(initialDomain);
@@ -455,7 +457,7 @@ export function OnboardingForm({
   useEffect(() => {
     if (!initialBrandSetup || brandSetupHydratedRef.current) return;
     brandSetupHydratedRef.current = true;
-    const savedChannels = availableChannels(initialBrandSetup.channels);
+    const savedChannels = availableChannels(initialBrandSetup.channels, enabledAdPlatforms);
     if (savedChannels.length > 0) {
       setWorkspaceChannels(savedChannels);
     }
@@ -480,12 +482,12 @@ export function OnboardingForm({
   useEffect(() => {
     if (initialBrandSetup?.channels?.length) return;
     const draft = readOnboardingDraft();
-    const draftChannels = availableChannels(draft?.workspaceChannels ?? []);
+    const draftChannels = availableChannels(draft?.workspaceChannels ?? [], enabledAdPlatforms);
     if (!draftChannels.length) return;
     setWorkspaceChannels((prev) =>
       isAllWorkspaceChannels(prev) ? draftChannels : prev,
     );
-  }, [initialBrandSetup, postPaymentResume]);
+  }, [initialBrandSetup, postPaymentResume, enabledAdPlatforms]);
 
   const effectiveWorkspaceMarketCodes = useMemo(() => {
     if (workspaceMarketsGlobal) return [...ONBOARDING_AD_MARKET_CODES];
@@ -513,9 +515,9 @@ export function OnboardingForm({
   const showFaviconSlot = showTypingSkeleton || Boolean(faviconSrc);
   const companyLooksValid = isPlausiblePublicHostname(normalizedCompany);
   const toggleWorkspaceChannel = useCallback((id: ChannelId) => {
-    if (!isChannelAvailable(id)) return;
+    if (!isChannelAvailable(id, enabledAdPlatforms)) return;
     setWorkspaceChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }, []);
+  }, [enabledAdPlatforms]);
 
   const toggleWorkspaceCountryMarket = useCallback((code: string) => {
     setWorkspaceMarketsAuto(false);
@@ -1222,7 +1224,7 @@ export function OnboardingForm({
             </div>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {CHANNELS.map(({ id, name, Logo }) => {
-                const available = isChannelAvailable(id);
+                const available = isChannelAvailable(id, enabledAdPlatforms);
                 const on = available && workspaceChannels.includes(id);
                 return (
                   <button

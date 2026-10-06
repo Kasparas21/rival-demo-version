@@ -33,6 +33,7 @@ import { filterWeeklyScrapeRowsWithBrandMapping } from "@/lib/ad-library/weekly-
 import { resolveScheduledScrapeRegions } from "@/lib/ad-library/resolve-scheduled-scrape-regions";
 import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
 import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { chainCronInvocation } from "@/lib/cron/chain-cron";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
@@ -202,11 +203,13 @@ async function runWeeklyJobForRow(
       spDisabled,
       nowMs,
     );
+    /** Only platforms an admin switched on for this account. */
+    const { enabledAdPlatforms } = await getBillingEntitlement(admin, row.user_id);
     const platformsToScrape = (
       duePlatforms.length > 0
         ? duePlatforms.filter((p) => configuredPlatforms.has(p))
         : configuredInitial.filter((p) => !trackingForConfigured.some((t) => t.platform === p))
-    ).filter(isScrapeEnabledForPlatform);
+    ).filter((p) => isScrapeEnabledForPlatform(p, enabledAdPlatforms));
 
     if (platformsToScrape.length === 0) {
       await admin
@@ -321,6 +324,7 @@ async function runWeeklyJobForRow(
     const platformsNeedingScrape = new Set<AdsLibraryPlatform>(platformsToScrape);
 
     await runAdsLibraryParallelScrape({
+      enabledAdPlatforms,
       ids,
       brandName,
       domain: domainNormLower,

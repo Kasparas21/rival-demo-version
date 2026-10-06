@@ -41,7 +41,7 @@ import {
   type AdsCachePickRow,
 } from "@/lib/ad-library/ads-cache-pick";
 import { expandAdsCacheDomainCandidates } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
-import { stripDisabledPlatformsFromScrapeSet } from "@/lib/ad-library/disabled-scrape-platforms";
+import { DEFAULT_ENABLED_AD_PLATFORMS, stripDisabledPlatformsFromScrapeSet } from "@/lib/ad-library/disabled-scrape-platforms";
 
 export const runtime = "nodejs";
 /** Request ceiling; effective wall time is min(this, Vercel plan — Hobby ~10s). Ads library + strategy recompute side effects may need Pro+ or a queue. */
@@ -324,7 +324,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     platformsNeedingScrape = new Set();
   }
 
-  platformsNeedingScrape = stripDisabledPlatformsFromScrapeSet(platformsNeedingScrape);
+  /** Platforms switched on for this account; signed-out requests get the defaults. */
+  let enabledAdPlatforms: readonly string[] = DEFAULT_ENABLED_AD_PLATFORMS;
+  if (!userId) {
+    platformsNeedingScrape = stripDisabledPlatformsFromScrapeSet(platformsNeedingScrape);
+  }
 
   if (platformsNeedingScrape.size > 0) {
     if (!userId) {
@@ -334,6 +338,8 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
 
     const billing = await getBillingEntitlement(supabase, userId);
+    enabledAdPlatforms = billing.enabledAdPlatforms;
+    platformsNeedingScrape = stripDisabledPlatformsFromScrapeSet(platformsNeedingScrape, enabledAdPlatforms);
     if (!billing.hasAccess) {
       return NextResponse.json(
         billingRequiredResponseBody("Upgrade to Starter or Pro to run fresh ad-library searches."),
@@ -448,6 +454,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   const isPartial = platformsRequested.size < ALL_ADS_API_PLATFORMS.length;
 
   await runAdsLibraryParallelScrape({
+    enabledAdPlatforms,
     ids,
     brandName,
     domain,

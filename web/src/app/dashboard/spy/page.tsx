@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect, useLayoutEffect, KeyboardEvent } fr
 import { Search, X, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
-import { AVAILABLE_CHANNEL_IDS, ChannelPickerModal, type ChannelId } from "@/components/channel-picker-modal";
+import { availableChannelIds, ChannelPickerModal, type ChannelId } from "@/components/channel-picker-modal";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { saveSearchToAccount } from "@/lib/account/client";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
@@ -56,6 +57,7 @@ export default function SpyOnCompetitorPage() {
   const [terms, setTerms] = useState<TermEntry[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [showChannelPicker, setShowChannelPicker] = useState(false);
+  const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
   const [competitorLimitError, setCompetitorLimitError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -188,7 +190,7 @@ export default function SpyOnCompetitorPage() {
     if (termPayload.length > 0) {
       params.set("terms", JSON.stringify(termPayload));
     }
-    if (selectedChannels.length < AVAILABLE_CHANNEL_IDS.length) {
+    if (selectedChannels.length < availableChannelIds(enabledAdPlatforms).length) {
       params.set("channels", selectedChannels.join(","));
     }
     void saveSearchToAccount({

@@ -11,6 +11,7 @@ import {
   DEFAULT_SELECTED_CHANNELS,
   isChannelAvailable,
 } from "@/components/channel-picker-modal";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { CollapsibleSingleSelectFlagChipRow, type RegionChipOption } from "@/components/ad-library/single-select-flag-chip-row";
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
@@ -76,12 +77,12 @@ function stableIdsFingerprint(ids: Record<string, string> | null | undefined): s
 }
 
 /** Saved picks minus platforms with scraping switched off (shown as "Coming soon"); falls back to the defaults. */
-function parseChannelSeed(csv: string): ChannelId[] {
+function parseChannelSeed(csv: string, enabledAdPlatforms: readonly string[]): ChannelId[] {
   const valid = new Set(CHANNELS.map((c) => c.id));
   const usable = csv
     .split(",")
     .map((s) => s.trim())
-    .filter((c): c is ChannelId => valid.has(c as ChannelId) && isChannelAvailable(c as ChannelId));
+    .filter((c): c is ChannelId => valid.has(c as ChannelId) && isChannelAvailable(c as ChannelId, enabledAdPlatforms));
   return usable.length ? usable : [...DEFAULT_SELECTED_CHANNELS];
 }
 
@@ -145,7 +146,11 @@ export function CompetitorPaidMediaSettingsPanel({
     return DEFAULT_SELECTED_CHANNELS.join(",");
   }, [initialChannelsKey, fallbackChannelsKey, initialContext?.channels, fallbackChannels]);
 
-  const seedChannels = useMemo((): ChannelId[] => parseChannelSeed(seedChannelsCsv), [seedChannelsCsv]);
+  const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
+  const seedChannels = useMemo(
+    (): ChannelId[] => parseChannelSeed(seedChannelsCsv, enabledAdPlatforms),
+    [seedChannelsCsv, enabledAdPlatforms],
+  );
 
   const seedRegionsKey = useMemo(
     () => JSON.stringify(resolveScheduledScrapeRegions(domain, { regions: initialContext?.regions })),
@@ -189,7 +194,7 @@ export function CompetitorPaidMediaSettingsPanel({
   }, []);
 
   const toggleChannel = (id: ChannelId) => {
-    if (!isChannelAvailable(id)) return;
+    if (!isChannelAvailable(id, enabledAdPlatforms)) return;
     setChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
@@ -623,7 +628,7 @@ export function CompetitorPaidMediaSettingsPanel({
           </p>
           <div className="mt-3 flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 p-2">
             {CHANNELS.map(({ id, name, Logo }) => {
-              const available = isChannelAvailable(id);
+              const available = isChannelAvailable(id, enabledAdPlatforms);
               const on = available && channels.includes(id);
               return (
                 <button
@@ -650,7 +655,7 @@ export function CompetitorPaidMediaSettingsPanel({
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-slate-500">Per-platform identifiers</p>
           <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-            {CHANNELS.filter((c) => channels.includes(c.id) && isChannelAvailable(c.id)).map((ch) => {
+            {CHANNELS.filter((c) => channels.includes(c.id) && isChannelAvailable(c.id, enabledAdPlatforms)).map((ch) => {
               const spec = PLATFORM_CONNECTION_FIELD_SPECS[ch.id];
               const value = fieldValueForChannel(ch.id, metaDisplay, identifiers);
               const previewHref = competitorPreviewHrefForChannel(ch.id, metaDisplay, identifiers);

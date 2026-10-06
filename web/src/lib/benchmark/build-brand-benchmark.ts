@@ -10,12 +10,20 @@ import {
   type BenchmarkRecommendedMove,
 } from "@/lib/benchmark/benchmark-types";
 import { runBenchmarkLlm } from "@/lib/benchmark/run-benchmark-llm";
-import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import { DEFAULT_ENABLED_AD_PLATFORMS } from "@/lib/ad-library/disabled-scrape-platforms";
 import { computeActiveAdsFingerprint } from "@/lib/strategy-overview/active-ads-fingerprint";
 import type { Database } from "@/lib/supabase/types";
 
-/** Platforms we actually scrape — switched-off ones can't count as gaps. */
-const SCRAPED_BENCHMARK_PLATFORM_COUNT = BENCHMARK_PLATFORMS.filter((p) => isScrapeEnabledForPlatform(p)).length;
+/**
+ * Denominator for "X of N platforms": the platforms every account scrapes, plus any platform where
+ * someone in the group is active — switched-off platforms with no data can't count as gaps.
+ */
+function trackedPlatformCount(entities: BenchmarkEntityMetrics[]): number {
+  return BENCHMARK_PLATFORMS.filter(
+    (p) =>
+      (DEFAULT_ENABLED_AD_PLATFORMS as readonly string[]).includes(p) || entities.some((e) => e.platformsActive[p]),
+  ).length;
+}
 
 const NEW_ADS_PERIOD_DAYS = 7;
 const STALE_OWN_BRAND_DAYS = 10;
@@ -339,6 +347,7 @@ function buildFallbackAiSummary(
   platformOpportunities: BenchmarkPlatformId[],
   angleGaps: string[],
 ): BenchmarkAiSummary {
+  const platformTotal = trackedPlatformCount([own, ...rivals]);
   const winning: string[] = [];
   const behind: string[] = [];
 
@@ -350,9 +359,9 @@ function buildFallbackAiSummary(
   }
 
   if (own.platformsActiveCount >= (avg(rivals.map((r) => r.platformsActiveCount)) ?? 0)) {
-    winning.push(`Platform breadth: live on ${own.platformsActiveCount} of ${SCRAPED_BENCHMARK_PLATFORM_COUNT} channels.`);
+    winning.push(`Platform breadth: live on ${own.platformsActiveCount} of ${platformTotal} channels.`);
   } else if (platformOpportunities.length > 0) {
-    behind.push(`Only ${own.platformsActiveCount} of ${SCRAPED_BENCHMARK_PLATFORM_COUNT} platforms active — gaps on ${platformOpportunities.slice(0, 2).join(", ")}.`);
+    behind.push(`Only ${own.platformsActiveCount} of ${platformTotal} platforms active — gaps on ${platformOpportunities.slice(0, 2).join(", ")}.`);
   }
 
   if (own.newAdsThisPeriod >= 2) {
@@ -465,7 +474,7 @@ export async function buildBrandBenchmarkPayload(params: {
   const metricsSummary = entities
     .map(
       (e) =>
-        `${e.isOwnBrand ? "[YOU]" : "[RIVAL]"} ${e.name}: score=${e.activityScore ?? "n/a"}, activeAds=${e.activeAdCount}, newAds7d=${e.newAdsThisPeriod}, platforms=${e.platformsActiveCount}/${SCRAPED_BENCHMARK_PLATFORM_COUNT}, freshnessDays=${e.creativeFreshnessDays ?? "n/a"}, angles=${e.extractedAngles.slice(0, 6).join("; ") || "none"}`,
+        `${e.isOwnBrand ? "[YOU]" : "[RIVAL]"} ${e.name}: score=${e.activityScore ?? "n/a"}, activeAds=${e.activeAdCount}, newAds7d=${e.newAdsThisPeriod}, platforms=${e.platformsActiveCount}/${trackedPlatformCount(entities)}, freshnessDays=${e.creativeFreshnessDays ?? "n/a"}, angles=${e.extractedAngles.slice(0, 6).join("; ") || "none"}`,
     )
     .join("\n");
 
@@ -501,7 +510,7 @@ export async function buildBrandBenchmarkPayload(params: {
       activeAdsYou: ownBrand.activeAdCount,
       activeAdsAvg: Math.round(avgAds * 10) / 10,
       activeAdsRankLabel: ownAdsRank ? `#${ownAdsRank.rank} of ${ownAdsRank.of}` : "—",
-      platformsYouLabel: `${ownBrand.platformsActiveCount} of ${SCRAPED_BENCHMARK_PLATFORM_COUNT}`,
+      platformsYouLabel: `${ownBrand.platformsActiveCount} of ${trackedPlatformCount([ownBrand, ...competitors])}`,
       platformsAvg: Math.round(avgPlatforms * 10) / 10,
       biggestGapLine: buildBiggestGapLine(ownBrand, competitors, platformOpportunities),
     },
@@ -567,7 +576,7 @@ export function rebuildBenchmarkPayloadFromEntities(
       activeAdsYou: ownBrand.activeAdCount,
       activeAdsAvg: Math.round(avgAds * 10) / 10,
       activeAdsRankLabel: ownAdsRank ? `#${ownAdsRank.rank} of ${ownAdsRank.of}` : "—",
-      platformsYouLabel: `${ownBrand.platformsActiveCount} of ${SCRAPED_BENCHMARK_PLATFORM_COUNT}`,
+      platformsYouLabel: `${ownBrand.platformsActiveCount} of ${trackedPlatformCount([ownBrand, ...competitors])}`,
       platformsAvg: Math.round(avgPlatforms * 10) / 10,
       biggestGapLine: buildBiggestGapLine(ownBrand, competitors, platformOpportunities),
     },

@@ -12,7 +12,8 @@ import {
   TikTokLogo,
   PinterestLogo,
 } from "./platform-logos";
-import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import { DEFAULT_ENABLED_AD_PLATFORMS, isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 
 export const CHANNELS = [
   { id: "meta", name: "Meta ads", Logo: MetaLogo },
@@ -25,12 +26,20 @@ export const CHANNELS = [
 
 export type ChannelId = (typeof CHANNELS)[number]["id"];
 
-/** False for platforms whose scraping is switched off (`SCRAPE_DISABLED_PLATFORMS`) — shown as "Coming soon". */
-export function isChannelAvailable(id: ChannelId): boolean {
-  return isScrapeEnabledForPlatform(id);
+/**
+ * False for platforms not switched on for the account (admin setting; pass `useEnabledAdPlatforms().enabled`).
+ * Unavailable platforms are shown as "Coming soon".
+ */
+export function isChannelAvailable(
+  id: ChannelId,
+  enabled: readonly string[] = DEFAULT_ENABLED_AD_PLATFORMS,
+): boolean {
+  return isScrapeEnabledForPlatform(id, enabled);
 }
 
-export const AVAILABLE_CHANNEL_IDS: ChannelId[] = CHANNELS.filter((c) => isChannelAvailable(c.id)).map((c) => c.id);
+export function availableChannelIds(enabled: readonly string[] = DEFAULT_ENABLED_AD_PLATFORMS): ChannelId[] {
+  return CHANNELS.filter((c) => isChannelAvailable(c.id, enabled)).map((c) => c.id);
+}
 
 export const CHANNEL_COMING_SOON_LABEL = "Coming soon";
 
@@ -77,8 +86,9 @@ export function ChannelPickerModal({
     };
   }, [isOpen, onClose]);
 
+  const { enabled: enabledPlatforms } = useEnabledAdPlatforms();
   const toggle = (id: ChannelId) => {
-    if (!isChannelAvailable(id)) return;
+    if (!isChannelAvailable(id, enabledPlatforms)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -87,11 +97,11 @@ export function ChannelPickerModal({
     });
   };
 
-  const selectAll = () => setSelected(new Set(AVAILABLE_CHANNEL_IDS));
+  const selectAll = () => setSelected(new Set(availableChannelIds(enabledPlatforms)));
   const selectNone = () => setSelected(new Set());
 
   const handleConfirm = () => {
-    onConfirm(Array.from(selected));
+    onConfirm(Array.from(selected).filter((id) => isChannelAvailable(id, enabledPlatforms)));
     onClose();
   };
 
@@ -183,7 +193,7 @@ export function ChannelPickerModal({
             <div className="rival-subtle-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {CHANNELS.map((channel) => {
-                  const available = isChannelAvailable(channel.id);
+                  const available = isChannelAvailable(channel.id, enabledPlatforms);
                   const isSelected = available && selected.has(channel.id);
                   const Logo = channel.Logo;
                   return (

@@ -19,6 +19,11 @@ import {
   type PlanLimits,
   type PlanTier,
 } from "@/lib/billing/plan-limits";
+import {
+  DEFAULT_ENABLED_AD_PLATFORMS,
+  normalizeEnabledAdPlatforms,
+  type ToggleableAdPlatform,
+} from "@/lib/ad-library/disabled-scrape-platforms";
 
 export type { PlanLimits, PlanTier, DevPlanOverride };
 
@@ -35,6 +40,8 @@ export type BillingEntitlement = {
   adminPlanOverride: PlanTier | null;
   /** Admin-controlled ads scrape scheduling; defaults to automatic weekly cron. */
   adminAdsScrapeMode: AdminAdsScrapeMode;
+  /** Ad platforms switched on for this account by an admin (defaults to Meta + Google). */
+  enabledAdPlatforms: ToggleableAdPlatform[];
   polarProductId: string | null;
   polarCustomerId: string | null;
   polarSubscriptionId: string | null;
@@ -92,6 +99,15 @@ export function readAdminAdsScrapeMode(
   const v = readRawPayload(rawPayload).admin_ads_scrape_mode;
   if (v === "manual" || v === "auto") return v;
   return options.payingSubscriber ? "auto" : "manual";
+}
+
+/** Admin dashboard: which ad platforms this account may scrape. Defaults to Meta + Google. */
+export function readEnabledAdPlatforms(rawPayload: unknown): ToggleableAdPlatform[] {
+  return (
+    normalizeEnabledAdPlatforms(readRawPayload(rawPayload).admin_enabled_ad_platforms) ?? [
+      ...DEFAULT_ENABLED_AD_PLATFORMS,
+    ]
+  );
 }
 
 export function normalizeAdminAdsScrapeMode(value: unknown): AdminAdsScrapeMode | null {
@@ -454,6 +470,7 @@ export async function getBillingEntitlement(
     planName,
     adminPlanOverride,
     adminAdsScrapeMode,
+    enabledAdPlatforms: readEnabledAdPlatforms(rawPayload),
     polarProductId: data?.polar_product_id ?? null,
     polarCustomerId: data?.polar_customer_id ?? null,
     polarSubscriptionId: data?.polar_subscription_id ?? null,

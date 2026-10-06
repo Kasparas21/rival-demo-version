@@ -6,6 +6,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 
 import type { AdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import type { AdminAdsScrapeMode } from "@/lib/billing/entitlements";
+import { AdminAdPlatformsSection } from "@/components/admin/admin-ad-platforms-section";
 import { formatQuotePrice } from "@/lib/billing/custom-quotes";
 
 type UserDetail = {
@@ -30,6 +31,7 @@ type UserDetail = {
     customPriceLabel: string | null;
   };
   adsScrapeMode: AdminAdsScrapeMode;
+  enabledAdPlatforms?: string[];
   usage: {
     month: string;
     adsScraped: number;
@@ -522,6 +524,8 @@ export default function AdminUserDetailPage() {
           <p className="mt-2 text-sm text-emerald-700">Ads scraping mode updated.</p>
         ) : null}
       </section>
+
+      <AdminAdPlatformsSection userId={userId} enabled={data.enabledAdPlatforms} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-xl border border-zinc-200 bg-white p-4">

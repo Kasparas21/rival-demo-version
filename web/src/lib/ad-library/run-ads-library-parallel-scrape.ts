@@ -25,7 +25,7 @@ import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/ap
 import { ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM } from "@/lib/ad-library/constants";
 import {
   applyDisabledScrapePlatformErrors,
-  SCRAPE_DISABLED_PLATFORMS,
+  stripDisabledPlatformsFromScrapeSet,
 } from "@/lib/ad-library/disabled-scrape-platforms";
 
 const MAX_ADS = ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM;
@@ -91,6 +91,8 @@ export type RunAdsLibraryParallelScrapeParams = {
   snapchatConfirmedAdvertiserQuery?: string;
   /** Post-onboarding workspace brand Meta scrape — full active page Ad Library URL. */
   metaWorkspaceBrandInitialScrape?: boolean;
+  /** Account's switched-on platforms (`billing.enabledAdPlatforms`); others are skipped with an error. */
+  enabledAdPlatforms: readonly string[];
 };
 
 /**
@@ -138,12 +140,16 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
     pinterestConfirmedAdvertiserQuery,
     snapchatConfirmedAdvertiserQuery,
     metaWorkspaceBrandInitialScrape,
+    enabledAdPlatforms,
   } = params;
 
-  for (const platform of SCRAPE_DISABLED_PLATFORMS) {
-    platformsNeedingScrape.delete(platform);
+  /** Platforms switched off for this account are never sent to Apify. */
+  for (const platform of [...platformsNeedingScrape]) {
+    if (!stripDisabledPlatformsFromScrapeSet(new Set([platform]), enabledAdPlatforms).size) {
+      platformsNeedingScrape.delete(platform);
+    }
   }
-  applyDisabledScrapePlatformErrors(out, platformsRequested);
+  applyDisabledScrapePlatformErrors(out, platformsRequested, enabledAdPlatforms);
 
   await Promise.all([
     (async () => {

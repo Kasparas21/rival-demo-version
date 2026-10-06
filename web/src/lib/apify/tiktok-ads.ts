@@ -5,8 +5,22 @@ import { DEFAULT_TIKTOK_ADS_REGION, normalizeTikTokAdsRegion } from "@/lib/ad-li
 import type { TikTokAdCard } from "@/lib/ad-library/normalize";
 import { tiktokApifyItemToCard, normalizeUserAdvertiserQueryToken } from "@/lib/ad-library/normalize";
 import { effectiveCompetitorBrandLabel } from "@/lib/ad-library/competitor-brand-display";
+import {
+  advertiserNameMatchesBrand,
+  brandMatchCandidates,
+  domainBrandLabel,
+} from "@/lib/ad-library/advertiser-name-match";
 
-const TIKTOK_ADS_ACTOR = "data_xplorer/tiktok-ads-scraper";
+/**
+ * s-r/tiktok-ads-library: TikTok now treats `query_type=1` as advertiser name; the previous actor
+ * (data_xplorer/tiktok-ads-scraper) still sends `2` and has returned zero rows for every advertiser since mid-2026.
+ */
+const TIKTOK_ADS_ACTOR = process.env.APIFY_TIKTOK_ADS_ACTOR?.trim() || "s-r/tiktok-ads-library";
+/** Regions the actor accepts; anything else (e.g. a non-EU market) searches all regions. */
+const SR_TIKTOK_REGIONS = new Set([
+  "all", "NL", "DE", "BE", "FR", "GB", "ES", "IT", "AT", "CH", "PL", "SE", "DK", "NO", "FI", "PT", "IE",
+  "AU", "CA", "NZ", "JP", "KR", "BR", "MX", "IN", "TR", "ZA", "AR", "CL", "CO", "EG", "SA", "AE", "IL",
+]);
 const MAX_TIMEOUT_SECS = 600;
 
 function formatIsoDate(d: Date): string {
@@ -14,33 +28,6 @@ function formatIsoDate(d: Date): string {
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/** Actor `query`: **2** = advertiser name / biz id · **url** = paste library URL. */
-function buildTikTokApifyQuery(params: {
-  brandName: string;
-  brandDomain?: string;
-  savedTiktok?: string | null;
-}): {
-  query: string;
-  queryType: string;
-} {
-  const raw = params.savedTiktok?.trim().replace(/^@+/, "") ?? "";
-  const searchBrand = effectiveCompetitorBrandLabel(params.brandName, params.brandDomain) || params.brandName.trim();
-
-  if (raw && /^https?:\/\//i.test(raw)) {
-    return { query: raw, queryType: "url" };
-  }
-  if (raw && /^\d{6,}$/.test(raw)) {
-    return { query: raw, queryType: "2" };
-  }
-
-  /** Always `query_type=2`; **omit** `"` wrappers — TikTok’s `adv_name=%22Brand%22` often matches zero rows vs plain `adv_name=Brand`. */
-  const token = normalizeUserAdvertiserQueryToken(raw.length > 0 ? raw : searchBrand);
-  if (!token.length) {
-    return { query: "brand", queryType: "2" };
-  }
-  return { query: token, queryType: "2" };
-}
 
 function pickStartEndDates(startIn?: string, endIn?: string): { startDate: string; endDate: string } {
   const end = new Date();
@@ -61,7 +48,7 @@ function pickStartEndDates(startIn?: string, endIn?: string): { startDate: strin
 export async function scrapeTikTokAdsLibrary(params: {
   brandName: string;
   brandDomain?: string;
-  /** Saved TikTok Ads Library advertiser token / pasted library URL — same `query_type=2` exact‑match semantics as brand name unless URL or numeric id. */
+  /** Saved TikTok Ads Library advertiser: library URL (with `adv_biz_ids`), numeric business id, or advertiser name. */
   savedTiktok?: string | null;
   region?: string;
   maxAds: number;
@@ -69,67 +56,103 @@ export async function scrapeTikTokAdsLibrary(params: {
   startDate?: string;
   endDate?: string;
 }): Promise<TikTokAdCard[]> {
-  const maxAds = Math.max(1, Math.min(params.maxAds, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
+  const wanted = Math.max(1, Math.min(params.maxAds, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM));
   const { startDate, endDate } = pickStartEndDates(params.startDate, params.endDate);
+  const target = resolveTikTokSearchTarget(params);
 
-  const { query, queryType } = buildTikTokApifyQuery({
-    brandName: params.brandName,
-    brandDomain: params.brandDomain,
-    savedTiktok: params.savedTiktok,
+  const regionIn = normalizeTikTokAdsRegion(params.region) || DEFAULT_TIKTOK_ADS_REGION;
+  const region = SR_TIKTOK_REGIONS.has(regionIn) ? regionIn : "all";
+  /** Name searches also return resellers that get filtered out, so ask for a few more. */
+  const limit = target.advBizId ? wanted : Math.min(wanted * 2, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM);
+
+  const input: Record<string, unknown> = {
+    region,
+    query_type: "1",
+    ad_status: "all",
+    start_date: startDate,
+    end_date: endDate,
+    limit,
+  };
+  if (target.advBizId) input.adv_biz_ids = target.advBizId;
+  else input.search = target.search;
+
+  const { items } = await runApifyActor<Record<string, unknown>>(TIKTOK_ADS_ACTOR, input, {
+    waitSecs: MAX_TIMEOUT_SECS,
+    timeoutSecs: MAX_TIMEOUT_SECS,
+    maxItems: limit,
+    memoryMbytes: readApifyActorMemoryMbytes("TIKTOK_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES),
   });
 
-  const hadUserSavedTiktok = Boolean(params.savedTiktok?.trim());
-  let confirmedAdvertiserQuery: string | undefined;
-  if (
-    hadUserSavedTiktok &&
-    queryType === "2" &&
-    query.trim() &&
-    !/^https?:\/\//i.test(query.trim()) &&
-    !/^\d{6,}$/.test(query.trim())
-  ) {
-    confirmedAdvertiserQuery = normalizeUserAdvertiserQueryToken(query);
-  }
-
-  const region = normalizeTikTokAdsRegion(params.region) || DEFAULT_TIKTOK_ADS_REGION;
-
-  /**Residential exits can trip TLS timeouts; set APIFY_TIKTOK_USE_RESIDENTIAL=false for datacenter (actor default — often more stable). */
-  const tiktokResidential =
-    typeof process.env.APIFY_TIKTOK_USE_RESIDENTIAL === "string" &&
-    ["0", "false", "no", "off"].includes(process.env.APIFY_TIKTOK_USE_RESIDENTIAL.trim().toLowerCase())
-      ? false
-      : true;
-
-  const { items } = await runApifyActor<Record<string, unknown>>(
-    TIKTOK_ADS_ACTOR,
-    {
-      mode: "library",
-      region,
-      startDate,
-      endDate,
-      queryType,
-      query,
-      maxAds,
-      fetchDetails: params.fetchDetails ?? true,
-      proxyConfiguration: {
-        useApifyProxy: true,
-        apifyProxyGroups: tiktokResidential ? ["RESIDENTIAL"] : [],
-      },
-    },
-    {
-      waitSecs: MAX_TIMEOUT_SECS,
-      timeoutSecs: MAX_TIMEOUT_SECS,
-      maxItems: maxAds,
-      memoryMbytes: readApifyActorMemoryMbytes("TIKTOK_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES),
-    }
+  const candidates = brandMatchCandidates(
+    target.search,
+    effectiveCompetitorBrandLabel(params.brandName, params.brandDomain),
+    domainBrandLabel(params.brandDomain),
   );
+  const rows = target.advBizId
+    ? items
+    : items.filter((row) => advertiserNameMatchesBrand(stringField(row, "advertiser_name"), candidates));
 
-  return items
-    .map((raw, i) =>
-      tiktokApifyItemToCard(raw, i, {
+  return rows
+    .slice(0, wanted)
+    .map((row, i) =>
+      tiktokApifyItemToCard(srTikTokRowToLegacyItem(row), i, {
         brandName: params.brandName,
         brandDomain: params.brandDomain,
-        ...(confirmedAdvertiserQuery ? { confirmedAdvertiserQuery } : {}),
-      })
+      }),
     )
     .filter((c): c is TikTokAdCard => c !== null);
+}
+
+/** Saved library URL / numeric id → exact advertiser; otherwise search by name. */
+function resolveTikTokSearchTarget(params: {
+  brandName: string;
+  brandDomain?: string;
+  savedTiktok?: string | null;
+}): { search: string; advBizId?: string } {
+  const raw = params.savedTiktok?.trim().replace(/^@+/, "") ?? "";
+  const fallbackName =
+    effectiveCompetitorBrandLabel(params.brandName, params.brandDomain) || params.brandName.trim() || "brand";
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      const advBizId = u.searchParams.get("adv_biz_ids")?.split(",")[0]?.trim();
+      const advName = u.searchParams.get("adv_name")?.trim().replace(/^"+|"+$/g, "");
+      if (advBizId && /^\d{6,}$/.test(advBizId)) return { search: advName || fallbackName, advBizId };
+      if (advName) return { search: normalizeUserAdvertiserQueryToken(advName) || fallbackName };
+    } catch {
+      /* fall through to the name search */
+    }
+    return { search: normalizeUserAdvertiserQueryToken(fallbackName) || fallbackName };
+  }
+  if (/^\d{6,}$/.test(raw)) return { search: fallbackName, advBizId: raw };
+  return { search: normalizeUserAdvertiserQueryToken(raw || fallbackName) || fallbackName };
+}
+
+function stringField(row: Record<string, unknown>, key: string): string {
+  const v = row[key];
+  return typeof v === "string" ? v : "";
+}
+
+/** s-r rows → the field names `tiktokApifyItemToCard` already reads (data_xplorer shape). */
+function srTikTokRowToLegacyItem(row: Record<string, unknown>): Record<string, unknown> {
+  const media = Array.isArray(row.videos) ? (row.videos[0] as Record<string, unknown> | undefined) : undefined;
+  const image = Array.isArray(row.images) ? (row.images[0] as Record<string, unknown> | string | undefined) : undefined;
+  const imageUrl =
+    (typeof media?.cover_image === "string" && media.cover_image) ||
+    (typeof image === "string" ? image : typeof image?.url === "string" ? image.url : undefined) ||
+    (typeof image === "object" && typeof image?.image_url === "string" ? image.image_url : undefined);
+  return {
+    "AD ID": stringField(row, "ad_id") || stringField(row, "creative_id"),
+    "Advertiser Name": stringField(row, "advertiser_name"),
+    text: stringField(row, "ad_text") || stringField(row, "text"),
+    "Ad Dates": [
+      { FirstShown: stringField(row, "first_shown") || stringField(row, "first_seen") },
+      { LastShown: stringField(row, "last_shown") || stringField(row, "last_seen") },
+    ],
+    "Ad Audience": { raw: stringField(row, "estimated_audience") },
+    "Ad Detail URL": stringField(row, "deeplink"),
+    ...(typeof media?.video_url === "string" ? { videoUrl: media.video_url } : row.video_url ? { videoUrl: row.video_url } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+  };
 }

@@ -18,8 +18,7 @@ import {
   useSavedAdsStatus,
 } from "@/lib/saved-ads/use-saved-ads";
 import type { StrategyPlatform } from "@/lib/strategy-overview/payload-types";
-import { isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
-import type { AdsLibraryPlatform } from "@/lib/ad-library/ads-library-platform";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 
 export type VaultAdRow = {
   id: string;
@@ -63,7 +62,7 @@ const PLATFORMS: { id: string; label: string }[] = [
   { id: "linkedin", label: "LinkedIn" },
   { id: "pinterest", label: "Pinterest" },
   { id: "snapchat", label: "Snapchat" },
-].filter((p) => p.id === "all" || isScrapeEnabledForPlatform(p.id as AdsLibraryPlatform));
+];
 
 const ANGLE_CAT_VALUES: AngleCardCategory[] = [
   "price",
@@ -146,6 +145,9 @@ export function CopyVaultPanel({
   lastScrapedAt = null,
   fetchEnabled = true,
 }: Props) {
+  const { isAvailable: isPlatformAvailable } = useEnabledAdPlatforms();
+  /** Filter chips only for platforms switched on for this account. */
+  const platformChips = PLATFORMS.filter((p) => p.id === "all" || isPlatformAvailable(p.id));
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -383,7 +385,7 @@ export function CopyVaultPanel({
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Filters</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <span className="w-full text-[12px] font-medium text-slate-500">Platform</span>
-          {PLATFORMS.map((p) => (
+          {platformChips.map((p) => (
             <button
               key={p.id}
               type="button"
