@@ -48,14 +48,14 @@ The UI shows FULL AD CREATIVES (video/image) inline. Users watch and save ads di
 CRITICAL OUTPUT RULES:
 - Respond with ONLY a single valid JSON object. No markdown, no tables, no prose before or after the JSON.
 - "message": MAX 2 short sentences (under 200 chars total). No bullet lists, no headers, no tables in message.
-- "visual_stats": 3-5 punchy stat chips, e.g. [{"label":"Video implant ads","value":"97","tone":"hot"},{"label":"Market temp","value":"Cooling ↓32%","tone":"down"}]
+- "visual_stats": 3-5 punchy stat chips, e.g. [{"label":"Video offer ads","value":"97","tone":"hot"},{"label":"Market temp","value":"Cooling ↓32%","tone":"down"}]
 - "ad_refs": REQUIRED — include 8-12 ad objects from your tool results. Each: {"id":"<uuid from tool>","competitor_name":"...","preview":"<first 80 chars of ad copy>"}
 - "highlight_ad_ids": same ids as ad_refs
 - "filter_patch": apply relevant filters so the feed matches
 - "suggestions": 3 short follow-up prompts
 
 Use tools for real data. Never invent ad ids or counts.
-For specific product/treatment searches (e.g. aligners, implants, whitening), pass ALL distinguishing keywords with match:"all" — do not use broad single words like "dental" alone.
+For specific product or service searches (e.g. a named product line, a treatment, a feature), pass ALL distinguishing keywords with match:"all" — do not use a broad category word alone.
 Pick ad_refs from the most relevant tool results (highest keyword overlap). Include real ad copy in each preview field.
 sort options: shuffle, newest, impressions, ultimate_winner, longest_running, oldest.
 
@@ -488,7 +488,7 @@ function buildHarvestFallbackResponse(
   return {
     message: "I couldn't format a full answer, but try refining your keywords or filters.",
     suggestions: [
-      "Show video ads about implants",
+      "Show only video ads",
       "What are the top keywords this week?",
       "Show ultimate winners",
     ],
@@ -553,7 +553,7 @@ async function finalizeAssistantResponse(
     message:
       sanitizeDisplayMessage(lastText) ||
       "Try a more specific question about keywords, competitors, or ad format.",
-    suggestions: ["Show video ads about implants", "What are the top keywords this week?"],
+    suggestions: ["Show only video ads", "What are the top keywords this week?"],
   };
 }
 

@@ -613,7 +613,7 @@ function ReportDashboard({
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Clinic activity" subtitle="Tap a bar to drill into ads">
+        <ChartCard title="Competitor activity" subtitle="Tap a bar to drill into ads">
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={competitorChart} layout="vertical" margin={{ top: 4, right: 8, left: 4, bottom: 0 }}>
               <CartesianGrid stroke={GRID} horizontal={false} />
@@ -698,7 +698,7 @@ function ReportDashboard({
         </ChartCard>
 
         {metrics.angle_mix.length > 0 ? (
-          <ChartCard title="Creative themes" subtitle="Tap to expand ads by clinic" className="lg:col-span-2">
+          <ChartCard title="Creative themes" subtitle="Tap to expand ads by competitor" className="lg:col-span-2">
             <AngleMixPanel
               angles={metrics.angle_mix}
               maxCount={angleMaxCount}
@@ -785,9 +785,41 @@ function ReportDashboard({
   );
 }
 
+type GenerationResult = { report?: DiscoveryPatternReportDto; error?: string };
+
+/**
+ * A report takes a minute or more to generate. The request lives outside the component so switching
+ * Discovery tabs mid-generation doesn't drop it: coming back shows it still running, then the result.
+ */
+const pendingGenerations = new Map<string, Promise<GenerationResult>>();
+
+function startGeneration(brandId: string, brandName: string, force: boolean): Promise<GenerationResult> {
+  const existing = pendingGenerations.get(brandId);
+  if (existing) return existing;
+  const run = (async (): Promise<GenerationResult> => {
+    try {
+      const res = await fetch("/api/discovery/patterns", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId, brandName, force }),
+      });
+      const json = (await res.json()) as { ok: boolean; report?: DiscoveryPatternReportDto; error?: string };
+      if (!res.ok || !json.ok || !json.report) {
+        return { error: json.error ?? "Failed to generate patterns report" };
+      }
+      return { report: json.report };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Failed to generate patterns report" };
+    }
+  })().finally(() => pendingGenerations.delete(brandId));
+  pendingGenerations.set(brandId, run);
+  return run;
+}
+
 export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [loading, setLoading] = useState(() => !pendingGenerations.has(brandId));
+  const [generating, setGenerating] = useState(() => pendingGenerations.has(brandId));
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<DiscoveryPatternReportDto | null>(null);
   const [history, setHistory] = useState<DiscoveryPatternMetrics[]>([]);
@@ -801,8 +833,9 @@ export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
     [brandId],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /** `quiet` keeps what's on screen while refreshing (after a generation finishes). */
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/discovery/patterns?brandId=${encodeURIComponent(brandId)}`, {
@@ -823,32 +856,37 @@ export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
   }, [brandId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const pending = pendingGenerations.get(brandId);
+    if (!pending) {
+      void load();
+      return;
+    }
+    let cancelled = false;
+    void pending.then(() => {
+      if (cancelled) return;
+      setGenerating(false);
+      void load({ quiet: true });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, load]);
 
   const generate = useCallback(
     async (force = false) => {
       setGenerating(true);
       setError(null);
-      try {
-        const res = await fetch("/api/discovery/patterns", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brandId, brandName, force }),
-        });
-        const json = (await res.json()) as { ok: boolean; report?: DiscoveryPatternReportDto; error?: string };
-        if (!res.ok || !json.ok || !json.report) {
-          throw new Error(json.error ?? "Failed to generate patterns report");
-        }
-        setReport(json.report);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to generate patterns report");
-      } finally {
-        setGenerating(false);
+      const result = await startGeneration(brandId, brandName, force);
+      setGenerating(false);
+      if (result.report) {
+        setReport(result.report);
+        /** Reload for the weekly history too; it changes when this week's row is new. */
+        void load({ quiet: true });
+      } else {
+        setError(result.error ?? "Failed to generate patterns report");
       }
     },
-    [brandId, brandName],
+    [brandId, brandName, load],
   );
 
   if (loading) {
@@ -892,8 +930,11 @@ export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
           className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[color:var(--rival-primary)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
-          Generate this week&apos;s analysis
+          {generating ? "Analysing this week's ads…" : "Generate this week's analysis"}
         </button>
+        {generating ? (
+          <p className="mt-3 text-sm text-slate-500">This takes about a minute. You can keep browsing Discovery.</p>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       </div>
     );

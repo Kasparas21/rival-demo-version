@@ -70,29 +70,43 @@ async function fetchDiscoveryPage(
   };
 }
 
-export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: string[] = []) {
-  const day = discoveryDayKey();
-  const enabled = Boolean(brandId && brandId !== "default");
+function toolbarForBrand(prev: DiscoveryToolbarState, brandId: string | null): DiscoveryToolbarState {
+  if (!brandId || brandId === "default") return prev;
+  return { ...prev, selectedClientBrandIds: new Set([brandId]), selectedCompetitorIds: new Set() };
+}
 
-  const [tab, setTab] = useState<DiscoveryFeedTab>("explore");
-  const [toolbar, setToolbar] = useState<DiscoveryToolbarState>(DEFAULT_DISCOVERY_TOOLBAR);
+/**
+ * `ready` stays false until the brand list has loaded: before that the layout reports the `_workspace`
+ * placeholder, and its feed request raced the real brand's (Explore could settle on "0 ads").
+ */
+export function useDiscoveryFeed(
+  brandId: string | null,
+  allClientBrandIds: string[] = [],
+  ready = true,
+  initialTab: DiscoveryFeedTab = "explore",
+) {
+  const day = discoveryDayKey();
+  const enabled = ready && Boolean(brandId && brandId !== "default");
+
+  const [tab, setTab] = useState<DiscoveryFeedTab>(initialTab);
+  const [toolbar, setToolbar] = useState<DiscoveryToolbarState>(() =>
+    toolbarForBrand({ ...DEFAULT_DISCOVERY_TOOLBAR, ...toolbarForTab(initialTab) }, brandId),
+  );
   const [searchDebounced, setSearchDebounced] = useState("");
 
-  const [shuffleSeed, setShuffleSeed] = useState(() => getOrCreateShuffleSeed(brandId, day));
+  /** Brand switches reset the brand filter in the same render, so no request goes out with the old one. */
+  const [toolbarBrandId, setToolbarBrandId] = useState(brandId);
+  if (toolbarBrandId !== brandId) {
+    setToolbarBrandId(brandId);
+    setToolbar((prev) => toolbarForBrand(prev, brandId));
+  }
 
-  useEffect(() => {
-    if (!enabled || !brandId) return;
-    setShuffleSeed(getOrCreateShuffleSeed(brandId, day));
-  }, [brandId, day, enabled]);
-
-  useEffect(() => {
-    if (!brandId || brandId === "default") return;
-    setToolbar((prev) => ({
-      ...prev,
-      selectedClientBrandIds: new Set([brandId]),
-      selectedCompetitorIds: new Set(),
-    }));
-  }, [brandId]);
+  /** Set by Reshuffle; otherwise the brand's stored seed for today. */
+  const [reshuffledSeed, setReshuffledSeed] = useState<{ brandId: string; day: string; seed: string } | null>(null);
+  const shuffleSeed = useMemo(() => {
+    if (reshuffledSeed && reshuffledSeed.brandId === brandId && reshuffledSeed.day === day) return reshuffledSeed.seed;
+    return getOrCreateShuffleSeed(brandId, day);
+  }, [brandId, day, reshuffledSeed]);
 
   useEffect(() => {
     const t = window.setTimeout(() => setSearchDebounced(toolbar.search.trim()), 250);
@@ -167,7 +181,7 @@ export function useDiscoveryFeed(brandId: string | null, allClientBrandIds: stri
     if (!brandId) return;
     const next = `${brandId}:${day}:${Date.now().toString(36)}`;
     writeShuffleSeed(brandId, day, next);
-    setShuffleSeed(next);
+    setReshuffledSeed({ brandId, day, seed: next });
     patchToolbar({ sort: "shuffle" });
     setTab("explore");
   }, [brandId, day, patchToolbar]);
