@@ -80,10 +80,18 @@ export function readAdminPlanOverride(rawPayload: unknown): PlanTier | null {
   return normalizePlanTier(v);
 }
 
-/** Admin dashboard: scheduled ads-library cron on (auto) or off (manual only). Defaults to auto. */
-export function readAdminAdsScrapeMode(rawPayload: unknown): AdminAdsScrapeMode {
+/**
+ * Admin dashboard: whether scheduled jobs (ads, organic, landing pages, Autopilot, enrichment) run for this
+ * account. An explicit admin choice always wins. Otherwise only real Polar subscribers default to auto —
+ * admin, complimentary and tester accounts stay manual unless an admin switches them on.
+ */
+export function readAdminAdsScrapeMode(
+  rawPayload: unknown,
+  options: { payingSubscriber?: boolean } = {},
+): AdminAdsScrapeMode {
   const v = readRawPayload(rawPayload).admin_ads_scrape_mode;
-  return v === "manual" ? "manual" : "auto";
+  if (v === "manual" || v === "auto") return v;
+  return options.payingSubscriber ? "auto" : "manual";
 }
 
 export function normalizeAdminAdsScrapeMode(value: unknown): AdminAdsScrapeMode | null {
@@ -397,7 +405,6 @@ export async function getBillingEntitlement(
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
   const adminPlanOverride = readAdminPlanOverride(rawPayload);
-  const adminAdsScrapeMode = readAdminAdsScrapeMode(rawPayload);
   const isUnlimited = isManualAdminUnlimited(rawPayload) || adminPlanOverride === "admin";
   const devPlanOverride = readDevPlanOverride(rawPayload);
   const applyDevOverride = isUnlimited || isDevPlanOverrideEnabled();
@@ -434,6 +441,11 @@ export async function getBillingEntitlement(
   }
 
   const hasPolarBillingRecord = hasPolarBillingRecordFromRow(data);
+  const payingSubscriber =
+    Boolean(data?.polar_subscription_id?.trim()) &&
+    !isUnlimited &&
+    hasActivePaidSubscription({ planTier, status, isUnlimited: false });
+  const adminAdsScrapeMode = readAdminAdsScrapeMode(rawPayload, { payingSubscriber });
 
   return {
     hasAccess,

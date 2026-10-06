@@ -213,20 +213,37 @@ export async function scrapeOrganicCompetitor(
   };
 }
 
-export async function fetchOrganicScrapeCandidates(admin: SupabaseClient<Database>, limit = 20) {
+/**
+ * Due competitors with socials. `allowUser` drops accounts before the batch is cut, so accounts with
+ * scheduled scraping off (which never advance `organic_next_scrape_at`) can't crowd out the rest.
+ */
+export async function fetchOrganicScrapeCandidates(
+  admin: SupabaseClient<Database>,
+  limit = 20,
+  allowUser?: (userId: string) => Promise<boolean>,
+) {
   const nowIso = new Date().toISOString();
   const { data, error } = await admin
     .from("saved_competitors")
     .select("id, user_id, socials, organic_baseline_date, organic_next_scrape_at")
     .lte("organic_next_scrape_at", nowIso)
-    .limit(limit * 3);
+    .order("organic_next_scrape_at", { ascending: true })
+    .limit(allowUser ? 1000 : limit * 3);
 
   if (error) throw new Error(error.message);
 
-  return (data ?? [])
-    .filter((row) => {
-      const socials = parseOrganicSocials(row.socials);
-      return Object.keys(socials).length > 0;
-    })
-    .slice(0, limit) as ScrapeOrganicCompetitorRow[];
+  const withSocials = (data ?? []).filter((row) => {
+    const socials = parseOrganicSocials(row.socials);
+    return Object.keys(socials).length > 0;
+  });
+
+  if (!allowUser) return withSocials.slice(0, limit) as ScrapeOrganicCompetitorRow[];
+
+  const owners = [...new Set(withSocials.map((row) => row.user_id))];
+  const allowed = new Set(
+    (await Promise.all(owners.map(async (userId) => ((await allowUser(userId)) ? userId : null)))).filter(
+      (userId): userId is string => userId !== null,
+    ),
+  );
+  return withSocials.filter((row) => allowed.has(row.user_id)).slice(0, limit) as ScrapeOrganicCompetitorRow[];
 }

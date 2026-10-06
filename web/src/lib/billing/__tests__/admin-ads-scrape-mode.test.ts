@@ -10,10 +10,20 @@ function mergeAdminAdsScrapeMode(
 }
 
 describe("readAdminAdsScrapeMode", () => {
-  it("defaults to auto when absent", () => {
-    expect(readAdminAdsScrapeMode(null)).toBe("auto");
-    expect(readAdminAdsScrapeMode({})).toBe("auto");
-    expect(readAdminAdsScrapeMode({ admin_ads_scrape_mode: "weekly" })).toBe("auto");
+  it("defaults to manual when absent, so admin, comped and tester accounts don't spend credits on their own", () => {
+    expect(readAdminAdsScrapeMode(null)).toBe("manual");
+    expect(readAdminAdsScrapeMode({})).toBe("manual");
+    expect(readAdminAdsScrapeMode({ admin_ads_scrape_mode: "weekly" })).toBe("manual");
+    expect(readAdminAdsScrapeMode({ admin_unlimited: true })).toBe("manual");
+  });
+
+  it("defaults to auto for paying Polar subscribers", () => {
+    expect(readAdminAdsScrapeMode({}, { payingSubscriber: true })).toBe("auto");
+  });
+
+  it("an explicit admin choice always wins", () => {
+    expect(readAdminAdsScrapeMode({ admin_ads_scrape_mode: "manual" }, { payingSubscriber: true })).toBe("manual");
+    expect(readAdminAdsScrapeMode({ admin_ads_scrape_mode: "auto" }, { payingSubscriber: false })).toBe("auto");
   });
 
   it("reads manual mode", () => {

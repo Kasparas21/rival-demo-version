@@ -6,6 +6,7 @@ import {
   isScrapingPausedForInactiveUser,
   resolveScrapeEligibility,
   resolveScheduledAdsScrapeAllowed,
+  resolveScheduledScrapeAllowed,
 } from "@/lib/billing/scrape-eligibility";
 import { isLapsedPaidSubscription } from "@/lib/billing/entitlements";
 import {
@@ -210,5 +211,31 @@ describe("resolveScheduledAdsScrapeAllowed", () => {
       now,
     });
     expect(resolveScheduledAdsScrapeAllowed(eligibility)).toBe(false);
+  });
+});
+
+describe("resolveScheduledScrapeAllowed (organic, landing pages, Autopilot, enrichment)", () => {
+  const now = new Date("2026-07-07T15:00:00.000Z");
+  const recentActivity = { lastActiveDate: ymdDaysAgo(1, now), updatedAt: null, createdAt: null };
+
+  function allowedFor(tier: BillingEntitlement["planTier"], overrides: Partial<BillingEntitlement> = {}) {
+    const billing = billingForTier(tier, overrides);
+    return resolveScheduledScrapeAllowed(resolveScrapeEligibility({ activity: recentActivity, billing, now }));
+  }
+
+  it("runs only when the account's scrape mode is auto", () => {
+    expect(allowedFor("pro", { adminAdsScrapeMode: "auto" })).toBe(true);
+    expect(allowedFor("pro", { adminAdsScrapeMode: "manual" })).toBe(false);
+  });
+
+  it("keeps admin accounts off unless switched on", () => {
+    expect(allowedFor("admin", { isUnlimited: true, adminAdsScrapeMode: "manual" })).toBe(false);
+    expect(allowedFor("admin", { isUnlimited: true, adminAdsScrapeMode: "auto" })).toBe(true);
+  });
+
+  it("never runs for accounts that can't scrape at all", () => {
+    expect(allowedFor("free_trial", { adminAdsScrapeMode: "auto", status: "canceled", hasPolarBillingRecord: true })).toBe(
+      false,
+    );
   });
 });
