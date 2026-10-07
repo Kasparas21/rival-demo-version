@@ -8,31 +8,25 @@ import { shouldSkipDetection } from "@/lib/agent/baseline";
 import { AGENT_COLD_START_CYCLES } from "@/lib/agent/types";
 
 describe("calculateThreatScore", () => {
-  it("returns baseline 5 for minimal factors", () => {
-    expect(calculateThreatScore({})).toBe(5);
+  it("starts from nothing", () => {
+    expect(calculateThreatScore({})).toBe(0);
   });
 
-  it("boosts long-running multi-platform new-angle ads", () => {
-    const score = calculateThreatScore({
-      days_running: 14,
-      platform_count: 3,
-      is_new_angle: true,
-      baseline_avg_duration: 5,
-    });
-    expect(score).toBeGreaterThanOrEqual(8);
-    expect(score).toBeLessThanOrEqual(10);
+  it("scores a long-running, high-reach, multi-platform new angle near the top", () => {
+    const score = calculateThreatScore({ days_running: 45, reach_index: 4.4, platform_count: 3, is_new_angle: true });
+    expect(score).toBe(9);
+  });
+
+  it("keeps a week-old ad that reached ~1K people low", () => {
+    expect(calculateThreatScore({ days_running: 8, reach_index: 2, platform_count: 1 })).toBe(2);
+  });
+
+  it("uses a long run as a stand-in when reach isn't published", () => {
+    expect(calculateThreatScore({ days_running: 60, reach_index: null })).toBe(5);
   });
 
   it("caps at 10", () => {
-    expect(
-      calculateThreatScore({
-        days_running: 30,
-        platform_count: 5,
-        is_new_angle: true,
-        is_trend: true,
-        baseline_avg_duration: 2,
-      }),
-    ).toBe(10);
+    expect(calculateThreatScore({ days_running: 90, reach_index: 6, platform_count: 5, is_new_angle: true })).toBe(10);
   });
 });
 

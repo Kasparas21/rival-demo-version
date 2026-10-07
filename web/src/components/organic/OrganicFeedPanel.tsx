@@ -22,6 +22,7 @@ import {
 } from "./organic-feed-layout";
 import { OrganicPlatformSection } from "./OrganicPlatformSection";
 import type { OrganicPostCardData } from "./OrganicPostCard";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 const PLATFORM_CHIP_LOGOS: Record<OrganicPlatform, ComponentType<{ className?: string }>> = {
   instagram: InstagramLogo,
@@ -67,7 +68,7 @@ export function OrganicFeedPanel({
 
   const loadGlobalMeta = useCallback(async () => {
     try {
-      const res = await fetch(`/api/competitor/${competitorId}/organic/socials`);
+      const res = await sharedFetch(`/api/competitor/${competitorId}/organic/socials`);
       if (res.ok) {
         const data = (await res.json()) as { organic_last_scraped_at?: string | null };
         setGlobalLastScrapedAt(data.organic_last_scraped_at ?? null);

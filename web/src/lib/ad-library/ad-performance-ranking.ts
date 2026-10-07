@@ -1,10 +1,15 @@
 /**
- * Meta ad performance ranking: impressions index (library band) + runtime days.
- * Used by Ads Library, Timeline, and MCP tools.
+ * Meta ad performance ranking: delivery band + runtime days.
+ * Used by Ads Library, Timeline, Discovery and MCP tools.
+ *
+ * The band is Meta's `impressions_index` when the scrape has one (in practice it never does: -1 or 0 on
+ * every ad), otherwise derived from the EU reach Meta publishes: log10(people reached) − 1, so
+ * 1K people ≈ 2, 10K ≈ 3, 100K ≈ 4, 1M ≈ 5.
  */
 
 import { computeMetaAdRunDays, hydrateMetaAdCardForLibrary } from "@/lib/ad-library/count-active-ads";
 import type { MetaAdCard } from "@/lib/ad-library/normalize";
+import { metaReachByCountry } from "@/lib/strategy-overview/reach-spend";
 
 export type AdPerformanceSort =
   | "newest"
@@ -13,13 +18,13 @@ export type AdPerformanceSort =
   | "impressions"
   | "ultimate_winner";
 
-/** Meta library band threshold for the “ultimate winner” tier (high impressions + long run). */
-export const ULTIMATE_WINNER_MIN_IMPRESSIONS_INDEX = 2;
+/** Band threshold for the “ultimate winner” tier with a long run: 3 ≈ 10K people reached. */
+export const ULTIMATE_WINNER_MIN_IMPRESSIONS_INDEX = 3;
 
 /** Minimum days live to qualify alongside a decent impression band. */
 export const ULTIMATE_WINNER_MIN_DAYS_RUNNING = 21;
 
-/** Top impression band can qualify with a shorter (but still proven) runtime. */
+/** Top band (4 ≈ 100K people reached) qualifies with a shorter (but still proven) runtime. */
 export const ULTIMATE_WINNER_HIGH_BAND_MIN_INDEX = 4;
 export const ULTIMATE_WINNER_HIGH_BAND_MIN_DAYS = 14;
 
@@ -31,6 +36,23 @@ export const ULTIMATE_WINNER_RUNTIME_ONLY_MIN_DAYS = 42;
 
 /** Score weight for runtime-only winners (between impression band 1 and 2). */
 const RUNTIME_ONLY_SCORE_MULTIPLIER = 1.75;
+
+/** Approximate people reached for a band, for labels ("~12K reached"). */
+export function formatReachFromIndex(index: number): string {
+  const people = 10 ** (index + 1);
+  if (people >= 1_000_000) return `~${(people / 1_000_000).toFixed(1)}M reached`;
+  if (people >= 1_000) return `~${Math.round(people / 1_000)}K reached`;
+  return `~${Math.round(people)} reached`;
+}
+
+/** Band from Meta's published EU reach (see file comment), or null when the ad has none. */
+export function metaReachIndex(rawPayload: unknown): number | null {
+  const byCountry = metaReachByCountry(rawPayload);
+  if (!byCountry) return null;
+  const people = [...byCountry.values()].reduce((s, n) => s + n, 0);
+  if (people < 1) return null;
+  return Math.max(0.1, Math.round((Math.log10(people) - 1) * 10) / 10);
+}
 
 export function extractImpressionsIndex(rawPayload: unknown): number | null {
   if (!rawPayload || typeof rawPayload !== "object" || Array.isArray(rawPayload)) return null;
@@ -50,7 +72,7 @@ export function extractImpressionsIndex(rawPayload: unknown): number | null {
     }
   }
 
-  return null;
+  return metaReachIndex(rawPayload);
 }
 
 /**

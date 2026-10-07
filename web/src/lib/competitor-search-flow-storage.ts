@@ -1,4 +1,4 @@
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import type { PlatformIdentifier } from "@/components/manual-identifiers-form";
 
 import type { AdLibraryRegionPrefs } from "@/lib/ad-library/ad-library-region-prefs";

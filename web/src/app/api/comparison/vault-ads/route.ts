@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { billingRequiredResponseBody, getBillingEntitlement } from "@/lib/billing/entitlements";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { angleSlugFromName, angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -289,7 +290,11 @@ export async function GET(req: Request): Promise<NextResponse> {
     .eq("competitor_id", competitorId)
     .eq("is_active", true);
 
-  if (angleFilter) {
+  /** Strategy payloads name angle categories ("Social proof"); older callers pass a full stored label. */
+  const angleCategory = angleSlugFromName(angleFilter);
+  if (angleCategory) {
+    q = q.not("ai_extracted_angle", "is", null).order("first_seen_at", { ascending: false });
+  } else if (angleFilter) {
     q = q.eq("ai_extracted_angle", angleFilter).order("first_seen_at", { ascending: false });
   } else {
     q = q
@@ -298,14 +303,17 @@ export async function GET(req: Request): Promise<NextResponse> {
       .order("first_seen_at", { ascending: true });
   }
 
-  const limit = angleFilter ? 200 : 80;
+  const limit = angleCategory ? 1000 : angleFilter ? 200 : 80;
   const { data: ads, error } = await q.limit(limit);
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
-  const mapped = (ads ?? []).map((a) => mapWallRow(a));
+  const matching = angleCategory
+    ? (ads ?? []).filter((a) => angleSlugOf(a.ai_extracted_angle) === angleCategory).slice(0, 200)
+    : (ads ?? []);
+  const mapped = matching.map((a) => mapWallRow(a));
 
   if (angleFilter) {
     return NextResponse.json({ ok: true, ads: mapped });

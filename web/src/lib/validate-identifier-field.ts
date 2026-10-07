@@ -1,7 +1,8 @@
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
 import type { IdentifierValidationCopy } from "@/lib/i18n/onboarding/types";
 import { linkedInAdLibraryUrlHasAdvertiserTargeting } from "@/lib/linkedin-ad-library-url";
+import { isMetaKeywordSearchUrl } from "@/lib/ad-library/meta-keyword-search-url";
 
 export type ValidateIdentifierResult =
   | { valid: true }
@@ -14,6 +15,8 @@ const DEFAULT_VALIDATION: IdentifierValidationCopy = {
   googleTransparency:
     "That link doesn't include a Transparency advertiser ID (…/advertiser/AR…). Open Google Ads Transparency Center, search for the brand, then open any creative or ad — copy the URL from that page's address bar and paste it here. Don't use only a shop domain or a ?domain= search results page.",
   linkedInKeyword: "This looks like a keyword search — results may include other companies",
+  metaKeywordSearch:
+    "This is a keyword search, not the brand's page — only ads from a page named like the brand are kept. For best results, open the brand's page in the Ad Library and copy that link (it contains view_all_page_id).",
 };
 
 /**
@@ -42,6 +45,10 @@ export function validateIdentifierField(
             valid: false,
             error: messages.metaAdLibrary,
           };
+        }
+        /** Keyword searches return every advertiser mentioning the word; the scrape keeps only the brand's page. */
+        if (isMetaKeywordSearchUrl(v)) {
+          return { valid: false, warning: messages.metaKeywordSearch };
         }
       }
       const digitsOnly = value.replace(/\D/g, "");

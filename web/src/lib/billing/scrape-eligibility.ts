@@ -89,12 +89,26 @@ export async function getUserScrapeEligibility(
   return resolveScrapeEligibility({ activity, billing });
 }
 
-/** Scheduled ads-library cron: active paid plan with auto-refresh, or admin (unless manual-only). */
+/**
+ * Any scheduled job that spends Apify / capture / LLM credits on its own (organic, landing pages,
+ * Autopilot, enrichment): only accounts whose scrape mode is auto — paying subscribers, or ones an admin switched on.
+ */
+export function resolveScheduledScrapeAllowed(eligibility: ScrapeEligibility): boolean {
+  return eligibility.allowed && eligibility.billing.adminAdsScrapeMode === "auto";
+}
+
+export async function userAllowsScheduledScrape(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<boolean> {
+  return resolveScheduledScrapeAllowed(await getUserScrapeEligibility(supabase, userId));
+}
+
+/** Scheduled ads-library cron: scrape mode auto, plus an active paid plan with auto-refresh (or admin). */
 export function resolveScheduledAdsScrapeAllowed(eligibility: ScrapeEligibility): boolean {
-  if (!eligibility.allowed) return false;
+  if (!resolveScheduledScrapeAllowed(eligibility)) return false;
 
   const { billing } = eligibility;
-  if (billing.adminAdsScrapeMode === "manual") return false;
   if (!hasActivePaidSubscription(billing) && !billing.isUnlimited) return false;
   return billing.limits.allowAutoRefresh || billing.isUnlimited;
 }

@@ -6,6 +6,7 @@ import { adminCanWrite, authorizeAdminRequest } from "@/lib/admin/auth";
 import { loadAdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import { rebuildAdminUserSnapshot } from "@/lib/admin/rebuild-snapshots";
 import { getBillingEntitlement, type AdminAdsScrapeMode } from "@/lib/billing/entitlements";
+import { normalizeEnabledAdPlatforms } from "@/lib/ad-library/disabled-scrape-platforms";
 import { normalizePlanTier, type PlanTier } from "@/lib/billing/plan-limits";
 import { loadLifetimeScrapeOperations, loadMonthlyUsageSnapshot, utcYearMonth } from "@/lib/billing/usage-quotas";
 import { getUserActivitySnapshot } from "@/lib/billing/user-activity";
@@ -66,6 +67,7 @@ export async function GET(req: Request, context: RouteContext) {
     profile: profileRes.data,
     billing,
     adsScrapeMode: billing.adminAdsScrapeMode,
+    enabledAdPlatforms: billing.enabledAdPlatforms,
     activity,
     usage: { month: yearMonth, ...usage, lifetimeScrapeOperations: lifetimeScrapes },
     competitors: competitorsRes.data ?? [],
@@ -105,6 +107,8 @@ type UpdateUserBody = {
   /** Plan tier to force for this user; `null` clears the override (back to Polar-derived plan). */
   planTier?: string | null;
   adsScrapeMode?: AdminAdsScrapeMode;
+  /** Ad platforms this account may scrape (subset of TOGGLEABLE_AD_PLATFORMS). */
+  enabledAdPlatforms?: string[];
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -173,6 +177,15 @@ async function applyAdminAdsScrapeMode(
   userId: string,
   mode: AdminAdsScrapeMode,
 ): Promise<string | null> {
+  return patchAdminBillingPayload(admin, userId, { admin_ads_scrape_mode: mode });
+}
+
+/** Merges admin-only keys into `billing_subscriptions.raw_payload` (creating the row when missing). */
+async function patchAdminBillingPayload(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  patch: Record<string, unknown>,
+): Promise<string | null> {
   const { data: existing } = await admin
     .from("billing_subscriptions")
     .select("raw_payload, polar_product_id, status")
@@ -184,7 +197,7 @@ async function applyAdminAdsScrapeMode(
       ? { ...(existing.raw_payload as Record<string, unknown>) }
       : {};
 
-  payload.admin_ads_scrape_mode = mode;
+  Object.assign(payload, patch);
 
   const { error } = await admin.from("billing_subscriptions").upsert(
     {
@@ -315,6 +328,18 @@ export async function PATCH(req: Request, context: RouteContext) {
     changes.ads_scrape_mode = body.adsScrapeMode;
   }
 
+  if (body.enabledAdPlatforms !== undefined) {
+    const platforms = normalizeEnabledAdPlatforms(body.enabledAdPlatforms);
+    if (!platforms || platforms.length !== body.enabledAdPlatforms.length) {
+      return NextResponse.json({ error: "Invalid ad platforms" }, { status: 400 });
+    }
+    const platformsErr = await patchAdminBillingPayload(admin, userId, { admin_enabled_ad_platforms: platforms });
+    if (platformsErr) {
+      return NextResponse.json({ error: `Ad platforms update failed: ${platformsErr}` }, { status: 500 });
+    }
+    changes.enabled_ad_platforms = platforms;
+  }
+
   if (Object.keys(changes).length === 0) {
     return NextResponse.json({ error: "No changes provided" }, { status: 400 });
   }
@@ -347,6 +372,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     profile: updatedProfile.data,
     billing,
     adsScrapeMode: billing.adminAdsScrapeMode,
+    enabledAdPlatforms: billing.enabledAdPlatforms,
   });
 }
 

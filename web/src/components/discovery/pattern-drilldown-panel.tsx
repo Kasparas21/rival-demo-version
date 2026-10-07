@@ -10,6 +10,7 @@ import type {
 } from "@/lib/discovery/types";
 import { aiGlassCardClass, aiGlassInsetClass } from "@/lib/ad-detail/ad-preview-analysis-styles";
 import { cn } from "@/lib/utils";
+import { formatReachFromIndex } from "@/lib/ad-library/ad-performance-ranking";
 
 type DrilldownQuery = {
   brandId: string;
@@ -86,7 +87,7 @@ function AdRow({ ad, onOpenAd }: { ad: PatternDrilldownAd; onOpenAd: (id: string
         <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-600">{ad.preview}</p>
         <p className="mt-1 text-xs text-slate-400">
           {ad.format || "ad"} · {ad.days_running}d running
-          {ad.impressions_index != null ? ` · index ${ad.impressions_index}` : ""}
+          {ad.impressions_index != null ? ` · ${formatReachFromIndex(ad.impressions_index)}` : ""}
           {ad.launched ? ` · launched ${ad.launched}` : ""}
         </p>
       </div>

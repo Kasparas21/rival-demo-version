@@ -2,7 +2,6 @@ import { after } from "next/server";
 import { NextResponse } from "next/server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { ensureSavedCompetitorForStrategyOverview } from "@/lib/strategy-overview/ensure-saved-competitor";
 import { deriveAndPersistFastPathStrategyOverview } from "@/lib/strategy-overview/derive-and-persist-fast-path";
 import {
   isStrategyRecomputeRunning,
@@ -78,8 +77,6 @@ export async function GET(req: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "competitorDomain required" }, { status: 400 });
   }
 
-  await ensureSavedCompetitorForStrategyOverview(supabase, user.id, domain);
-
   const meta = await loadSavedCompetitorForUser(supabase, user.id, domain);
   if (!meta) {
     return NextResponse.json({ ok: false, error: "Competitor not found" }, { status: 404 });
@@ -127,12 +124,23 @@ export async function GET(req: Request): Promise<NextResponse> {
     : null;
   if (staleEarly) {
     const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
+    // The stored map no longer matches the live ads: show it, and rebuild in the background (only the new,
+    // unclassified ads go to the model). It used to be shown as-is until someone pressed refresh.
+    if (!running) {
+      scheduleBackgroundRecompute({
+        competitorDomain: domain,
+        userId: user.id,
+        competitorId: meta.competitorId,
+        stealLock: false,
+        refreshAdEnrichment: false,
+      });
+    }
     return NextResponse.json(
       {
         ok: true,
         cached: true,
-        recomputing: running,
-        staleWhileRecomputing: running,
+        recomputing: true,
+        staleWhileRecomputing: true,
         payload: await attachRuntimeLayers(
           normalizeCompetitorStrategyOverviewPayload(staleEarly)
         ),

@@ -1,4 +1,5 @@
-import { hasActivePaidSubscription, shouldShowAwaitingQuotePage } from "@/lib/billing/entitlements";
+import { hasActivePaidSubscription, shouldShowPaywall } from "@/lib/billing/entitlements";
+import { buildPaywallHref } from "@/lib/billing/paywall";
 import type { BillingEntitlement } from "@/lib/billing/entitlements";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 
@@ -66,13 +67,13 @@ export function resolveIncompleteOnboardingPath(
   const dest = safeNext?.trim() || DASHBOARD_HOME_PATH;
 
   if (hasPrePaymentSetup(profile)) {
-    if (shouldShowAwaitingQuotePage(billing)) {
-      return `/awaiting-quote?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
+    if (shouldShowPaywall(billing)) {
+      return buildPaywallHref(POST_PAYMENT_ONBOARDING_PATH);
     }
     if (canFinishPostPaymentOnboarding(billing)) {
       return POST_PAYMENT_ONBOARDING_PATH;
     }
-    return `/awaiting-quote?next=${encodeURIComponent(POST_PAYMENT_ONBOARDING_PATH)}`;
+    return buildPaywallHref(POST_PAYMENT_ONBOARDING_PATH);
   }
 
   return dest !== DASHBOARD_HOME_PATH ? `/onboarding?next=${encodeURIComponent(dest)}` : "/onboarding";

@@ -17,6 +17,7 @@ import {
 import { fetchSavedCompetitorsFromAccount } from "@/lib/account/client";
 import { AgentSettingsForm } from "./AgentSettingsForm";
 import { AgentSettingsFormSkeleton } from "./AgentSettingsSkeleton";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 type AgentSettingsModalProps = {
   open: boolean;
@@ -117,7 +118,7 @@ export function AgentSettingsModal({
     if (!open) return;
     void (async () => {
       try {
-        const brandsRes = await fetch("/api/account/brands", { credentials: "include" });
+        const brandsRes = await sharedFetch("/api/account/brands");
         const brandsJson = (await brandsRes.json()) as {
           brands?: { id: string; name: string; is_primary?: boolean }[];
         };

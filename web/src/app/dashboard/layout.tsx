@@ -78,6 +78,7 @@ import {
   getDemoSidebarCompetitors,
   isDashboardDemoPath,
 } from "@/lib/demo/dashboard-demo-config";
+import { invalidateSharedFetch, sharedFetch } from "@/lib/client/shared-fetch";
 
 const FIRST_RUN_WELCOME_DISMISSED_KEY = "rival_first_run_welcome_dismissed";
 
@@ -381,7 +382,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, [hydrateDashboardPrefs]);
 
   const refreshUserProfile = useCallback(() => {
-    void fetch("/api/account/profile", { cache: "no-store", credentials: "include" })
+    void sharedFetch("/api/account/profile")
       .then((r) => r.json())
       .then(
         (d: {
@@ -401,7 +402,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   }, []);
 
   const refreshBrands = useCallback(() => {
-    void fetch("/api/account/brands", { cache: "no-store", credentials: "include" })
+    void sharedFetch("/api/account/brands")
       .then((r) => r.json())
       .then(
         (d: {
@@ -553,6 +554,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: brand.id }),
         });
+        invalidateSharedFetch("/api/");
         const json = (await res.json()) as { ok?: boolean; nextBrandId?: string | null; error?: string };
         if (!res.ok || !json.ok) {
           setBrandRemoveError(json.error ?? "Could not delete brand");

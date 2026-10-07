@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { scoreWithHaikuBatch } from "@/lib/activity-score/haiku-scorer";
-import { tierFromScore } from "@/lib/activity-score/tier-mapping";
+import { aiSampleFingerprint, pickAiSampleAds } from "@/lib/activity-score/ai-sample";
+import { scoreWithHaikuBatch, type HaikuBatchScores } from "@/lib/activity-score/haiku-scorer";
+import { ACTIVITY_TIER_LABELS, tierFromScore } from "@/lib/activity-score/tier-mapping";
 import { computeActivityDuration } from "@/lib/activity-score/signals/activity-duration";
 import { computeCopySophistication } from "@/lib/activity-score/signals/copy-sophistication";
 import { computeCreativeDiversity } from "@/lib/activity-score/signals/creative-diversity";
@@ -39,17 +40,20 @@ function buildTopReasons(
   signals: Record<ActivitySignalName, { score: number; weight: number; contribution: number }>,
   ctx: Record<string, unknown>
 ): ActivityTopReason[] {
-  const entries = Object.entries(signals) as [ActivitySignalName, { contribution: number; score: number }][];
+  /** Signals that don't apply (weight 0) are left out of the reasons. */
+  const entries = (Object.entries(signals) as [ActivitySignalName, ActivityScoreResult["signals"][ActivitySignalName]][]).filter(
+    ([, v]) => v.weight > 0
+  );
   const sorted = [...entries].sort((x, y) => y[1].contribution - x[1].contribution);
 
   const out: ActivityTopReason[] = [];
   for (const [name, v] of sorted.slice(0, 2)) {
-    if (v.contribution >= W[name] * 0.35) {
+    if (v.contribution >= v.weight * 0.35) {
       out.push({ type: "positive", signal: name, text: reasonForSignal(name, v.score, ctx, "positive") });
     }
   }
   const lowest = [...entries].sort((x, y) => x[1].contribution - y[1].contribution)[0];
-  if (lowest && lowest[1].contribution <= W[lowest[0]] * 0.22) {
+  if (lowest && lowest[1].contribution <= lowest[1].weight * 0.22) {
     out.push({
       type: "negative",
       signal: lowest[0],
@@ -131,7 +135,7 @@ export async function computeActivityScore(params: {
 
   const { data: priorScoreRow } = await supabaseAdmin
     .from("competitor_activity_scores")
-    .select("score")
+    .select("score, raw_metrics")
     .eq("user_id", userId)
     .eq("competitor_id", competitorId)
     .maybeSingle();
@@ -142,7 +146,9 @@ export async function computeActivityScore(params: {
     .from("scraped_ads")
     .select("format, ad_text, first_seen_at, platform, raw_payload, ad_creative_url")
     .eq("user_id", userId)
-    .eq("competitor_id", competitorId);
+    .eq("competitor_id", competitorId)
+    /** Running ads only: ended ads describe what the competitor did, not what it does now. */
+    .eq("is_active", true);
 
   if (fetchErr) {
     console.error("[activity-score] scraped_ads fetch failed", fetchErr);
@@ -163,7 +169,7 @@ export async function computeActivityScore(params: {
     const insufficient: ActivityScoreResult = {
       score: 0,
       tier: 1,
-      tierLabel: "Hobbyist",
+      tierLabel: ACTIVITY_TIER_LABELS[1],
       spendRange: { min: 0, max: 500 },
       signals: {
         production_value: { score: 0, weight: W.production_value, contribution: 0 },
@@ -228,15 +234,15 @@ export async function computeActivityScore(params: {
   const prodDepthH = computeProductDepthHeuristic(ads);
   const duration = computeActivityDuration(ads, now);
 
-  let s1 = prodH.score;
+  const s1 = prodH?.score ?? 0;
   let s6 = copyH.score;
   let s7 = prodDepthH.score;
+  let aiFingerprint: string | null = null;
+  let aiScores: HaikuBatchScores | null = null;
+  let aiReused = false;
 
   if (adsCount > 5) {
-    const distinctCopies = [...new Set(ads.map((a) => a.ad_text.replace(/\s+/g, " ").trim()).filter(Boolean))];
-    const samplePool = [...ads];
-    samplePool.sort(() => Math.random() - 0.5);
-    const samples = samplePool.slice(0, 8).map((a) => {
+    const samples = pickAiSampleAds(ads, 8).map((a) => {
       const f = a.format.trim().toLowerCase();
       const vid =
         f.includes("video") ||
@@ -253,15 +259,22 @@ export async function computeActivityScore(params: {
       };
     });
 
-    const copyList =
-      distinctCopies.length > 20
-        ? [...distinctCopies].sort(() => Math.random() - 0.5).slice(0, 20)
-        : distinctCopies;
+    const copyList = pickAiSampleAds(ads, 20).map((a) => a.ad_text.replace(/\s+/g, " ").trim());
 
-    const hk = await scoreWithHaikuBatch({ sampleAds: samples, adCopiesForProducts: copyList });
+    /** Same ads as last time → same answer, without asking the model again. */
+    aiFingerprint = await aiSampleFingerprint(samples.map((x) => x.copy), copyList);
+    const prior = (priorScoreRow?.raw_metrics ?? null) as { aiSampleFingerprint?: string; aiScores?: HaikuBatchScores } | null;
+    const reusable =
+      prior?.aiSampleFingerprint === aiFingerprint &&
+      typeof prior.aiScores?.copy_sophistication === "number" &&
+      typeof prior.aiScores?.distinct_product_count === "number";
+    const hk = reusable
+      ? ({ ok: true, data: prior!.aiScores! } as const)
+      : await scoreWithHaikuBatch({ sampleAds: samples, adCopiesForProducts: copyList });
+    aiReused = reusable;
     if (hk.ok) {
       haikuImproved = true;
-      s1 = average(s1, hk.data.production_quality);
+      aiScores = hk.data;
       s6 = average(s6, hk.data.copy_sophistication);
       const fromCount = productCountScore(hk.data.distinct_product_count);
       s7 = average(s7, fromCount);
@@ -291,11 +304,15 @@ export async function computeActivityScore(params: {
     activity_duration: s8,
   };
 
+  /** Production value doesn't apply to advertisers with no social ads; the other weights are rescaled to 100%. */
+  const applies = (k: ActivitySignalName) => k !== "production_value" || prodH != null;
+  const weightTotal = (Object.keys(W) as ActivitySignalName[]).filter(applies).reduce((sum, k) => sum + W[k], 0);
+
   let weighted = 0;
   const signals = {} as ActivityScoreResult["signals"];
   (Object.keys(W) as ActivitySignalName[]).forEach((k) => {
     const score = signalValues[k];
-    const weight = W[k];
+    const weight = applies(k) ? W[k] / weightTotal : 0;
     const contribution = score * weight;
     weighted += contribution;
     signals[k] = { score, weight, contribution };
@@ -307,7 +324,11 @@ export async function computeActivityScore(params: {
 
   const rawMetrics: Record<string, unknown> = {
     adsCount,
-    videoRatio: prodH.videoRatio,
+    videoRatio: prodH?.videoRatio ?? null,
+    productionValueApplies: prodH != null,
+    aiSampleFingerprint: aiFingerprint,
+    aiScores,
+    aiReused,
     uniqueConcepts: div.uniqueConcepts,
     diversityRatio: div.diversityRatio,
     newAdsInWindow: refresh.newAdsInWindow,

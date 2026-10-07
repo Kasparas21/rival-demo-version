@@ -45,7 +45,7 @@ const LANDING_PAGE_SORT_OPTIONS: { id: DiscoveryToolbarState["landingPageSort"];
 const SORT_OPTIONS: { id: DiscoveryToolbarState["sort"]; label: string }[] = [
   { id: "shuffle", label: "Shuffle mix" },
   { id: "newest", label: "Newest" },
-  { id: "impressions", label: "Impressions (high → low)" },
+  { id: "impressions", label: "Reach (high → low)" },
   { id: "ultimate_winner", label: "Ultimate winner" },
   { id: "longest_running", label: "Longest running" },
   { id: "oldest", label: "Oldest" },

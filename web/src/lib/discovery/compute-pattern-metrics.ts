@@ -13,6 +13,7 @@ import {
   startOfUtcWeekMonday,
   utcWeekStartYmd,
 } from "./pattern-week-utils";
+import { angleLabelOf } from "@/lib/strategy-overview/ad-angles";
 
 export type PatternMetricsAd = {
   id: string;
@@ -62,6 +63,13 @@ function wasActiveDuringWeek(ad: PatternMetricsAd, weekStartMs: number, weekEndM
   const lastMs = parseMs(ad.last_seen_at);
   if (lastMs == null) return false;
   return lastMs >= weekStartMs;
+}
+
+/** How much of the report week has happened by `nowMs`: elapsed time (0–7 days) and whole days started (1–7). */
+export function weekCoverage(weekStartMs: number, nowMs: number): { elapsedMs: number; daysCovered: number } {
+  const elapsedMs = Math.min(7 * DAY_MS, Math.max(0, nowMs - weekStartMs));
+  const daysCovered = Math.min(7, Math.max(1, Math.ceil(elapsedMs / DAY_MS)));
+  return { elapsedMs, daysCovered };
 }
 
 function crossedUltimateWinnerThresholdThisWeek(
@@ -158,12 +166,18 @@ export function computeDiscoveryPatternMetrics(
 
   const thisWeekEnd = weekStartMs + 7 * DAY_MS;
   const prevWeekStart = weekStartMs - 7 * DAY_MS;
+  const { elapsedMs, daysCovered } = weekCoverage(weekStartMs, nowMs);
+  // The previous week cut at the same point, so a Wednesday report compares Mon–Wed with Mon–Wed.
+  const prevSameDaysEnd = prevWeekStart + elapsedMs;
 
   let activeAds = 0;
   let newThisWeek = 0;
   let newPrevWeek = 0;
   let killedThisWeek = 0;
   let killedPrevWeek = 0;
+  let newPrevSameDays = 0;
+  let killedPrevSameDays = 0;
+  let newWinnersPrevSameDays = 0;
   let ultimateWinnersTotal = 0;
   let newUltimateWinnersThisWeek = 0;
   let activeVideo = 0;
@@ -182,6 +196,8 @@ export function computeDiscoveryPatternMetrics(
       active: number;
       launched: number;
       killed: number;
+      launchedPrevSameDays: number;
+      killedPrevSameDays: number;
       winners: number;
       videoActive: number;
       landingKeys: Set<string>;
@@ -219,9 +235,15 @@ export function computeDiscoveryPatternMetrics(
       if (isVideoFormat(ad.format)) newVideo += 1;
     }
     if (launchedPrevWeek) newPrevWeek += 1;
+    if (launchMs != null && inUtcHalfOpenRange(launchMs, prevWeekStart, prevSameDaysEnd)) {
+      newPrevSameDays += 1;
+    }
 
     if (crossedUltimateWinnerThresholdThisWeek(ad, weekStartMs, thisWeekEnd)) {
       newUltimateWinnersThisWeek += 1;
+    }
+    if (crossedUltimateWinnerThresholdThisWeek(ad, prevWeekStart, prevSameDaysEnd)) {
+      newWinnersPrevSameDays += 1;
     }
 
     if (ad.is_killed) {
@@ -234,6 +256,9 @@ export function computeDiscoveryPatternMetrics(
       if (lastMs != null && inUtcHalfOpenRange(lastMs, prevWeekStart, weekStartMs)) {
         killedPrevWeek += 1;
       }
+      if (lastMs != null && inUtcHalfOpenRange(lastMs, prevWeekStart, prevSameDaysEnd)) {
+        killedPrevSameDays += 1;
+      }
     }
 
     const comp = competitorMap.get(ad.competitor_id) ?? {
@@ -241,6 +266,8 @@ export function computeDiscoveryPatternMetrics(
       active: 0,
       launched: 0,
       killed: 0,
+      launchedPrevSameDays: 0,
+      killedPrevSameDays: 0,
       winners: 0,
       videoActive: 0,
       landingKeys: new Set<string>(),
@@ -251,16 +278,23 @@ export function computeDiscoveryPatternMetrics(
     }
     if (!ad.is_killed) comp.active += 1;
     if (launchedThisWeek) comp.launched += 1;
+    if (launchMs != null && inUtcHalfOpenRange(launchMs, prevWeekStart, prevSameDaysEnd)) {
+      comp.launchedPrevSameDays += 1;
+    }
     if (ad.is_killed) {
       const lastMs = parseMs(ad.last_seen_at);
       if (lastMs != null && inUtcHalfOpenRange(lastMs, weekStartMs, thisWeekEnd)) comp.killed += 1;
+      if (lastMs != null && inUtcHalfOpenRange(lastMs, prevWeekStart, prevSameDaysEnd)) {
+        comp.killedPrevSameDays += 1;
+      }
     }
     if (ad.is_ultimate_winner) comp.winners += 1;
     if (isVideoFormat(ad.format) && !ad.is_killed) comp.videoActive += 1;
     competitorMap.set(ad.competitor_id, comp);
 
-    const angle = ad.ai_extracted_angle?.trim();
-    if (angle && angle.toLowerCase() !== "unclassified") {
+    /** Group by category: the full stored label (with hook and body) is unique per ad. */
+    const angle = angleLabelOf(ad.ai_extracted_angle);
+    if (angle) {
       const stats = angleCounts.get(angle) ?? {
         count: 0,
         ad_ids: [],
@@ -291,6 +325,8 @@ export function computeDiscoveryPatternMetrics(
       active_ads: c.active,
       launched_this_week: c.launched,
       killed_this_week: c.killed,
+      launched_prev_same_days: c.launchedPrevSameDays,
+      killed_prev_same_days: c.killedPrevSameDays,
       ultimate_winners: c.winners,
       video_share_pct: c.active > 0 ? Math.round((c.videoActive / c.active) * 100) : 0,
       unique_landing_pages: c.landingKeys.size,
@@ -323,6 +359,14 @@ export function computeDiscoveryPatternMetrics(
     killed_this_week: killedThisWeek,
     killed_prev_week: killedPrevWeek,
     net_change: newThisWeek - killedThisWeek,
+    as_of: new Date(nowMs).toISOString(),
+    days_covered: daysCovered,
+    prev_week_same_days: {
+      new: newPrevSameDays,
+      killed: killedPrevSameDays,
+      net_change: newPrevSameDays - killedPrevSameDays,
+      new_ultimate_winners: newWinnersPrevSameDays,
+    },
     ultimate_winners_total: ultimateWinnersTotal,
     new_ultimate_winners_this_week: newUltimateWinnersThisWeek,
     video_share_pct: activeAds > 0 ? Math.round((activeVideo / activeAds) * 100) : 0,

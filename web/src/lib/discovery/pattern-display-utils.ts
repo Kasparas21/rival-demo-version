@@ -114,6 +114,36 @@ export function formatPatternsTimestamp(iso: string, timeZone: string): string {
   }
 }
 
+/** Days of the week the report covers when it was made mid-week (1–6); null for a full week or an older report. */
+export function partialWeekDays(metrics: DiscoveryPatternMetrics): number | null {
+  const days = metrics.days_covered;
+  return days != null && days < 7 ? days : null;
+}
+
+/**
+ * This week's numbers against the same days of the previous week, falling back to the stored prior report for
+ * reports saved before the same-days counts existed.
+ */
+export function priorWeekComparison(
+  metrics: DiscoveryPatternMetrics,
+  priorMetrics: DiscoveryPatternMetrics | null,
+): { new: number; killed: number; net_change: number; new_ultimate_winners: number | null; label: string } {
+  const same = metrics.prev_week_same_days;
+  if (same) {
+    return {
+      ...same,
+      label: partialWeekDays(metrics) != null ? "vs same days last week" : "vs prior week",
+    };
+  }
+  return {
+    new: metrics.new_prev_week,
+    killed: metrics.killed_prev_week,
+    net_change: priorMetrics?.net_change ?? metrics.new_prev_week - metrics.killed_prev_week,
+    new_ultimate_winners: priorMetrics?.new_ultimate_winners_this_week ?? null,
+    label: "vs prior week",
+  };
+}
+
 export function getPriorWeekStart(weekStart: string): string {
   return utcWeekStartYmd(parseUtcWeekStartYmd(weekStart) - 7 * DAY_MS);
 }

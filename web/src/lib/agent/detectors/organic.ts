@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { AgentBaselineMetrics, AgentOrganicPostInput, DetectedAgentSignal } from "@/lib/agent/types";
 import type { Database } from "@/lib/supabase/types";
+import { knownLikes } from "@/lib/organic-content/known-likes";
 
 async function getRecentCollabs(
   admin: SupabaseClient<Database>,
@@ -42,10 +43,14 @@ export async function detectOrganicSignals(params: {
   const seenCollabs = new Set<string>();
 
   for (const post of newPosts) {
-    const postEngagement = (post.likes ?? 0) + (post.comments ?? 0) + (post.shares ?? 0);
+    /** With hidden likes the post can only be compared on comments + shares. */
+    const likes = knownLikes({ ...post, views: null }, false);
+    const postEngagement = (likes ?? 0) + (post.comments ?? 0) + (post.shares ?? 0);
+    const compareTo =
+      likes == null ? (baseline.organic?.avg_comments ?? 0) + (baseline.organic?.avg_shares ?? 0) : avgEngagement;
 
-    if (avgEngagement > 0 && postEngagement >= avgEngagement * 2) {
-      const threat = postEngagement < avgEngagement * 4 ? 6 : 8;
+    if (compareTo > 0 && postEngagement >= compareTo * 2) {
+      const threat = postEngagement < compareTo * 4 ? 6 : 8;
       signals.push({
         signal_type: "organic_spike",
         source: "organic",
@@ -53,7 +58,7 @@ export async function detectOrganicSignals(params: {
         payload: {
           post,
           engagement: postEngagement,
-          vs_average: Math.round((postEngagement / avgEngagement) * 10) / 10,
+          vs_average: Math.round((postEngagement / compareTo) * 10) / 10,
           platform: post.platform,
           media_urls: post.media_urls ?? [],
         },

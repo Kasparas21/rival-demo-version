@@ -1,6 +1,6 @@
 /** Columns required for strategy derivation + spend footprint (avoids select("*")). */
 export const SCRAPED_ADS_DERIVATION_SELECT =
-  "id, platform, ad_text, format, first_seen_at, last_seen_at, ai_extracted_angle, funnel_stage, ai_enrichment_status, ai_extracted_launch_date, ai_extracted_voice_tone, is_active, raw_payload, created_at" as const;
+  "id, platform, ad_text, format, first_seen_at, last_seen_at, ai_extracted_angle, funnel_stage, ai_enrichment_status, ai_extracted_launch_date, ai_extracted_voice_tone, is_active, raw_payload, created_at, creative_text" as const;
 
 /** Subset of scraped_ads rows returned by {@link SCRAPED_ADS_DERIVATION_SELECT}. */
 export type ScrapedAdDerivationRow = {
@@ -18,6 +18,7 @@ export type ScrapedAdDerivationRow = {
   is_active: boolean;
   raw_payload: unknown;
   created_at: string;
+  creative_text?: string | null;
 };
 
 export function scrapedAdDerivationRowToInput(r: ScrapedAdDerivationRow): import("@/lib/strategy-overview/strategyDerivation").ScrapedAdInput {
@@ -35,5 +36,6 @@ export function scrapedAdDerivationRowToInput(r: ScrapedAdDerivationRow): import
     ai_extracted_voice_tone: r.ai_extracted_voice_tone ?? null,
     is_active: r.is_active,
     raw_payload: r.raw_payload,
+    creative_text: r.creative_text ?? null,
   };
 }

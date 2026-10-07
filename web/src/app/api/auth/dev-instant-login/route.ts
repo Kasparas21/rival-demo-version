@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authLinkOriginForRequest } from "@/lib/auth/auth-link-origin";
 import { isDevToolsRouteEnabled } from "@/lib/auth/local-dev";
 import { pickHashedTokenFromGenerateLinkProperties } from "@/lib/auth/pick-hashed-token-from-generate-link";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
 
 /**
  * Local-only instant email sign-in (uses service role). Off when DEV_INSTANT_EMAIL_LOGIN=false.
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
-  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
+  const next = safeNextPath(nextRaw) ?? "/dashboard/spy";
 
   const admin = createSupabaseAdminClient();
 

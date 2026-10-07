@@ -37,14 +37,6 @@ const SIGNAL_LABEL: Record<ActivitySignalName, string> = {
   activity_duration: "Sustained activity duration",
 };
 
-function formatSpendBand(min: number, max: number | null, opts?: { suffix?: string }): string {
-  const suffix = opts?.suffix ?? " in this market";
-  const fmt = (n: number) =>
-    n >= 1000 ? `€${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}K` : `€${Math.round(n).toLocaleString()}`;
-  if (max == null) return `${fmt(min)}+/mo${suffix}`;
-  return `${fmt(min)}–${fmt(max)}/mo${suffix}`;
-}
-
 function tierBadgeClass(tier: number): string {
   switch (tier) {
     case 1:
@@ -282,25 +274,18 @@ export function ActivityScorePanel({
         />
       </div>
 
-      <p className={`font-semibold ${headline} ${isAnalytics ? "text-[13px]" : "text-[14px]"}`}>
-        {d.tierLabel}
-        {activeAdsCount === 0 ? (
-          <> — typical tier spend {formatSpendBand(d.spendRange.min, d.spendRange.max, { suffix: "" })} when active</>
-        ) : (
-          <> — {formatSpendBand(d.spendRange.min, d.spendRange.max)}</>
-        )}
-      </p>
+      {/* Tier only: the estimated spend is on the strategy map and in Comparison, from one model. */}
+      <p className={`font-semibold ${headline} ${isAnalytics ? "text-[13px]" : "text-[14px]"}`}>{d.tierLabel}</p>
 
       <p className={`text-[11px] ${subtext} mt-2 leading-snug`}>
         {activeAdsCount === 0 ? (
           <>
-            No ads running now. Score and spend band reflect the historical footprint from{" "}
-            {d.adsCount.toLocaleString()} scraped ads — not current monthly spend. Ad libraries do not disclose actual
-            budgets.
+            No ads running now, so there is nothing current to score.
           </>
         ) : (
           <>
-            Based on operational footprint visible in scraped ads. Actual spend is not publicly disclosed by ad libraries.
+            How sophisticated their running ads are: launch pace, creative variety, formats, landing pages and copy. It
+            measures effort, not spend; see the strategy map for estimated spend.
           </>
         )}
       </p>
@@ -348,11 +333,13 @@ export function ActivityScorePanel({
             const label = SIGNAL_LABEL[key];
             const pct = block.score;
             return (
-              <div key={key}>
+              <div key={key} className={block.weight === 0 ? "opacity-50" : undefined}>
                 <div className="flex justify-between gap-2 text-[11px] mb-0.5">
                   <span className={`${isAnalytics ? "text-[#0f172a]" : "text-[#3f3f46]"} font-medium`}>{label}</span>
                   <span className={`tabular-nums ${subtext}`}>
-                    {pct}/100 · weight {Math.round(block.weight * 100)}% · +{block.contribution.toFixed(1)} pts
+                    {block.weight === 0
+                      ? "doesn't apply (no social ads)"
+                      : `${pct}/100 · weight ${Math.round(block.weight * 100)}% · +${block.contribution.toFixed(1)} pts`}
                   </span>
                 </div>
                 <div className={`h-1.5 rounded-full ${barTrack} overflow-hidden`}>

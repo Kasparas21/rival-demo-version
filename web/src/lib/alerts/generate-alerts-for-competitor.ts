@@ -25,6 +25,12 @@ import type { Database, Json } from "@/lib/supabase/types";
 
 type AlertInsert = Database["public"]["Tables"]["competitor_alerts"]["Insert"];
 
+/** Proven-winner alerts one scrape may raise; the rest of a large launch crossing together are skipped. */
+const MAX_PROVEN_WINNER_ALERTS_PER_SCRAPE = 5;
+
+/** Batches this soon after a competitor's first one belong to its first scrape. */
+const BASELINE_WINDOW_MS = 30 * 60 * 1000;
+
 export async function generateAlertsForCompetitor(params: {
   supabase: SupabaseClient<Database>;
   userId: string;
@@ -48,6 +54,52 @@ export async function generateAlertsForCompetitor(params: {
   let batchId = params.batchId ?? null;
   if (!batchId) {
     batchId = await getLatestScrapeBatchId(supabase, competitorId);
+  }
+
+  let batchCreatedAt: string | null = null;
+  let previousBatchCreatedAt: string | null = null;
+  let firstBatchCreatedAt: string | null = null;
+  if (batchId) {
+    const { data: batchRow } = await supabase
+      .from("scrape_batches")
+      .select("created_at")
+      .eq("id", batchId)
+      .maybeSingle();
+    batchCreatedAt = batchRow?.created_at ?? null;
+    if (batchCreatedAt) {
+      const [{ data: previousRow }, { data: firstRow }] = await Promise.all([
+        supabase
+          .from("scrape_batches")
+          .select("created_at")
+          .eq("competitor_id", competitorId)
+          .lt("created_at", batchCreatedAt)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("scrape_batches")
+          .select("created_at")
+          .eq("competitor_id", competitorId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      previousBatchCreatedAt = previousRow?.created_at ?? null;
+      firstBatchCreatedAt = firstRow?.created_at ?? batchCreatedAt;
+    }
+  }
+
+  /**
+   * A competitor's first scrape is the baseline: every platform and angle looks new and every long-running ad
+   * looks like a fresh winner (one new competitor produced 57 alerts). One scrape writes a batch per platform
+   * about 30s apart (later scrapes come hours or days later), so everything in that first window is baseline.
+   */
+  if (
+    batchCreatedAt &&
+    firstBatchCreatedAt &&
+    Date.parse(batchCreatedAt) - Date.parse(firstBatchCreatedAt) < BASELINE_WINDOW_MS
+  ) {
+    return;
   }
 
   const [billing, compRes, rulesRes] = await Promise.all([
@@ -201,14 +253,11 @@ export async function generateAlertsForCompetitor(params: {
   if (batchId) {
     const creativeThreshold = thresholdsFor("creative_push").creativePushCount;
 
-    let batchCreatedAt: string | null = null;
-    const { data: batchRow } = await supabase
-      .from("scrape_batches")
-      .select("created_at")
-      .eq("id", batchId)
-      .maybeSingle();
-    batchCreatedAt = batchRow?.created_at ?? null;
-
+    /**
+     * New = first stored during this scrape. Rows move to the latest batch whenever an ad is seen again,
+     * but keep their created_at. (Comparing first_seen_at — the library's start date, always before the
+     * scrape — meant this alert never fired.)
+     */
     let newAdsQuery = supabase
       .from("scraped_ads")
       .select("id", { count: "exact", head: true })
@@ -217,7 +266,7 @@ export async function generateAlertsForCompetitor(params: {
       .eq("scrape_batch_id", batchId);
 
     if (batchCreatedAt) {
-      newAdsQuery = newAdsQuery.gte("first_seen_at", batchCreatedAt);
+      newAdsQuery = newAdsQuery.gte("created_at", new Date(Date.parse(batchCreatedAt) - 60_000).toISOString());
     }
 
     const { count: newAdCount, error: countErr } = await newAdsQuery;
@@ -231,17 +280,31 @@ export async function generateAlertsForCompetitor(params: {
     }
 
     const lifespanDays = thresholdsFor("proven_winner").lifespanDays;
-    const cutoff = new Date(Date.now() - lifespanDays * 86400000).toISOString();
-    const { data: winnerAds, error: winnerErr } = await supabase
+    const lifespanMs = lifespanDays * 86400000;
+    const cutoff = new Date(Date.now() - lifespanMs).toISOString();
+    let winnerQuery = supabase
       .from("scraped_ads")
-      .select("id, platform, ad_text, first_seen_at")
+      .select("id, platform, ad_text, first_seen_at, reach:raw_payload->transparency_by_location->eu_transparency->>eu_total_reach")
       .eq("user_id", userId)
       .eq("competitor_id", competitorId)
       .eq("is_active", true)
-      .lte("first_seen_at", cutoff)
-      .limit(50);
+      .lte("first_seen_at", cutoff);
+    /** Only ads that crossed the lifespan since the previous scrape; older ones were already winners then. */
+    if (previousBatchCreatedAt) {
+      const previousCutoff = new Date(Date.parse(previousBatchCreatedAt) - lifespanMs).toISOString();
+      winnerQuery = winnerQuery.gt("first_seen_at", previousCutoff);
+    }
+    const { data: crossed, error: winnerErr } = await winnerQuery.limit(200);
+    /**
+     * A launch of 40 ads that are all still running crosses the threshold together; alerting on each was
+     * one alert per ad. Keep the strongest few: most people reached, then longest running.
+     */
+    const reachOf = (r: { reach?: string | number | null }) => Number(r.reach ?? 0) || 0;
+    const winnerAds = (crossed ?? [])
+      .sort((a, b) => reachOf(b) - reachOf(a) || Date.parse(a.first_seen_at) - Date.parse(b.first_seen_at))
+      .slice(0, MAX_PROVEN_WINNER_ALERTS_PER_SCRAPE);
 
-    if (!winnerErr && winnerAds?.length) {
+    if (!winnerErr && winnerAds.length) {
       for (const ad of winnerAds) {
         const firstSeen = Date.parse(ad.first_seen_at);
         const daysLive = Number.isFinite(firstSeen)

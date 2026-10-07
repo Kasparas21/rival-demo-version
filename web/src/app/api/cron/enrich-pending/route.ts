@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
+import { userAllowsScheduledScrape } from "@/lib/billing/scrape-eligibility";
 import { enrichAllPendingScrapedAdsForCompetitor } from "@/lib/strategy-overview/adEnrichment";
 
 export const runtime = "nodejs";
@@ -13,11 +14,32 @@ async function runEnrichPending(req: Request) {
 
   const admin = createSupabaseAdminClient();
 
+  const PENDING_FILTER = "ai_enrichment_status.is.null,ai_enrichment_status.eq.pending,ai_enrichment_status.eq.failed";
+
+  /** LLM spend: only accounts with scheduled jobs switched on (see `userAllowsScheduledScrape`). */
+  const { data: ownerRows, error: ownerErr } = await admin
+    .from("scraped_ads")
+    .select("user_id")
+    .eq("is_active", true)
+    .or(PENDING_FILTER)
+    .limit(5000);
+  if (ownerErr) {
+    return Response.json({ ok: false, error: ownerErr.message }, { status: 500 });
+  }
+  const owners = [...new Set((ownerRows ?? []).map((row) => row.user_id))];
+  const allowedOwners = (
+    await Promise.all(owners.map(async (userId) => ((await userAllowsScheduledScrape(admin, userId)) ? userId : null)))
+  ).filter((userId): userId is string => userId !== null);
+  if (allowedOwners.length === 0) {
+    return Response.json({ ok: true, processed: 0, message: "no pending enrichment for accounts with scheduled jobs on" });
+  }
+
   const { data: seedRows, error: seedErr } = await admin
     .from("scraped_ads")
     .select("user_id, competitor_id")
     .eq("is_active", true)
-    .or("ai_enrichment_status.is.null,ai_enrichment_status.eq.pending,ai_enrichment_status.eq.failed")
+    .or(PENDING_FILTER)
+    .in("user_id", allowedOwners)
     .limit(200);
 
   if (seedErr) {

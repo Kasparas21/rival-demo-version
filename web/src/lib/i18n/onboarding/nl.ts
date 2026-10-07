@@ -30,6 +30,7 @@ const form: OnboardingCopy["form"] = {
   platforms: {
     title: "Uw advertentieplatforms",
     body: "Vertel ons waar u actief advertenties draait. We scrapen die libraries om de angles, creatives en aanbiedingen van uw bedrijf in kaart te brengen — de basis voor concurrentiestrategie in Rival.",
+    comingSoon: "Binnenkort",
   },
   markets: {
     title: "Regio's voor uw advertenties",
@@ -79,21 +80,23 @@ const form: OnboardingCopy["form"] = {
       "Deze link bevat geen Transparency-adverteerders-ID (…/advertiser/AR…). Open Google Ads Transparency Center, zoek het merk, open een creative of advertentie en kopieer de URL uit de adresbalk. Geen alleen shopdomein of ?domain=-zoekpagina.",
     linkedInKeyword:
       "Dit lijkt op een zoekopdracht op trefwoord — resultaten kunnen andere bedrijven bevatten",
+    metaKeywordSearch:
+      "Dit is een zoekopdracht op trefwoord, niet de pagina van het merk — alleen advertenties van een pagina met de merknaam worden bewaard. Open voor het beste resultaat de pagina van het merk in de Ads Library en kopieer die link (met view_all_page_id).",
   },
 };
 
 const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   allSet: "U bent klaar",
   choosePlanTitle: "Kies uw plan",
-  intro: "Beide plannen met 7 dagen proef — volledig product, kaart vereist, altijd opzegbaar.",
-  trialBadge: "7 dagen proef",
+  intro: "Kies het plan dat bij uw team past. Volledige toegang zodra de checkout is afgerond — altijd opzegbaar.",
+  trialBadge: "Altijd opzegbaar",
   billingAria: "Factureringsperiode",
   monthly: "Maandelijks",
   annual: "Jaarlijks",
   savePercentBadge: "Bespaar {percent}%",
   perMonth: "/mnd",
   saveVsMonthly: "Bespaar {percent}% t.o.v. maandelijks",
-  startFreeTrial: "Start gratis proef",
+  startFreeTrial: "Verder naar checkout",
   popular: "Populair",
   includes: "Inclusief",
   billedMonthly: "Maandelijks gefactureerd",

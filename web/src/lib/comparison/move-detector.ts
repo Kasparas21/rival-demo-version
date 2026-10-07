@@ -1,5 +1,6 @@
 import { llmSmart } from "@/lib/llm/anthropic";
 import { isBrandBidAngle } from "@/lib/comparison/move-brand-bid";
+import { angleSlugFromName } from "@/lib/strategy-overview/ad-angles";
 import type { CompetitorStrategyOverviewPayload, StrategyPlatform } from "@/lib/strategy-overview/payload-types";
 
 export type MoveEventType =
@@ -20,6 +21,15 @@ export type DetectedMove = {
   after_state: Record<string, unknown>;
   narrative?: string;
 };
+
+/**
+ * Older payloads list each ad's full label as an "angle"; newer ones list categories ("Social proof").
+ * Comparing across that change would make every category look new, so angles are only compared when
+ * both sides use categories — the first category payload is the baseline.
+ */
+function anglesAreCategories(payload: CompetitorStrategyOverviewPayload): boolean {
+  return (payload.insights.angles_by_platform ?? []).every((row) => angleSlugFromName(row.angle) != null);
+}
 
 function angleEvidenceHook(after: CompetitorStrategyOverviewPayload, angle: string): string | null {
   const row = after.insights.angle_clustering.angles.find((x) => x.angle === angle);
@@ -66,12 +76,15 @@ export function detectMoves(
     }
   }
 
+  const compareAngles = anglesAreCategories(before) && anglesAreCategories(after);
   const beforeAngles = new Set((before.insights.angles_by_platform ?? []).map((a) => a.angle));
-  const afterAngles = new Set((after.insights.angles_by_platform ?? []).map((a) => a.angle));
+  const afterAngles = new Set(compareAngles ? (after.insights.angles_by_platform ?? []).map((a) => a.angle) : []);
 
   for (const ang of afterAngles) {
     if (!beforeAngles.has(ang)) {
       if (brandName && isBrandBidAngle(ang, brandName)) continue;
+      // "Other" is what the classifier says when no angle fits; it isn't something a competitor starts doing.
+      if (angleSlugFromName(ang) === "other") continue;
 
       const angleData = after.insights.angles_by_platform?.find((x) => x.angle === ang);
       if (angleData && angleData.totalCount >= 2) {
@@ -91,7 +104,7 @@ export function detectMoves(
     }
   }
 
-  for (const angleAfter of after.insights.angles_by_platform ?? []) {
+  for (const angleAfter of compareAngles ? (after.insights.angles_by_platform ?? []) : []) {
     if (brandName && isBrandBidAngle(angleAfter.angle, brandName)) continue;
 
     const angleBefore = before.insights.angles_by_platform?.find((x) => x.angle === angleAfter.angle);

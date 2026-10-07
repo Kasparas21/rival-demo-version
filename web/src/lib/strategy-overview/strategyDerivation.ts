@@ -1,9 +1,16 @@
+import { angleLabelOf } from "@/lib/strategy-overview/ad-angles";
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
+import { estimatePlatformSpend, sumAdSpend, type EurRange } from "@/lib/strategy-overview/reach-spend";
 import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
 import { deriveSidebarInsights } from "@/lib/strategy-overview/derive-sidebar-insights";
 import { strategyMapNodeSize } from "@/lib/strategy-overview/map-node-sizing";
 import { applyFunnelCellLayout } from "@/lib/strategy-overview/layout-funnel-cells";
-import { deriveFunnelCellEdges } from "@/lib/strategy-overview/funnel-cell-edges";
+import {
+  deriveFunnelCellEdges,
+  isSpecificLandingPage,
+  type LandingPagesByCell,
+} from "@/lib/strategy-overview/funnel-cell-edges";
+import { landingPageKeyFromAd } from "@/lib/landing-pages/count-unique-landing-pages";
 import type {
   ActivityLevel,
   CompetitorStrategyMeta,
@@ -146,6 +153,8 @@ export type ScrapedAdInput = {
   /** When set (recompute path), Strategy Map uses distinct live creatives; see live-creatives.ts */
   is_active?: boolean;
   raw_payload?: unknown;
+  /** Copy transcribed from the creative image (Google ads without published copy). */
+  creative_text?: string | null;
 };
 
 const PLATFORM_LABEL: Record<string, string> = {
@@ -179,14 +188,10 @@ export function parseStage(raw: string | null | undefined): FunnelStage | null {
   return null;
 }
 
+/** Average runtime (first to last seen), the same definition the platform nodes use. */
 function computeAvgActiveDaysFromAds(ads: ScrapedAdInput[]): number {
   if (ads.length === 0) return 0;
-  const now = Date.now();
-  const days = ads.map((a) => {
-    const first = a.first_seen_at ? new Date(a.first_seen_at).getTime() : now;
-    return Math.max(1, (now - first) / (1000 * 60 * 60 * 24));
-  });
-  return days.reduce((a, b) => a + b, 0) / days.length;
+  return ads.reduce((sum, a) => sum + activeDays(a.first_seen_at, a.last_seen_at), 0) / ads.length;
 }
 
 /** Funnel stages as rows; platforms as columns — positions applied in layout-funnel-cells. */
@@ -194,43 +199,41 @@ function layoutFunnelCells(cells: FunnelCellNodePayload[]): FunnelCellNodePayloa
   return applyFunnelCellLayout(cells);
 }
 
-function resolvePlatformDefaultStage(
-  platform: StrategyPlatform,
-  allAds: ScrapedAdInput[],
-  unclassified: ScrapedAdInput[],
-): FunnelStage {
-  const unclassifiedRatio = unclassified.length / Math.max(1, allAds.length);
-  if (unclassifiedRatio > 0.8) {
-    return PLATFORM_DEFAULT_FUNNEL_STAGE[platform] ?? "MOF";
-  }
-  return PLATFORM_DEFAULT_FUNNEL_STAGE[platform] ?? "MOF";
-}
-
-/** Bucket live ads into funnel stages; unclassified ads use the platform default stage. */
+/**
+ * Bucket live ads into funnel stages. Ads without a stage are left out: they used to go into the platform's
+ * default stage (Meta MOF, Google BOF), so 90 never-classified Meta ads were drawn as MOF and Google ads with
+ * no readable copy as BOF. {@link unclassifiedSummary} reports them instead.
+ */
 export function bucketAdsByFunnelStage(
-  platform: StrategyPlatform,
+  _platform: StrategyPlatform,
   ads: ScrapedAdInput[],
 ): Map<FunnelStage, ScrapedAdInput[]> {
   const byStage = new Map<FunnelStage, ScrapedAdInput[]>();
-  const unclassified: ScrapedAdInput[] = [];
-
   for (const ad of ads) {
     const stage = parseStage(ad.funnel_stage);
-    if (stage == null) {
-      unclassified.push(ad);
-      continue;
-    }
+    if (stage == null) continue;
     if (!byStage.has(stage)) byStage.set(stage, []);
     byStage.get(stage)!.push(ad);
   }
-
-  if (unclassified.length > 0) {
-    const defaultStage = resolvePlatformDefaultStage(platform, ads, unclassified);
-    if (!byStage.has(defaultStage)) byStage.set(defaultStage, []);
-    byStage.get(defaultStage)!.push(...unclassified);
-  }
-
   return byStage;
+}
+
+/** Live ads per platform that have no stage, split by why: still waiting for the model, or no readable copy. */
+export function unclassifiedSummary(
+  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>,
+): NonNullable<StrategyMapPayload["unclassifiedByPlatform"]> {
+  const out: NonNullable<StrategyMapPayload["unclassifiedByPlatform"]> = [];
+  for (const [platform, ads] of byPlatformLive) {
+    let pending = 0;
+    let noText = 0;
+    for (const a of ads) {
+      if (parseStage(a.funnel_stage) != null) continue;
+      if (a.ai_enrichment_status === "skipped_no_text") noText += 1;
+      else pending += 1;
+    }
+    if (pending + noText > 0) out.push({ platform, pending, noText, total: ads.length });
+  }
+  return out;
 }
 
 /**
@@ -240,7 +243,9 @@ export function bucketAdsByFunnelStage(
 export function deriveFunnelCells(
   byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>,
   brandScaleScore: number,
-  spendV2OverridesByPlatformStage?: Map<string, { low: number; mid: number; high: number }>
+  spendV2OverridesByPlatformStage?: Map<string, { low: number; mid: number; high: number }>,
+  /** Per-ad spend from the platform estimate; cells then add up to their platform's total. */
+  perAdSpend?: Map<StrategyPlatform, Map<string, EurRange>>
 ): FunnelCellNodePayload[] {
   const cells: FunnelCellNodePayload[] = [];
 
@@ -267,7 +272,10 @@ export function deriveFunnelCells(
       });
 
       const overrideKey = `${platform}:${stage}`;
-      const override = spendV2OverridesByPlatformStage?.get(overrideKey);
+      const platformShares = perAdSpend?.get(platform);
+      const override = platformShares
+        ? sumAdSpend(platformShares, ads.map((a) => a.id))
+        : spendV2OverridesByPlatformStage?.get(overrideKey);
       const finalSpend = override ?? spend;
 
       const cellConfidence: "high" | "medium" | "low" =
@@ -324,129 +332,22 @@ function dataConfidence(
   return "low";
 }
 
-/** Ads that contribute to funnel-edge angle overlap (classified + angle text). */
-export function adsForEdgeAngles(ads: ScrapedAdInput[]): ScrapedAdInput[] {
-  return ads.filter((a) => parseStage(a.funnel_stage) != null && (a.ai_extracted_angle ?? "").trim().length > 0);
-}
-
-function angleTokens(ads: ScrapedAdInput[]): Map<string, Set<string>> {
-  const byPlat = new Map<string, Set<string>>();
-  for (const a of adsForEdgeAngles(ads)) {
-    const pl = normalizePlatform(a.platform);
-    if (!pl) continue;
-    const ang = (a.ai_extracted_angle ?? "general").trim().toLowerCase() || "general";
-    if (!byPlat.has(pl)) byPlat.set(pl, new Set());
-    byPlat.get(pl)!.add(ang);
-  }
-  return byPlat;
-}
-
-export function enrichedAdsByPlatform(ads: ScrapedAdInput[]): Map<StrategyPlatform, number> {
-  const m = new Map<StrategyPlatform, number>();
-  for (const a of ads) {
-    if (parseStage(a.funnel_stage) == null || !(a.ai_extracted_angle ?? "").trim()) continue;
-    const pl = normalizePlatform(a.platform);
-    if (!pl) continue;
-    m.set(pl, (m.get(pl) ?? 0) + 1);
-  }
-  return m;
-}
-
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 0;
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter += 1;
-  const union = a.size + b.size - inter;
-  return union <= 0 ? 0 : inter / union;
-}
-
-const MIN_ENRICHED_PER_PLATFORM_FOR_EDGE = 5;
-
-export function deriveFunnelEdges(params: {
-  platforms: StrategyPlatform[];
-  stageByPlatform: Map<StrategyPlatform, FunnelStage>;
-  angleByPlatform: Map<string, Set<string>>;
-  enrichedAdsByPlatform: Map<StrategyPlatform, number>;
-  minEnrichedPerPlatform?: number;
-}): { edges: FunnelEdgePayload[]; detected: number; suppressed: number } {
-  const { platforms, stageByPlatform, angleByPlatform, enrichedAdsByPlatform } = params;
-  const minPl = params.minEnrichedPerPlatform ?? MIN_ENRICHED_PER_PLATFORM_FOR_EDGE;
-  const edges: FunnelEdgePayload[] = [];
-  const seen = new Set<string>();
-  let detected = 0;
-
-  const stageIndex = (s: FunnelStage) => STAGE_ORDER.indexOf(s);
-
-  for (let i = 0; i < platforms.length; i++) {
-    for (let j = 0; j < platforms.length; j++) {
-      if (i === j) continue;
-      const from = platforms[i]!;
-      const to = platforms[j]!;
-      const sf = stageByPlatform.get(from)!;
-      const st = stageByPlatform.get(to)!;
-      if (stageIndex(st) <= stageIndex(sf)) continue;
-
-      const key = `${from}->${to}`;
-      if (seen.has(key)) continue;
-
-      const overlap = jaccard(angleByPlatform.get(from) ?? new Set(), angleByPlatform.get(to) ?? new Set());
-      let confidence = 0.35 + (stageIndex(st) - stageIndex(sf)) * 0.18;
-      confidence += overlap * 0.35;
-      confidence = Math.min(0.95, confidence);
-
-      if (confidence < 0.4) continue;
-
-      detected += 1;
-
-      const enFrom = enrichedAdsByPlatform.get(from) ?? 0;
-      const enTo = enrichedAdsByPlatform.get(to) ?? 0;
-      if (enFrom < minPl || enTo < minPl) continue;
-
-      const style: "solid" | "dashed" = confidence >= 0.72 ? "solid" : "dashed";
-      const reasoning =
-        overlap >= 0.2
-          ? `Creative angles overlap between ${PLATFORM_LABEL[from] ?? from} and ${PLATFORM_LABEL[to] ?? to}; staged funnel progression.`
-          : `Heavier ${sf} on ${PLATFORM_LABEL[from] ?? from} feeding ${st} on ${PLATFORM_LABEL[to] ?? to}.`;
-
-      edges.push({ from, to, confidence, reasoning, style });
-      seen.add(key);
-    }
-  }
-
-  const suppressed = detected - edges.length;
-  return { edges, detected, suppressed };
-}
-
-function angleTokensByCell(
-  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>
-): Map<FunnelCellId, Set<string>> {
-  const byCell = new Map<FunnelCellId, Set<string>>();
-  for (const [platform, liveList] of byPlatformLive) {
-    for (const a of adsForEdgeAngles(liveList)) {
-      const stage = parseStage(a.funnel_stage);
-      if (!stage) continue;
-      const id = `${platform}:${stage}` as FunnelCellId;
-      const ang = (a.ai_extracted_angle ?? "general").trim().toLowerCase() || "general";
-      if (!byCell.has(id)) byCell.set(id, new Set());
-      byCell.get(id)!.add(ang);
-    }
-  }
-  return byCell;
-}
-
-function enrichedCountByCell(
-  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>
-): Map<FunnelCellId, number> {
-  const m = new Map<FunnelCellId, number>();
+/** Ads per specific landing page in each funnel cell: the evidence funnel arrows are drawn from. */
+function landingPagesByCell(byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>): LandingPagesByCell {
+  const byCell: LandingPagesByCell = new Map();
   for (const [platform, liveList] of byPlatformLive) {
     for (const a of liveList) {
       const stage = parseStage(a.funnel_stage);
-      if (!stage || !(a.ai_extracted_angle ?? "").trim()) continue;
-      const id = `${platform}:${stage}` as FunnelCellId;
-      m.set(id, (m.get(id) ?? 0) + 1);
+      if (!stage) continue;
+      const key = landingPageKeyFromAd({ platform: a.platform, raw_payload: a.raw_payload });
+      if (!key || !isSpecificLandingPage(key)) continue;
+      const id = `${platform}:${stage}`;
+      const pages = byCell.get(id) ?? new Map<string, number>();
+      pages.set(key, (pages.get(key) ?? 0) + 1);
+      byCell.set(id, pages);
     }
   }
-  return m;
+  return byCell;
 }
 
 function layoutNodes(
@@ -689,15 +590,20 @@ export function computeVoiceToneByPlatform(ads: ScrapedAdInput[]): VoiceToneByPl
 export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatformInsight[] {
   const angleMap = new Map<
     string,
-    { count: number; platforms: Map<StrategyPlatform, number>; lifespanDays: number[] }
+    {
+      count: number;
+      platforms: Map<StrategyPlatform, number>;
+      lifespanDays: number[];
+      example: { label: string; days: number } | null;
+    }
   >();
 
   for (const ad of ads) {
-    const angle = (ad.ai_extracted_angle ?? "").trim();
-    if (!angle || angle === "Unclassified") continue;
+    const angle = angleLabelOf(ad.ai_extracted_angle);
+    if (!angle) continue;
 
     if (!angleMap.has(angle)) {
-      angleMap.set(angle, { count: 0, platforms: new Map(), lifespanDays: [] });
+      angleMap.set(angle, { count: 0, platforms: new Map(), lifespanDays: [], example: null });
     }
     const entry = angleMap.get(angle)!;
     entry.count += 1;
@@ -708,7 +614,11 @@ export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatform
 
     const firstSeen = new Date(ad.first_seen_at).getTime();
     const lastSeen = ad.last_seen_at ? new Date(ad.last_seen_at).getTime() : Date.now();
-    entry.lifespanDays.push(Math.max(1, Math.floor((lastSeen - firstSeen) / 86_400_000)));
+    const days = Math.max(1, Math.floor((lastSeen - firstSeen) / 86_400_000));
+    entry.lifespanDays.push(days);
+    if (!entry.example || days > entry.example.days) {
+      entry.example = { label: (ad.ai_extracted_angle ?? "").trim(), days };
+    }
   }
 
   return Array.from(angleMap.entries())
@@ -719,6 +629,7 @@ export function computeAnglesByPlatform(ads: ScrapedAdInput[]): AnglesByPlatform
       }
       return {
         angle,
+        ...(data.example ? { exampleAngle: data.example.label } : {}),
         totalCount: data.count,
         platforms: Array.from(data.platforms.keys()).sort(),
         platformCounts,
@@ -829,15 +740,12 @@ export function deriveStrategyOverviewPayload(
 
   const stageByPlatform = new Map<StrategyPlatform, FunnelStage>();
   const nodes: PlatformNodePayload[] = [];
+  const perAdSpendByPlatform = new Map<StrategyPlatform, Map<string, EurRange>>();
 
   let maxCount = 0;
   for (const [, list] of byPlatformLive) {
     maxCount = Math.max(maxCount, list.length);
   }
-
-  const adsForAngles = totalLive > 0 ? [...byPlatformLive.values()].flat() : activeAds;
-  const angleByPlatform = angleTokens(adsForAngles);
-  const enrByPl = enrichedAdsByPlatform(adsForAngles);
 
   const brandScaleScore = deriveBrandScale(activeAds, byPlatform);
   console.log(
@@ -864,12 +772,14 @@ export function deriveStrategyOverviewPayload(
     const avgDays =
       liveList.reduce((s, x) => s + activeDays(x.first_seen_at, x.last_seen_at), 0) /
       Math.max(1, liveList.length);
-    const spend = estimateMonthlySpendEur({
-      platform: pl,
-      adCount: liveList.length,
-      avgActiveDays: avgDays,
-      brandScaleScore,
-    });
+    const spend = estimatePlatformSpend(
+      pl,
+      liveList,
+      (count) =>
+        estimateMonthlySpendEur({ platform: pl, adCount: count, avgActiveDays: avgDays, brandScaleScore }),
+      nowMs
+    );
+    perAdSpendByPlatform.set(pl, spend.perAd);
 
     nodes.push({
       platform: pl,
@@ -879,6 +789,7 @@ export function deriveStrategyOverviewPayload(
       estSpendEur: spend.mid,
       estSpendEurLow: spend.low,
       estSpendEurHigh: spend.high,
+      reachBasedAds: spend.reachBasedAds,
       funnelStage: stage,
       position: { x: 0, y: 0 },
     });
@@ -907,6 +818,8 @@ export function deriveStrategyOverviewPayload(
       logSpendEstimateDebug(`derive:${competitor.name}`, fp, estConfig);
 
       for (const n of nodes) {
+        /** Real reach beats any ad-count model. */
+        if ((n.reachBasedAds ?? 0) > 0) continue;
         const st = fp.platform_stats.find((s) => s.platform === n.platform);
         if (st) n.adCount = st.active_ads;
         const row = spendEstimateV2.perPlatform.find((x) => x.platform === n.platform);
@@ -944,7 +857,12 @@ export function deriveStrategyOverviewPayload(
     if (spendV2ByPlatformStage.size === 0) spendV2ByPlatformStage = undefined;
   }
 
-  const funnelCells = deriveFunnelCells(byPlatformLive, brandScaleScore, spendV2ByPlatformStage);
+  /** Cells share their platform's per-ad spend, except where spend v2 (ad-count model) took the platform over. */
+  const v2Platforms = new Set(
+    nodes.filter((n) => spendEstimateV2?.perPlatform.some((x) => x.platform === n.platform) && !n.reachBasedAds).map((n) => n.platform)
+  );
+  const cellShares = new Map([...perAdSpendByPlatform].filter(([pl]) => !v2Platforms.has(pl)));
+  const funnelCells = deriveFunnelCells(byPlatformLive, brandScaleScore, spendV2ByPlatformStage, cellShares);
 
   const totalMid = nodes.reduce((s, n) => s + n.estSpendEur, 0);
   const totalLow = nodes.reduce((s, n) => s + (n.estSpendEurLow ?? n.estSpendEur), 0);
@@ -954,26 +872,12 @@ export function deriveStrategyOverviewPayload(
   let funnelEdges: FunnelEdgePayload[] = [];
   let edgeDetected = 0;
   let edgeSuppressed = 0;
-  const angleByCell = angleTokensByCell(byPlatformLive);
-  const enrByCell = enrichedCountByCell(byPlatformLive);
-
   if (funnelCells.length > 0) {
     const allowCrossPlatform = suppressEdgesReason !== "single_platform" && suppressEdgesReason !== "low_sample";
     const { edges, detected, suppressed } = deriveFunnelCellEdges({
       cells: funnelCells,
-      angleByCell,
-      enrichedCountByCell: enrByCell,
+      landingPagesByCell: landingPagesByCell(byPlatformLive),
       allowCrossPlatform,
-    });
-    funnelEdges = edges;
-    edgeDetected = detected;
-    edgeSuppressed = suppressed;
-  } else if (!suppressEdgesReason) {
-    const { edges, detected, suppressed } = deriveFunnelEdges({
-      platforms: nodes.map((n) => n.platform),
-      stageByPlatform,
-      angleByPlatform,
-      enrichedAdsByPlatform: enrByPl,
     });
     funnelEdges = edges;
     edgeDetected = detected;
@@ -985,7 +889,7 @@ export function deriveStrategyOverviewPayload(
 
   const angleAgg = new Map<string, number>();
   for (const a of activeAds) {
-    const k = (a.ai_extracted_angle ?? "Unclassified").trim() || "Unclassified";
+    const k = angleLabelOf(a.ai_extracted_angle) ?? "Unclassified";
     angleAgg.set(k, (angleAgg.get(k) ?? 0) + 1);
   }
 
@@ -1022,6 +926,7 @@ export function deriveStrategyOverviewPayload(
     },
     platformNodes: nodes,
     funnelCells,
+    unclassifiedByPlatform: unclassifiedSummary(byPlatformLive),
     funnelEdges,
     suppressEdgesReason,
     activeAdCount: totalLive > 0 ? totalLive : activeAds.length,
@@ -1057,7 +962,7 @@ export function deriveStrategyOverviewPayload(
       title: "Platform Footprint",
       subtitle: "Active ad presence per platform",
       tooltip:
-        "Side-by-side platform comparison: active ads per platform and modeled monthly spend range (benchmark CPM × footprint — not invoiced spend).",
+        "Running ads per platform and estimated monthly spend. Meta ads shown in the EU are priced from the reach Meta publishes (people reached × typical views per person × that country's price per 1,000 views); other ads from ad count × benchmark price. A range, not invoiced spend.",
       aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
@@ -1072,19 +977,21 @@ export function deriveStrategyOverviewPayload(
           funnelStage: n.funnelStage,
           spendShare: pct(n),
           earliestFirstSeenAt: earliestFirstSeenIsoForPlatform(activeAds, n.platform),
+          reachBasedAds: n.reachBasedAds ?? 0,
         }))
         .sort((a, b) => b.activeAds - a.activeAds),
       totalActiveAds: nodes.reduce((sum, n) => sum + n.adCount, 0),
       totalEstSpendEur: Math.round(totalMid),
       totalEstSpendEurLow: Math.round(totalLow),
       totalEstSpendEurHigh: Math.round(totalHigh),
+      reachBasedAds: nodes.reduce((sum, n) => sum + (n.reachBasedAds ?? 0), 0),
       platformCount: nodes.length,
     },
     budget_allocation: {
       title: "Budget Allocation",
       subtitle: "Estimated monthly spend share by platform",
       tooltip:
-        "Estimated using benchmark CPM × active ad count × brand size multiplier × format coefficient. NOT invoiced spend.",
+        "Share of estimated monthly spend. Meta ads shown in the EU use the reach Meta publishes, priced per country; other ads use ad count × benchmark price. Not invoiced spend.",
       aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
@@ -1139,7 +1046,7 @@ export function deriveStrategyOverviewPayload(
       title: "Angle Clustering",
       subtitle: "Top creative angles by ad count",
       tooltip:
-        "Creative angles from enrichment (`ai_extracted_angle`). Each classified ad receives one label. “Unclassified” means missing or broad extraction.",
+        "Creative angle category from enrichment: each classified ad gets one of a fixed set (Price, Social proof, Urgency, …). “Unclassified” means the ad has not been labelled (or has no copy to label).",
       aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
@@ -1149,7 +1056,7 @@ export function deriveStrategyOverviewPayload(
         sharePct: activeAds.length > 0 ? Math.round((count / activeAds.length) * 100) : 0,
         exampleSnippet:
           activeAds.find((ad) => {
-            const label = (ad.ai_extracted_angle ?? "").trim() || "Unclassified";
+            const label = angleLabelOf(ad.ai_extracted_angle) ?? "Unclassified";
             return label === angleName;
           })?.ad_text?.slice(0, 120) ?? null,
       })),

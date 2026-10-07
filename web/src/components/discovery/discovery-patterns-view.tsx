@@ -48,6 +48,8 @@ import {
   formatPatternsTimestamp,
   findPriorWeekMetrics,
   loadPatternsDisplayPrefs,
+  partialWeekDays,
+  priorWeekComparison,
   resolvePatternsTimezone,
   savePatternsDisplayPrefs,
   type PatternsDisplayPrefs,
@@ -117,11 +119,13 @@ function StatCell({
   label,
   value,
   delta,
+  deltaLabel = "vs prior week",
   compare,
 }: {
   label: string;
   value: string;
   delta?: number | null;
+  deltaLabel?: string;
   compare: boolean;
 }) {
   const showDelta = compare && delta != null && delta !== 0;
@@ -134,10 +138,10 @@ function StatCell({
       {showDelta ? (
         <p className={cn("mt-1.5 inline-flex items-center gap-1 text-sm font-semibold", up ? "text-emerald-700" : "text-rose-700")}>
           {up ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
-          {formatDelta(delta!)} vs prior week
+          {formatDelta(delta!)} {deltaLabel}
         </p>
       ) : compare ? (
-        <p className="mt-1.5 text-sm font-medium text-slate-400">Flat vs prior week</p>
+        <p className="mt-1.5 text-sm font-medium text-slate-400">Flat {deltaLabel}</p>
       ) : null}
     </div>
   );
@@ -465,18 +469,22 @@ function ReportDashboard({
     () => new Map(priorMetrics?.competitors.map((c) => [c.competitor_id, c]) ?? []),
     [priorMetrics],
   );
+  const partialDays = partialWeekDays(metrics);
+  const prior = priorWeekComparison(metrics, priorMetrics);
   const series = useMemo(
     () =>
       metrics.weekly_series.map((w, i, arr) => {
         const prev = i > 0 ? arr[i - 1] : null;
+        // The report's own week is cut short mid-week: its faded bar is the same days of the week before.
+        const partial = partialDays != null && w.week_start === metrics.week_start;
         return {
           ...w,
-          label: formatWeekLabel(w.week_start, timeZone),
-          launches_prev: prev?.launches ?? 0,
-          retirements_prev: prev?.retirements ?? 0,
+          label: `${formatWeekLabel(w.week_start, timeZone)}${partial ? " (so far)" : ""}`,
+          launches_prev: partial ? prior.new : (prev?.launches ?? 0),
+          retirements_prev: partial ? prior.killed : (prev?.retirements ?? 0),
         };
       }),
-    [metrics.weekly_series, timeZone],
+    [metrics.weekly_series, metrics.week_start, partialDays, prior.new, prior.killed, timeZone],
   );
 
   const competitorChart = useMemo(
@@ -492,8 +500,8 @@ function ReportDashboard({
             fullName: c.name,
             launched: c.launched_this_week,
             killed: c.killed_this_week,
-            launched_prev: prev?.launched_this_week ?? 0,
-            killed_prev: prev?.killed_this_week ?? 0,
+            launched_prev: c.launched_prev_same_days ?? prev?.launched_this_week ?? 0,
+            killed_prev: c.killed_prev_same_days ?? prev?.killed_this_week ?? 0,
             active: c.active_ads,
             aggression: c.aggression_score,
           };
@@ -544,42 +552,48 @@ function ReportDashboard({
       <DiscoveryPatternsControls
         prefs={prefs}
         onChange={onPrefsChange}
-        weekRangeLabel={`Week of ${formatWeekRange(report.week_start, timeZone)}`}
+        weekRangeLabel={`Week of ${formatWeekRange(report.week_start, timeZone)}${
+          partialDays != null ? ` · first ${partialDays} of 7 days` : ""
+        }`}
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCell
           label="New launches"
           value={metrics.new_this_week.toLocaleString()}
-          delta={metrics.new_this_week - metrics.new_prev_week}
+          delta={metrics.new_this_week - prior.new}
+          deltaLabel={prior.label}
           compare={compare}
         />
         <StatCell
           label="Retired"
           value={metrics.killed_this_week.toLocaleString()}
-          delta={metrics.killed_this_week - metrics.killed_prev_week}
+          delta={metrics.killed_this_week - prior.killed}
+          deltaLabel={prior.label}
           compare={compare}
         />
         <StatCell
           label="Net change"
           value={formatDelta(metrics.net_change)}
-          delta={compare ? metrics.net_change - (priorMetrics ? priorMetrics.net_change : 0) : null}
-          compare={compare && priorMetrics != null}
+          delta={metrics.net_change - prior.net_change}
+          deltaLabel={prior.label}
+          compare={compare}
         />
         <StatCell
           label="New winners"
           value={metrics.new_ultimate_winners_this_week.toLocaleString()}
           delta={
-            compare && priorMetrics
-              ? metrics.new_ultimate_winners_this_week - priorMetrics.new_ultimate_winners_this_week
+            prior.new_ultimate_winners != null
+              ? metrics.new_ultimate_winners_this_week - prior.new_ultimate_winners
               : null
           }
-          compare={compare && priorMetrics != null}
+          deltaLabel={prior.label}
+          compare={compare && prior.new_ultimate_winners != null}
         />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <ChartCard title="Launch vs retirement" subtitle={compare ? "Solid = this period · faded = prior week per bar" : undefined}>
+        <ChartCard title="Launch vs retirement" subtitle={compare ? `Solid = this period · faded = prior week per bar${partialDays != null ? " (same days for the week so far)" : ""}` : undefined}>
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={series} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
@@ -785,9 +799,41 @@ function ReportDashboard({
   );
 }
 
+type GenerationResult = { report?: DiscoveryPatternReportDto; error?: string };
+
+/**
+ * A report takes a minute or more to generate. The request lives outside the component so switching
+ * Discovery tabs mid-generation doesn't drop it: coming back shows it still running, then the result.
+ */
+const pendingGenerations = new Map<string, Promise<GenerationResult>>();
+
+function startGeneration(brandId: string, brandName: string, force: boolean): Promise<GenerationResult> {
+  const existing = pendingGenerations.get(brandId);
+  if (existing) return existing;
+  const run = (async (): Promise<GenerationResult> => {
+    try {
+      const res = await fetch("/api/discovery/patterns", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandId, brandName, force }),
+      });
+      const json = (await res.json()) as { ok: boolean; report?: DiscoveryPatternReportDto; error?: string };
+      if (!res.ok || !json.ok || !json.report) {
+        return { error: json.error ?? "Failed to generate patterns report" };
+      }
+      return { report: json.report };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Failed to generate patterns report" };
+    }
+  })().finally(() => pendingGenerations.delete(brandId));
+  pendingGenerations.set(brandId, run);
+  return run;
+}
+
 export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
-  const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  const [loading, setLoading] = useState(() => !pendingGenerations.has(brandId));
+  const [generating, setGenerating] = useState(() => pendingGenerations.has(brandId));
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<DiscoveryPatternReportDto | null>(null);
   const [history, setHistory] = useState<DiscoveryPatternMetrics[]>([]);
@@ -801,8 +847,9 @@ export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
     [brandId],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  /** `quiet` keeps what's on screen while refreshing (after a generation finishes). */
+  const load = useCallback(async (opts?: { quiet?: boolean }) => {
+    if (!opts?.quiet) setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/discovery/patterns?brandId=${encodeURIComponent(brandId)}`, {
@@ -823,32 +870,37 @@ export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
   }, [brandId]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const pending = pendingGenerations.get(brandId);
+    if (!pending) {
+      void load();
+      return;
+    }
+    let cancelled = false;
+    void pending.then(() => {
+      if (cancelled) return;
+      setGenerating(false);
+      void load({ quiet: true });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, load]);
 
   const generate = useCallback(
     async (force = false) => {
       setGenerating(true);
       setError(null);
-      try {
-        const res = await fetch("/api/discovery/patterns", {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ brandId, brandName, force }),
-        });
-        const json = (await res.json()) as { ok: boolean; report?: DiscoveryPatternReportDto; error?: string };
-        if (!res.ok || !json.ok || !json.report) {
-          throw new Error(json.error ?? "Failed to generate patterns report");
-        }
-        setReport(json.report);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to generate patterns report");
-      } finally {
-        setGenerating(false);
+      const result = await startGeneration(brandId, brandName, force);
+      setGenerating(false);
+      if (result.report) {
+        setReport(result.report);
+        /** Reload for the weekly history too; it changes when this week's row is new. */
+        void load({ quiet: true });
+      } else {
+        setError(result.error ?? "Failed to generate patterns report");
       }
     },
-    [brandId, brandName],
+    [brandId, brandName, load],
   );
 
   if (loading) {
@@ -892,8 +944,11 @@ export function DiscoveryPatternsView({ brandId, brandName, onOpenAd }: Props) {
           className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[color:var(--rival-primary)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
         >
           {generating ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
-          Generate this week&apos;s analysis
+          {generating ? "Analysing this week's ads…" : "Generate this week's analysis"}
         </button>
+        {generating ? (
+          <p className="mt-3 text-sm text-slate-500">This takes about a minute. You can keep browsing Discovery.</p>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
       </div>
     );

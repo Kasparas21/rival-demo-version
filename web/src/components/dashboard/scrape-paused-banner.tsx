@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 export function ScrapePausedBanner() {
   const [paused, setPaused] = useState(false);
@@ -9,7 +10,7 @@ export function ScrapePausedBanner() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/account/scrape-status");
+        const res = await sharedFetch("/api/account/scrape-status");
         if (!res.ok) return;
         const json = (await res.json()) as { scrapePaused?: boolean };
         if (!cancelled) setPaused(Boolean(json.scrapePaused));

@@ -1,4 +1,5 @@
 import { limitsForTier, type PlanTier } from "@/lib/billing/plan-limits";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 const SESSION_KEY = "rival:max-watched-competitors";
 const SLOTS_USED_KEY = "rival:competitors-slots-used";
@@ -82,7 +83,7 @@ export function readClientMaxWatchedCompetitors(
 
 export async function syncClientMaxWatchedCompetitorsFromUsage(): Promise<number> {
   try {
-    const res = await fetch("/api/account/usage", { cache: "no-store", credentials: "include" });
+    const res = await sharedFetch("/api/account/usage");
     if (!res.ok) return readClientMaxWatchedCompetitors();
     const data = (await res.json()) as {
       usage?: {
@@ -123,7 +124,7 @@ export type DashboardBillingSnapshot = {
 /** Full billing snapshot for dashboard shell (brand limits + global competitor slots). */
 export async function fetchDashboardBillingSnapshot(): Promise<DashboardBillingSnapshot | null> {
   try {
-    const res = await fetch("/api/account/usage", { cache: "no-store", credentials: "include" });
+    const res = await sharedFetch("/api/account/usage");
     if (!res.ok) return null;
     const data = (await res.json()) as {
       usage?: {

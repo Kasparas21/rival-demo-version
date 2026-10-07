@@ -30,6 +30,7 @@ const form: OnboardingCopy["form"] = {
   platforms: {
     title: "Ihre Anzeigenplattformen",
     body: "Sagen Sie uns, wo Sie aktiv Werbung schalten. Wir scrapen diese Libraries, um Angles, Creatives und Angebote Ihres Unternehmens zu erfassen — die Grundlage für Wettbewerbsstrategie in Rival.",
+    comingSoon: "Bald verfügbar",
   },
   markets: {
     title: "Regionen für Ihre Anzeigen",
@@ -79,21 +80,23 @@ const form: OnboardingCopy["form"] = {
       "Der Link enthält keine Transparency-Advertiser-ID (…/advertiser/AR…). Öffnen Sie das Google Ads Transparency Center, suchen Sie die Marke, öffnen Sie eine Anzeige und kopieren Sie die URL aus der Adressleiste. Keine reine Shop-Domain oder ?domain=-Suchseite.",
     linkedInKeyword:
       "Das wirkt wie eine Stichwortsuche — Ergebnisse können andere Unternehmen enthalten",
+    metaKeywordSearch:
+      "Das ist eine Stichwortsuche, nicht die Seite der Marke — nur Anzeigen einer gleichnamigen Seite werden übernommen. Am besten die Seite der Marke in der Ads Library öffnen und diesen Link kopieren (er enthält view_all_page_id).",
   },
 };
 
 const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   allSet: "Alles erledigt",
   choosePlanTitle: "Plan wählen",
-  intro: "Beide Pläne mit 7-Tage-Test — volles Produkt, Karte nötig, jederzeit kündbar.",
-  trialBadge: "7-Tage-Test",
+  intro: "Wählen Sie den passenden Plan. Voller Produktzugang direkt nach dem Checkout — jederzeit kündbar.",
+  trialBadge: "Jederzeit kündbar",
   billingAria: "Abrechnungszeitraum",
   monthly: "Monatlich",
   annual: "Jährlich",
   savePercentBadge: "{percent} % sparen",
   perMonth: "/Monat",
   saveVsMonthly: "{percent} % Ersparnis vs. monatlich",
-  startFreeTrial: "Gratis-Test starten",
+  startFreeTrial: "Weiter zum Checkout",
   popular: "Beliebt",
   includes: "Enthält",
   billedMonthly: "Monatlich abgerechnet",

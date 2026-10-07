@@ -1,5 +1,6 @@
 "use client";
 
+import { knownLikes } from "@/lib/organic-content/known-likes";
 import { Flame } from "lucide-react";
 
 import type { OrganicPlatform, OrganicSocials } from "@/lib/organic-content/types";
@@ -53,7 +54,8 @@ export function HotPostCard({ hot, post, socials, variant = "default", onPostCli
     !isCompact &&
     (post?.media_aspect === "vertical" || post?.product_type === "clips" || platform === "tiktok");
 
-  const likes = post?.likes ?? 0;
+  /** 0 when Instagram's hidden-likes placeholder: the line below is skipped rather than show "3 likes". */
+  const likes = post ? (knownLikes(post, false) ?? 0) : 0;
   const comments = post?.comments ?? 0;
   const views = post?.views ?? 0;
   const engagement = hot.engagement_total || likes + comments + (post?.shares ?? 0);

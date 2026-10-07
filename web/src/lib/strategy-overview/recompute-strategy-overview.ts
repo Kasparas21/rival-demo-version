@@ -14,7 +14,12 @@ import {
   expandAdsCacheDomainCandidates,
   tryHydrateScrapedAdsFromAdsCache,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
-import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
+import { transcribeMissingAdCopy } from "@/lib/ad-library/transcribe-ad-creatives";
+import {
+  inferAudience,
+  buildAudienceInferenceInputFromPayload,
+  withAdEvidence,
+} from "@/lib/comparison/audience-inference";
 import { generateAlertsForCompetitor } from "@/lib/alerts/generate-alerts-for-competitor";
 import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
@@ -704,6 +709,15 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
         .eq("user_id", userId);
     }
 
+    /** Google ads without published copy: read the ad's image first so the classifier has something to go on. */
+    const transcribed = await transcribeMissingAdCopy(supabase, userId, competitorId, { maxAds: 150 });
+    aiCostUsdTotal += transcribed.costUsd;
+    if (transcribed.candidates > 0) {
+      console.log(
+        `[recompute] transcribed ad images competitorId=${competitorId} done=${transcribed.transcribed}/${transcribed.candidates} failed=${transcribed.failed} costUsd=${transcribed.costUsd.toFixed(4)}`
+      );
+    }
+
     const enrichStats = await enrichAllPendingScrapedAdsForCompetitor(supabase, userId, competitorId, {
       beforeBatch: () => isRecomputeLockOwner(supabase, competitorId, token),
       afterBatch: () => updateLockProgress(supabase, competitorId, token, {}),
@@ -777,9 +791,9 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     if (payload.pipelineStatus !== "no_ads_found" && (payload.totalAdCount ?? 0) > 0) {
       const domain = meta.brandDomain ?? meta.cacheDomain;
-      const audIn = buildAudienceInferenceInputFromPayload(
-        { brandName: meta.name, brandDomain: domain },
-        payload
+      const audIn = withAdEvidence(
+        buildAudienceInferenceInputFromPayload({ brandName: meta.name, brandDomain: domain }, payload),
+        freshInputs
       );
       const aud = await inferAudience(audIn);
       payload = { ...payload, audience_inference: aud };

@@ -33,6 +33,7 @@ import type {
   WatchAlertCandidate,
   WatchChannels,
 } from "./types";
+import { userAllowsScheduledScrape } from "@/lib/billing/scrape-eligibility";
 
 const MAX_BLOCKS_PER_EMAIL = 5;
 const ALERT_LOOKBACK_DAYS = 7;
@@ -454,6 +455,15 @@ export async function runAutopilotWatch(params: {
     const settingsByUser = new Map<string, AutopilotSettingsRow>();
     for (const row of settingsRows ?? []) {
       settingsByUser.set(row.user_id, settingsFromRow(row as Record<string, unknown>));
+    }
+    /** LLM spend: scheduled runs only for accounts with scheduled jobs switched on. */
+    if (!params.testMode) {
+      const allowed = await Promise.all(
+        [...settingsByUser.keys()].map(async (userId) => [userId, await userAllowsScheduledScrape(params.admin, userId)] as const),
+      );
+      for (const [userId, ok] of allowed) {
+        if (!ok) settingsByUser.delete(userId);
+      }
     }
 
     await flushPendingOutputs({ admin: params.admin, settingsByUser, appOrigin, now, summary });

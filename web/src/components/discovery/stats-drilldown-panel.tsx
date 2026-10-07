@@ -12,6 +12,7 @@ import type {
   PatternDrilldownResult,
 } from "@/lib/discovery/types";
 import { cn } from "@/lib/utils";
+import { formatReachFromIndex } from "@/lib/ad-library/ad-performance-ranking";
 
 type StatsDrilldownQuery = {
   brandId: string;
@@ -86,7 +87,7 @@ function AdRow({ ad, onOpenAd }: { ad: PatternDrilldownAd; onOpenAd: (id: string
         <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-slate-600">{ad.preview}</p>
         <p className="mt-1 text-xs text-slate-400">
           {ad.format || "ad"} · {ad.days_running}d running
-          {ad.impressions_index != null ? ` · index ${ad.impressions_index}` : ""}
+          {ad.impressions_index != null ? ` · ${formatReachFromIndex(ad.impressions_index)}` : ""}
         </p>
       </div>
       <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />

@@ -195,7 +195,7 @@ function adOverlapsWindow(platform: AdsLibraryPlatform, ad: unknown, window: { s
 function impressionsIndexForPlatformAd(platform: AdsLibraryPlatform, ad: unknown): number | null {
   if (platform === "meta") {
     const card = ad as MetaAdCard;
-    return card.impressionsIndex ?? extractImpressionsIndex(card);
+    return extractImpressionsIndex(card) /* the card's own impressionsIndex is -1 when unknown */;
   }
   return extractImpressionsIndex(ad);
 }

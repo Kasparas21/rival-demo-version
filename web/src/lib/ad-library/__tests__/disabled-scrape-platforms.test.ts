@@ -4,13 +4,14 @@ import { emptyAdsLibraryShell } from "@/lib/ad-library/api-types";
 import {
   applyDisabledScrapePlatformErrors,
   isScrapeEnabledForPlatform,
+  normalizeEnabledAdPlatforms,
   prepareAdsLibraryScrapePlatforms,
   SCRAPE_DISABLED_PLATFORM_MESSAGE,
   stripDisabledPlatformsFromScrapeSet,
 } from "@/lib/ad-library/disabled-scrape-platforms";
 
 describe("disabled-scrape-platforms", () => {
-  it("disables linkedin, tiktok, pinterest, and snapchat only", () => {
+  it("defaults to Meta + Google only", () => {
     expect(isScrapeEnabledForPlatform("meta")).toBe(true);
     expect(isScrapeEnabledForPlatform("google")).toBe(true);
     expect(isScrapeEnabledForPlatform("linkedin")).toBe(false);
@@ -43,5 +44,36 @@ describe("disabled-scrape-platforms", () => {
     });
     expect([...prepared]).toEqual(["meta"]);
     expect(out.linkedin.error).toBe(SCRAPE_DISABLED_PLATFORM_MESSAGE);
+  });
+
+  it("follows the account's switched-on platforms", () => {
+    const enabled = ["meta", "google", "tiktok"];
+    expect(isScrapeEnabledForPlatform("tiktok", enabled)).toBe(true);
+    expect(isScrapeEnabledForPlatform("snapchat", enabled)).toBe(false);
+    expect([...stripDisabledPlatformsFromScrapeSet(new Set(["tiktok", "snapchat", "meta"]), enabled)].sort()).toEqual([
+      "meta",
+      "tiktok",
+    ]);
+    const out = emptyAdsLibraryShell();
+    applyDisabledScrapePlatformErrors(out, new Set(["tiktok", "snapchat"]), enabled);
+    expect(out.tiktok.error).toBeNull();
+    expect(out.snapchat.error).toBe(SCRAPE_DISABLED_PLATFORM_MESSAGE);
+  });
+
+  it("can switch Meta or Google off too", () => {
+    const out = emptyAdsLibraryShell();
+    applyDisabledScrapePlatformErrors(out, new Set(["google"]), ["meta"]);
+    expect(out.google.error).toBe(SCRAPE_DISABLED_PLATFORM_MESSAGE);
+    expect(out.google.rows).toEqual([]);
+  });
+
+  it("leaves platforms outside the switch (microsoft) alone", () => {
+    expect(isScrapeEnabledForPlatform("microsoft", [])).toBe(true);
+  });
+
+  it("parses stored lists", () => {
+    expect(normalizeEnabledAdPlatforms(["tiktok", "meta", "bogus"])).toEqual(["meta", "tiktok"]);
+    expect(normalizeEnabledAdPlatforms([])).toEqual([]);
+    expect(normalizeEnabledAdPlatforms("meta")).toBeNull();
   });
 });

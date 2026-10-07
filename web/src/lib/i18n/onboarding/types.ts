@@ -11,6 +11,7 @@ export type IdentifierValidationCopy = {
   metaAdLibrary: string;
   googleTransparency: string;
   linkedInKeyword: string;
+  metaKeywordSearch: string;
 };
 
 export type OnboardingFormCopy = {
@@ -44,6 +45,7 @@ export type OnboardingFormCopy = {
   platforms: {
     title: string;
     body: string;
+    comingSoon: string;
   };
   markets: {
     title: string;

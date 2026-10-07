@@ -1,4 +1,4 @@
-import type { ChannelId } from "@/components/channel-picker-modal";
+import type { ChannelId } from "@/lib/channels";
 import { rememberTrialPending, clearTrialPending } from "@/lib/auth/oauth-bridge-cookies";
 import type { WorkspaceAdsScrapeHints } from "@/lib/onboarding/workspace-ads-setup";
 

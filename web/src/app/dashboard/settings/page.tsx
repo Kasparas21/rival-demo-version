@@ -25,6 +25,7 @@ import {
   buildCheckoutHref,
   buildUpgradeToProHref,
   POLAR_BILLING_PORTAL_HREF,
+  POLAR_BILLING_UPGRADE_HREF,
 } from "@/lib/billing/checkout-url";
 import {
   hasActivePaidSubscription,
@@ -34,6 +35,7 @@ import {
   subscriptionStatusBadgeClassName,
 } from "@/lib/billing/entitlements";
 import type { PlanTier } from "@/lib/billing/plan-limits";
+import { invalidateSharedFetch, sharedFetch } from "@/lib/client/shared-fetch";
 
 type ProfileState = {
   company_name: string;
@@ -235,6 +237,12 @@ export default function SettingsPage() {
     if (status === "error" && message) {
       return { kind: "error" as const, text: message };
     }
+    if (searchParams.get("billing_portal") === "unavailable") {
+      return {
+        kind: "info" as const,
+        text: "There's no Polar billing account for this workspace, so there are no invoices to show. Email hello@spy-rival.com for billing questions.",
+      };
+    }
     return null;
   }, [searchParams]);
 
@@ -246,8 +254,8 @@ export default function SettingsPage() {
     }
     try {
       const [profileRes, usageRes] = await Promise.all([
-        fetch("/api/account/profile", { cache: "no-store", credentials: "include" }),
-        fetch("/api/account/usage", { cache: "no-store", credentials: "include" }),
+        sharedFetch("/api/account/profile"),
+        sharedFetch("/api/account/usage"),
       ]);
 
       const profileJson = (await profileRes.json()) as {
@@ -363,7 +371,8 @@ export default function SettingsPage() {
     void syncPolarBilling();
   }, [searchParams, syncPolarBilling]);
 
-  const billingActivating = isBillingActivating(billing) || billingSyncing;
+  /** Admin access sits on a free_trial row with no Polar record, which otherwise reads as a checkout still activating. */
+  const billingActivating = !billing.isUnlimited && (isBillingActivating(billing) || billingSyncing);
 
   useEffect(() => {
     if (loading) return;
@@ -453,6 +462,7 @@ export default function SettingsPage() {
           brand_context: profile.brand_context,
         }),
       });
+      invalidateSharedFetch("/api/");
       const json = (await res.json()) as {
         ok?: boolean;
         error?: string;
@@ -545,6 +555,7 @@ export default function SettingsPage() {
         showPolarPortal: false,
         showUpgradeToPro: false,
         showManage: false,
+        managedWithoutPolar: false,
         cancelScheduled: false,
         accessEndsAt: null as string | null,
         isFullyCanceled: false,
@@ -557,11 +568,14 @@ export default function SettingsPage() {
     const accessEndsAt = subscriptionAccessEndDate(billing);
     const isFullyCanceled = CANCELED_SUBSCRIPTION_STATUSES.has(billing.status);
 
+    /** Comped quotes and admin-granted plans are active without any Polar customer: no portal to open. */
+    const polarPortal = polarUi && billing.hasPolarBillingRecord;
     return {
       showCheckout: !polarUi,
-      showPolarPortal: polarUi,
-      showUpgradeToPro: polarUi && billing.planTier !== "pro",
-      showManage: polarUi,
+      showPolarPortal: polarPortal,
+      showUpgradeToPro: polarPortal && billing.planTier !== "pro",
+      showManage: polarPortal,
+      managedWithoutPolar: polarUi && !polarPortal,
       cancelScheduled,
       accessEndsAt,
       isFullyCanceled,
@@ -766,7 +780,7 @@ export default function SettingsPage() {
               <span className="mt-2 block text-[12px]">
                 Plan: <span className="font-medium text-[#52525b]">{billing.planName}</span>
               </span>
-              {!billing.isUnlimited ? (
+              {!billing.isUnlimited && !subscriptionActions.managedWithoutPolar ? (
                 <span className="mt-2 block text-[11px] leading-relaxed text-[#a1a1aa]">
                   Checkout, upgrades, and cancellations are handled securely by Polar. After you cancel in Polar,
                   access continues until the end of your billing period.
@@ -873,6 +887,15 @@ export default function SettingsPage() {
                   Upgrade to Pro
                 </CheckoutNavigationAnchor>
               </div>
+            ) : subscriptionActions.managedWithoutPolar ? (
+              <p className="text-[13px] leading-relaxed text-[#52525b]">
+                Your plan was set up by the Spy Rival team, so there&apos;s no card on file or Polar invoice. To
+                change it, email{" "}
+                <a href="mailto:hello@spy-rival.com" className="font-medium underline underline-offset-2">
+                  hello@spy-rival.com
+                </a>
+                .
+              </p>
             ) : subscriptionActions.showManage ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <a
@@ -898,8 +921,10 @@ export default function SettingsPage() {
                 <a href={POLAR_BILLING_PORTAL} className="font-medium text-[#52525b] underline underline-offset-2 hover:text-[#1a1a2e]">
                   View invoices &amp; receipts
                 </a>
-                {" "}or cancel in Polar&apos;s billing portal via Manage subscription. Upgrade to Pro charges only the
-                prorated difference for the rest of this billing period.
+                {" "}or cancel in Polar&apos;s billing portal via Manage subscription.
+                {subscriptionActions.showUpgradeToPro && upgradeToProHref === POLAR_BILLING_UPGRADE_HREF
+                  ? " Upgrade to Pro charges only the prorated difference for the rest of this billing period."
+                  : null}
               </p>
             ) : null}
           </div>

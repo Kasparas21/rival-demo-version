@@ -16,6 +16,7 @@ import { EmailMarketingInsights } from "./EmailMarketingInsights";
 import { EmailInboxSkeleton } from "./EmailMarketingSkeleton";
 import { SavedEmailsPanel } from "./SavedEmailsPanel";
 import { EmailTrackerBar } from "./EmailTrackerBar";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 function isTabVisible(): boolean {
   return typeof document === "undefined" || document.visibilityState === "visible";
@@ -59,7 +60,7 @@ export function EmailMarketingTab({
     try {
       const [countRes, usageRes] = await Promise.all([
         fetch(`/api/email-trackers/${competitorId}?count=1`),
-        fetch("/api/account/usage"),
+        sharedFetch("/api/account/usage"),
       ]);
       if (countRes.ok) {
         const data = (await countRes.json()) as {

@@ -112,6 +112,9 @@ export type DiscoveryPatternCompetitorMetrics = {
   active_ads: number;
   launched_this_week: number;
   killed_this_week: number;
+  /** Same days of the previous week; see `DiscoveryPatternMetrics.prev_week_same_days`. */
+  launched_prev_same_days?: number;
+  killed_prev_same_days?: number;
   ultimate_winners: number;
   video_share_pct: number;
   unique_landing_pages: number;
@@ -182,6 +185,20 @@ export type DiscoveryPatternMetrics = {
   killed_this_week: number;
   killed_prev_week: number;
   net_change: number;
+  /**
+   * When these numbers were computed, and how many days of the week (1–7) they cover. A report made on
+   * Wednesday covers 3 days; comparing it with the whole previous week made every mid-week report read as a
+   * collapse ("9 new, down from 60"). Absent on reports saved before this field existed.
+   */
+  as_of?: string;
+  days_covered?: number;
+  /** The previous week cut at the same point (Mon–Wed vs Mon–Wed): the comparison to show. */
+  prev_week_same_days?: {
+    new: number;
+    killed: number;
+    net_change: number;
+    new_ultimate_winners: number;
+  };
   ultimate_winners_total: number;
   new_ultimate_winners_this_week: number;
   video_share_pct: number;

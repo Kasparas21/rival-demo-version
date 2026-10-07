@@ -830,6 +830,8 @@ export type Database = {
           funnel_stage: string | null;
           ai_enrichment_status: string;
           ai_extracted_voice_tone: Json | null;
+          creative_text: string | null;
+          creative_text_at: string | null;
           ai_extracted_launch_date: string | null;
           created_at: string;
           archived_at: string | null;
@@ -853,6 +855,8 @@ export type Database = {
           funnel_stage?: string | null;
           ai_enrichment_status?: string | null;
           ai_extracted_voice_tone?: Json | null;
+          creative_text?: string | null;
+          creative_text_at?: string | null;
           ai_extracted_launch_date?: string | null;
           archived_at?: string | null;
           archived_creative_url?: string | null;
@@ -876,6 +880,8 @@ export type Database = {
           funnel_stage?: string | null;
           ai_enrichment_status?: string | null;
           ai_extracted_voice_tone?: Json | null;
+          creative_text?: string | null;
+          creative_text_at?: string | null;
           ai_extracted_launch_date?: string | null;
           archived_at?: string | null;
           archived_creative_url?: string | null;

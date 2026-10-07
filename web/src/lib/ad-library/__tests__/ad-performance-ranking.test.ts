@@ -9,6 +9,23 @@ import {
   sortAdsByPerformanceSort,
 } from "@/lib/ad-library/ad-performance-ranking";
 
+describe("extractImpressionsIndex from published EU reach", () => {
+  const withReach = (people: number) => ({
+    impressionsIndex: -1,
+    transparency_by_location: { eu_transparency: { eu_total_reach: people } },
+  });
+
+  it("derives a log band when Meta's own index is missing", () => {
+    expect(extractImpressionsIndex(withReach(1_000))).toBe(2);
+    expect(extractImpressionsIndex(withReach(10_000))).toBe(3);
+    expect(extractImpressionsIndex(withReach(258_238))).toBe(4.4);
+  });
+
+  it("stays null without reach", () => {
+    expect(extractImpressionsIndex({ impressionsIndex: -1 })).toBeNull();
+  });
+});
+
 describe("extractImpressionsIndex", () => {
   it("reads impressionsIndex from normalized payload", () => {
     expect(extractImpressionsIndex({ impressionsIndex: 4 })).toBe(4);
@@ -27,9 +44,13 @@ describe("qualifiesAsUltimateWinner", () => {
     expect(qualifiesAsUltimateWinner(4, 14)).toBe(true);
   });
 
-  it("qualifies mid band + three-week runtime (SMB-friendly)", () => {
-    expect(qualifiesAsUltimateWinner(2, 21)).toBe(true);
-    expect(qualifiesAsUltimateWinner(2, 20)).toBe(false);
+  it("qualifies ~10K people reached + three-week runtime", () => {
+    expect(qualifiesAsUltimateWinner(3, 21)).toBe(true);
+    expect(qualifiesAsUltimateWinner(3, 20)).toBe(false);
+  });
+
+  it("doesn't crown a long-running ad that only reached ~1K people", () => {
+    expect(qualifiesAsUltimateWinner(2, 200)).toBe(false);
   });
 
   it("rejects short tests even with a high band", () => {

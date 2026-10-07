@@ -8,13 +8,13 @@ import {
 import {
   getBillingEntitlement,
   hasActivePaidSubscription,
-  shouldShowAwaitingQuotePage,
+  shouldShowPaywall,
 } from "@/lib/billing/entitlements";
+import { buildPaywallHref } from "@/lib/billing/paywall";
 import { recordUserDailyActivity } from "@/lib/billing/user-activity";
 import { TRIAL_PENDING_COOKIE } from "@/lib/auth/oauth-bridge-cookies";
-import { AWAITING_QUOTE_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
+import { PAYWALL_AFTER_TRIAL_PATH, shouldRedirectToTrialComplete } from "@/lib/auth/trial-flow";
 import { hasPrePaymentSetup, POST_PAYMENT_ONBOARDING_PATH, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
-import { WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { getPublicSupabaseEnv } from "./env";
 import type { Database } from "./types";
 
@@ -24,6 +24,7 @@ import type { Database } from "./types";
  */
 const PROTECTED_PATHS = ["/dashboard", "/onboarding", "/reset-password", "/api/account", "/admin"];
 const AUTH_PAGES = ["/login", "/signup", "/forgot-password"];
+const ACTIVITY_DAY_COOKIE = "rival_activity_day";
 const BILLING_EXEMPT_PREFIXES = ["/awaiting-quote", "/choose-plan", "/checkout", "/api/billing", "/auth/callback"];
 
 function matchesPrefix(pathname: string, prefixes: string[]): boolean {
@@ -64,9 +65,14 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  /**
+   * `getClaims()` verifies the session JWT locally against the project's ES256 signing key (cached JWKS), and
+   * still refreshes an expired session — `getUser()` was a network round-trip to Supabase Auth on every request.
+   * Route handlers that need the full user call `getUser()` themselves.
+   */
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const userId = typeof claimsData?.claims?.sub === "string" ? claimsData.claims.sub : null;
+  const user = userId ? { id: userId } : null;
 
   const { pathname, search } = request.nextUrl;
   const isProtected = matchesPrefix(pathname, PROTECTED_PATHS);
@@ -87,37 +93,31 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
   }
 
   if (user && isAuthPage) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("onboarding_completed, company_url")
-      .eq("id", user.id)
-      .maybeSingle();
-    const billing = await getBillingEntitlement(supabase, user.id);
+    const [{ data: profile }, billing] = await Promise.all([
+      supabase.from("profiles").select("onboarding_completed, company_url").eq("id", user.id).maybeSingle(),
+      getBillingEntitlement(supabase, user.id),
+    ]);
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.search = "";
     if (!profile?.onboarding_completed) {
       const nextParam = request.nextUrl.searchParams.get("next");
       const trialPending = request.cookies.get(TRIAL_PENDING_COOKIE)?.value;
       if (shouldRedirectToTrialComplete(nextParam, trialPending)) {
-        const trialPlans = new URL(AWAITING_QUOTE_AFTER_TRIAL_PATH, request.url);
+        const trialPlans = new URL(PAYWALL_AFTER_TRIAL_PATH, request.url);
         redirectUrl.pathname = trialPlans.pathname;
         redirectUrl.search = trialPlans.search;
         return NextResponse.redirect(redirectUrl);
       }
-      if (hasPrePaymentSetup(profile) && shouldShowAwaitingQuotePage(billing)) {
-        redirectUrl.pathname = "/awaiting-quote";
-        redirectUrl.searchParams.set("next", POST_PAYMENT_ONBOARDING_PATH);
-        return NextResponse.redirect(redirectUrl);
+      if (hasPrePaymentSetup(profile) && shouldShowPaywall(billing)) {
+        return NextResponse.redirect(new URL(buildPaywallHref(POST_PAYMENT_ONBOARDING_PATH), request.url));
       }
       const target = new URL(resolveIncompleteOnboardingPath(profile, billing, "/dashboard/spy"), request.url);
       redirectUrl.pathname = target.pathname;
       redirectUrl.search = target.search;
       return NextResponse.redirect(redirectUrl);
     }
-    if (shouldShowAwaitingQuotePage(billing)) {
-      redirectUrl.pathname = "/awaiting-quote";
-      redirectUrl.searchParams.set("next", "/dashboard/spy");
-      return NextResponse.redirect(redirectUrl);
+    if (shouldShowPaywall(billing)) {
+      return NextResponse.redirect(new URL(buildPaywallHref("/dashboard/spy"), request.url));
     }
     redirectUrl.pathname = "/dashboard/spy";
     return NextResponse.redirect(redirectUrl);
@@ -128,43 +128,25 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
     pathname.startsWith("/dashboard") &&
     !matchesPrefix(pathname, BILLING_EXEMPT_PREFIXES)
   ) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("onboarding_completed, company_url")
-      .eq("id", user.id)
-      .maybeSingle();
+    /** Profile and plan in parallel; every dashboard navigation waits on this. */
+    const [{ data: profile }, billing] = await Promise.all([
+      supabase.from("profiles").select("onboarding_completed, company_url").eq("id", user.id).maybeSingle(),
+      getBillingEntitlement(supabase, user.id),
+    ]);
 
     if (!profile?.onboarding_completed) {
-      const billing = await getBillingEntitlement(supabase, user.id);
-      const redirectUrl = request.nextUrl.clone();
-      if (shouldShowAwaitingQuotePage(billing)) {
-        redirectUrl.pathname = "/awaiting-quote";
-        redirectUrl.searchParams.set("next", POST_PAYMENT_ONBOARDING_PATH);
-      } else if (billing.isUnlimited || hasActivePaidSubscription(billing)) {
-        redirectUrl.pathname = POST_PAYMENT_ONBOARDING_PATH;
-        redirectUrl.search = "";
-      } else {
-        const target = new URL(
-          resolveIncompleteOnboardingPath(profile, billing, `${pathname}${search}`),
-          request.url,
-        );
-        redirectUrl.pathname = target.pathname;
-        redirectUrl.search = target.search;
-      }
-      const gated = NextResponse.redirect(redirectUrl);
+      const targetPath = shouldShowPaywall(billing)
+        ? buildPaywallHref(POST_PAYMENT_ONBOARDING_PATH)
+        : billing.isUnlimited || hasActivePaidSubscription(billing)
+          ? POST_PAYMENT_ONBOARDING_PATH
+          : resolveIncompleteOnboardingPath(profile, billing, `${pathname}${search}`);
+      const gated = NextResponse.redirect(new URL(targetPath, request.url));
       cookieJarMerge(response, gated);
       return gated;
     }
 
-    const billing = await getBillingEntitlement(supabase, user.id);
-    const isWorkspaceBrandScrape =
-      pathname.startsWith("/dashboard/searching") &&
-      request.nextUrl.searchParams.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) === "1";
-    if (shouldShowAwaitingQuotePage(billing) && !isWorkspaceBrandScrape) {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/awaiting-quote";
-      redirectUrl.searchParams.set("next", `${pathname}${search}`);
-      const gated = NextResponse.redirect(redirectUrl);
+    if (shouldShowPaywall(billing)) {
+      const gated = NextResponse.redirect(new URL(buildPaywallHref(`${pathname}${search}`), request.url));
       cookieJarMerge(response, gated);
       return gated;
     }
@@ -180,13 +162,23 @@ export async function updateSession(request: NextRequest, event?: NextFetchEvent
     }
   }
 
-  if (user && pathname.startsWith("/dashboard")) {
+  /** Daily activity is per day — skip the RPC when this browser already recorded today. */
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const activityCookie = `${user?.id ?? ""}:${todayUtc}`;
+  if (user && pathname.startsWith("/dashboard") && request.cookies.get(ACTIVITY_DAY_COOKIE)?.value !== activityCookie) {
     const activityPromise = recordUserDailyActivity(supabase, user.id);
     if (event?.waitUntil) {
       event.waitUntil(activityPromise);
     } else {
       await activityPromise;
     }
+    response.cookies.set(ACTIVITY_DAY_COOKIE, activityCookie, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 36,
+    });
   }
 
   return response;

@@ -30,6 +30,7 @@ const form: OnboardingCopy["form"] = {
   platforms: {
     title: "Your ad platforms",
     body: "Tell us everywhere you actively run ads. We scrape those libraries to map the angles, creatives, and offers your company's pushing right now—which powers competitive strategy inside Rival.",
+    comingSoon: "Coming soon",
   },
   markets: {
     title: "Regions for your ads",
@@ -75,21 +76,23 @@ const form: OnboardingCopy["form"] = {
     googleTransparency:
       "That link doesn't include a Transparency advertiser ID (…/advertiser/AR…). Open Google Ads Transparency Center, search for the brand, then open any creative or ad — copy the URL from that page's address bar and paste it here. Don't use only a shop domain or a ?domain= search results page.",
     linkedInKeyword: "This looks like a keyword search — results may include other companies",
+    metaKeywordSearch:
+      "This is a keyword search, not the brand's page — only ads from a page named like the brand are kept. For best results, open the brand's page in the Ad Library and copy that link (it contains view_all_page_id).",
   },
 };
 
 const planPickerMeta: Omit<OnboardingCopy["planPicker"], "plans"> = {
   allSet: "You're all set",
   choosePlanTitle: "Choose your plan",
-  intro: "Both plans include a 7-day free trial — full product, card required, cancel anytime.",
-  trialBadge: "7-day free trial",
+  intro: "Pick the plan that fits your team. Full product access as soon as checkout completes — cancel anytime.",
+  trialBadge: "Cancel anytime",
   billingAria: "Billing period",
   monthly: "Monthly",
   annual: "Annual",
   savePercentBadge: "Save {percent}%",
   perMonth: "/mo",
   saveVsMonthly: "Save {percent}% vs paying monthly",
-  startFreeTrial: "Start free trial",
+  startFreeTrial: "Continue to checkout",
   popular: "Popular",
   includes: "Includes",
   billedMonthly: "Billed monthly",

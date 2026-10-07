@@ -212,6 +212,27 @@ export const DISCOVERY_WHATS_NEW_WINDOWS: {
   { id: "7d", label: "This week", description: "Launched in the past 7 days" },
 ];
 
+const DISCOVERY_FEED_TABS: readonly DiscoveryFeedTab[] = [
+  "explore",
+  "trending",
+  "ultimate",
+  "whats_new",
+  "patterns",
+  "landing_pages",
+  "stats",
+];
+
+/** `?tab=` value → tab; accepts `whats-new` and `whats_new`. */
+export function parseDiscoveryTab(value: string | null | undefined): DiscoveryFeedTab | null {
+  const v = (value ?? "").trim().toLowerCase().replace(/-/g, "_");
+  return (DISCOVERY_FEED_TABS as readonly string[]).includes(v) ? (v as DiscoveryFeedTab) : null;
+}
+
+/** Tab → `?tab=` value (hyphenated); null for the default tab. */
+export function discoveryTabParam(tab: DiscoveryFeedTab): string | null {
+  return tab === "explore" ? null : tab.replace(/_/g, "-");
+}
+
 export function toolbarForTab(tab: DiscoveryFeedTab): Partial<DiscoveryToolbarState> {
   switch (tab) {
     case "trending":

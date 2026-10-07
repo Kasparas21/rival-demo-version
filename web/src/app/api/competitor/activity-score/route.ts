@@ -7,6 +7,7 @@ import { SIGNAL_WEIGHTS as W } from "@/lib/activity-score/types";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/types";
+import { ACTIVITY_TIER_LABELS } from "@/lib/activity-score/tier-mapping";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,10 +37,17 @@ function rowToResult(row: ScoreRow): ActivityScoreResult {
     activity_duration: s8,
   };
 
+  /** Same weighting as the computation: production value is dropped (and the rest rescaled) when it didn't apply. */
+  const raw = row.raw_metrics && typeof row.raw_metrics === "object" && !Array.isArray(row.raw_metrics)
+    ? (row.raw_metrics as Record<string, unknown>)
+    : {};
+  const applies = (k: ActivitySignalName) => k !== "production_value" || raw.productionValueApplies !== false;
+  const weightTotal = (Object.keys(W) as ActivitySignalName[]).filter(applies).reduce((sum, k) => sum + W[k], 0);
+
   const signals = {} as ActivityScoreResult["signals"];
   (Object.keys(W) as ActivitySignalName[]).forEach((k) => {
     const score = values[k];
-    const weight = W[k];
+    const weight = applies(k) ? W[k] / weightTotal : 0;
     signals[k] = { score, weight, contribution: score * weight };
   });
 
@@ -51,7 +59,8 @@ function rowToResult(row: ScoreRow): ActivityScoreResult {
   return {
     score: row.score,
     tier: row.tier as ActivityScoreResult["tier"],
-    tierLabel: row.tier_label,
+    /** From the tier number, so rows saved under the old size names show the current labels. */
+    tierLabel: ACTIVITY_TIER_LABELS[row.tier as ActivityScoreResult["tier"]] ?? row.tier_label,
     spendRange: { min: row.spend_range_min, max: row.spend_range_max },
     signals,
     topReasons,

@@ -12,6 +12,11 @@ import {
   TikTokLogo,
   PinterestLogo,
 } from "./platform-logos";
+import { DEFAULT_ENABLED_AD_PLATFORMS, isScrapeEnabledForPlatform } from "@/lib/ad-library/disabled-scrape-platforms";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
+import { DEFAULT_SELECTED_CHANNELS, type ChannelId } from "@/lib/channels";
+
+export { DEFAULT_SELECTED_CHANNELS, type ChannelId };
 
 export const CHANNELS = [
   { id: "meta", name: "Meta ads", Logo: MetaLogo },
@@ -20,12 +25,25 @@ export const CHANNELS = [
   { id: "linkedin", name: "LinkedIn ads", Logo: LinkedInLogo },
   { id: "pinterest", name: "Pinterest ads", Logo: PinterestLogo },
   { id: "snapchat", name: "Snapchat ads", Logo: SnapchatLogo },
-] as const;
+] as const satisfies readonly { id: ChannelId; name: string; Logo: unknown }[];
 
-export type ChannelId = (typeof CHANNELS)[number]["id"];
+/**
+ * False for platforms not switched on for the account (admin setting; pass `useEnabledAdPlatforms().enabled`).
+ * Unavailable platforms are shown as "Coming soon".
+ */
+export function isChannelAvailable(
+  id: ChannelId,
+  enabled: readonly string[] = DEFAULT_ENABLED_AD_PLATFORMS,
+): boolean {
+  return isScrapeEnabledForPlatform(id, enabled);
+}
 
-/** Default when opening the picker — exported for ads-library defaults */
-export const DEFAULT_SELECTED_CHANNELS: ChannelId[] = ["meta", "google"];
+export function availableChannelIds(enabled: readonly string[] = DEFAULT_ENABLED_AD_PLATFORMS): ChannelId[] {
+  return CHANNELS.filter((c) => isChannelAvailable(c.id, enabled)).map((c) => c.id);
+}
+
+export const CHANNEL_COMING_SOON_LABEL = "Coming soon";
+
 
 interface ChannelPickerModalProps {
   isOpen: boolean;
@@ -67,7 +85,9 @@ export function ChannelPickerModal({
     };
   }, [isOpen, onClose]);
 
+  const { enabled: enabledPlatforms } = useEnabledAdPlatforms();
   const toggle = (id: ChannelId) => {
+    if (!isChannelAvailable(id, enabledPlatforms)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -76,11 +96,11 @@ export function ChannelPickerModal({
     });
   };
 
-  const selectAll = () => setSelected(new Set(CHANNELS.map((c) => c.id)));
+  const selectAll = () => setSelected(new Set(availableChannelIds(enabledPlatforms)));
   const selectNone = () => setSelected(new Set());
 
   const handleConfirm = () => {
-    onConfirm(Array.from(selected));
+    onConfirm(Array.from(selected).filter((id) => isChannelAvailable(id, enabledPlatforms)));
     onClose();
   };
 
@@ -172,19 +192,23 @@ export function ChannelPickerModal({
             <div className="rival-subtle-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6">
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 {CHANNELS.map((channel) => {
-                  const isSelected = selected.has(channel.id);
+                  const available = isChannelAvailable(channel.id, enabledPlatforms);
+                  const isSelected = available && selected.has(channel.id);
                   const Logo = channel.Logo;
                   return (
                     <button
                       key={channel.id}
                       type="button"
                       onClick={() => toggle(channel.id)}
+                      disabled={!available}
                       className={[
                         "flex min-h-[52px] items-center gap-3 rounded-2xl border px-3 py-2.5 text-left transition-[border-color,background-color,box-shadow] duration-150 outline-none",
                         "focus-visible:ring-2 focus-visible:ring-[color:var(--rival-accent-blue)]/50 focus-visible:ring-offset-2",
-                        isSelected
-                          ? "border-[#343434]/85 bg-white shadow-[0_2px_12px_rgba(52,52,52,0.06)]"
-                          : "border-transparent bg-[#f8fafc] hover:border-[#e2e8f0] hover:bg-[#f1f5f9]",
+                        !available
+                          ? "cursor-not-allowed border-transparent bg-[#f8fafc] opacity-55"
+                          : isSelected
+                            ? "border-[#343434]/85 bg-white shadow-[0_2px_12px_rgba(52,52,52,0.06)]"
+                            : "border-transparent bg-[#f8fafc] hover:border-[#e2e8f0] hover:bg-[#f1f5f9]",
                       ].join(" ")}
                     >
                       <div
@@ -203,15 +227,21 @@ export function ChannelPickerModal({
                       >
                         {channel.name}
                       </span>
-                      <div
-                        className={[
-                          "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
-                          isSelected ? "bg-[#343434] text-white" : "border border-[#cbd5e1] bg-white text-transparent",
-                        ].join(" ")}
-                        aria-hidden
-                      >
-                        <Check size={12} strokeWidth={3} />
-                      </div>
+                      {available ? (
+                        <div
+                          className={[
+                            "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
+                            isSelected ? "bg-[#343434] text-white" : "border border-[#cbd5e1] bg-white text-transparent",
+                          ].join(" ")}
+                          aria-hidden
+                        >
+                          <Check size={12} strokeWidth={3} />
+                        </div>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-[#e2e8f0] px-2 py-0.5 text-[10px] font-semibold text-[#64748b]">
+                          {CHANNEL_COMING_SOON_LABEL}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

@@ -6,6 +6,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 
 import type { AdminUserUsageDetail } from "@/lib/admin/load-user-usage-detail";
 import type { AdminAdsScrapeMode } from "@/lib/billing/entitlements";
+import { AdminAdPlatformsSection } from "@/components/admin/admin-ad-platforms-section";
 import { formatQuotePrice } from "@/lib/billing/custom-quotes";
 
 type UserDetail = {
@@ -30,6 +31,7 @@ type UserDetail = {
     customPriceLabel: string | null;
   };
   adsScrapeMode: AdminAdsScrapeMode;
+  enabledAdPlatforms?: string[];
   usage: {
     month: string;
     adsScraped: number;
@@ -60,7 +62,7 @@ type UserDetail = {
 };
 
 const ADS_SCRAPE_MODE_OPTIONS: { value: AdminAdsScrapeMode; label: string }[] = [
-  { value: "auto", label: "Automatic (weekly cron)" },
+  { value: "auto", label: "Automatic (scheduled scrapes, Autopilot, AI enrichment)" },
   { value: "manual", label: "Manual only" },
 ];
 
@@ -470,10 +472,11 @@ export default function AdminUserDetailPage() {
       <section className="rounded-xl border border-sky-200 bg-sky-50/60 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900">Ads scraping schedule</h2>
+            <h2 className="text-sm font-semibold text-zinc-900">Automatic scraping</h2>
             <p className="mt-1 text-sm text-zinc-600">
-              Control whether this user&apos;s competitors are refreshed automatically by the weekly cron or only
-              when they trigger a manual scrape.
+              Whether scheduled jobs (ads, organic posts, landing pages, Autopilot, AI enrichment) run for this
+              user, or only scrapes they start themselves. Paying subscribers default to automatic; everyone else to
+              manual.
             </p>
           </div>
           <span
@@ -521,6 +524,8 @@ export default function AdminUserDetailPage() {
           <p className="mt-2 text-sm text-emerald-700">Ads scraping mode updated.</p>
         ) : null}
       </section>
+
+      <AdminAdPlatformsSection userId={userId} enabled={data.enabledAdPlatforms} />
 
       <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-xl border border-zinc-200 bg-white p-4">

@@ -46,9 +46,11 @@ import {
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
 import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progress-bar";
 import type { Locale } from "@/lib/i18n/locale";
-import { buildSignupAfterOnboardingPath } from "@/lib/auth/trial-flow";
+import { buildSignupAfterOnboardingPath, PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
 import { PlanPickerContent } from "@/components/billing/plan-picker-content";
-import { CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { availableChannelIds, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
+import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
+import { applyPartialOnboardingDraft } from "@/lib/onboarding/apply-draft";
 import { saveOnboardingDraft, readOnboardingDraft, clearOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
 import { resolveOnboardingCompanyHost } from "@/lib/onboarding/resolve-company-host";
 import {
@@ -61,6 +63,7 @@ import {
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { OnboardingCopy } from "@/lib/i18n/onboarding/types";
+import { invalidateSharedFetch } from "@/lib/client/shared-fetch";
 
 /** Workspace ad-profile step (2-column grid): label + input only */
 const workspaceAdProfileInputClass = `${glassInputClass} rounded-xl px-3 py-2.5 text-[14px]`;
@@ -137,12 +140,11 @@ const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
 const STEP_CHOOSE_PLAN = 5;
 
-const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = CHANNELS.map((c) => c.id);
+/** Default picks: the platforms every account has (Meta + Google). Others show as "Coming soon" unless switched on. */
+const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = availableChannelIds();
 
-function getHydrationDraft(skipDraft = false): OnboardingDraft | null {
-  if (skipDraft) return null;
-  if (typeof window === "undefined") return null;
-  return readOnboardingDraft();
+function availableChannels(channels: readonly ChannelId[], enabled?: readonly string[]): ChannelId[] {
+  return channels.filter((id) => isChannelAvailable(id, enabled));
 }
 
 function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
@@ -155,11 +157,9 @@ function isAllWorkspaceChannels(channels: ChannelId[]): boolean {
 function resolveInitialWorkspaceChannels(
   initialBrandSetup: AdsProfileSetup | null | undefined,
 ): ChannelId[] {
-  if (initialBrandSetup?.channels?.length) return initialBrandSetup.channels;
-  if (typeof window !== "undefined") {
-    const draft = readOnboardingDraft();
-    if (draft?.workspaceChannels?.length) return draft.workspaceChannels;
-  }
+  const saved = availableChannels(initialBrandSetup?.channels ?? []);
+  if (saved.length) return saved;
+  /** Guest draft picks are restored after mount, keeping the first render identical on server and client. */
   return ALL_WORKSPACE_CHANNEL_IDS;
 }
 
@@ -392,18 +392,15 @@ export function OnboardingForm({
   const lastContinueFromWebsiteHostRef = useRef<string>("");
 
   const skipDraftHydration = newBrandMode;
+  const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
+  /** The saved guest draft is applied after mount (see below) so server and client render the same first frame. */
   const [companyUrl, setCompanyUrl] = useState(() => {
-    const draft = getHydrationDraft(skipDraftHydration);
-    if (draft?.companyUrl?.trim()) return sanitizeCompanyUrlInput(draft.companyUrl);
     if (initialDomain) return sanitizeCompanyUrlInput(initialDomain);
     return sanitizeCompanyUrlInput(initialData?.company_url ?? "");
   });
 
   const [brandLoading, setBrandLoading] = useState(false);
-  const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(() => {
-    const draft = getHydrationDraft(skipDraftHydration);
-    return draft ? brandInsightsFromDraft(draft) : null;
-  });
+  const [brandInsights, setBrandInsights] = useState<BrandInsightsPayload | null>(null);
 
   /** Workspace (your ads) */
   const [workspaceChannels, setWorkspaceChannels] = useState<ChannelId[]>(() =>
@@ -419,17 +416,12 @@ export function OnboardingForm({
   const [workspaceMarketsAuto, setWorkspaceMarketsAuto] = useState(true);
   const [workspaceMarketsPickerExpanded, setWorkspaceMarketsPickerExpanded] = useState(false);
   const [companyScrape, setCompanyScrape] = useState<WorkspaceAdsScrapeHints>(() => {
-    const draft = getHydrationDraft(skipDraftHydration);
-    const hostFromDraft = draft?.companyHost
-      ? normalizedWorkspaceHost(draft.companyHost)
-      : "";
     const host =
-      hostFromDraft ||
-      (initialDomain
+      initialDomain
         ? normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialDomain))
         : newBrandMode
           ? ""
-          : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? "")));
+          : normalizedWorkspaceHost(sanitizeCompanyUrlInput(initialData?.company_url ?? ""));
     const base = emptyWorkspaceScrapeRow(host);
     if (!initialBrandSetup?.scrape) return base;
     return { ...base, ...initialBrandSetup.scrape };
@@ -445,12 +437,18 @@ export function OnboardingForm({
   }, [newBrandMode]);
 
   useEffect(() => {
+    if (skipDraftHydration) return;
     const draft = readOnboardingDraft();
     if (!draft) return;
-    if (!companyUrl.trim() && draft.companyUrl?.trim()) {
+    /** The draft wins over `?domain=` and the profile, as it did when it was read during render. */
+    if (draft.companyUrl?.trim()) {
       setCompanyUrl(sanitizeCompanyUrlInput(draft.companyUrl));
     }
-    if (!brandInsights && draft.brandInsights) {
+    const hostFromDraft = draft.companyHost ? normalizedWorkspaceHost(draft.companyHost) : "";
+    if (hostFromDraft) {
+      setCompanyScrape({ ...emptyWorkspaceScrapeRow(hostFromDraft), ...(initialBrandSetup?.scrape ?? {}) });
+    }
+    if (draft.brandInsights) {
       setBrandInsights(brandInsightsFromDraft(draft));
     }
     // Hydrate once on mount — guest draft survives Google OAuth redirect.
@@ -460,8 +458,9 @@ export function OnboardingForm({
   useEffect(() => {
     if (!initialBrandSetup || brandSetupHydratedRef.current) return;
     brandSetupHydratedRef.current = true;
-    if (initialBrandSetup.channels.length > 0) {
-      setWorkspaceChannels(initialBrandSetup.channels);
+    const savedChannels = availableChannels(initialBrandSetup.channels, enabledAdPlatforms);
+    if (savedChannels.length > 0) {
+      setWorkspaceChannels(savedChannels);
     }
     const codes = initialBrandSetup.adMarketCountryCodes;
     if (codes.length >= ONBOARDING_AD_MARKET_CODES.length) {
@@ -478,17 +477,18 @@ export function OnboardingForm({
       ...prev,
       ...initialBrandSetup.scrape,
     }));
-  }, [initialBrandSetup, normalizedCompany]);
+  }, [initialBrandSetup, normalizedCompany, enabledAdPlatforms]);
 
   /** Post-signup: restore platform picks from guest draft until DB sync catches up. */
   useEffect(() => {
     if (initialBrandSetup?.channels?.length) return;
     const draft = readOnboardingDraft();
-    if (!draft?.workspaceChannels?.length) return;
+    const draftChannels = availableChannels(draft?.workspaceChannels ?? [], enabledAdPlatforms);
+    if (!draftChannels.length) return;
     setWorkspaceChannels((prev) =>
-      isAllWorkspaceChannels(prev) ? draft.workspaceChannels : prev,
+      isAllWorkspaceChannels(prev) ? draftChannels : prev,
     );
-  }, [initialBrandSetup, postPaymentResume]);
+  }, [initialBrandSetup, postPaymentResume, enabledAdPlatforms]);
 
   const effectiveWorkspaceMarketCodes = useMemo(() => {
     if (workspaceMarketsGlobal) return [...ONBOARDING_AD_MARKET_CODES];
@@ -516,8 +516,9 @@ export function OnboardingForm({
   const showFaviconSlot = showTypingSkeleton || Boolean(faviconSrc);
   const companyLooksValid = isPlausiblePublicHostname(normalizedCompany);
   const toggleWorkspaceChannel = useCallback((id: ChannelId) => {
+    if (!isChannelAvailable(id, enabledAdPlatforms)) return;
     setWorkspaceChannels((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }, []);
+  }, [enabledAdPlatforms]);
 
   const toggleWorkspaceCountryMarket = useCallback((code: string) => {
     setWorkspaceMarketsAuto(false);
@@ -720,12 +721,20 @@ export function OnboardingForm({
       const draft = buildPrePaymentDraft();
       saveOnboardingDraft(draft);
 
-      if (!guestMode) {
-        const supabase = createSupabaseBrowserClient();
-        await supabase.auth.signOut();
+      if (guestMode) {
+        router.push(buildSignupAfterOnboardingPath(testerInviteCode));
+        router.refresh();
+        return true;
       }
 
-      router.push(buildSignupAfterOnboardingPath(testerInviteCode));
+      /** Already signed in (signed up directly): save the setup to this account and go to plans — never sign out. */
+      const saved = await applyPartialOnboardingDraft(userId, draft);
+      if (!saved.ok) {
+        console.warn("[onboarding] could not save pre-payment setup", saved.error);
+        setError(t.errors.somethingWrong);
+        return false;
+      }
+      router.push(PAYWALL_AFTER_TRIAL_PATH);
       router.refresh();
       return true;
     } catch {
@@ -769,6 +778,13 @@ export function OnboardingForm({
         setWorkspaceAdMarketCodes([]);
         setWorkspaceMarketsPickerExpanded(true);
         setStep(STEP_WORKSPACE_MARKETS);
+        return false;
+      }
+
+      /** An invalid Meta link used to save anyway — the scrape then showed "Connected" with 0 ads. */
+      if (workspaceChannels.includes("meta") && workspaceMetaInputError) {
+        setError(workspaceMetaInputError);
+        setStep(STEP_WORKSPACE_SCRAPE);
         return false;
       }
 
@@ -870,6 +886,7 @@ export function OnboardingForm({
             color: "#343434",
           }),
         });
+        invalidateSharedFetch("/api/");
         const created = (await createRes.json()) as {
           ok?: boolean;
           brand?: { id: string };
@@ -908,6 +925,7 @@ export function OnboardingForm({
           ...brandPatchBody,
         }),
       });
+      invalidateSharedFetch("/api/");
       let brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
 
       if (
@@ -925,6 +943,7 @@ export function OnboardingForm({
             ...coreOnly,
           }),
         });
+        invalidateSharedFetch("/api/");
         brandJson = (await brandRes.json()) as { ok?: boolean; error?: string };
       }
 
@@ -1216,14 +1235,16 @@ export function OnboardingForm({
             </div>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {CHANNELS.map(({ id, name, Logo }) => {
-                const on = workspaceChannels.includes(id);
+                const available = isChannelAvailable(id, enabledAdPlatforms);
+                const on = available && workspaceChannels.includes(id);
                 return (
                   <button
                     key={id}
                     type="button"
                     aria-pressed={on}
+                    disabled={!available}
                     onClick={() => toggleWorkspaceChannel(id)}
-                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-xl border px-2.5 py-3 text-left transition sm:flex sm:items-center sm:gap-4 sm:px-4 sm:py-4 ${
+                    className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 rounded-xl border px-2.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 sm:flex sm:items-center sm:gap-4 sm:px-4 sm:py-4 ${
                       on
                         ? "border-[#4a7fa5]/35 bg-white/55 text-gray-900 shadow-sm ring-1 ring-[#4a7fa5]/25"
                         : "border-gray-200/70 bg-white/30 text-gray-700 hover:border-gray-300/80 hover:bg-white/45"
@@ -1232,17 +1253,26 @@ export function OnboardingForm({
                     <Logo className="size-7 shrink-0 sm:size-9" />
                     <span className="min-w-0 text-[13px] font-semibold leading-snug sm:flex-1 sm:text-[16px]">
                       {name}
+                      {available ? null : (
+                        <span className="block text-[11px] font-medium text-gray-500 sm:text-[12px]">
+                          {t.platforms.comingSoon}
+                        </span>
+                      )}
                     </span>
-                    <span
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition sm:size-7 ${
-                        on
-                          ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
-                          : "border-gray-300/80 bg-white/60"
-                      }`}
-                      aria-hidden
-                    >
-                      {on ? <Check className="size-3.5 sm:size-4" strokeWidth={2.75} /> : null}
-                    </span>
+                    {available ? (
+                      <span
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition sm:size-7 ${
+                          on
+                            ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                            : "border-gray-300/80 bg-white/60"
+                        }`}
+                        aria-hidden
+                      >
+                        {on ? <Check className="size-3.5 sm:size-4" strokeWidth={2.75} /> : null}
+                      </span>
+                    ) : (
+                      <span className="size-6 shrink-0 sm:size-7" aria-hidden />
+                    )}
                   </button>
                 );
               })}
@@ -1264,7 +1294,7 @@ export function OnboardingForm({
               disabled={saving || !workspaceChannelsValid}
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
-              {compactPrePaymentFlow && saving ? t.saving : t.continueToSignup}
+              {compactPrePaymentFlow && saving ? t.saving : guestMode ? t.continueToSignup : t.continue}
             </button>
           </>
         ) : null}
@@ -1514,7 +1544,11 @@ export function OnboardingForm({
             <button
               type="button"
               onClick={() => void advanceFromAdProfiles()}
-              disabled={saving}
+              disabled={
+                saving ||
+                Boolean(workspaceChannels.includes("meta") && workspaceMetaInputError) ||
+                Boolean(workspaceChannels.includes("google") && workspaceGoogleInputError)
+              }
               className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
             >
               {saving

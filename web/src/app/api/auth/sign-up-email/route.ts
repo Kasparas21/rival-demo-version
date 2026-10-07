@@ -15,6 +15,8 @@ import { getSignupCopy } from "@/lib/i18n/auth";
 import { LOCALE_COOKIE, LOCALE_HEADER, parseLocale } from "@/lib/i18n/locale";
 import { getPostHogServerClient } from "@/lib/analytics/posthog-server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { safeNextPath } from "@/lib/auth/safe-next-path";
+import { clientIp, hitRateLimit, PUBLIC_EMAIL_LIMITS } from "@/lib/rate-limit";
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -57,9 +59,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Password required" }, { status: 400 });
   }
 
+  /** Public and sends email via the admin API (bypasses Supabase's own throttling) — cap per IP and per address. */
+  const [ipOk, emailOk] = await Promise.all([
+    hitRateLimit(`sign-up:ip:${clientIp(request)}`, PUBLIC_EMAIL_LIMITS.perIp),
+    hitRateLimit(`sign-up:email:${email}`, PUBLIC_EMAIL_LIMITS.perEmail),
+  ]);
+  if (!ipOk || !emailOk) {
+    return NextResponse.json(
+      { error: "Too many attempts. Please wait a few minutes and try again." },
+      { status: 429, headers: { "Retry-After": "600" } },
+    );
+  }
+
   const nextRaw = typeof body.next === "string" ? body.next : "/dashboard/spy";
-  const next =
-    nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/dashboard/spy";
+  const next = safeNextPath(nextRaw) ?? "/dashboard/spy";
 
   const testerInvite = resolveSignupTesterInvite(request, body.testerInvite);
 

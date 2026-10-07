@@ -7,6 +7,7 @@ import type { Database } from "@/lib/supabase/types";
 import { ORGANIC_INSIGHTS_MAX_TOKENS } from "./constants";
 import { insightAiSectionsEmpty, sanitizeInsightItem } from "./insight-utils";
 import { organicInsightsAnalysisSchema, type OrganicInsightsAnalysis } from "./types";
+import { knownLikes, repeatsHiddenLikesPlaceholder } from "@/lib/organic-content/known-likes";
 
 export { insightAiSectionsEmpty };
 
@@ -17,7 +18,8 @@ const INSIGHTS_POST_LIMIT = 30;
 
 type OrganicPostRow = Database["public"]["Tables"]["organic_posts"]["Row"];
 
-export function compactPostForInsights(post: OrganicPostRow) {
+/** `placeholderRepeated`: from {@link repeatsHiddenLikesPlaceholder} over the same posts. */
+export function compactPostForInsights(post: OrganicPostRow, placeholderRepeated = false) {
   const raw =
     post.raw_data && typeof post.raw_data === "object"
       ? (post.raw_data as Record<string, unknown>)
@@ -27,7 +29,8 @@ export function compactPostForInsights(post: OrganicPostRow) {
     post_id: post.post_id,
     platform: post.platform,
     content: (post.content ?? "").slice(0, 400),
-    likes: post.likes,
+    /** null = the account hides like counts (Instagram reports a placeholder 3). */
+    likes: knownLikes(post, placeholderRepeated),
     comments: post.comments,
     shares: post.shares,
     views: post.views,
@@ -150,7 +153,8 @@ export async function generateInsightsForPlatform(
   }
 
   const collabs = await fetchCollabsForInsights(admin, competitorId, userId, platform);
-  const compactPosts = posts.map(compactPostForInsights);
+  const repeated = repeatsHiddenLikesPlaceholder(posts);
+  const compactPosts = posts.map((p) => compactPostForInsights(p, repeated));
 
   const userPrompt = `Analyze the following organic social posts from a competitor brand.
 

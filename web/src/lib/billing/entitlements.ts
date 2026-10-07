@@ -3,6 +3,7 @@ import type { Database } from "@/lib/supabase/types";
 import { TESTER_FULL_PRO_PAYLOAD_KEY } from "@/lib/billing/claim-tester-access-core";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { getPolarProductIds, isPolarCustomProductId } from "@/lib/billing/config";
+import { PAYWALL_PATH } from "@/lib/billing/paywall";
 import {
   getActiveCustomQuoteForUser,
   getSentCustomQuoteForUser,
@@ -18,6 +19,11 @@ import {
   type PlanLimits,
   type PlanTier,
 } from "@/lib/billing/plan-limits";
+import {
+  DEFAULT_ENABLED_AD_PLATFORMS,
+  normalizeEnabledAdPlatforms,
+  type ToggleableAdPlatform,
+} from "@/lib/ad-library/disabled-scrape-platforms";
 
 export type { PlanLimits, PlanTier, DevPlanOverride };
 
@@ -34,6 +40,8 @@ export type BillingEntitlement = {
   adminPlanOverride: PlanTier | null;
   /** Admin-controlled ads scrape scheduling; defaults to automatic weekly cron. */
   adminAdsScrapeMode: AdminAdsScrapeMode;
+  /** Ad platforms switched on for this account by an admin (defaults to Meta + Google). */
+  enabledAdPlatforms: ToggleableAdPlatform[];
   polarProductId: string | null;
   polarCustomerId: string | null;
   polarSubscriptionId: string | null;
@@ -79,10 +87,27 @@ export function readAdminPlanOverride(rawPayload: unknown): PlanTier | null {
   return normalizePlanTier(v);
 }
 
-/** Admin dashboard: scheduled ads-library cron on (auto) or off (manual only). Defaults to auto. */
-export function readAdminAdsScrapeMode(rawPayload: unknown): AdminAdsScrapeMode {
+/**
+ * Admin dashboard: whether scheduled jobs (ads, organic, landing pages, Autopilot, enrichment) run for this
+ * account. An explicit admin choice always wins. Otherwise only real Polar subscribers default to auto —
+ * admin, complimentary and tester accounts stay manual unless an admin switches them on.
+ */
+export function readAdminAdsScrapeMode(
+  rawPayload: unknown,
+  options: { payingSubscriber?: boolean } = {},
+): AdminAdsScrapeMode {
   const v = readRawPayload(rawPayload).admin_ads_scrape_mode;
-  return v === "manual" ? "manual" : "auto";
+  if (v === "manual" || v === "auto") return v;
+  return options.payingSubscriber ? "auto" : "manual";
+}
+
+/** Admin dashboard: which ad platforms this account may scrape. Defaults to Meta + Google. */
+export function readEnabledAdPlatforms(rawPayload: unknown): ToggleableAdPlatform[] {
+  return (
+    normalizeEnabledAdPlatforms(readRawPayload(rawPayload).admin_enabled_ad_platforms) ?? [
+      ...DEFAULT_ENABLED_AD_PLATFORMS,
+    ]
+  );
 }
 
 export function normalizeAdminAdsScrapeMode(value: unknown): AdminAdsScrapeMode | null {
@@ -300,9 +325,9 @@ export function shouldUsePolarSubscriptionUi(
 }
 
 /**
- * Post-onboarding: user needs a custom quote / checkout (replaces plan picker).
+ * Post-onboarding paywall: no admin access and no active plan (paid, comped quote, or admin override).
  */
-export function shouldShowAwaitingQuotePage(
+export function shouldShowPaywall(
   billing: Pick<
     BillingEntitlement,
     "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
@@ -313,14 +338,14 @@ export function shouldShowAwaitingQuotePage(
   return true;
 }
 
-/** @deprecated Use shouldShowAwaitingQuotePage */
+/** @deprecated Use shouldShowPaywall */
 export function shouldShowPostOnboardingPlanPicker(
   billing: Pick<
     BillingEntitlement,
     "planTier" | "status" | "isUnlimited" | "hasPolarBillingRecord"
   >,
 ): boolean {
-  return shouldShowAwaitingQuotePage(billing);
+  return shouldShowPaywall(billing);
 }
 
 export function isTesterInviteBillingAccount(
@@ -396,7 +421,6 @@ export async function getBillingEntitlement(
   const status = data?.status ?? "none";
   const rawPayload = data?.raw_payload;
   const adminPlanOverride = readAdminPlanOverride(rawPayload);
-  const adminAdsScrapeMode = readAdminAdsScrapeMode(rawPayload);
   const isUnlimited = isManualAdminUnlimited(rawPayload) || adminPlanOverride === "admin";
   const devPlanOverride = readDevPlanOverride(rawPayload);
   const applyDevOverride = isUnlimited || isDevPlanOverrideEnabled();
@@ -433,6 +457,11 @@ export async function getBillingEntitlement(
   }
 
   const hasPolarBillingRecord = hasPolarBillingRecordFromRow(data);
+  const payingSubscriber =
+    Boolean(data?.polar_subscription_id?.trim()) &&
+    !isUnlimited &&
+    hasActivePaidSubscription({ planTier, status, isUnlimited: false });
+  const adminAdsScrapeMode = readAdminAdsScrapeMode(rawPayload, { payingSubscriber });
 
   return {
     hasAccess,
@@ -441,6 +470,7 @@ export async function getBillingEntitlement(
     planName,
     adminPlanOverride,
     adminAdsScrapeMode,
+    enabledAdPlatforms: readEnabledAdPlatforms(rawPayload),
     polarProductId: data?.polar_product_id ?? null,
     polarCustomerId: data?.polar_customer_id ?? null,
     polarSubscriptionId: data?.polar_subscription_id ?? null,
@@ -485,7 +515,7 @@ export function remainingMonthlyAdsProcessed(
 
 export function billingRequiredResponseBody(
   message = "A custom subscription is required to continue.",
-  checkoutUrl = "/awaiting-quote",
+  checkoutUrl = PAYWALL_PATH,
 ) {
   return {
     ok: false,
@@ -510,7 +540,7 @@ export function quotaExceededResponseBody(params: {
     used,
     requested,
     remaining: remainingMonthlyAdsProcessed(used, requested, limit),
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -520,7 +550,7 @@ export function freeTrialScrapeUsedResponseBody() {
     code: "free_trial_scrape_used",
     error:
       "Your free trial includes one competitor discovery scrape. Subscribe with your custom plan for ongoing refreshes.",
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -530,7 +560,7 @@ export function inactiveUserScrapePausedResponseBody() {
     code: "inactive_scrape_paused",
     error:
       "Automatic competitor tracking is paused because you have not opened Rival in the last week. Open the app to resume.",
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -540,7 +570,7 @@ export function subscriptionEndedScrapePausedResponseBody() {
     code: "subscription_ended_scrape_paused",
     error:
       "Your subscription has ended. Contact us or complete checkout with your custom plan to resume automatic tracking.",
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }
 
@@ -563,6 +593,6 @@ export function featureNotAvailableResponseBody(feature: string, requiredTier: P
     code: "feature_not_available",
     error: `${feature} is not included in your current plan.`,
     requiredTier,
-    checkoutUrl: "/awaiting-quote",
+    checkoutUrl: PAYWALL_PATH,
   };
 }

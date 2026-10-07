@@ -1,4 +1,4 @@
-import { DEFAULT_SELECTED_CHANNELS, type ChannelId } from "@/components/channel-picker-modal";
+import { DEFAULT_SELECTED_CHANNELS, type ChannelId } from "@/lib/channels";
 import type { AdsLibraryPlatform } from "./api-types";
 
 /** Platforms callable via Apify in `/api/ads/library` (aligned with the channel picker where applicable). */

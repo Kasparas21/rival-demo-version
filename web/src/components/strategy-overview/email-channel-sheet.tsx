@@ -14,6 +14,7 @@ import {
   formatRelativeTime,
   parseOffers,
 } from "@/components/email-intelligence/email-intelligence-ui";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 type InboxListResponse = {
   emails?: CompetitorEmailRow[];
@@ -54,7 +55,7 @@ export function EmailChannelSheet({ open, competitorId, nodeSummary, onClose }: 
     setSelectedId(null);
     setSelectedEmail(null);
     try {
-      const res = await fetch(`/api/email-trackers/${competitorId.trim()}`);
+      const res = await sharedFetch(`/api/email-trackers/${competitorId.trim()}`);
       const data = (await res.json()) as InboxListResponse;
       if (!res.ok) throw new Error(data.error ?? "Failed to load emails");
       const list = data.emails ?? [];

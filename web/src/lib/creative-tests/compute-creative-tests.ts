@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { googleAdCopy } from "@/lib/ad-library/google-ad-copy";
+import { angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 import type { Database } from "@/lib/supabase/types";
 
 export const KILLED_BUFFER_HOURS = 24;
@@ -19,6 +21,10 @@ export type ScrapedAdRowForCreativeTests = {
   ad_text: string;
   ai_extracted_angle: string | null;
   format: string;
+  /** Running per the latest scrape; when absent, "seen within a day of the last scrape" decides. */
+  is_active?: boolean | null;
+  /** Meta EU reach (people), when published. */
+  reach?: number | string | null;
 };
 
 export type CreativeTestComputed = {
@@ -63,8 +69,92 @@ export function medianLifespanDaysFloat(sortedAsc: number[]): number {
   return (sortedAsc[mid - 1]! + sortedAsc[mid]!) / 2;
 }
 
+/** Ads launched this close together can belong to one test. */
+export const TEST_WINDOW_DAYS = 3;
+/** Larger clusters are bulk launches (one had 151 ads), not A/B tests. */
+export const MAX_TEST_SIZE = 10;
+/** Copy overlap (word Jaccard) that makes two ads variants; lower when they share an angle category. */
+export const COPY_SIMILARITY_MIN = 0.6;
+export const COPY_SIMILARITY_SAME_ANGLE_MIN = 0.35;
+/**
+ * A survivor must outlast every stopped variant by this much. Versions stopped a day ago after the same
+ * run (or missed by one scrape) aren't a decision yet.
+ */
+export const WINNER_MIN_OUTLIVE_DAYS = 7;
+/** With several variants still running, a reach lead this large names the winner. */
+export const REACH_LEAD_MULTIPLIER = 3;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function testCopy(ad: ScrapedAdRowForCreativeTests): string {
+  const p = ad.platform.trim().toLowerCase();
+  /** Google/YouTube rows without real copy are generated scaffolding: every ad would look like a variant. */
+  const text = p === "google" || p === "youtube" ? googleAdCopy(ad.ad_text) : ad.ad_text ?? "";
+  return text.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function copyTokens(copy: string): Set<string> {
+  return new Set(copy.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3));
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const w of a) if (b.has(w)) inter += 1;
+  return inter / (a.size + b.size - inter);
+}
+
+function reachOf(ad: ScrapedAdRowForCreativeTests): number | null {
+  const n = typeof ad.reach === "string" ? Number(ad.reach) : ad.reach;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+type Prepared = {
+  ad: ScrapedAdRowForCreativeTests;
+  launchMs: number;
+  launchDate: string;
+  copy: string;
+  tokens: Set<string>;
+  angle: string | null;
+};
+
+function areVariants(a: Prepared, b: Prepared): boolean {
+  if (Math.abs(a.launchMs - b.launchMs) > TEST_WINDOW_DAYS * DAY_MS) return false;
+  if (a.copy === b.copy) return true;
+  const sim = jaccard(a.tokens, b.tokens);
+  if (sim >= COPY_SIMILARITY_MIN) return true;
+  return a.angle != null && a.angle !== "other" && a.angle === b.angle && sim >= COPY_SIMILARITY_SAME_ANGLE_MIN;
+}
+
+/** Variant clusters per platform (union of variant pairs). */
+function clusterVariants(ads: Prepared[]): Prepared[][] {
+  const parent = ads.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)));
+  const sorted = ads.map((a, i) => ({ a, i })).sort((x, y) => x.a.launchMs - y.a.launchMs);
+  for (let x = 0; x < sorted.length; x++) {
+    for (let y = x + 1; y < sorted.length; y++) {
+      if (sorted[y]!.a.launchMs - sorted[x]!.a.launchMs > TEST_WINDOW_DAYS * DAY_MS) break;
+      if (areVariants(sorted[x]!.a, sorted[y]!.a)) parent[find(sorted[x]!.i)] = find(sorted[y]!.i);
+    }
+  }
+  const groups = new Map<number, Prepared[]>();
+  ads.forEach((a, i) => {
+    const root = find(i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root)!.push(a);
+  });
+  return [...groups.values()];
+}
+
 /**
  * Pure computation used by DB persistence and unit tests.
+ *
+ * A test is 2–10 ads on one platform, launched within {@link TEST_WINDOW_DAYS} of each other, with
+ * near-identical copy (or the same angle category and similar copy). Status follows how advertisers end
+ * tests — they stop the losers and keep the winner running:
+ * - one variant still running 7+ days after the rest stopped, 14+ days in → winner
+ * - several still running → running, unless one leads on published reach by 3×
+ * - all stopped → fast fail (<7 days), a 2×-median outlier winner, or no clear winner
  */
 export function computeCreativeTestsData(params: {
   userId: string;
@@ -80,79 +170,86 @@ export function computeCreativeTestsData(params: {
     : Date.now();
   const killedThresholdMs = lastScrapedMs - KILLED_BUFFER_HOURS * 60 * 60 * 1000;
 
-  const groups = new Map<string, ScrapedAdRowForCreativeTests[]>();
+  const byPlatform = new Map<string, Prepared[]>();
   for (const ad of ads) {
     const launchDate = launchDateKeyForAd(ad);
-    if (!launchDate) continue;
-    const key = `${launchDate}|${ad.platform}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(ad);
+    const launchMs = Date.parse(`${launchDate}T00:00:00Z`);
+    const copy = testCopy(ad);
+    if (!launchDate || !Number.isFinite(launchMs) || copy.length < 10) continue;
+    const slug = angleSlugOf(ad.ai_extracted_angle);
+    const prepared: Prepared = { ad, launchMs, launchDate, copy, tokens: copyTokens(copy), angle: slug };
+    if (!byPlatform.has(ad.platform)) byPlatform.set(ad.platform, []);
+    byPlatform.get(ad.platform)!.push(prepared);
   }
 
   const computedTests: CreativeTestComputed[] = [];
 
-  for (const [key, groupAds] of groups) {
-    if (groupAds.length < 2) continue;
+  for (const [platform, platformAds] of byPlatform) {
+    for (const group of clusterVariants(platformAds)) {
+      if (group.length < 2 || group.length > MAX_TEST_SIZE) continue;
 
-    const [launchDate, platform] = key.split("|");
-    if (!launchDate || !platform) continue;
+      const launchDate = group.reduce((min, g) => (g.launchDate < min ? g.launchDate : min), group[0]!.launchDate);
+      const adLifespans = group.map(({ ad }) => {
+        const start = new Date(ad.first_seen_at).getTime();
+        const end = new Date(ad.last_seen_at).getTime();
+        const lifespanDays = Math.floor(Math.max(0, end - start) / DAY_MS);
+        const running = typeof ad.is_active === "boolean" ? ad.is_active : end >= killedThresholdMs;
+        return { ad, lifespanDays, running, reach: reachOf(ad) };
+      });
 
-    const adLifespans = groupAds.map((ad) => {
-      const start = new Date(ad.first_seen_at).getTime();
-      const end = new Date(ad.last_seen_at).getTime();
-      const lifespanMs = Math.max(0, end - start);
-      const lifespanDays = Math.floor(lifespanMs / (24 * 60 * 60 * 1000));
-      const isKilled = end < killedThresholdMs;
-      return { ad, lifespanDays, isKilled };
-    });
+      const sortedDays = [...adLifespans.map((a) => a.lifespanDays)].sort((x, y) => x - y);
+      const medianFloat = medianLifespanDaysFloat(sortedDays);
+      const maxDays = sortedDays[sortedDays.length - 1] ?? 0;
+      const survivors = adLifespans.filter((a) => a.running);
+      const stopped = adLifespans.length - survivors.length;
 
-    const allKilled = adLifespans.every((a) => a.isKilled);
-    const anyActive = !allKilled;
+      let status: CreativeTestStatus;
+      let winner: (typeof adLifespans)[number] | null = null;
 
-    const sortedDays = [...adLifespans.map((a) => a.lifespanDays)].sort((x, y) => x - y);
-    const medianFloat = medianLifespanDaysFloat(sortedDays);
-    const medianRounded = Math.round(medianFloat);
-    const maxDays = sortedDays[sortedDays.length - 1] ?? 0;
-
-    let status: CreativeTestStatus;
-    let winnerAdId: string | null = null;
-    let winnerLifespan: number | null = null;
-
-    if (anyActive) {
-      status = "running";
-    } else if (maxDays < ALL_KILLED_FAST_THRESHOLD_DAYS) {
-      status = "all_killed_fast";
-    } else {
-      const maxLifespan = maxDays;
-      const spread = medianFloat * WINNER_SPREAD_MULTIPLIER;
-      const candidates = adLifespans.filter(
-        (a) =>
-          a.lifespanDays === maxLifespan &&
-          a.lifespanDays >= spread &&
-          a.lifespanDays >= WINNER_MIN_LIFESPAN_DAYS,
-      );
-      if (candidates.length === 1) {
-        status = "winner_identified";
-        winnerAdId = candidates[0]!.ad.id;
-        winnerLifespan = candidates[0]!.lifespanDays;
+      if (survivors.length === 1 && stopped > 0) {
+        /** The others were switched off and this one kept going: the advertiser picked it. */
+        const survivor = survivors[0]!;
+        const longestStopped = Math.max(...adLifespans.filter((a) => !a.running).map((a) => a.lifespanDays));
+        winner =
+          survivor.lifespanDays >= WINNER_MIN_LIFESPAN_DAYS &&
+          survivor.lifespanDays - longestStopped >= WINNER_MIN_OUTLIVE_DAYS
+            ? survivor
+            : null;
+        status = winner ? "winner_identified" : "running";
+      } else if (survivors.length >= 2) {
+        const withReach = [...survivors].filter((a) => a.reach != null).sort((a, b) => b.reach! - a.reach!);
+        const lead = withReach.length === survivors.length && withReach.length >= 2
+          ? withReach[0]!.reach! >= withReach[1]!.reach! * REACH_LEAD_MULTIPLIER
+          : false;
+        winner = lead && withReach[0]!.lifespanDays >= WINNER_MIN_LIFESPAN_DAYS ? withReach[0]! : null;
+        status = winner ? "winner_identified" : "running";
+      } else if (maxDays < ALL_KILLED_FAST_THRESHOLD_DAYS) {
+        status = "all_killed_fast";
       } else {
-        status = "no_clear_winner";
+        const candidates = adLifespans.filter(
+          (a) =>
+            a.lifespanDays === maxDays &&
+            a.lifespanDays >= medianFloat * WINNER_SPREAD_MULTIPLIER &&
+            a.lifespanDays >= WINNER_MIN_LIFESPAN_DAYS,
+        );
+        winner = candidates.length === 1 ? candidates[0]! : null;
+        status = winner ? "winner_identified" : "no_clear_winner";
       }
-    }
 
-    computedTests.push({
-      competitor_id: competitorId,
-      user_id: userId,
-      launch_date: launchDate,
-      platform,
-      ad_ids: groupAds.map((a) => a.id),
-      winner_ad_id: winnerAdId,
-      test_status: status,
-      median_lifespan_days: medianRounded,
-      max_lifespan_days: maxDays,
-      winner_lifespan_days: winnerLifespan,
-      ad_count: groupAds.length,
-    });
+      computedTests.push({
+        competitor_id: competitorId,
+        user_id: userId,
+        launch_date: launchDate,
+        platform,
+        ad_ids: group.map((g) => g.ad.id),
+        winner_ad_id: winner?.ad.id ?? null,
+        test_status: status,
+        median_lifespan_days: Math.round(medianFloat),
+        max_lifespan_days: maxDays,
+        winner_lifespan_days: winner?.lifespanDays ?? null,
+        ad_count: group.length,
+      });
+    }
   }
 
   return computedTests;
@@ -178,7 +275,9 @@ export async function computeCreativeTestsForCompetitor(params: {
 
   const { data: ads, error: adsErr } = await supabase
     .from("scraped_ads")
-    .select("id, platform, first_seen_at, last_seen_at, ai_extracted_launch_date, ad_creative_url, ad_text, ai_extracted_angle, format")
+    .select(
+      "id, platform, first_seen_at, last_seen_at, ai_extracted_launch_date, ad_creative_url, ad_text, ai_extracted_angle, format, is_active, reach:raw_payload->transparency_by_location->eu_transparency->>eu_total_reach"
+    )
     .eq("user_id", userId)
     .eq("competitor_id", competitorId);
 

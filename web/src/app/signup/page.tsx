@@ -3,12 +3,13 @@ import { redirect } from "next/navigation";
 import { SignupForm } from "@/components/auth/signup-form";
 import { AuthSetupError } from "@/components/auth/auth-setup-error";
 import { firstParam, postOnboardingPath, safeAuthNextPath, type SearchParams } from "@/lib/auth/auth-page-helpers";
-import { getBillingEntitlement, shouldShowAwaitingQuotePage } from "@/lib/billing/entitlements";
+import { getBillingEntitlement, shouldShowPaywall } from "@/lib/billing/entitlements";
+import { buildPaywallHref } from "@/lib/billing/paywall";
 import { matchesTesterInviteCode, normalizeInviteCode } from "@/lib/billing/tester-invite";
 import { getTesterInviteCodeFromCookies } from "@/lib/billing/tester-invite-server";
-import { AWAITING_QUOTE_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
+import { PAYWALL_AFTER_TRIAL_PATH, isPostGuestSignupPath } from "@/lib/auth/trial-flow";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
-import { hasPrePaymentSetup, resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
+import { resolveIncompleteOnboardingPath } from "@/lib/onboarding/phase";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getSignupCopy } from "@/lib/i18n/auth";
@@ -51,21 +52,14 @@ export default async function SignupPage({
     const billing = await getBillingEntitlement(supabase, user.id);
     const dest = safePostOnboardingPath ?? DASHBOARD_HOME_PATH;
 
-    /** Trial funnel: show signup after guest onboarding — never skip straight to plans. */
-    if (
-      safeNext &&
-      isPostGuestSignupPath(safeNext) &&
-      !profile?.onboarding_completed &&
-      !hasPrePaymentSetup(profile)
-    ) {
-      await supabase.auth.signOut();
-    } else if (!profile?.onboarding_completed) {
+    /** Already signed in: never sign out here — the plan picker saves any guest onboarding draft to this account. */
+    if (!profile?.onboarding_completed) {
       if (safeNext && isPostGuestSignupPath(safeNext)) {
-        redirect(AWAITING_QUOTE_AFTER_TRIAL_PATH);
+        redirect(PAYWALL_AFTER_TRIAL_PATH);
       }
       redirect(resolveIncompleteOnboardingPath(profile, billing, dest));
-    } else if (shouldShowAwaitingQuotePage(billing)) {
-      redirect(`/awaiting-quote?next=${encodeURIComponent(dest)}`);
+    } else if (shouldShowPaywall(billing)) {
+      redirect(buildPaywallHref(dest));
     } else {
       redirect(dest);
     }

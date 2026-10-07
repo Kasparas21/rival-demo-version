@@ -246,7 +246,7 @@ export function StealableAnglesPanel({
         {visibleRows.map((row, idx) => {
           const ex = examples[row.angle];
           const busy = loadingAngles[row.angle];
-          const { hook, blurb } = parseAngleForDisplay(row.angle);
+          const { hook, blurb } = parseAngleForDisplay(row.exampleAngle ?? row.angle);
           const pill = angleCategoryPill(row.angle);
           const dot = lifespanDotClass(row.avgLifespanDays ?? null);
           const plat = row.platforms?.[0] ?? "meta";

@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildActivitySpikeDedupeKey,
   buildNewPlatformDedupeKey,
+  buildProvenWinnerDedupeKey,
   DEFAULT_SEVERITY,
 } from "@/lib/alerts/alert-types";
 import { generateAlertsForCompetitor } from "@/lib/alerts/generate-alerts-for-competitor";
@@ -109,138 +110,97 @@ function minimalPayload(overrides: Partial<CompetitorStrategyOverviewPayload> = 
   return { ...base, ...overrides };
 }
 
+type Call = { method: string; args: unknown[] };
+type Resolver = (table: string, calls: Call[]) => unknown;
+
+/** Chainable stand-in for the Supabase query builder: records calls and resolves through `resolve`. */
 function makeSupabaseMock(opts: {
-  planTier?: "starter" | "pro";
-  rules?: Array<{ alert_type: string; enabled: boolean; competitor_id: string | null; threshold?: object; notify_email?: boolean }>;
-  upsertRows?: unknown[];
+  rules?: Array<{ alert_type: string; enabled: boolean; competitor_id: string | null; threshold?: object }>;
+  /** created_at of the competitor's previous batch; null makes this scrape the first (baseline). */
+  previousBatchAt?: string | null;
+  /** created_at of the competitor's first batch; defaults to the previous batch (or this one). */
+  firstBatchAt?: string;
+  winnerAds?: Array<{ id: string; platform: string; ad_text: string; first_seen_at: string; reach?: string | null }>;
+  /** Ads first stored during this scrape. */
+  newAdCount?: number;
 }) {
-  const upsertRows: unknown[] = opts.upsertRows ?? [];
+  const upsertRows: unknown[] = [];
+  const queries: Array<{ table: string; calls: Call[] }> = [];
   const upsert = vi.fn(async (rows: unknown[]) => {
     upsertRows.push(...(Array.isArray(rows) ? rows : [rows]));
     return { error: null };
   });
 
-  const from = vi.fn((table: string) => {
-    if (table === "alert_rules") {
-      return {
-        select: () => ({
-          eq: async () => ({ data: opts.rules ?? [], error: null }),
-        }),
-      };
-    }
-    if (table === "saved_competitors") {
-      return {
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({
-                data: { name: "Maxima", brand_name: "Maxima" },
-                error: null,
-              }),
-            }),
-          }),
-        }),
-      };
-    }
+  const batchNow = new Date().toISOString();
+  const resolve: Resolver = (table, calls) => {
+    const has = (method: string) => calls.some((c) => c.method === method);
+    if (table === "alert_rules") return { data: opts.rules ?? [], error: null };
+    if (table === "saved_competitors") return { data: { name: "Maxima", brand_name: "Maxima" }, error: null };
     if (table === "scrape_batches") {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: { created_at: new Date().toISOString() }, error: null }),
-          }),
-        }),
-      };
+      const prev = opts.previousBatchAt === undefined ? "2026-09-01T00:00:00.000Z" : opts.previousBatchAt;
+      if (has("lt")) return { data: prev ? { created_at: prev } : null, error: null };
+      if (has("order")) return { data: { created_at: opts.firstBatchAt ?? prev ?? batchNow }, error: null };
+      return { data: { created_at: batchNow }, error: null };
     }
     if (table === "scraped_ads") {
-      return {
-        select: () => ({
-          eq: () => ({
-            eq: () => ({
-              eq: () => ({
-                gte: () => ({ count: 0, error: null }),
-                lte: () => ({ limit: async () => ({ data: [], error: null }) }),
-              }),
-            }),
-          }),
-        }),
+      if (has("lte")) return { data: opts.winnerAds ?? [], error: null };
+      return { count: opts.newAdCount ?? 0, error: null };
+    }
+    return { data: null, error: null };
+  };
+
+  const from = vi.fn((table: string) => {
+    if (table === "competitor_alerts") return { upsert };
+    const calls: Call[] = [];
+    queries.push({ table, calls });
+    const chain: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "lt", "lte", "gt", "gte", "order", "limit", "maybeSingle"]) {
+      chain[method] = (...args: unknown[]) => {
+        calls.push({ method, args });
+        return chain;
       };
     }
-    if (table === "competitor_alerts") {
-      return { upsert };
-    }
-    if (table === "billing_subscriptions") {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({
-              data: {
-                status: "active",
-                polar_product_id: opts.planTier === "pro" ? "pro-id" : "starter-id",
-                raw_payload: {},
-              },
-              error: null,
-            }),
-          }),
-        }),
-      };
-    }
-    if (table === "tester_invite_redemptions") {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: null, error: null }),
-          }),
-        }),
-      };
-    }
-    return {};
+    chain.then = (onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) =>
+      Promise.resolve(resolve(table, calls)).then(onFulfilled, onRejected);
+    return chain;
   });
 
-  return { from, upsertRows, upsert };
+  return { from, upsertRows, upsert, queries };
 }
 
-vi.mock("@/lib/billing/config", () => ({
-  getPolarProductIds: () => ({ pro: "pro-id", starter: "starter-id" }),
+const billing = { limits: { allowAlertRules: false } };
+vi.mock("@/lib/billing/entitlements", () => ({
+  getBillingEntitlement: async () => billing,
 }));
+
+beforeEach(() => {
+  billing.limits.allowAlertRules = false;
+});
+
+function payloadWithPlatform(activeAds: number): CompetitorStrategyOverviewPayload {
+  return minimalPayload({
+    insights: {
+      ...minimalPayload().insights,
+      platform_footprint: {
+        ...minimalPayload().insights.platform_footprint,
+        platforms: [
+          { platform: "tiktok", label: "TikTok", activeAds, estSpendEur: 0, funnelStage: "MOF", spendShare: 100 },
+        ],
+      },
+    },
+  });
+}
 
 describe("generateAlertsForCompetitor", () => {
   it("maps new_platform moves with dedupe keys and severity", async () => {
-    const before = minimalPayload({
-      insights: {
-        ...minimalPayload().insights,
-        platform_footprint: {
-          ...minimalPayload().insights.platform_footprint,
-          platforms: [],
-        },
-      },
-    });
-    const after = minimalPayload({
-      insights: {
-        ...minimalPayload().insights,
-        platform_footprint: {
-          ...minimalPayload().insights.platform_footprint,
-          platforms: [
-            {
-              platform: "tiktok",
-              label: "TikTok",
-              activeAds: 12,
-              estSpendEur: 0,
-              funnelStage: "MOF",
-              spendShare: 100,
-            },
-          ],
-        },
-      },
-    });
-
-    const mock = makeSupabaseMock({ planTier: "starter" });
+    const mock = makeSupabaseMock({});
 
     await generateAlertsForCompetitor({
       supabase: mock as never,
       userId,
       competitorId,
-      beforePayload: before,
-      afterPayload: after,
+      beforePayload: minimalPayload(),
+      afterPayload: payloadWithPlatform(12),
       batchId,
     });
 
@@ -259,29 +219,9 @@ describe("generateAlertsForCompetitor", () => {
     expect(row.body).toContain("12");
   });
 
-  it("skips disabled Pro rules", async () => {
-    const before = minimalPayload();
-    const after = minimalPayload({
-      insights: {
-        ...minimalPayload().insights,
-        platform_footprint: {
-          ...minimalPayload().insights.platform_footprint,
-          platforms: [
-            {
-              platform: "tiktok",
-              label: "TikTok",
-              activeAds: 5,
-              estSpendEur: 0,
-              funnelStage: "MOF",
-              spendShare: 100,
-            },
-          ],
-        },
-      },
-    });
-
+  it("skips disabled rules when the plan allows customising them", async () => {
+    billing.limits.allowAlertRules = true;
     const mock = makeSupabaseMock({
-      planTier: "pro",
       rules: [{ alert_type: "new_platform", enabled: false, competitor_id: null }],
     });
 
@@ -289,8 +229,8 @@ describe("generateAlertsForCompetitor", () => {
       supabase: mock as never,
       userId,
       competitorId,
-      beforePayload: before,
-      afterPayload: after,
+      beforePayload: minimalPayload(),
+      afterPayload: payloadWithPlatform(5),
       batchId,
     });
 
@@ -298,7 +238,7 @@ describe("generateAlertsForCompetitor", () => {
   });
 
   it("inserts activity spike with batch dedupe key", async () => {
-    const mock = makeSupabaseMock({ planTier: "starter" });
+    const mock = makeSupabaseMock({});
 
     await generateAlertsForCompetitor({
       supabase: mock as never,
@@ -317,4 +257,104 @@ describe("generateAlertsForCompetitor", () => {
     expect(spike!.dedupe_key).toBe(buildActivitySpikeDedupeKey(competitorId, batchId));
     expect(spike!.title).toContain("+25");
   });
+
+  it("says nothing on a competitor's first scrape (the baseline)", async () => {
+    const mock = makeSupabaseMock({
+      previousBatchAt: null,
+      winnerAds: [{ id: "ad-1", platform: "meta", ad_text: "Old ad", first_seen_at: "2025-01-01T00:00:00.000Z" }],
+    });
+
+    await generateAlertsForCompetitor({
+      supabase: mock as never,
+      userId,
+      competitorId,
+      beforePayload: minimalPayload(),
+      afterPayload: payloadWithPlatform(40),
+      batchId,
+      activityScoreBefore: 0,
+      activityScoreAfter: 80,
+    });
+
+    expect(mock.upsert).not.toHaveBeenCalled();
+    expect(mock.queries.some((q) => q.table === "scraped_ads")).toBe(false);
+  });
+
+  it("treats the other platforms' batches from that first scrape as baseline too", async () => {
+    const mock = makeSupabaseMock({
+      previousBatchAt: new Date(Date.now() - 33_000).toISOString(),
+      winnerAds: [{ id: "ad-2", platform: "google", ad_text: "Old ad", first_seen_at: "2025-01-01T00:00:00.000Z" }],
+    });
+
+    await generateAlertsForCompetitor({
+      supabase: mock as never,
+      userId,
+      competitorId,
+      beforePayload: minimalPayload(),
+      afterPayload: payloadWithPlatform(40),
+      batchId,
+    });
+
+    expect(mock.upsert).not.toHaveBeenCalled();
+  });
+
+  it("only flags winners that crossed the lifespan since the previous scrape", async () => {
+    const previousBatchAt = "2026-09-20T00:00:00.000Z";
+    const mock = makeSupabaseMock({
+      previousBatchAt,
+      winnerAds: [{ id: "ad-9", platform: "meta", ad_text: "Crossed", first_seen_at: "2026-06-15T00:00:00.000Z" }],
+    });
+
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+
+    const winnerQuery = mock.queries.find(
+      (q) => q.table === "scraped_ads" && q.calls.some((c) => c.method === "lte"),
+    )!;
+    const lowerBound = winnerQuery.calls.find((c) => c.method === "gt");
+    expect(lowerBound?.args[0]).toBe("first_seen_at");
+    expect(Date.parse(lowerBound!.args[1] as string)).toBeLessThan(Date.parse(previousBatchAt));
+    const winner = mock.upsertRows.find((r) => (r as { alert_type: string }).alert_type === "proven_winner") as
+      | { dedupe_key: string }
+      | undefined;
+    expect(winner?.dedupe_key).toBe(buildProvenWinnerDedupeKey(competitorId, "ad-9"));
+  });
+
+  it("raises a creative push when 8+ ads were first stored in this scrape", async () => {
+    const mock = makeSupabaseMock({ newAdCount: 31 });
+
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+
+    const push = mock.upsertRows.find((r) => (r as { alert_type: string }).alert_type === "creative_push") as
+      | { body: string; metadata: { newAdCount: number } }
+      | undefined;
+    expect(push?.metadata.newAdCount).toBe(31);
+    const countQuery = mock.queries.find(
+      (q) => q.table === "scraped_ads" && q.calls.some((c) => c.method === "gte"),
+    )!;
+    expect(countQuery.calls.find((c) => c.method === "gte")?.args[0]).toBe("created_at");
+  });
+
+  it("stays quiet below 8 new ads", async () => {
+    const mock = makeSupabaseMock({ newAdCount: 7 });
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+    expect(mock.upsertRows.some((r) => (r as { alert_type: string }).alert_type === "creative_push")).toBe(false);
+  });
+
+  it("alerts on at most 5 proven winners per scrape, strongest reach first", async () => {
+    const winnerAds = Array.from({ length: 12 }, (_, i) => ({
+      id: `w${i}`,
+      platform: "meta",
+      ad_text: "Launch ad",
+      first_seen_at: "2026-09-03T00:00:00.000Z",
+      reach: String(1000 * (i + 1)),
+    }));
+    const mock = makeSupabaseMock({ previousBatchAt: "2026-10-04T00:00:00.000Z", winnerAds });
+
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+
+    const winners = mock.upsertRows
+      .filter((r) => (r as { alert_type: string }).alert_type === "proven_winner")
+      .map((r) => (r as { metadata: { scrapedAdId: string } }).metadata.scrapedAdId);
+    expect(winners).toEqual(["w11", "w10", "w9", "w8", "w7"]);
+  });
 });
+

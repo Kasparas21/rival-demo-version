@@ -10,6 +10,7 @@ import {
 import { ORGANIC_PLATFORMS, type OrganicPlatform, type OrganicSocials } from "@/lib/organic-content/types";
 import { isDebugPlatformClassificationEnabled } from "@/lib/debug/platform-classification";
 import { cn } from "@/lib/utils";
+import { invalidateSharedFetch } from "@/lib/client/shared-fetch";
 
 type OrganicSettingsPanelProps = {
   competitorId: string;
@@ -130,6 +131,7 @@ export function OrganicSettingsPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ socials }),
       });
+      invalidateSharedFetch("/api/");
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;

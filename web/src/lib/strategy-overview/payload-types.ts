@@ -54,6 +54,8 @@ export type PlatformNodePayload = {
   estSpendEur: number;
   estSpendEurLow?: number;
   estSpendEurHigh?: number;
+  /** Ads whose spend comes from Meta's published reach (the rest use the ad-count estimate). */
+  reachBasedAds?: number;
   funnelStage: FunnelStage;
   position: { x: number; y: number };
 };
@@ -86,6 +88,12 @@ export type FunnelEdgePayload = {
   confidence: number;
   reasoning: string;
   style: "solid" | "dashed";
+  /** Why the arrow is drawn: specific landing pages both ends send people to (absent on older payloads). */
+  evidence?: {
+    sharedLandingPages: string[];
+    fromAds: number;
+    toAds: number;
+  };
 };
 
 export type AudienceSignals = {
@@ -281,6 +289,11 @@ export type StrategyChannelSignals = {
 };
 
 export type StrategyMapPayload = {
+  /**
+   * Live ads per platform left off the stage grid because they have no stage: `pending` still wait for the
+   * classifier, `noText` have no readable copy (Google rows that only carry advertiser and dates).
+   */
+  unclassifiedByPlatform?: { platform: StrategyPlatform; pending: number; noText: number; total: number }[];
   title: string;
   competitor: CompetitorStrategyMeta;
   totalAdSpend: TotalAdSpend;
@@ -399,11 +412,15 @@ export type PlatformFootprintCard = InsightCardBase & {
     spendShare: number;
     /** Earliest `first_seen_at` among active ads on this platform (ISO), for “Active since” UI. */
     earliestFirstSeenAt?: string | null;
+    /** Ads priced from Meta's published reach on this platform. */
+    reachBasedAds?: number;
   }[];
   totalActiveAds: number;
   totalEstSpendEur: number;
   totalEstSpendEurLow?: number;
   totalEstSpendEurHigh?: number;
+  /** Ads priced from real reach, across all platforms (of `totalActiveAds`). */
+  reachBasedAds?: number;
   platformCount: number;
 };
 
@@ -426,7 +443,10 @@ export type VoiceToneByPlatformInsight = {
 
 /** Angle × platform rollups for comparison panels. */
 export type AnglesByPlatformInsight = {
+  /** Category name (e.g. "Social proof"); see `lib/strategy-overview/ad-angles`. */
   angle: string;
+  /** Full enrichment label of the category's longest-running ad, for showing a concrete hook. */
+  exampleAngle?: string;
   totalCount: number;
   platforms: StrategyPlatform[];
   platformCounts: Partial<Record<StrategyPlatform, number>>;
@@ -453,6 +473,14 @@ export type AudienceInferenceResult = {
   segments: AudienceInferenceSegment[];
   primarySegmentName: string;
   summary: string;
+  /**
+   * What the inference was given beyond platform mix and angles: Meta's published reach and targeting, and
+   * how many real ad texts. Absent on results made before it existed.
+   */
+  evidence?: {
+    meta: import("@/lib/comparison/meta-audience-evidence").MetaAudienceEvidence | null;
+    copySamples: number;
+  };
 };
 
 export type InsightCardsPayload = {

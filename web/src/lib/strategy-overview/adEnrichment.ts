@@ -4,6 +4,9 @@ import { z } from "zod";
 
 import type { Database, Json } from "@/lib/supabase/types";
 import { llmFast, modelLabelForTask } from "@/lib/llm/anthropic";
+import { SHOPPING_AD_PREFIX } from "@/lib/ad-library/transcribe-ad-creatives";
+import { googleAdCopy } from "@/lib/ad-library/google-ad-copy";
+import { AD_ANGLE_SLUGS, normalizeAngleSlug, type AdAngleSlug } from "@/lib/strategy-overview/ad-angles";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
 import {
   SCRAPED_ADS_DERIVATION_SELECT,
@@ -80,18 +83,6 @@ const BATCH_MAX = 15;
 
 const MIN_AD_TEXT_CHARS = 10;
 
-const ALLOWED_ANGLES = new Set([
-  "discount",
-  "social_proof",
-  "urgency",
-  "quality",
-  "price",
-  "speed",
-  "transformation",
-  "fear",
-  "curiosity",
-  "identity",
-]);
 
 const voiceToneSchema = z.object({
   formal: z.number().min(0).max(1),
@@ -109,12 +100,33 @@ const modelRowSchema = z.object({
   body_theme: z.string().optional(),
 });
 
+/**
+ * Text the model should label. Google/YouTube rows drop the generated "Advertiser — domain · Shown …"
+ * scaffolding, so a row with no real copy ends up empty and is skipped instead of labelled from metadata.
+ */
+export function enrichmentTextForAd(
+  adText: string | null | undefined,
+  platform: string,
+  creativeText?: string | null,
+): string {
+  const p = platform.trim().toLowerCase();
+  let text = p === "google" || p === "youtube" ? googleAdCopy(adText) : (adText ?? "");
+  /** Google rows mostly carry no copy; the transcription of the ad's image stands in for it. */
+  if (text.trim().length < MIN_AD_TEXT_CHARS && creativeText?.trim()) text = creativeText;
+  return prepareAdTextForEnrichment(text);
+}
+
 /** First letter or digit (any Unicode script) — strips emoji, stray slashes, ZWSP, etc. */
 export function prepareAdTextForEnrichment(raw: string): string {
   const t = raw.trim();
   const match = t.match(/[\p{L}\p{N}]/u);
   if (!match || match.index == null) return t;
   return t.slice(match.index).trim();
+}
+
+/** Content hash of what the classifier saw: the ad text plus any transcription of its image. */
+export function enrichmentContentHash(row: { ad_text: string; creative_text?: string | null }): string {
+  return hashAdText(`${row.ad_text}${row.creative_text ? `\n${row.creative_text}` : ""}`);
 }
 
 export function hashAdText(text: string): string {
@@ -126,7 +138,61 @@ type EnrichItem = {
   ad_text: string;
   format: string;
   platform: string;
+  /** Button text ("Book Now", "Learn More"), headline, link description and landing page, when published. */
+  cta?: string;
+  headline?: string;
+  link_description?: string;
+  landing_page?: string;
 };
+
+function payloadString(p: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = p[k];
+    if (typeof v === "string" && v.trim()) return v.trim().slice(0, 200);
+  }
+  return undefined;
+}
+
+/** Host and path only: query strings are tracking noise. */
+function landingPageForPrompt(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    return `${u.hostname.replace(/^www\./, "")}${u.pathname === "/" ? "" : u.pathname}`.slice(0, 160);
+  } catch {
+    return undefined;
+  }
+}
+
+const BOOKING_CTA = /^(book now|get offer|call now|apply now|get quote|send whatsapp message|order now|buy now|request time|book a test drive)$/i;
+/** A price in the copy ("nuo 544 €", "$1,299", "1 199 EUR"); percentages alone are often satisfaction stats. */
+const PRICE = /(?:[€$£]\s?\d)|(?:\d[\d\s.,]*\s?(?:€|eur\b|usd\b|\$|£))/i;
+
+/**
+ * BOF regardless of what the model said: a stated price or a booking-style button is direct response by the
+ * prompt's own first rule, and the model sometimes skipped past it (a team intro with "Book now" as TOF).
+ */
+export function forcedBofFromSignals(item: Pick<EnrichItem, "ad_text" | "cta" | "headline" | "link_description">): boolean {
+  if (item.cta && BOOKING_CTA.test(item.cta.trim())) return true;
+  if (item.ad_text.startsWith(SHOPPING_AD_PREFIX)) return true;
+  return [item.ad_text, item.headline, item.link_description].some((t) => (t ? PRICE.test(t) : false));
+}
+
+/**
+ * Signals beyond the body text. The classifier used to see the text alone; on a hand-checked sample about
+ * a quarter of Meta stages contradicted the prompt's own rules (a price offer as MOF, an explainer as BOF),
+ * while the CTA button and landing page that settle most of those were already stored.
+ */
+export function enrichmentSignalsForAd(rawPayload: unknown): Pick<EnrichItem, "cta" | "headline" | "link_description" | "landing_page"> {
+  if (!rawPayload || typeof rawPayload !== "object") return {};
+  const p = rawPayload as Record<string, unknown>;
+  return {
+    cta: payloadString(p, "cta", "ctaText", "cta_text", "callToAction"),
+    headline: payloadString(p, "headline", "title"),
+    link_description: payloadString(p, "linkDescription", "link_description"),
+    landing_page: landingPageForPrompt(payloadString(p, "destinationUrl", "landingPageUrl", "link_url")),
+  };
+}
 
 /**
  * Maps model output to TOF | MOF | BOF. Accepts exact tokens plus common EN synonyms and light Lithuanian/French/German cues.
@@ -177,17 +243,9 @@ export function normalizeFunnel(raw: string): "TOF" | "MOF" | "BOF" | null {
   return null;
 }
 
-/** Canonical angle slug, free-text label, or best-effort from headline/body fields. */
-export function resolveAngle(r: z.infer<typeof modelRowSchema>): string | null {
-  const raw = typeof r.angle === "string" ? r.angle.trim().toLowerCase().replace(/\s+/g, "_") : "";
-  if (raw && ALLOWED_ANGLES.has(raw)) return raw;
-  const ft = typeof r.angle_free_text === "string" ? r.angle_free_text.trim() : "";
-  if (ft.length >= 2) return ft.slice(0, 80);
-  const hook = typeof r.headline_guess === "string" ? r.headline_guess.trim() : "";
-  if (hook.length >= 3) return hook.slice(0, 80);
-  const body = typeof r.body_theme === "string" ? r.body_theme.trim() : "";
-  if (body.length >= 3) return body.slice(0, 80);
-  return null;
+/** Always one of {@link AD_ANGLE_SLUGS}: anything off the list (or missing) becomes "other". */
+export function resolveAngle(r: z.infer<typeof modelRowSchema>): AdAngleSlug {
+  return normalizeAngleSlug(r.angle) ?? normalizeAngleSlug(r.angle_free_text) ?? "other";
 }
 
 function buildEnrichmentUserPrompt(items: EnrichItem[]): string {
@@ -201,37 +259,41 @@ Fields:
 - headline_guess: main hook (≤100 chars). Use the ad's language or English if mixed — short and specific.
 - body_theme: what the ad does in one phrase (≤100 chars).
 
-- angle: exactly one of: discount, social_proof, urgency, quality, price, speed, transformation, fear, curiosity, identity — **only** if it clearly fits. Else use "" and put a short label in angle_free_text (≤80 chars, any language).
+- angle: **exactly one** of: ${AD_ANGLE_SLUGS.join(", ")}. Never invent another label.
+  - education = teaches or explains (how-to, Q&A, tips); brand = awareness, launches, product showcase or story with no other hook
+  - other = only when none of the above fits at all
 
-- funnel_stage: **exactly one string**, must be one of: **TOF**, **MOF**, **BOF** (Latin letters only).
-  - TOF = awareness / brand / reach / story, light CTA
-  - MOF = education / comparison / trust / community
-  - BOF = direct response: offers, appointments, savings, "consultation", prices, strong booking/buy CTA
+- funnel_stage: **exactly one string**, must be one of: **TOF**, **MOF**, **BOF** (Latin letters only). Decide in this order:
+  1. **BOF** if the ad states a price, discount, instalment plan, free consultation / check-up / scan, a limited-time offer, or asks people to book, register, call or buy — even when the rest of the text educates. A booking/offer/pricing/registration landing page or a "Book Now", "Get Offer", "Sign Up", "Apply Now", "Call Now" button also points to BOF.
+  2. **MOF** if it explains a problem, procedure or product, compares options, or builds trust (introducing the team or a doctor, experience, guarantees, reviews) **without** an offer or price.
+  3. **TOF** if it is brand story, a launch or announcement, lifestyle or entertainment, with no offer and no explanation.
+  Use "cta", "headline", "link_description" and "landing_page" when present; they often settle it. "Learn More" alone is neutral.
 
 - voice_tone: **required** object with numbers in [0,1]: formal (0 casual → 1 formal), emotional (0 rational → 1 emotional), confidence (your certainty; use 0.25–0.45 for very short or truncated copy).
 
 Worked examples (format only — your ids come from Ads):
 
 1) English long Meta:
-{"id":"ex1","angle":"urgency","angle_free_text":"","funnel_stage":"MOF","voice_tone":{"formal":0.55,"emotional":0.5,"confidence":0.82},"headline_guess":"Limited-time playoff watch party","body_theme":"Drive tune-in with countdown energy"}
+{"id":"ex1","angle":"urgency","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.6,"confidence":0.82},"headline_guess":"Last pairs at 30% off, ends Sunday","body_theme":"Clearance countdown with discount"}
 
 2) Lithuanian short Google Search:
-{"id":"ex2","angle":"price","angle_free_text":"","funnel_stage":"BOF","voice_tone":{"formal":0.65,"emotional":0.35,"confidence":0.55},"headline_guess":"Implantai nuo 999€","body_theme":"Price-led dental offer"}
+{"id":"ex2","angle":"price","funnel_stage":"BOF","voice_tone":{"formal":0.65,"emotional":0.35,"confidence":0.55},"headline_guess":"Implantai nuo 999€","body_theme":"Price-led dental offer"}
 
 3) German image ad:
-{"id":"ex3","angle":"quality","angle_free_text":"","funnel_stage":"MOF","voice_tone":{"formal":0.7,"emotional":0.4,"confidence":0.68},"headline_guess":"Zahnimplantate mit Garantie","body_theme":"Trust and quality positioning"}
+{"id":"ex3","angle":"quality","funnel_stage":"MOF","voice_tone":{"formal":0.7,"emotional":0.4,"confidence":0.68},"headline_guess":"Zahnimplantate mit Garantie","body_theme":"Trust and quality positioning"}
 
 4) French awareness:
-{"id":"ex4","angle":"curiosity","angle_free_text":"","funnel_stage":"TOF","voice_tone":{"formal":0.5,"emotional":0.55,"confidence":0.72},"headline_guess":"Découvrez une nouvelle routine sourire","body_theme":"Soft brand / discovery"}
+{"id":"ex4","angle":"curiosity","funnel_stage":"TOF","voice_tone":{"formal":0.5,"emotional":0.55,"confidence":0.72},"headline_guess":"Découvrez une nouvelle routine sourire","body_theme":"Soft brand / discovery"}
 
 Ads:
 ${JSON.stringify(items)}
 
 Return **only** a valid JSON array (no markdown):
-[{"id":"uuid","angle":"","angle_free_text":"...","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.5,"confidence":0.5},"headline_guess":"...","body_theme":"..."},...]`;
+[{"id":"uuid","angle":"price","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.5,"confidence":0.5},"headline_guess":"...","body_theme":"..."},...]`;
 }
 
-async function enrichBatchWithLlm(
+/** Exported for one-off checks against the live model; production code goes through enrichScrapedAdsIfNeeded. */
+export async function enrichBatchWithLlm(
   items: EnrichItem[]
 ): Promise<{ rows: z.infer<typeof modelRowSchema>[] | null; costUsd: number; preZodCount: number }> {
   console.log("[enrich-trace] enrichBatch called, items=", items.length, "model=", modelLabelForTask("ad_enrichment"));
@@ -390,13 +452,13 @@ export async function enrichScrapedAdsIfNeeded(
   const textCandidates: TextCandidate[] = [];
 
   for (const r of need) {
-    const prepared = prepareAdTextForEnrichment(r.ad_text ?? "");
+    const prepared = enrichmentTextForAd(r.ad_text, r.platform, r.creative_text);
     if (prepared.length < MIN_AD_TEXT_CHARS) {
       skippedNoText += 1;
       skippedNoTextIds.push(r.id);
       continue;
     }
-    textCandidates.push({ row: r, hash: hashAdText(r.ad_text) });
+    textCandidates.push({ row: r, hash: enrichmentContentHash(r) });
   }
 
   if (skippedNoTextIds.length > 0) {
@@ -451,12 +513,13 @@ export async function enrichScrapedAdsIfNeeded(
     console.log("[enrich-trace] batch index=", i, "batch size=", batch.length);
 
     const items: EnrichItem[] = batch.map((r) => {
-      const cleaned = prepareAdTextForEnrichment(r.ad_text ?? "");
+      const cleaned = enrichmentTextForAd(r.ad_text, r.platform, r.creative_text);
       return {
         id: r.id,
         ad_text: cleaned.slice(0, 4000),
         format: r.format,
         platform: r.platform,
+        ...enrichmentSignalsForAd(r.raw_payload),
       };
     });
 
@@ -524,9 +587,11 @@ export async function enrichScrapedAdsIfNeeded(
         continue;
       }
 
-      const fs = normalizeFunnel(r.funnel_stage);
+      const item = items.find((it) => it.id === row.id);
+      const modelStage = normalizeFunnel(r.funnel_stage);
+      const fs = modelStage && item && forcedBofFromSignals(item) ? "BOF" : modelStage;
       const angleResolved = resolveAngle(r);
-      if (!fs || !angleResolved) {
+      if (!fs) {
         failedInvalid += 1;
         batchFailed += 1;
         console.warn(
@@ -569,7 +634,7 @@ export async function enrichScrapedAdsIfNeeded(
         continue;
       }
 
-      const h = hashAdText(row.ad_text);
+      const h = enrichmentContentHash(row);
       await supabase.from("ad_enrichment_log").insert({
         user_id: userId,
         scraped_ad_id: row.id,

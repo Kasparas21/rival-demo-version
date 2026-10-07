@@ -5,7 +5,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureUserProfile } from "@/lib/auth/profile";
 import { claimTesterAccessForUser } from "@/lib/billing/claim-tester-access-core";
 import {
-  AWAITING_QUOTE_AFTER_TRIAL_PATH,
+  PAYWALL_AFTER_TRIAL_PATH,
   resolveAuthCallbackNext,
   shouldRedirectToTrialComplete,
 } from "@/lib/auth/trial-flow";
@@ -32,17 +32,6 @@ const OTP_TYPES = new Set<EmailOtpType>([
   "invite",
   "email_change",
 ]);
-
-function safeNextPath(value: string | null | undefined): string | null {
-  if (!value) return null;
-  let decoded = value;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    decoded = value;
-  }
-  return decoded.startsWith("/") && !decoded.startsWith("//") && decoded !== "/login" ? decoded : null;
-}
 
 function postOnboardingPath(path: string): string {
   return path === "/checkout" ? "/api/billing/checkout" : path;
@@ -192,18 +181,18 @@ export async function GET(request: NextRequest) {
   const RESET_PASSWORD_PATH = "/reset-password";
 
   let pathname: string;
-  let searchFromIncomplete: string | null = null;
+  let destSearch: string | null = null;
   if (safePostOnboardingPath === RESET_PASSWORD_PATH) {
     pathname = RESET_PASSWORD_PATH;
   } else if (!onboardingDone && trialFunnel) {
     if (claimedTesterAccess || billing.isUnlimited) {
       const postPayment = new URL(POST_PAYMENT_ONBOARDING_PATH, url.origin);
       pathname = postPayment.pathname;
-      searchFromIncomplete = postPayment.search;
+      destSearch = postPayment.search;
     } else {
-      const trialPlans = new URL(AWAITING_QUOTE_AFTER_TRIAL_PATH, url.origin);
+      const trialPlans = new URL(PAYWALL_AFTER_TRIAL_PATH, url.origin);
       pathname = trialPlans.pathname;
-      searchFromIncomplete = trialPlans.search;
+      destSearch = trialPlans.search;
     }
   } else if (!onboardingDone) {
     const incompleteTarget = resolveIncompleteOnboardingPath(
@@ -213,20 +202,23 @@ export async function GET(request: NextRequest) {
     );
     const parsedIncomplete = new URL(incompleteTarget, url.origin);
     pathname = parsedIncomplete.pathname;
-    searchFromIncomplete = parsedIncomplete.search;
+    destSearch = parsedIncomplete.search;
   } else if (resolvedNext) {
-    pathname = resolvedNext;
+    /** `next` can carry a query (`/dashboard/discovery?tab=patterns`); `URL.pathname` would escape its `?`. */
+    const parsedNext = new URL(resolvedNext, url.origin);
+    pathname = parsedNext.pathname;
+    destSearch = parsedNext.search || null;
   } else {
     pathname = "/dashboard/spy";
   }
 
   const finalDest = request.nextUrl.clone();
   finalDest.pathname = pathname;
-  finalDest.search = searchFromIncomplete ?? "";
+  finalDest.search = destSearch ?? "";
   finalDest.hash = "";
   if (
     !onboardingDone &&
-    !searchFromIncomplete &&
+    !destSearch &&
     pathname === "/onboarding" &&
     resolvedNext
   ) {

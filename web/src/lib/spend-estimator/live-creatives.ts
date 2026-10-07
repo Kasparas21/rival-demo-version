@@ -43,13 +43,16 @@ export function extractStableCreativeKey(platform: string, rawPayload: unknown, 
   return `${pl}:row:${rowId}`;
 }
 
-/** Creative is "live" if any source row is active in DB or was seen recently. */
+/**
+ * Creative is "live" when the DB says it is running. Only rows with no `is_active` value fall back to
+ * "seen within the recency window" — an ad marked inactive no longer counts as running for 45 days.
+ */
 export function isCreativeLive(
   row: Pick<RowWithCreativePayload, "is_active" | "last_seen_at">,
   nowMs: number,
   recencyDays: number = LIVE_AD_RECENCY_DAYS
 ): boolean {
-  if (row.is_active === true) return true;
+  if (typeof row.is_active === "boolean") return row.is_active;
   const last = Date.parse(row.last_seen_at);
   if (!Number.isFinite(last)) return false;
   return last >= nowMs - recencyDays * 86_400_000;

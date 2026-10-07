@@ -5,9 +5,9 @@ import {
   computeTrend,
   deriveBrandScale,
   deriveFunnelCells,
-  deriveFunnelEdges,
   deriveStrategyOverviewPayload,
   monthlyFirstSeenCounts,
+  unclassifiedSummary,
   type ScrapedAdInput,
 } from "@/lib/strategy-overview/strategyDerivation";
 
@@ -25,71 +25,31 @@ function ad(
   };
 }
 
-describe("deriveFunnelEdges", () => {
-  it("creates forward edges when stages progress and overlap exists", () => {
-    const stageByPlatform = new Map([
-      ["tiktok", "TOF"],
-      ["meta", "MOF"],
-      ["google", "BOF"],
-    ] as const);
-
-    const angleByPlatform = new Map<string, Set<string>>([
-      ["tiktok", new Set(["discount"])],
-      ["meta", new Set(["discount", "quality"])],
-      ["google", new Set(["quality"])],
-    ]);
-
-    const enriched = new Map([
-      ["tiktok", 10],
-      ["meta", 10],
-      ["google", 10],
-    ] as const);
-
-    const { edges, detected, suppressed } = deriveFunnelEdges({
-      platforms: ["tiktok", "meta", "google"],
-      stageByPlatform,
-      angleByPlatform,
-      enrichedAdsByPlatform: enriched,
-    });
-
-    expect(detected).toBeGreaterThan(0);
-    expect(suppressed).toBe(0);
-
-    const keys = new Set(edges.map((e) => `${e.from}->${e.to}`));
-    expect(keys.has("tiktok->meta")).toBe(true);
-    expect(keys.has("meta->google")).toBe(true);
-    expect(keys.has("tiktok->google")).toBe(true);
-    for (const e of edges) {
-      expect(e.confidence).toBeGreaterThanOrEqual(0.4);
-    }
-  });
-
-  it("suppresses edges when either platform has fewer than 5 enriched ads", () => {
-    const stageByPlatform = new Map([
-      ["tiktok", "TOF"],
-      ["meta", "MOF"],
-      ["google", "BOF"],
-    ] as const);
-
-    const angleByPlatform = new Map<string, Set<string>>([
-      ["tiktok", new Set(["discount"])],
-      ["meta", new Set(["discount", "quality"])],
-      ["google", new Set(["quality"])],
-    ]);
-
-    const { edges, suppressed } = deriveFunnelEdges({
-      platforms: ["tiktok", "meta", "google"],
-      stageByPlatform,
-      angleByPlatform,
-      enrichedAdsByPlatform: new Map([
-        ["tiktok", 2],
-        ["meta", 10],
-        ["google", 10],
-      ]),
-    });
-
-    expect(suppressed).toBeGreaterThan(0);
-    expect(edges.find((e) => e.from === "tiktok")).toBeUndefined();
+describe("funnel arrows in the derived map", () => {
+  it("draws an arrow only between stages that share a specific landing page", () => {
+    const now = Date.now();
+    const iso = (daysAgo: number) => new Date(now - daysAgo * 86_400_000).toISOString();
+    const metaAd = (id: string, stage: string, url: string): ScrapedAdInput =>
+      ad({
+        id,
+        platform: "meta",
+        first_seen_at: iso(20),
+        last_seen_at: iso(0),
+        is_active: true,
+        funnel_stage: stage,
+        ai_extracted_angle: "social_proof",
+        ad_text: `copy ${id}`,
+        raw_payload: { destinationUrl: url },
+      });
+    const ads = [
+      ...[1, 2, 3].map((i) => metaAd(`t${i}`, "TOF", "https://brand.com/collections/new")),
+      ...[1, 2, 3].map((i) => metaAd(`m${i}`, "MOF", "https://brand.com/collections/new")),
+      ...[1, 2, 3].map((i) => metaAd(`b${i}`, "BOF", "https://brand.com/")),
+    ];
+    const payload = deriveStrategyOverviewPayload(ads, { name: "Brand", domain: "brand.com", logoUrl: null }, null);
+    const edges = payload.map?.funnelEdges ?? [];
+    expect(edges.map((e) => `${e.from}->${e.to}`)).toEqual(["meta:TOF->meta:MOF"]);
+    expect(edges[0]!.evidence).toEqual({ sharedLandingPages: ["brand.com/collections/new"], fromAds: 3, toAds: 3 });
   });
 });
 
@@ -198,21 +158,21 @@ describe("deriveFunnelCells", () => {
     expect(deriveFunnelCells(new Map(), 1.2)).toEqual([]);
   });
 
-  it("places wholly unclassified platform ads in the platform default stage (Google → BOF)", () => {
+  it("leaves ads without a stage off the grid and reports why", () => {
     const now = new Date().toISOString();
     const byPlatformLive = new Map<StrategyPlatform, ScrapedAdInput[]>([
       [
         "google",
         [
-          ad({ id: "g1", platform: "google", first_seen_at: now, funnel_stage: null }),
-          ad({ id: "g2", platform: "google", first_seen_at: now, funnel_stage: null }),
+          ad({ id: "g1", platform: "google", first_seen_at: now, funnel_stage: null, ai_enrichment_status: "skipped_no_text" }),
+          ad({ id: "g2", platform: "google", first_seen_at: now, funnel_stage: null, ai_enrichment_status: "pending" }),
+          ad({ id: "g3", platform: "google", first_seen_at: now, funnel_stage: "BOF" }),
         ],
       ],
     ]);
     const cells = deriveFunnelCells(byPlatformLive, 1.2);
-    expect(cells).toHaveLength(1);
-    expect(cells[0]?.id).toBe("google:BOF");
-    expect(cells[0]?.adCount).toBe(2);
+    expect(cells.map((c) => `${c.id}:${c.adCount}`)).toEqual(["google:BOF:1"]);
+    expect(unclassifiedSummary(byPlatformLive)).toEqual([{ platform: "google", pending: 1, noText: 1, total: 3 }]);
   });
 });
 

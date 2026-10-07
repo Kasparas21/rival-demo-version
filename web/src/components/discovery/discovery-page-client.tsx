@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Compass, Loader2, RefreshCw, Search } from "lucide-react";
 
 import { AdDetailDrawer } from "@/components/ad-detail/ad-detail-drawer";
@@ -15,23 +16,34 @@ import { DiscoveryPatternsView } from "@/components/discovery/discovery-patterns
 import { DiscoveryWhatsNewToolbar } from "@/components/discovery/discovery-whats-new-toolbar";
 import { DiscoveryMasonryFeed } from "@/components/discovery/discovery-masonry-feed";
 import { DiscoveryToolbar, discoveryTabClass } from "@/components/discovery/discovery-toolbar";
+import { discoveryTabParam, parseDiscoveryTab } from "@/components/discovery/discovery-types";
 import { useDiscoveryFeed } from "@/components/discovery/use-discovery-feed";
 import { useDiscoverySavedAds } from "@/components/discovery/use-discovery-saved-ads";
 import { useAdDetailState } from "@/lib/ad-detail/use-ad-detail-state";
+import { sharedFetch } from "@/lib/client/shared-fetch";
 
 export function DiscoveryPageClient() {
   const activeBrand = useActiveBrand();
+  const searchParams = useSearchParams();
+  const [initialTab] = useState(() => parseDiscoveryTab(searchParams.get("tab")) ?? "explore");
   const { activeAdId, openAd, closeAd } = useAdDetailState();
   const [clientBrands, setClientBrands] = useState<{ id: string; name: string }[]>([]);
+  const [clientBrandsLoaded, setClientBrandsLoaded] = useState(false);
 
   useEffect(() => {
-    void fetch("/api/account/brands", { credentials: "include", cache: "no-store" })
+    void sharedFetch("/api/account/brands")
       .then((r) => r.json())
       .then((d: { ok?: boolean; brands?: { id: string; name: string }[] }) => {
         if (!d.ok || !d.brands?.length) return;
         setClientBrands(d.brands.map((b) => ({ id: b.id, name: b.name })));
-      });
+      })
+      .catch(() => {})
+      .finally(() => setClientBrandsLoaded(true));
   }, []);
+
+  /** Wait for the brand list, and for the layout to swap its `_workspace` placeholder for a real brand. */
+  const feedReady =
+    clientBrandsLoaded && (clientBrands.length === 0 || activeBrand.id !== "_workspace");
 
   const {
     tab,
@@ -52,7 +64,19 @@ export function DiscoveryPageClient() {
   } = useDiscoveryFeed(
     activeBrand.id,
     clientBrands.map((brand) => brand.id),
+    feedReady,
+    initialTab,
   );
+
+  /** Keep `?tab=` in step with the open tab (shareable, survives reload) without a Next navigation. */
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const param = discoveryTabParam(tab);
+    if ((url.searchParams.get("tab") ?? null) === param) return;
+    if (param) url.searchParams.set("tab", param);
+    else url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", url);
+  }, [tab]);
 
   const { isSaved, isPending, toggleSave } = useDiscoverySavedAds(ads, feedKey);
 
@@ -76,7 +100,7 @@ export function DiscoveryPageClient() {
       <FeatureSectionHeader
         overline="Inspo"
         title="Discovery"
-        description="Meta ads from every competitor you track. Shuffle for inspiration or rank by impressions, recency, and ultimate winners."
+        description="Meta ads from every competitor you track. Shuffle for inspiration or rank by reach, recency, and ultimate winners."
         actions={
           tab !== "landing_pages" && tab !== "patterns" && tab !== "stats" ? (
             <button

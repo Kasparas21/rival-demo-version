@@ -186,7 +186,7 @@ function normalizeAdForStats(
   let impressionsIndex: number | null = null;
   if (platform === "meta") {
     const card = ad as MetaAdCard;
-    impressionsIndex = card.impressionsIndex ?? extractImpressionsIndex(card);
+    impressionsIndex = extractImpressionsIndex(card) /* the card's own impressionsIndex is -1 when unknown */;
   }
 
   let isText = false;

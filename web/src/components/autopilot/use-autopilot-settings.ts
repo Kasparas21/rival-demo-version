@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { AutopilotDeliveryStatus } from "@/lib/autopilot/autopilot-delivery-status";
 import type { AutopilotSettingsRow } from "@/lib/autopilot/types";
 import { normalizeWatchMinScoreForUi } from "@/lib/autopilot/watch-alert-score";
+import { invalidateSharedFetch, sharedFetch } from "@/lib/client/shared-fetch";
 
 export type AutopilotBillingMeta = {
   planTier: string;
@@ -78,7 +79,7 @@ export function useAutopilotSettings() {
     setError(null);
     setSettingsLoading(true);
     try {
-      const res = await fetch("/api/autopilot/settings", { credentials: "include" });
+      const res = await sharedFetch("/api/autopilot/settings");
       const data = (await res.json()) as SettingsGetResponse;
       if (!res.ok || !data.ok || !data.settings) {
         throw new Error(typeof data.error === "string" ? data.error : "Failed to load autopilot settings");
@@ -113,6 +114,7 @@ export function useAutopilotSettings() {
           credentials: "include",
           body: JSON.stringify(patch),
         });
+        invalidateSharedFetch("/api/");
         const data = (await res.json()) as SettingsGetResponse;
         if (!res.ok || !data.ok || !data.settings) {
           const errMsg =
