@@ -19,6 +19,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 const MODEL_TIMEOUT_MS = 30_000;
 const CONCURRENCY = 4;
 const MAX_TEXT_CHARS = 2000;
+const MAX_SCRIPT_BYTES = 2 * 1024 * 1024;
 
 function imageMime(buf: Buffer): string | null {
   const hex = buf.subarray(0, 4).toString("hex");
@@ -31,13 +32,90 @@ function imageMime(buf: Buffer): string | null {
 
 /** The ad's image link: `img` on Google rows (an archived render on tpc.googlesyndication.com). */
 export function creativeImageUrl(rawPayload: unknown): string | null {
+  const src = creativeSource(rawPayload);
+  return src?.kind === "image" ? src.url : null;
+}
+
+/**
+ * Where the ad's content can be read: an image to transcribe, or (shopping, local and rich display ads, about
+ * 1 in 6 Google rows) Google's `content.js` preview script, which embeds the ad as HTML.
+ */
+export function creativeSource(rawPayload: unknown): { kind: "image" | "preview_script"; url: string } | null {
   if (!rawPayload || typeof rawPayload !== "object") return null;
   const p = rawPayload as Record<string, unknown>;
   for (const k of ["img", "previewUrl"]) {
     const v = p[k];
-    if (typeof v === "string" && /^https:\/\//.test(v) && !/\.js(\?|$)/.test(v)) return v;
+    if (typeof v !== "string" || !/^https:\/\//.test(v)) continue;
+    return { kind: /\/content\.js(\?|$)/.test(v) ? "preview_script" : "image", url: v };
   }
   return null;
+}
+
+/** Marks transcriptions of Google Shopping product listings; the classifier treats them as BOF. */
+export const SHOPPING_AD_PREFIX = "Google Shopping ad:";
+
+const ENTITIES: Record<string, string> = { amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " " };
+
+function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const code = e[1]?.toLowerCase() === "x" ? Number.parseInt(e.slice(2), 16) : Number.parseInt(e.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : m;
+    }
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+}
+
+/** Rendering-service names, platform labels and placeholders in the preview HTML that aren't ad copy. */
+const PREVIEW_NOISE = /^(?:.*rendering service|remiama|sponsored|reklama|\[price\]|·)$/i;
+
+/**
+ * The visible text of the ad embedded in a `content.js` preview: the script carries the ad's HTML as an
+ * escaped string ("Dantų Protezavimas Raseiniuose", "Rothy's - The Daily Flat, Size 5.5"). Free: no model.
+ */
+export function previewScriptText(js: string): string | null {
+  let s = js
+    .replace(/\\x([0-9a-f]{2})/gi, (_, h: string) => String.fromCharCode(Number.parseInt(h, 16)))
+    .replace(/\\u([0-9a-f]{4})/gi, (_, h: string) => String.fromCharCode(Number.parseInt(h, 16)));
+  s = decodeEntities(decodeEntities(s));
+  const lines: string[] = [];
+  for (const m of s.matchAll(/>([^<>{}=;]{2,240})</g)) {
+    const t = m[1]!.replace(/\\+$/, "").replace(/^·\s*/, "").trim();
+    if (!t || !/\p{L}{2}/u.test(t) || PREVIEW_NOISE.test(t)) continue;
+    if (/function|return |var |&&|\|\||\(\)/.test(t)) continue;
+    if (!lines.includes(t)) lines.push(t);
+  }
+  const body = lines.join("\n");
+  if (body.length < 10) return null;
+  // Product listing ads (a product with its price) are shopping ads; say so, since the price is a placeholder.
+  const shopping = /product listing ad rendering service/i.test(s);
+  return `${shopping ? `${SHOPPING_AD_PREFIX} ` : ""}${body}`.slice(0, MAX_TEXT_CHARS);
+}
+
+async function readPreviewScript(url: string): Promise<{ ok: true; text: string; costUsd: number } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) return { ok: false, error: `preview ${res.status}` };
+    const js = await res.text();
+    const text = js.length <= MAX_SCRIPT_BYTES ? previewScriptText(js) : null;
+    return text ? { ok: true, text, costUsd: 0 } : { ok: false, error: "no text in preview" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "preview fetch failed" };
+  }
+}
+
+/**
+ * Transcriptions that aren't ad copy: Google's error page captured as the ad image, an icon with no text
+ * ("Image: An information icon"), or a template with unfilled placeholders ("<Rating (Reviews)>").
+ */
+export function isUnusableTranscription(text: string): boolean {
+  const t = text.trim();
+  return (
+    t.length < 10 ||
+    /^image:/i.test(t) ||
+    /that['’]s an error|there was an error/i.test(t) ||
+    /<[A-Z][^<>]{1,40}>/.test(t)
+  );
 }
 
 export async function transcribeAdImage(
@@ -95,7 +173,14 @@ export async function transcribeAdImage(
   }
 }
 
-export type TranscribeStats = { candidates: number; transcribed: number; failed: number; costUsd: number };
+export type TranscribeStats = {
+  candidates: number;
+  transcribed: number;
+  /** Read but not ad copy (error page, icon, template); marked so they aren't retried. */
+  unusable: number;
+  failed: number;
+  costUsd: number;
+};
 
 /**
  * Transcribe active Google/YouTube ads of one competitor that have no published copy and no transcription
@@ -108,7 +193,7 @@ export async function transcribeMissingAdCopy(
   competitorId: string,
   opts: { maxAds?: number; includeClassified?: boolean } = {},
 ): Promise<TranscribeStats> {
-  const stats: TranscribeStats = { candidates: 0, transcribed: 0, failed: 0, costUsd: 0 };
+  const stats: TranscribeStats = { candidates: 0, transcribed: 0, unusable: 0, failed: 0, costUsd: 0 };
   let query = supabase
     .from("scraped_ads")
     .select("id, platform, ad_text, raw_payload, ai_enrichment_status")
@@ -130,8 +215,8 @@ export async function transcribeMissingAdCopy(
 
   const todo = (data ?? [])
     .filter((r) => googleAdCopy(r.ad_text).trim().length < 10)
-    .map((r) => ({ id: r.id, url: creativeImageUrl(r.raw_payload) }))
-    .filter((r): r is { id: string; url: string } => r.url != null)
+    .map((r) => ({ id: r.id, src: creativeSource(r.raw_payload) }))
+    .filter((r): r is { id: string; src: NonNullable<ReturnType<typeof creativeSource>> } => r.src != null)
     .slice(0, opts.maxAds ?? 150);
   stats.candidates = todo.length;
 
@@ -139,18 +224,20 @@ export async function transcribeMissingAdCopy(
   const worker = async () => {
     while (next < todo.length) {
       const item = todo[next++]!;
-      const r = await transcribeAdImage(item.url);
+      const r = item.src.kind === "image" ? await transcribeAdImage(item.src.url) : await readPreviewScript(item.src.url);
       if (!r.ok) {
         stats.failed += 1;
         continue;
       }
       stats.costUsd += r.costUsd;
-      const { error: upErr } = await supabase
-        .from("scraped_ads")
-        .update({ creative_text: r.text, creative_text_at: new Date().toISOString(), ai_enrichment_status: "pending" })
-        .eq("id", item.id)
-        .eq("user_id", userId);
+      const unusable = isUnusableTranscription(r.text);
+      // Unusable: store "" so it isn't read again; the ad stays without a stage rather than keep a guess.
+      const update = unusable
+        ? { creative_text: "", creative_text_at: new Date().toISOString(), funnel_stage: null, ai_enrichment_status: "skipped_no_text" }
+        : { creative_text: r.text, creative_text_at: new Date().toISOString(), ai_enrichment_status: "pending" };
+      const { error: upErr } = await supabase.from("scraped_ads").update(update).eq("id", item.id).eq("user_id", userId);
       if (upErr) stats.failed += 1;
+      else if (unusable) stats.unusable += 1;
       else stats.transcribed += 1;
     }
   };

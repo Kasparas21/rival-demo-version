@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { Database, Json } from "@/lib/supabase/types";
 import { llmFast, modelLabelForTask } from "@/lib/llm/anthropic";
+import { SHOPPING_AD_PREFIX } from "@/lib/ad-library/transcribe-ad-creatives";
 import { googleAdCopy } from "@/lib/ad-library/google-ad-copy";
 import { AD_ANGLE_SLUGS, normalizeAngleSlug, type AdAngleSlug } from "@/lib/strategy-overview/ad-angles";
 import type { ScrapedAdInput } from "@/lib/strategy-overview/strategyDerivation";
@@ -173,6 +174,7 @@ const PRICE = /(?:[€$£]\s?\d)|(?:\d[\d\s.,]*\s?(?:€|eur\b|usd\b|\$|£))/i;
  */
 export function forcedBofFromSignals(item: Pick<EnrichItem, "ad_text" | "cta" | "headline" | "link_description">): boolean {
   if (item.cta && BOOKING_CTA.test(item.cta.trim())) return true;
+  if (item.ad_text.startsWith(SHOPPING_AD_PREFIX)) return true;
   return [item.ad_text, item.headline, item.link_description].some((t) => (t ? PRICE.test(t) : false));
 }
 
