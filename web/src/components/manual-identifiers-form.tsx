@@ -30,6 +30,7 @@ import {
   extractMetaAdsLibraryPageId,
 } from "@/lib/ad-library/canonical-library-url";
 import { canonicalGoogleAdsTransparencyStartUrl } from "@/lib/ad-library/google-transparency-url";
+import type { PickedAdAccounts } from "@/components/ad-account-picker";
 import { buildGoogleTransparencyPreviewUrl } from "@/lib/onboarding/ad-library-preview-urls";
 
 /** “All markets” / world options first; then ISO 3166-1 alpha-2 A–Z (same order on every platform row). */
@@ -437,6 +438,8 @@ interface ManualIdentifiersFormProps {
   onAdLibraryRegionsChange: (next: AdLibraryRegionPrefs) => void;
   /** Remove a platform from the selection (parent updates URL / channel list). */
   onRemoveChannel?: (channelId: ChannelId) => void;
+  /** Accounts chosen in the ad-account picker; each change fills (or, for null, clears) that platform's field. */
+  pickedAccounts?: PickedAdAccounts;
 }
 
 function isNonEmptyDiscovered(v: unknown): v is string {
@@ -583,6 +586,7 @@ export function ManualIdentifiersForm({
   adLibraryRegions,
   onAdLibraryRegionsChange,
   onRemoveChannel,
+  pickedAccounts,
 }: ManualIdentifiersFormProps) {
   const [identifiers, setIdentifiers] = useState<PlatformIdentifier>(() =>
     buildManualIdentifierSeed(discoveredIds, selectedChannels)
@@ -618,6 +622,26 @@ export function ManualIdentifiersForm({
       return out;
     });
   }, [discoveredIds, selectedChannels]);
+
+  // Apply each new pick once, during render (not in an effect), so the field updates in the same pass.
+  const [appliedPick, setAppliedPick] = useState<PickedAdAccounts | undefined>(undefined);
+  if (pickedAccounts && pickedAccounts !== appliedPick) {
+    setAppliedPick(pickedAccounts);
+    const { metaPageId, googleAdvertiserId } = pickedAccounts;
+    if (metaPageId !== undefined) {
+      setMetaDisplay(metaPageId ? buildMetaAdLibraryUrl(metaPageId) : "");
+      setErrors((prev) => ({ ...prev, meta: undefined }));
+      setWarnings((prev) => ({ ...prev, meta: undefined }));
+    }
+    if (googleAdvertiserId !== undefined) {
+      const google = googleAdvertiserId
+        ? (canonicalGoogleAdsTransparencyStartUrl(`https://adstransparency.google.com/advertiser/${googleAdvertiserId}`) ?? undefined)
+        : undefined;
+      setIdentifiers((prev) => ({ ...prev, google }));
+      setErrors((prev) => ({ ...prev, google: undefined }));
+      setWarnings((prev) => ({ ...prev, google: undefined }));
+    }
+  }
 
   const autoFoundDisplaySnap = useMemo(
     () => autoFoundDisplaySnapshot(discoveredIds),
