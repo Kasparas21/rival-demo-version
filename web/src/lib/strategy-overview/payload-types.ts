@@ -54,6 +54,8 @@ export type PlatformNodePayload = {
   estSpendEur: number;
   estSpendEurLow?: number;
   estSpendEurHigh?: number;
+  /** Ads whose spend comes from Meta's published reach (the rest use the ad-count estimate). */
+  reachBasedAds?: number;
   funnelStage: FunnelStage;
   position: { x: number; y: number };
 };
@@ -399,11 +401,15 @@ export type PlatformFootprintCard = InsightCardBase & {
     spendShare: number;
     /** Earliest `first_seen_at` among active ads on this platform (ISO), for “Active since” UI. */
     earliestFirstSeenAt?: string | null;
+    /** Ads priced from Meta's published reach on this platform. */
+    reachBasedAds?: number;
   }[];
   totalActiveAds: number;
   totalEstSpendEur: number;
   totalEstSpendEurLow?: number;
   totalEstSpendEurHigh?: number;
+  /** Ads priced from real reach, across all platforms (of `totalActiveAds`). */
+  reachBasedAds?: number;
   platformCount: number;
 };
 

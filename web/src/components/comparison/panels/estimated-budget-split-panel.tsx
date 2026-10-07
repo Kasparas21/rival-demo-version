@@ -99,15 +99,31 @@ function budgetInsight(params: {
   return `Modeled budgets are close; ${platLabel} still carries the majority of weight on both sides.`;
 }
 
+/** What a brand's spend estimate rests on: Meta's published reach, or only the ad-count model. */
+function spendBasis(payload: CompetitorStrategyOverviewPayload | null | undefined): string | null {
+  const fp = payload?.insights?.platform_footprint;
+  if (!fp || !fp.totalActiveAds) return null;
+  const low = fp.totalEstSpendEurLow;
+  const high = fp.totalEstSpendEurHigh;
+  const range =
+    low != null && high != null && high > low ? `Range €${low.toLocaleString()}–€${high.toLocaleString()}. ` : "";
+  const reach = fp.reachBasedAds ?? 0;
+  if (reach === 0) return `${range}Estimated from ad count; no published reach for these ads.`;
+  if (reach >= fp.totalActiveAds) return `${range}From Meta's published reach for all ${reach} running ads.`;
+  return `${range}From Meta's published reach for ${reach} of ${fp.totalActiveAds} running ads; the rest estimated.`;
+}
+
 function StackedRow({
   titleLine,
   segments,
   totalEur,
+  basis,
   reduce,
 }: {
   titleLine: string;
   segments: Seg[];
   totalEur: number;
+  basis: string | null;
   reduce: boolean;
 }) {
   const has = segments.some((s) => s.pct > 0);
@@ -147,7 +163,10 @@ function StackedRow({
             </span>
           ))}
       </div>
-      <p className="text-[11px] text-slate-500">Total modeled monthly spend: €{Math.round(totalEur).toLocaleString()}</p>
+      <p className="text-[11px] text-slate-500">
+        Total estimated monthly spend: €{Math.round(totalEur).toLocaleString()}
+        {basis ? <span className="block">{basis}</span> : null}
+      </p>
     </div>
   );
 }
@@ -188,12 +207,14 @@ export function EstimatedBudgetSplitPanel({ left, right }: Props) {
             titleLine={`YOU · ${left.name.toUpperCase()} · €${Math.round(leftTotal).toLocaleString()}/mo`}
             segments={leftSegments}
             totalEur={leftTotal}
+            basis={spendBasis(left.payload)}
             reduce={rm}
           />
           <StackedRow
             titleLine={`THEM · ${right.name.toUpperCase()} · €${Math.round(rightTotal).toLocaleString()}/mo`}
             segments={rightSegments}
             totalEur={rightTotal}
+            basis={spendBasis(right.payload)}
             reduce={rm}
           />
           <div className="rounded-r-lg border-l-4 border-blue-400 bg-blue-50/90 p-3 text-sm leading-snug text-blue-950">

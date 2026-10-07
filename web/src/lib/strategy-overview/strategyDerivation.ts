@@ -1,5 +1,6 @@
 import { angleLabelOf, angleSlugOf } from "@/lib/strategy-overview/ad-angles";
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
+import { estimatePlatformSpend, sumAdSpend, type EurRange } from "@/lib/strategy-overview/reach-spend";
 import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
 import { deriveSidebarInsights } from "@/lib/strategy-overview/derive-sidebar-insights";
 import { strategyMapNodeSize } from "@/lib/strategy-overview/map-node-sizing";
@@ -241,7 +242,9 @@ export function bucketAdsByFunnelStage(
 export function deriveFunnelCells(
   byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>,
   brandScaleScore: number,
-  spendV2OverridesByPlatformStage?: Map<string, { low: number; mid: number; high: number }>
+  spendV2OverridesByPlatformStage?: Map<string, { low: number; mid: number; high: number }>,
+  /** Per-ad spend from the platform estimate; cells then add up to their platform's total. */
+  perAdSpend?: Map<StrategyPlatform, Map<string, EurRange>>
 ): FunnelCellNodePayload[] {
   const cells: FunnelCellNodePayload[] = [];
 
@@ -268,7 +271,10 @@ export function deriveFunnelCells(
       });
 
       const overrideKey = `${platform}:${stage}`;
-      const override = spendV2OverridesByPlatformStage?.get(overrideKey);
+      const platformShares = perAdSpend?.get(platform);
+      const override = platformShares
+        ? sumAdSpend(platformShares, ads.map((a) => a.id))
+        : spendV2OverridesByPlatformStage?.get(overrideKey);
       const finalSpend = override ?? spend;
 
       const cellConfidence: "high" | "medium" | "low" =
@@ -843,6 +849,7 @@ export function deriveStrategyOverviewPayload(
 
   const stageByPlatform = new Map<StrategyPlatform, FunnelStage>();
   const nodes: PlatformNodePayload[] = [];
+  const perAdSpendByPlatform = new Map<StrategyPlatform, Map<string, EurRange>>();
 
   let maxCount = 0;
   for (const [, list] of byPlatformLive) {
@@ -878,12 +885,14 @@ export function deriveStrategyOverviewPayload(
     const avgDays =
       liveList.reduce((s, x) => s + activeDays(x.first_seen_at, x.last_seen_at), 0) /
       Math.max(1, liveList.length);
-    const spend = estimateMonthlySpendEur({
-      platform: pl,
-      adCount: liveList.length,
-      avgActiveDays: avgDays,
-      brandScaleScore,
-    });
+    const spend = estimatePlatformSpend(
+      pl,
+      liveList,
+      (count) =>
+        estimateMonthlySpendEur({ platform: pl, adCount: count, avgActiveDays: avgDays, brandScaleScore }),
+      nowMs
+    );
+    perAdSpendByPlatform.set(pl, spend.perAd);
 
     nodes.push({
       platform: pl,
@@ -893,6 +902,7 @@ export function deriveStrategyOverviewPayload(
       estSpendEur: spend.mid,
       estSpendEurLow: spend.low,
       estSpendEurHigh: spend.high,
+      reachBasedAds: spend.reachBasedAds,
       funnelStage: stage,
       position: { x: 0, y: 0 },
     });
@@ -921,6 +931,8 @@ export function deriveStrategyOverviewPayload(
       logSpendEstimateDebug(`derive:${competitor.name}`, fp, estConfig);
 
       for (const n of nodes) {
+        /** Real reach beats any ad-count model. */
+        if ((n.reachBasedAds ?? 0) > 0) continue;
         const st = fp.platform_stats.find((s) => s.platform === n.platform);
         if (st) n.adCount = st.active_ads;
         const row = spendEstimateV2.perPlatform.find((x) => x.platform === n.platform);
@@ -958,7 +970,12 @@ export function deriveStrategyOverviewPayload(
     if (spendV2ByPlatformStage.size === 0) spendV2ByPlatformStage = undefined;
   }
 
-  const funnelCells = deriveFunnelCells(byPlatformLive, brandScaleScore, spendV2ByPlatformStage);
+  /** Cells share their platform's per-ad spend, except where spend v2 (ad-count model) took the platform over. */
+  const v2Platforms = new Set(
+    nodes.filter((n) => spendEstimateV2?.perPlatform.some((x) => x.platform === n.platform) && !n.reachBasedAds).map((n) => n.platform)
+  );
+  const cellShares = new Map([...perAdSpendByPlatform].filter(([pl]) => !v2Platforms.has(pl)));
+  const funnelCells = deriveFunnelCells(byPlatformLive, brandScaleScore, spendV2ByPlatformStage, cellShares);
 
   const totalMid = nodes.reduce((s, n) => s + n.estSpendEur, 0);
   const totalLow = nodes.reduce((s, n) => s + (n.estSpendEurLow ?? n.estSpendEur), 0);
@@ -1071,7 +1088,7 @@ export function deriveStrategyOverviewPayload(
       title: "Platform Footprint",
       subtitle: "Active ad presence per platform",
       tooltip:
-        "Side-by-side platform comparison: active ads per platform and modeled monthly spend range (benchmark CPM × footprint — not invoiced spend).",
+        "Running ads per platform and estimated monthly spend. Meta ads shown in the EU are priced from the reach Meta publishes (people reached × typical views per person × that country's price per 1,000 views); other ads from ad count × benchmark price. A range, not invoiced spend.",
       aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
@@ -1086,19 +1103,21 @@ export function deriveStrategyOverviewPayload(
           funnelStage: n.funnelStage,
           spendShare: pct(n),
           earliestFirstSeenAt: earliestFirstSeenIsoForPlatform(activeAds, n.platform),
+          reachBasedAds: n.reachBasedAds ?? 0,
         }))
         .sort((a, b) => b.activeAds - a.activeAds),
       totalActiveAds: nodes.reduce((sum, n) => sum + n.adCount, 0),
       totalEstSpendEur: Math.round(totalMid),
       totalEstSpendEurLow: Math.round(totalLow),
       totalEstSpendEurHigh: Math.round(totalHigh),
+      reachBasedAds: nodes.reduce((sum, n) => sum + (n.reachBasedAds ?? 0), 0),
       platformCount: nodes.length,
     },
     budget_allocation: {
       title: "Budget Allocation",
       subtitle: "Estimated monthly spend share by platform",
       tooltip:
-        "Estimated using benchmark CPM × active ad count × brand size multiplier × format coefficient. NOT invoiced spend.",
+        "Share of estimated monthly spend. Meta ads shown in the EU use the reach Meta publishes, priced per country; other ads use ad count × benchmark price. Not invoiced spend.",
       aiNarrative: null,
       lastUpdated: nowIso,
       dataConfidence: conf,
