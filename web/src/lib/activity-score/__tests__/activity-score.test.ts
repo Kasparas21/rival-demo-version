@@ -46,9 +46,13 @@ describe("pickAiSampleAds", () => {
     expect(pickAiSampleAds(ads, 4).map((x) => x.ad_text)).toEqual(["big", "small", "old", "new"]);
   });
 
-  it("fingerprints what the AI saw", () => {
-    expect(aiSampleFingerprint(["a  b"], ["c"])).toBe(aiSampleFingerprint(["a b"], ["c"]));
-    expect(aiSampleFingerprint(["a"], ["c"])).not.toBe(aiSampleFingerprint(["a"], ["d"]));
+  it("fingerprints what the AI saw", async () => {
+    expect(await aiSampleFingerprint(["a  b"], ["c"])).toBe(await aiSampleFingerprint(["a b"], ["c"]));
+    expect(await aiSampleFingerprint(["a"], ["c"])).not.toBe(await aiSampleFingerprint(["a"], ["d"]));
+    // Same digest node:crypto gave, so fingerprints stored before the switch still match.
+    const { createHash } = await import("node:crypto");
+    const legacy = createHash("sha256").update(JSON.stringify([["a"], ["c"]])).digest("hex").slice(0, 32);
+    expect(await aiSampleFingerprint(["a"], ["c"])).toBe(legacy);
   });
 });
 

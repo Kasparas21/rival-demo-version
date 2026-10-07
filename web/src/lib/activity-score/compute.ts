@@ -262,7 +262,7 @@ export async function computeActivityScore(params: {
     const copyList = pickAiSampleAds(ads, 20).map((a) => a.ad_text.replace(/\s+/g, " ").trim());
 
     /** Same ads as last time → same answer, without asking the model again. */
-    aiFingerprint = aiSampleFingerprint(samples.map((x) => x.copy), copyList);
+    aiFingerprint = await aiSampleFingerprint(samples.map((x) => x.copy), copyList);
     const prior = (priorScoreRow?.raw_metrics ?? null) as { aiSampleFingerprint?: string; aiScores?: HaikuBatchScores } | null;
     const reusable =
       prior?.aiSampleFingerprint === aiFingerprint &&

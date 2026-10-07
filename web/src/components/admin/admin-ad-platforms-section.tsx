@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { CHANNELS } from "@/components/channel-picker-modal";
 import { DEFAULT_ENABLED_AD_PLATFORMS } from "@/lib/ad-library/disabled-scrape-platforms";
@@ -21,10 +21,13 @@ export function AdminAdPlatformsSection({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
+  /** The page refetched with a different saved list: start from it (reset during render, not in an effect). */
+  const [syncedKey, setSyncedKey] = useState(initialKey);
+  if (syncedKey !== initialKey) {
+    setSyncedKey(initialKey);
     setSavedKey(initialKey);
     setPicked(initialKey ? initialKey.split(",") : []);
-  }, [initialKey]);
+  }
 
   const dirty = [...picked].sort().join(",") !== savedKey;
 

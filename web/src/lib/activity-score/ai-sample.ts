@@ -1,4 +1,3 @@
-import { createHash } from "crypto";
 
 import { metaReachByCountry } from "@/lib/strategy-overview/reach-spend";
 
@@ -42,10 +41,16 @@ export function pickAiSampleAds<T extends SampleableAd>(ads: T[], limit: number)
     .map(([, v]) => v.ad);
 }
 
-/** Stable id of what the AI was shown, so an unchanged sample reuses the previous answer. */
-export function aiSampleFingerprint(sampleCopies: string[], productCopies: string[]): string {
-  return createHash("sha256")
-    .update(JSON.stringify([sampleCopies.map(normalizeCopy), productCopies.map(normalizeCopy)]))
-    .digest("hex")
+/**
+ * Stable id of what the AI was shown, so an unchanged sample reuses the previous answer. SHA-256 via Web
+ * Crypto rather than node:crypto: this module is bundled into the Edge middleware through the scrape code.
+ */
+export async function aiSampleFingerprint(sampleCopies: string[], productCopies: string[]): Promise<string> {
+  const data = new TextEncoder().encode(
+    JSON.stringify([sampleCopies.map(normalizeCopy), productCopies.map(normalizeCopy)]),
+  );
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0"))
+    .join("")
     .slice(0, 32);
 }

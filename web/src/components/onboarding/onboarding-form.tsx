@@ -477,7 +477,7 @@ export function OnboardingForm({
       ...prev,
       ...initialBrandSetup.scrape,
     }));
-  }, [initialBrandSetup, normalizedCompany]);
+  }, [initialBrandSetup, normalizedCompany, enabledAdPlatforms]);
 
   /** Post-signup: restore platform picks from guest draft until DB sync catches up. */
   useEffect(() => {
