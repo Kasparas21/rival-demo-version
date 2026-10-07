@@ -100,7 +100,7 @@ export function DiscoveryPageClient() {
       <FeatureSectionHeader
         overline="Inspo"
         title="Discovery"
-        description="Meta ads from every competitor you track. Shuffle for inspiration or rank by impressions, recency, and ultimate winners."
+        description="Meta ads from every competitor you track. Shuffle for inspiration or rank by reach, recency, and ultimate winners."
         actions={
           tab !== "landing_pages" && tab !== "patterns" && tab !== "stats" ? (
             <button

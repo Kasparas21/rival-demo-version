@@ -151,7 +151,7 @@ export function TimelineFiltersBar(props: Props) {
           >
             <option value="newest">Newest first</option>
             <option value="longest_running">Longest running</option>
-            <option value="impressions">Impressions (high → low)</option>
+            <option value="impressions">Reach (high → low)</option>
             <option value="ultimate_winner">Ultimate winner</option>
           </select>
         </div>

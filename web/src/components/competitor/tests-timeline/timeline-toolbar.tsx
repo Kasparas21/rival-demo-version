@@ -71,7 +71,7 @@ const BASE_SORT_OPTIONS: { id: TimelineSort; label: string }[] = [
 ];
 
 const META_SORT_OPTIONS: { id: TimelineSort; label: string }[] = [
-  { id: "impressions", label: "Impressions (high → low)" },
+  { id: "impressions", label: "Reach (high → low)" },
   { id: "ultimate_winner", label: "Ultimate winner" },
 ];
 
@@ -208,13 +208,13 @@ export function TimelineToolbar({
                   />
                   <TimelineToggleRow
                     label="Ultimate winners only"
-                    description="High Meta impression band plus 30+ days live."
+                    description="10K+ people reached and 3+ weeks live, or 6+ weeks live where Meta doesn't publish reach."
                     checked={state.ultimateOnly}
                     onChange={(ultimateOnly) => onChange({ ultimateOnly })}
                   />
                   <TimelineToggleRow
-                    label="Has impression data"
-                    description="Meta ads with a reported impression band."
+                    label="Has reach data"
+                    description="Meta ads delivered in the EU, where Meta publishes how many people they reached."
                     checked={state.impressionsOnly}
                     onChange={(impressionsOnly) => onChange({ impressionsOnly })}
                   />

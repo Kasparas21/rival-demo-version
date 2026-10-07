@@ -1527,7 +1527,8 @@ function DetailsTab({ data }: { data: AdDetailData }) {
         ? googleTransparencyTerritoryDisclosureRows(googleTransparencyStats)
         : [];
     rows.push({
-      label: "Impressions",
+      /** Meta's number is people reached (EU transparency), not impressions. */
+      label: pl === "meta" ? "People reached (EU)" : "Impressions",
       value:
         googleTerritoryRows.length > 0 ? (
           <GoogleTransparencyImpressionsDisclosure

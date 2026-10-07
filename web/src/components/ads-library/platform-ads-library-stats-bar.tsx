@@ -165,7 +165,7 @@ export function PlatformAdsLibraryStatsBar({ platform, ads, scrapeAtMs, classNam
             hint={
               stats.avg_impressions_index != null ? (
                 <span className="text-[11px] text-slate-500">
-                  Avg band {stats.avg_impressions_index} · {stats.impressions_coverage_percent}% disclosed
+                  Reach published for {stats.impressions_coverage_percent}% of ads
                 </span>
               ) : (
                 <span className="text-[11px] text-slate-500">Long-run proven creatives</span>

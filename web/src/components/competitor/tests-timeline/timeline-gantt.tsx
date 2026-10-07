@@ -20,6 +20,7 @@ import {
   groupDuplicateAds,
   headlineForAd,
 } from "./timeline-helpers";
+import { formatReachFromIndex } from "@/lib/ad-library/ad-performance-ranking";
 
 const LABEL_COL = 300;
 const ROW_H = 72;
@@ -210,7 +211,7 @@ function RowLabel({ ad, viewFields, duplicateCount }: LabelProps) {
             {ad.is_ultimate_winner ? (
               <span
                 className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-bold text-amber-800"
-                title="Ultimate winner — high impressions and long runtime"
+                title="Ultimate winner — high reach and long runtime"
               >
                 <Sparkles className="h-3 w-3" aria-hidden />
                 Ultimate
@@ -240,7 +241,7 @@ function RowLabel({ ad, viewFields, duplicateCount }: LabelProps) {
           </span>
           {typeof ad.impressions_index === "number" && Number.isFinite(ad.impressions_index) ? (
             <span className="rounded-full bg-slate-100 px-1.5 py-0 text-[10px] font-semibold text-slate-600">
-              Imp. band {ad.impressions_index}
+              {formatReachFromIndex(ad.impressions_index)}
             </span>
           ) : null}
         </div>
