@@ -126,7 +126,60 @@ type EnrichItem = {
   ad_text: string;
   format: string;
   platform: string;
+  /** Button text ("Book Now", "Learn More"), headline, link description and landing page, when published. */
+  cta?: string;
+  headline?: string;
+  link_description?: string;
+  landing_page?: string;
 };
+
+function payloadString(p: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const k of keys) {
+    const v = p[k];
+    if (typeof v === "string" && v.trim()) return v.trim().slice(0, 200);
+  }
+  return undefined;
+}
+
+/** Host and path only: query strings are tracking noise. */
+function landingPageForPrompt(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    return `${u.hostname.replace(/^www\./, "")}${u.pathname === "/" ? "" : u.pathname}`.slice(0, 160);
+  } catch {
+    return undefined;
+  }
+}
+
+const BOOKING_CTA = /^(book now|get offer|call now|apply now|get quote|send whatsapp message|order now|buy now|request time|book a test drive)$/i;
+/** A price in the copy ("nuo 544 €", "$1,299", "1 199 EUR"); percentages alone are often satisfaction stats. */
+const PRICE = /(?:[€$£]\s?\d)|(?:\d[\d\s.,]*\s?(?:€|eur\b|usd\b|\$|£))/i;
+
+/**
+ * BOF regardless of what the model said: a stated price or a booking-style button is direct response by the
+ * prompt's own first rule, and the model sometimes skipped past it (a team intro with "Book now" as TOF).
+ */
+export function forcedBofFromSignals(item: Pick<EnrichItem, "ad_text" | "cta" | "headline" | "link_description">): boolean {
+  if (item.cta && BOOKING_CTA.test(item.cta.trim())) return true;
+  return [item.ad_text, item.headline, item.link_description].some((t) => (t ? PRICE.test(t) : false));
+}
+
+/**
+ * Signals beyond the body text. The classifier used to see the text alone; on a hand-checked sample about
+ * a quarter of Meta stages contradicted the prompt's own rules (a price offer as MOF, an explainer as BOF),
+ * while the CTA button and landing page that settle most of those were already stored.
+ */
+export function enrichmentSignalsForAd(rawPayload: unknown): Pick<EnrichItem, "cta" | "headline" | "link_description" | "landing_page"> {
+  if (!rawPayload || typeof rawPayload !== "object") return {};
+  const p = rawPayload as Record<string, unknown>;
+  return {
+    cta: payloadString(p, "cta", "ctaText", "cta_text", "callToAction"),
+    headline: payloadString(p, "headline", "title"),
+    link_description: payloadString(p, "linkDescription", "link_description"),
+    landing_page: landingPageForPrompt(payloadString(p, "destinationUrl", "landingPageUrl", "link_url")),
+  };
+}
 
 /**
  * Maps model output to TOF | MOF | BOF. Accepts exact tokens plus common EN synonyms and light Lithuanian/French/German cues.
@@ -197,17 +250,18 @@ Fields:
   - education = teaches or explains (how-to, Q&A, tips); brand = awareness, launches, product showcase or story with no other hook
   - other = only when none of the above fits at all
 
-- funnel_stage: **exactly one string**, must be one of: **TOF**, **MOF**, **BOF** (Latin letters only).
-  - TOF = awareness / brand / reach / story, light CTA
-  - MOF = education / comparison / trust / community
-  - BOF = direct response: offers, appointments, savings, "consultation", prices, strong booking/buy CTA
+- funnel_stage: **exactly one string**, must be one of: **TOF**, **MOF**, **BOF** (Latin letters only). Decide in this order:
+  1. **BOF** if the ad states a price, discount, instalment plan, free consultation / check-up / scan, a limited-time offer, or asks people to book, register, call or buy — even when the rest of the text educates. A booking/offer/pricing/registration landing page or a "Book Now", "Get Offer", "Sign Up", "Apply Now", "Call Now" button also points to BOF.
+  2. **MOF** if it explains a problem, procedure or product, compares options, or builds trust (introducing the team or a doctor, experience, guarantees, reviews) **without** an offer or price.
+  3. **TOF** if it is brand story, a launch or announcement, lifestyle or entertainment, with no offer and no explanation.
+  Use "cta", "headline", "link_description" and "landing_page" when present; they often settle it. "Learn More" alone is neutral.
 
 - voice_tone: **required** object with numbers in [0,1]: formal (0 casual → 1 formal), emotional (0 rational → 1 emotional), confidence (your certainty; use 0.25–0.45 for very short or truncated copy).
 
 Worked examples (format only — your ids come from Ads):
 
 1) English long Meta:
-{"id":"ex1","angle":"urgency","funnel_stage":"MOF","voice_tone":{"formal":0.55,"emotional":0.5,"confidence":0.82},"headline_guess":"Limited-time playoff watch party","body_theme":"Drive tune-in with countdown energy"}
+{"id":"ex1","angle":"urgency","funnel_stage":"BOF","voice_tone":{"formal":0.4,"emotional":0.6,"confidence":0.82},"headline_guess":"Last pairs at 30% off, ends Sunday","body_theme":"Clearance countdown with discount"}
 
 2) Lithuanian short Google Search:
 {"id":"ex2","angle":"price","funnel_stage":"BOF","voice_tone":{"formal":0.65,"emotional":0.35,"confidence":0.55},"headline_guess":"Implantai nuo 999€","body_theme":"Price-led dental offer"}
@@ -452,6 +506,7 @@ export async function enrichScrapedAdsIfNeeded(
         ad_text: cleaned.slice(0, 4000),
         format: r.format,
         platform: r.platform,
+        ...enrichmentSignalsForAd(r.raw_payload),
       };
     });
 
@@ -519,7 +574,9 @@ export async function enrichScrapedAdsIfNeeded(
         continue;
       }
 
-      const fs = normalizeFunnel(r.funnel_stage);
+      const item = items.find((it) => it.id === row.id);
+      const modelStage = normalizeFunnel(r.funnel_stage);
+      const fs = modelStage && item && forcedBofFromSignals(item) ? "BOF" : modelStage;
       const angleResolved = resolveAngle(r);
       if (!fs) {
         failedInvalid += 1;
