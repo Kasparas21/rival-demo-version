@@ -1,5 +1,6 @@
 "use client";
 
+import { knownLikes } from "@/lib/organic-content/known-likes";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -96,7 +97,9 @@ function DetailsTab({
         <span className="ml-2 text-[12px] text-slate-600">{platformLabel}</span>
       </DetailRow>
       <DetailRow label="Posted">{formatPostedDate(post.posted_at)}</DetailRow>
-      <DetailRow label="Likes">{formatEngagementCount(post.likes)}</DetailRow>
+      <DetailRow label="Likes">
+        {knownLikes(post, false) == null ? "Hidden by the account" : formatEngagementCount(post.likes)}
+      </DetailRow>
       <DetailRow label="Comments">{formatEngagementCount(post.comments)}</DetailRow>
       <DetailRow label="Shares">{formatEngagementCount(post.shares)}</DetailRow>
       {(post.views ?? 0) > 0 ? (

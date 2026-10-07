@@ -83,6 +83,8 @@ export function detectMoves(
   for (const ang of afterAngles) {
     if (!beforeAngles.has(ang)) {
       if (brandName && isBrandBidAngle(ang, brandName)) continue;
+      // "Other" is what the classifier says when no angle fits; it isn't something a competitor starts doing.
+      if (angleSlugFromName(ang) === "other") continue;
 
       const angleData = after.insights.angles_by_platform?.find((x) => x.angle === ang);
       if (angleData && angleData.totalCount >= 2) {

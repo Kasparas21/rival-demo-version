@@ -2,6 +2,7 @@
 
 import { Bookmark, Heart, MessageCircle, MoreHorizontal, Send } from "lucide-react";
 
+import { knownLikes } from "@/lib/organic-content/known-likes";
 import { cn } from "@/lib/utils";
 
 import {
@@ -81,7 +82,14 @@ export function InstagramPostCard({
         ) : null}
 
         <p className="text-[13px] font-semibold text-black">
-          <EngagementCount value={post.likes} /> likes
+          {/* Instagram reports 3 when the owner hides likes; don't show the placeholder as a count. */}
+          {knownLikes({ platform: "instagram", likes: post.likes, comments: post.comments, views: post.views }, false) == null ? (
+            "Likes hidden"
+          ) : (
+            <>
+              <EngagementCount value={post.likes} /> likes
+            </>
+          )}
         </p>
 
         {isReel && (post.views ?? 0) > 0 ? (
