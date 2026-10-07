@@ -18,6 +18,7 @@ import {
   parsePatternWeekStartMs,
   resolvePatternWeekStartMs,
   resolvePatternWeekStartYmd,
+  weekCoverage,
   type PatternMetricsAd,
 } from "./compute-pattern-metrics";
 import { DAY_MS, inUtcHalfOpenRange } from "./pattern-week-utils";
@@ -52,7 +53,7 @@ type CompetitorRow = {
   last_scraped_at: string | null;
 };
 
-const SYSTEM_PROMPT = `You are a senior paid-social strategist analyzing a competitive market for an agency. You receive structured data about every Meta ad tracked in this market: launches, kills, long-running winners, and pre-computed aggregate metrics. Your job is to find PATTERNS — what creative approaches, offers, hooks, and formats are winning or dying in this specific market, and what that implies for an advertiser entering it this week. The market vertical must be inferred from the competitor names and ad texts (e.g. dental clinics); use vertical-appropriate language. Never invent numbers — every numeric claim must come from the provided metrics. Reference evidence ads by their id. Write in clear, punchy English. Return ONLY valid JSON matching the requested schema. No markdown, no preamble.`;
+const SYSTEM_PROMPT = `You are a senior paid-social strategist analyzing a competitive market for an agency. You receive structured data about every Meta ad tracked in this market: launches, kills, long-running winners, and pre-computed aggregate metrics. Your job is to find PATTERNS — what creative approaches, offers, hooks, and formats are winning or dying in this specific market, and what that implies for an advertiser entering it this week. The market vertical must be inferred from the competitor names and ad texts (e.g. dental clinics); use vertical-appropriate language. Never invent numbers — every numeric claim must come from the provided metrics. Week-over-week claims must come from the "week" block only: it compares this week so far with the same days of the previous week and already holds the change. Never compare two numbers yourself or turn them into ratios, multiples or percentages ("6 vs 0" is not "6x"), and when the week is not complete say so ("9 new in the first 3 days, vs 20 in the same days last week"). market_temperature follows the week block: fewer launches and more retirements is not "heating_up". Reference evidence ads by their id. Write in clear, punchy English. Return ONLY valid JSON matching the requested schema. No markdown, no preamble.`;
 
 const OUTPUT_SCHEMA = `{
   headline: string;
@@ -245,10 +246,67 @@ function buildEvidencePayload(
     );
 
   return {
+    week: weekComparisonForPrompt(metrics, weekStartMs, nowMs),
     changed_ads: changedAds.slice(0, 250),
     long_runners: longRunners,
-    metrics,
+    metrics: metricsForPrompt(metrics),
     market_context: marketContext,
+  };
+}
+
+type WeekChange = {
+  this_week: number;
+  previous_week_same_days: number;
+  change: number;
+  direction: "up" | "down" | "flat";
+};
+
+function weekChange(current: number, previous: number): WeekChange {
+  const change = current - previous;
+  return {
+    this_week: current,
+    previous_week_same_days: previous,
+    change,
+    direction: change > 0 ? "up" : change < 0 ? "down" : "flat",
+  };
+}
+
+/** The only week-over-week comparison the model sees, computed here so a partial week is never set against a full one. */
+export function weekComparisonForPrompt(metrics: DiscoveryPatternMetrics, weekStartMs: number, nowMs: number) {
+  const { daysCovered } = weekCoverage(weekStartMs, nowMs);
+  const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+  const prevStart = weekStartMs - 7 * DAY_MS;
+  const prev = metrics.prev_week_same_days ?? {
+    new: metrics.new_prev_week,
+    killed: metrics.killed_prev_week,
+    net_change: metrics.new_prev_week - metrics.killed_prev_week,
+    new_ultimate_winners: 0,
+  };
+  return {
+    this_week: `${ymd(weekStartMs)} to ${ymd(weekStartMs + (daysCovered - 1) * DAY_MS)}`,
+    days_covered: daysCovered,
+    week_complete: daysCovered === 7,
+    compared_with: `${ymd(prevStart)} to ${ymd(prevStart + (daysCovered - 1) * DAY_MS)} (the same ${daysCovered} day${daysCovered === 1 ? "" : "s"} of the previous week)`,
+    new_launches: weekChange(metrics.new_this_week, prev.new),
+    retired: weekChange(metrics.killed_this_week, prev.killed),
+    net_change: weekChange(metrics.net_change, prev.net_change),
+    new_winners: weekChange(metrics.new_ultimate_winners_this_week, prev.new_ultimate_winners),
+  };
+}
+
+/**
+ * Metrics minus the full-previous-week totals (the model set those against a partial week), with the
+ * current week's bar in the series marked as partial.
+ */
+function metricsForPrompt(metrics: DiscoveryPatternMetrics) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { new_prev_week, killed_prev_week, prev_week_same_days, as_of, ...rest } = metrics;
+  const days = metrics.days_covered ?? 7;
+  return {
+    ...rest,
+    weekly_series: metrics.weekly_series.map((w) =>
+      w.week_start === metrics.week_start && days < 7 ? { ...w, partial_week_days: days } : w,
+    ),
   };
 }
 

@@ -30,7 +30,7 @@ function WowBadge({ delta, pct }: { delta: number; pct: number | null }) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-slate-500">
         <Minus className="h-3 w-3" aria-hidden />
-        Flat vs prior week
+        Flat vs prior 7 days
       </span>
     );
   }
@@ -42,7 +42,7 @@ function WowBadge({ delta, pct }: { delta: number; pct: number | null }) {
   return (
     <span className={cn("inline-flex items-center gap-0.5 text-[11px] font-semibold", tone)}>
       <Icon className="h-3 w-3" aria-hidden />
-      {formatDelta(delta)} vs prior week
+      {formatDelta(delta)} vs prior 7 days
       {pct != null ? ` (${up ? "+" : ""}${pct}%)` : null}
     </span>
   );
@@ -92,8 +92,8 @@ export function DiscoveryMarketStatsBar({ stats, className }: Props) {
     ) : (
       <span className="text-[11px] text-slate-500">
         {stats.retired_this_week > 0
-          ? `${stats.retired_this_week} retired this week`
-          : "No retirements this week"}
+          ? `${stats.retired_this_week} retired in 7 days`
+          : "No retirements in 7 days"}
       </span>
     );
 
@@ -101,7 +101,7 @@ export function DiscoveryMarketStatsBar({ stats, className }: Props) {
     stats.hottest_competitor_name && stats.hottest_competitor_new_this_week > 0
       ? `${stats.hottest_competitor_name} launched ${stats.hottest_competitor_new_this_week}`
       : stats.new_this_week === 0
-        ? "Quiet week for new creatives"
+        ? "No new creatives in 7 days"
         : null;
 
   return (
@@ -114,7 +114,7 @@ export function DiscoveryMarketStatsBar({ stats, className }: Props) {
     >
       <div className="mb-2.5 flex items-center justify-between gap-2 px-0.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Market pulse</p>
-        <p className="text-[11px] text-slate-400">Rolling 7-day windows vs prior week</p>
+        <p className="text-[11px] text-slate-400">Last 7 days vs the 7 days before</p>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <StatCell
@@ -128,7 +128,7 @@ export function DiscoveryMarketStatsBar({ stats, className }: Props) {
           icon={<Activity className="h-3 w-3" aria-hidden />}
         />
         <StatCell
-          label="New this week"
+          label="New · 7 days"
           value={stats.new_this_week.toLocaleString()}
           hint={launchHint}
           icon={<TrendingUp className="h-3 w-3" aria-hidden />}

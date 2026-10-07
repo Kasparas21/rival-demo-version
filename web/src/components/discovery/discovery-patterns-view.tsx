@@ -48,6 +48,8 @@ import {
   formatPatternsTimestamp,
   findPriorWeekMetrics,
   loadPatternsDisplayPrefs,
+  partialWeekDays,
+  priorWeekComparison,
   resolvePatternsTimezone,
   savePatternsDisplayPrefs,
   type PatternsDisplayPrefs,
@@ -117,11 +119,13 @@ function StatCell({
   label,
   value,
   delta,
+  deltaLabel = "vs prior week",
   compare,
 }: {
   label: string;
   value: string;
   delta?: number | null;
+  deltaLabel?: string;
   compare: boolean;
 }) {
   const showDelta = compare && delta != null && delta !== 0;
@@ -134,10 +138,10 @@ function StatCell({
       {showDelta ? (
         <p className={cn("mt-1.5 inline-flex items-center gap-1 text-sm font-semibold", up ? "text-emerald-700" : "text-rose-700")}>
           {up ? <ArrowUp className="h-3.5 w-3.5" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5" aria-hidden />}
-          {formatDelta(delta!)} vs prior week
+          {formatDelta(delta!)} {deltaLabel}
         </p>
       ) : compare ? (
-        <p className="mt-1.5 text-sm font-medium text-slate-400">Flat vs prior week</p>
+        <p className="mt-1.5 text-sm font-medium text-slate-400">Flat {deltaLabel}</p>
       ) : null}
     </div>
   );
@@ -465,18 +469,22 @@ function ReportDashboard({
     () => new Map(priorMetrics?.competitors.map((c) => [c.competitor_id, c]) ?? []),
     [priorMetrics],
   );
+  const partialDays = partialWeekDays(metrics);
+  const prior = priorWeekComparison(metrics, priorMetrics);
   const series = useMemo(
     () =>
       metrics.weekly_series.map((w, i, arr) => {
         const prev = i > 0 ? arr[i - 1] : null;
+        // The report's own week is cut short mid-week: its faded bar is the same days of the week before.
+        const partial = partialDays != null && w.week_start === metrics.week_start;
         return {
           ...w,
-          label: formatWeekLabel(w.week_start, timeZone),
-          launches_prev: prev?.launches ?? 0,
-          retirements_prev: prev?.retirements ?? 0,
+          label: `${formatWeekLabel(w.week_start, timeZone)}${partial ? " (so far)" : ""}`,
+          launches_prev: partial ? prior.new : (prev?.launches ?? 0),
+          retirements_prev: partial ? prior.killed : (prev?.retirements ?? 0),
         };
       }),
-    [metrics.weekly_series, timeZone],
+    [metrics.weekly_series, metrics.week_start, partialDays, prior.new, prior.killed, timeZone],
   );
 
   const competitorChart = useMemo(
@@ -492,8 +500,8 @@ function ReportDashboard({
             fullName: c.name,
             launched: c.launched_this_week,
             killed: c.killed_this_week,
-            launched_prev: prev?.launched_this_week ?? 0,
-            killed_prev: prev?.killed_this_week ?? 0,
+            launched_prev: c.launched_prev_same_days ?? prev?.launched_this_week ?? 0,
+            killed_prev: c.killed_prev_same_days ?? prev?.killed_this_week ?? 0,
             active: c.active_ads,
             aggression: c.aggression_score,
           };
@@ -544,42 +552,48 @@ function ReportDashboard({
       <DiscoveryPatternsControls
         prefs={prefs}
         onChange={onPrefsChange}
-        weekRangeLabel={`Week of ${formatWeekRange(report.week_start, timeZone)}`}
+        weekRangeLabel={`Week of ${formatWeekRange(report.week_start, timeZone)}${
+          partialDays != null ? ` · first ${partialDays} of 7 days` : ""
+        }`}
       />
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCell
           label="New launches"
           value={metrics.new_this_week.toLocaleString()}
-          delta={metrics.new_this_week - metrics.new_prev_week}
+          delta={metrics.new_this_week - prior.new}
+          deltaLabel={prior.label}
           compare={compare}
         />
         <StatCell
           label="Retired"
           value={metrics.killed_this_week.toLocaleString()}
-          delta={metrics.killed_this_week - metrics.killed_prev_week}
+          delta={metrics.killed_this_week - prior.killed}
+          deltaLabel={prior.label}
           compare={compare}
         />
         <StatCell
           label="Net change"
           value={formatDelta(metrics.net_change)}
-          delta={compare ? metrics.net_change - (priorMetrics ? priorMetrics.net_change : 0) : null}
-          compare={compare && priorMetrics != null}
+          delta={metrics.net_change - prior.net_change}
+          deltaLabel={prior.label}
+          compare={compare}
         />
         <StatCell
           label="New winners"
           value={metrics.new_ultimate_winners_this_week.toLocaleString()}
           delta={
-            compare && priorMetrics
-              ? metrics.new_ultimate_winners_this_week - priorMetrics.new_ultimate_winners_this_week
+            prior.new_ultimate_winners != null
+              ? metrics.new_ultimate_winners_this_week - prior.new_ultimate_winners
               : null
           }
-          compare={compare && priorMetrics != null}
+          deltaLabel={prior.label}
+          compare={compare && prior.new_ultimate_winners != null}
         />
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <ChartCard title="Launch vs retirement" subtitle={compare ? "Solid = this period · faded = prior week per bar" : undefined}>
+        <ChartCard title="Launch vs retirement" subtitle={compare ? `Solid = this period · faded = prior week per bar${partialDays != null ? " (same days for the week so far)" : ""}` : undefined}>
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={series} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
