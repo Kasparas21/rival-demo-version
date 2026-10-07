@@ -15,7 +15,7 @@ const MAX_TIMEOUT_SECS = 3600;
  * RAM for the Google Transparency Apify run. Many actors default to 4096MB, which can exceed
  * account memory caps. Override with `GOOGLE_ADS_MEMORY_MBYTES` (e.g. 2048, 1024).
  */
-function readGoogleAdsMemoryMbytes(): number {
+export function readGoogleAdsMemoryMbytes(): number {
   return readApifyActorMemoryMbytes("GOOGLE_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES);
 }
 

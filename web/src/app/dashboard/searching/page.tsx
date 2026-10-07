@@ -5,6 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { availableChannelIds, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { ManualIdentifiersForm, type PlatformIdentifier } from "@/components/manual-identifiers-form";
+import { AdAccountPicker, type PickedAdAccounts } from "@/components/ad-account-picker";
+import { hostCountry, hostOf } from "@/lib/ad-account-discovery/score";
 import { looksLikeUrl } from "@/lib/discovery";
 import type { TermHint } from "@/lib/competitor-query";
 import { BrandLogoSkeleton } from "@/components/brand-logo-skeleton";
@@ -225,6 +227,7 @@ function SearchingContent() {
   const [discoveredIds, setDiscoveredIds] = useState<Partial<PlatformIdentifier>>({});
   const [discoveredBrand, setDiscoveredBrand] = useState<DiscoveredBrand | null>(null);
   const [manualIds, setManualIds] = useState<PlatformIdentifier>({});
+  const [pickedAccounts, setPickedAccounts] = useState<PickedAdAccounts | undefined>(undefined);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [discoveryWarning, setDiscoveryWarning] = useState<string | null>(null);
   const [discoveryStep, setDiscoveryStep] = useState<string>("Searching for your competitor...");
@@ -1062,8 +1065,18 @@ function SearchingContent() {
                 </div>
               </div>
             )}
+            {discoveredBrand?.domain && (selectedChannels.includes("meta") || selectedChannels.includes("google")) ? (
+              <AdAccountPicker
+                domain={hostOf(discoveredBrand.domain) ?? discoveredBrand.domain}
+                brandName={discoveredBrand.name}
+                market={hostCountry(hostOf(activeBrand.domain) ?? "")}
+                platforms={{ meta: selectedChannels.includes("meta"), google: selectedChannels.includes("google") }}
+                onPick={setPickedAccounts}
+              />
+            ) : null}
             <ManualIdentifiersForm
               key={manualFormMountKey}
+              pickedAccounts={pickedAccounts}
               selectedChannels={selectedChannels}
               discoveredIds={discoveredIds}
               onSubmit={handleManualSubmit}
