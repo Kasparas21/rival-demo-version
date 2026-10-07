@@ -9,7 +9,7 @@ import {
 } from "@/lib/strategy-overview/ads-library-strategy-bridge";
 import { hasChannelSignals } from "@/lib/strategy-overview/channel-signals";
 import { hasJourneyGoal } from "@/lib/strategy-overview/derive-journey-goal";
-import type { CompetitorStrategyOverviewPayload, FunnelCellId } from "@/lib/strategy-overview/payload-types";
+import type { CompetitorStrategyOverviewPayload, FunnelCellId, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
 import { normalizeCompetitorStrategyOverviewPayload, normalizeStrategyMapPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
 import { useStrategyOverviewUi } from "@/lib/strategy-overview/strategy-overview-store";
 import { StrategyMapFlow } from "@/components/strategy-overview/strategy-map-flow";
@@ -62,6 +62,32 @@ type Props = {
   onOpenEmailTab?: () => void;
   onOpenLandingPages?: () => void;
 };
+
+const PLATFORM_NAME: Record<string, string> = {
+  meta: "Meta",
+  google: "Google",
+  linkedin: "LinkedIn",
+  tiktok: "TikTok",
+  pinterest: "Pinterest",
+  snapchat: "Snapchat",
+};
+
+/** Ads left off the stage grid, and why; they used to be drawn in a default stage without saying so. */
+function UnplacedAdsNote({ rows }: { rows: StrategyMapPayload["unclassifiedByPlatform"] }) {
+  const parts = (rows ?? []).flatMap((r) => {
+    const name = PLATFORM_NAME[r.platform] ?? r.platform;
+    return [
+      r.pending > 0 ? `${r.pending} ${name} ad${r.pending === 1 ? "" : "s"} waiting to be classified` : null,
+      r.noText > 0 ? `${r.noText} ${name} ad${r.noText === 1 ? "" : "s"} with no readable copy` : null,
+    ].filter((x): x is string => x != null);
+  });
+  if (parts.length === 0) return null;
+  return (
+    <p className="px-1 text-xs text-slate-500">
+      Not placed on a stage: {parts.join(" · ")}. They still count in ad totals and spend.
+    </p>
+  );
+}
 
 export function StrategyOverviewApp({
   brand,
@@ -447,6 +473,7 @@ export function StrategyOverviewApp({
                 }}
                 onEdgeHover={setEdgeTip}
               />
+              <UnplacedAdsNote rows={payload!.map.unclassifiedByPlatform} />
             </div>
             <aside className="w-full shrink-0 xl:w-[min(520px,36vw)] xl:max-w-[520px] space-y-4">
               {journeyGoalActive && payload!.journeyGoal ? (

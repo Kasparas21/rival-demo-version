@@ -289,6 +289,11 @@ export type StrategyChannelSignals = {
 };
 
 export type StrategyMapPayload = {
+  /**
+   * Live ads per platform left off the stage grid because they have no stage: `pending` still wait for the
+   * classifier, `noText` have no readable copy (Google rows that only carry advertiser and dates).
+   */
+  unclassifiedByPlatform?: { platform: StrategyPlatform; pending: number; noText: number; total: number }[];
   title: string;
   competitor: CompetitorStrategyMeta;
   totalAdSpend: TotalAdSpend;

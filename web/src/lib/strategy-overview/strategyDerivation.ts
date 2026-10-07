@@ -197,43 +197,41 @@ function layoutFunnelCells(cells: FunnelCellNodePayload[]): FunnelCellNodePayloa
   return applyFunnelCellLayout(cells);
 }
 
-function resolvePlatformDefaultStage(
-  platform: StrategyPlatform,
-  allAds: ScrapedAdInput[],
-  unclassified: ScrapedAdInput[],
-): FunnelStage {
-  const unclassifiedRatio = unclassified.length / Math.max(1, allAds.length);
-  if (unclassifiedRatio > 0.8) {
-    return PLATFORM_DEFAULT_FUNNEL_STAGE[platform] ?? "MOF";
-  }
-  return PLATFORM_DEFAULT_FUNNEL_STAGE[platform] ?? "MOF";
-}
-
-/** Bucket live ads into funnel stages; unclassified ads use the platform default stage. */
+/**
+ * Bucket live ads into funnel stages. Ads without a stage are left out: they used to go into the platform's
+ * default stage (Meta MOF, Google BOF), so 90 never-classified Meta ads were drawn as MOF and Google ads with
+ * no readable copy as BOF. {@link unclassifiedSummary} reports them instead.
+ */
 export function bucketAdsByFunnelStage(
-  platform: StrategyPlatform,
+  _platform: StrategyPlatform,
   ads: ScrapedAdInput[],
 ): Map<FunnelStage, ScrapedAdInput[]> {
   const byStage = new Map<FunnelStage, ScrapedAdInput[]>();
-  const unclassified: ScrapedAdInput[] = [];
-
   for (const ad of ads) {
     const stage = parseStage(ad.funnel_stage);
-    if (stage == null) {
-      unclassified.push(ad);
-      continue;
-    }
+    if (stage == null) continue;
     if (!byStage.has(stage)) byStage.set(stage, []);
     byStage.get(stage)!.push(ad);
   }
-
-  if (unclassified.length > 0) {
-    const defaultStage = resolvePlatformDefaultStage(platform, ads, unclassified);
-    if (!byStage.has(defaultStage)) byStage.set(defaultStage, []);
-    byStage.get(defaultStage)!.push(...unclassified);
-  }
-
   return byStage;
+}
+
+/** Live ads per platform that have no stage, split by why: still waiting for the model, or no readable copy. */
+export function unclassifiedSummary(
+  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>,
+): NonNullable<StrategyMapPayload["unclassifiedByPlatform"]> {
+  const out: NonNullable<StrategyMapPayload["unclassifiedByPlatform"]> = [];
+  for (const [platform, ads] of byPlatformLive) {
+    let pending = 0;
+    let noText = 0;
+    for (const a of ads) {
+      if (parseStage(a.funnel_stage) != null) continue;
+      if (a.ai_enrichment_status === "skipped_no_text") noText += 1;
+      else pending += 1;
+    }
+    if (pending + noText > 0) out.push({ platform, pending, noText, total: ads.length });
+  }
+  return out;
 }
 
 /**
@@ -926,6 +924,7 @@ export function deriveStrategyOverviewPayload(
     },
     platformNodes: nodes,
     funnelCells,
+    unclassifiedByPlatform: unclassifiedSummary(byPlatformLive),
     funnelEdges,
     suppressEdgesReason,
     activeAdCount: totalLive > 0 ? totalLive : activeAds.length,

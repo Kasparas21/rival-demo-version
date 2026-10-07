@@ -7,6 +7,7 @@ import {
   deriveFunnelCells,
   deriveStrategyOverviewPayload,
   monthlyFirstSeenCounts,
+  unclassifiedSummary,
   type ScrapedAdInput,
 } from "@/lib/strategy-overview/strategyDerivation";
 
@@ -157,21 +158,21 @@ describe("deriveFunnelCells", () => {
     expect(deriveFunnelCells(new Map(), 1.2)).toEqual([]);
   });
 
-  it("places wholly unclassified platform ads in the platform default stage (Google → BOF)", () => {
+  it("leaves ads without a stage off the grid and reports why", () => {
     const now = new Date().toISOString();
     const byPlatformLive = new Map<StrategyPlatform, ScrapedAdInput[]>([
       [
         "google",
         [
-          ad({ id: "g1", platform: "google", first_seen_at: now, funnel_stage: null }),
-          ad({ id: "g2", platform: "google", first_seen_at: now, funnel_stage: null }),
+          ad({ id: "g1", platform: "google", first_seen_at: now, funnel_stage: null, ai_enrichment_status: "skipped_no_text" }),
+          ad({ id: "g2", platform: "google", first_seen_at: now, funnel_stage: null, ai_enrichment_status: "pending" }),
+          ad({ id: "g3", platform: "google", first_seen_at: now, funnel_stage: "BOF" }),
         ],
       ],
     ]);
     const cells = deriveFunnelCells(byPlatformLive, 1.2);
-    expect(cells).toHaveLength(1);
-    expect(cells[0]?.id).toBe("google:BOF");
-    expect(cells[0]?.adCount).toBe(2);
+    expect(cells.map((c) => `${c.id}:${c.adCount}`)).toEqual(["google:BOF:1"]);
+    expect(unclassifiedSummary(byPlatformLive)).toEqual([{ platform: "google", pending: 1, noText: 1, total: 3 }]);
   });
 });
 

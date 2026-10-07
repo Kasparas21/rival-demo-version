@@ -474,6 +474,7 @@ export function normalizeStrategyMapPayload(map: StrategyMapPayload): StrategyMa
     platformNodes,
     funnelEdges: Array.isArray(raw.funnelEdges) ? raw.funnelEdges : [],
     funnelCells: Array.isArray(raw.funnelCells) ? raw.funnelCells : undefined,
+    unclassifiedByPlatform: Array.isArray(raw.unclassifiedByPlatform) ? raw.unclassifiedByPlatform : undefined,
     activeAdCount:
       typeof raw.activeAdCount === "number" && Number.isFinite(raw.activeAdCount)
         ? raw.activeAdCount
