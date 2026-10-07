@@ -124,12 +124,23 @@ export async function GET(req: Request): Promise<NextResponse> {
     : null;
   if (staleEarly) {
     const running = await isStrategyRecomputeRunning(supabase, meta.competitorId);
+    // The stored map no longer matches the live ads: show it, and rebuild in the background (only the new,
+    // unclassified ads go to the model). It used to be shown as-is until someone pressed refresh.
+    if (!running) {
+      scheduleBackgroundRecompute({
+        competitorDomain: domain,
+        userId: user.id,
+        competitorId: meta.competitorId,
+        stealLock: false,
+        refreshAdEnrichment: false,
+      });
+    }
     return NextResponse.json(
       {
         ok: true,
         cached: true,
-        recomputing: running,
-        staleWhileRecomputing: running,
+        recomputing: true,
+        staleWhileRecomputing: true,
         payload: await attachRuntimeLayers(
           normalizeCompetitorStrategyOverviewPayload(staleEarly)
         ),

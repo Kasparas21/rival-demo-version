@@ -1,4 +1,3 @@
-import { after } from "next/server";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { adsPlatformsFromLibraryContext } from "@/lib/ad-library/channels-to-platforms";
 import { classifyCompetitorPlatforms } from "@/lib/ad-library/classify-competitor-platforms";
@@ -25,7 +24,6 @@ import {
 import { microsoftMarketCodeToArray } from "@/lib/ad-library/scrape-settings-options";
 import { normalizeTikTokAdsRegion } from "@/lib/ad-library/tiktok-regions";
 import { hostToBrandLabel } from "@/lib/onboarding/host";
-import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 import { loadOrderedWeeklyScrapeCandidates } from "@/lib/ad-library/weekly-scrape-candidate-order";
@@ -400,20 +398,8 @@ async function runWeeklyJobForRow(
       console.error("[cron/weekly-scrape] weekly_scrape_jobs done", doneErr.message);
     }
 
-    const userIdSnap = row.user_id;
-    const competitorIdSnap = row.id;
-
-    after(() => {
-      const sb = createSupabaseAdminClient();
-      void recomputeStrategyOverviewForCompetitor({
-        supabase: sb,
-        userId: userIdSnap,
-        competitorId: competitorIdSnap,
-        domainHint: domainNormLower,
-      }).then((r) => {
-        if (!r.ok) console.warn("[cron/weekly-scrape] strategy overview recompute:", r.error);
-      });
-    });
+    // The strategy map is rebuilt by /api/cron/strategy-recompute, which waits for each rebuild. Starting it
+    // here from after() ran it once this loop had used its time budget, and it died mid-classification.
 
     return { skipped: false };
   } catch (e) {
