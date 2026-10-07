@@ -70,6 +70,7 @@ export const organicMetricsOverviewSchema = z.object({
   avg_likes: z.number().default(0),
   avg_comments: z.number().default(0),
   avg_shares: z.number().default(0),
+  likes_known_posts: z.number().optional(),
   post_frequency_per_week: z.number().default(0),
   best_platform: z.string().default(""),
   best_post_type: z.string().default(""),

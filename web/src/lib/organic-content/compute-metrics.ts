@@ -1,16 +1,25 @@
+import { knownLikes, repeatsHiddenLikesPlaceholder } from "@/lib/organic-content/known-likes";
+
 export type OrganicPostMetricRow = {
   platform: string;
   likes: number | null;
   comments: number | null;
   shares: number | null;
+  views?: number | null;
   posted_at: string | null;
   product_type?: string | null;
 };
 
+/**
+ * `avg_*` hold the typical (median) post: one viral post no longer sets the "average" for the account.
+ * Likes come only from posts whose likes are visible ({@link knownLikes}).
+ */
 export type OrganicMetricsOverview = {
   avg_likes: number;
   avg_comments: number;
   avg_shares: number;
+  /** Posts whose like count is real; 0 with posts means the account hides likes. */
+  likes_known_posts?: number;
   post_frequency_per_week: number;
   best_platform: string;
   best_post_type: string;
@@ -28,29 +37,43 @@ export function normalizeMetricsOverview(
     avg_likes: roundMetric(Number(m.avg_likes ?? 0)),
     avg_comments: roundMetric(Number(m.avg_comments ?? 0)),
     avg_shares: roundMetric(Number(m.avg_shares ?? 0)),
+    ...(m.likes_known_posts != null ? { likes_known_posts: roundMetric(Number(m.likes_known_posts)) } : {}),
     post_frequency_per_week: roundMetric(Number(m.post_frequency_per_week ?? 0)),
     best_platform: String(m.best_platform ?? "").trim(),
     best_post_type: String(m.best_post_type ?? "").trim(),
   };
 }
 
-/** Best platform by average engagement — always computed across all provided posts. */
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const s = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 1 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
+}
+
+/**
+ * Best platform by typical (median) engagement per post. Posts with hidden likes are left out rather than
+ * counted as 3, unless no platform has visible likes (then everything compares on comments + shares).
+ */
 export function computeBestPlatform(posts: OrganicPostMetricRow[]): string {
-  const platformEngagement = new Map<string, { total: number; count: number }>();
+  const repeated = repeatsHiddenLikesPlaceholder(posts);
+  const anyKnown = posts.some((p) => knownLikes(p, repeated) != null);
+  const byPlatform = new Map<string, number[]>();
   for (const post of posts) {
-    const engagement = (post.likes ?? 0) + (post.comments ?? 0) + (post.shares ?? 0);
-    const row = platformEngagement.get(post.platform) ?? { total: 0, count: 0 };
-    row.total += engagement;
-    row.count += 1;
-    platformEngagement.set(post.platform, row);
+    const likes = knownLikes(post, repeated);
+    if (anyKnown && likes == null) continue;
+    const engagement = (likes ?? 0) + (post.comments ?? 0) + (post.shares ?? 0);
+    const list = byPlatform.get(post.platform) ?? [];
+    list.push(engagement);
+    byPlatform.set(post.platform, list);
   }
 
   let best_platform = "";
-  let bestAvg = -1;
-  for (const [plat, { total, count }] of platformEngagement) {
-    const avg = total / count;
-    if (avg > bestAvg) {
-      bestAvg = avg;
+  let bestTypical = -1;
+  for (const [plat, values] of byPlatform) {
+    const typical = median(values);
+    if (typical > bestTypical) {
+      bestTypical = typical;
       best_platform = plat;
     }
   }
@@ -69,9 +92,11 @@ export function computeOrganicMetricsOverview(posts: OrganicPostMetricRow[]): Or
     };
   }
 
-  const avg_likes = posts.reduce((s, p) => s + (p.likes ?? 0), 0) / posts.length;
-  const avg_comments = posts.reduce((s, p) => s + (p.comments ?? 0), 0) / posts.length;
-  const avg_shares = posts.reduce((s, p) => s + (p.shares ?? 0), 0) / posts.length;
+  const repeated = repeatsHiddenLikesPlaceholder(posts);
+  const visibleLikes = posts.map((p) => knownLikes(p, repeated)).filter((n): n is number => n != null);
+  const avg_likes = median(visibleLikes);
+  const avg_comments = median(posts.map((p) => p.comments ?? 0));
+  const avg_shares = median(posts.map((p) => p.shares ?? 0));
 
   const dated = posts.filter((p) => p.posted_at);
   let post_frequency_per_week = posts.length;
@@ -102,6 +127,7 @@ export function computeOrganicMetricsOverview(posts: OrganicPostMetricRow[]): Or
     avg_likes: roundMetric(avg_likes),
     avg_comments: roundMetric(avg_comments),
     avg_shares: roundMetric(avg_shares),
+    likes_known_posts: visibleLikes.length,
     post_frequency_per_week: roundMetric(post_frequency_per_week),
     best_platform,
     best_post_type,

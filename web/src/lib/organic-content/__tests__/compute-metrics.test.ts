@@ -102,3 +102,51 @@ describe("metricsOverviewIsEmpty", () => {
     );
   });
 });
+
+describe("hidden Instagram likes", () => {
+  const ig = (likes: number, comments: number, views = 0) => ({
+    platform: "instagram",
+    likes,
+    comments,
+    shares: 0,
+    views,
+    posted_at: "2026-06-01T00:00:00.000Z",
+  });
+
+  it("leaves Instagram's placeholder 3 out of typical likes (real Rothy's shape)", () => {
+    const posts = [
+      ...Array.from({ length: 25 }, (_, i) => ig(3, 10, i % 2 ? 9000 : 0)),
+      ig(10_028, 44),
+      ig(553, 82),
+      ig(326, 63),
+      ig(1_101, 10),
+      ig(2_734, 116),
+    ];
+    const m = computeOrganicMetricsOverview(posts);
+    expect(m.avg_likes).toBe(1_101);
+    expect(m.likes_known_posts).toBe(5);
+  });
+
+  it("reports likes as hidden when every post hides them", () => {
+    const m = computeOrganicMetricsOverview([ig(3, 12, 2_000), ig(3, 8, 5_000), ig(3, 20)]);
+    expect(m.likes_known_posts).toBe(0);
+    expect(m.avg_likes).toBe(0);
+  });
+
+  it("keeps a real 3-like post", () => {
+    const m = computeOrganicMetricsOverview([ig(3, 1), ig(40, 2)]);
+    expect(m.likes_known_posts).toBe(2);
+  });
+
+  it("picks the best platform without counting hidden likes as 3", () => {
+    const m = computeOrganicMetricsOverview([
+      ig(3, 10, 9_000),
+      ig(3, 12, 8_000),
+      ig(3, 9, 7_000),
+      ig(900, 30),
+      { platform: "facebook", likes: 40, comments: 2, shares: 1, views: 0, posted_at: "2026-06-02T00:00:00.000Z" },
+    ]);
+    expect(m.best_platform).toBe("instagram");
+  });
+});
+

@@ -7,6 +7,7 @@ import {
   type AgentSignalSource,
 } from "@/lib/agent/types";
 import type { Database, Json } from "@/lib/supabase/types";
+import { knownLikes, repeatsHiddenLikesPlaceholder } from "@/lib/organic-content/known-likes";
 
 const BASELINE_WINDOW_DAYS = 30;
 
@@ -97,7 +98,7 @@ export async function recalculateBaseline(
       .gte("received_at", since),
     admin
       .from("organic_posts")
-      .select("likes, comments, shares, posted_at")
+      .select("platform, likes, comments, shares, views, posted_at")
       .eq("competitor_id", competitorId)
       .eq("user_id", userId)
       .gte("posted_at", since),
@@ -134,10 +135,17 @@ export async function recalculateBaseline(
   }
 
   let totalLikes = 0;
+  let likesCounted = 0;
   let totalComments = 0;
   let totalShares = 0;
+  const likesPlaceholderRepeated = repeatsHiddenLikesPlaceholder(posts);
   for (const p of posts) {
-    totalLikes += p.likes ?? 0;
+    /** Hidden like counts (Instagram's placeholder 3) stay out of the average. */
+    const likes = knownLikes(p, likesPlaceholderRepeated);
+    if (likes != null) {
+      totalLikes += likes;
+      likesCounted += 1;
+    }
     totalComments += p.comments ?? 0;
     totalShares += p.shares ?? 0;
   }
@@ -154,7 +162,7 @@ export async function recalculateBaseline(
       common_hooks: [...hookTypes].slice(0, 10),
     },
     organic: {
-      avg_likes: Math.round(totalLikes / postCount),
+      avg_likes: likesCounted > 0 ? Math.round(totalLikes / likesCounted) : 0,
       avg_comments: Math.round(totalComments / postCount),
       avg_shares: Math.round(totalShares / postCount),
       post_freq_per_week: Math.round((posts.length / weeksInWindow) * 10) / 10,

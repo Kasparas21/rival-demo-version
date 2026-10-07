@@ -50,6 +50,7 @@ function toMetricRows(
     likes: number;
     comments: number;
     shares: number;
+    views: number;
     posted_at: string | null;
     raw_data: unknown;
   }>,
@@ -59,6 +60,7 @@ function toMetricRows(
     likes: p.likes,
     comments: p.comments,
     shares: p.shares,
+    views: p.views,
     posted_at: p.posted_at,
     product_type: extractProductType(p.raw_data),
   }));

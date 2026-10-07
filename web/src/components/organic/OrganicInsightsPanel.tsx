@@ -39,6 +39,8 @@ type MetricsOverview = {
   avg_likes?: number;
   avg_comments?: number;
   avg_shares?: number;
+  /** Posts with visible like counts; 0 means the account hides likes. */
+  likes_known_posts?: number;
   post_frequency_per_week?: number;
   best_platform?: string;
   best_post_type?: string;
@@ -95,13 +97,17 @@ function MetricsOverviewGrid({
       )}
     >
       <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Avg Likes</p>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500" title="Middle post, so one viral post doesn't set it. Hidden like counts are left out.">
+          Typical Likes
+        </p>
         <p className="mt-1 text-[18px] font-semibold text-slate-900">
-          {formatEngagementCount(overview.avg_likes ?? 0)}
+          {overview.likes_known_posts === 0 ? "Hidden" : formatEngagementCount(overview.avg_likes ?? 0)}
         </p>
       </div>
       <div className="rounded-xl border border-[#f4f4f5] bg-[#fafafa]/80 px-4 py-3">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Avg Comments</p>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500" title="Middle post, so one viral post doesn't set it.">
+          Typical Comments
+        </p>
         <p className="mt-1 text-[18px] font-semibold text-slate-900">
           {formatEngagementCount(overview.avg_comments ?? 0)}
         </p>
