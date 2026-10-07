@@ -71,6 +71,10 @@ export function SignupForm({
       setFormError(t.errors.emailRequired);
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setFormError(t.errors.validEmailRequired);
+      return;
+    }
     if (!password) {
       setFormError(t.errors.passwordRequired);
       return;
@@ -179,6 +183,7 @@ export function SignupForm({
 
         <form
           className="mt-8 space-y-5"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
             void handleSignUp();
@@ -195,7 +200,10 @@ export function SignupForm({
                 autoComplete="email"
                 placeholder={t.emailPlaceholder}
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setFormError(null);
+                }}
                 className={glassInputField}
               />
             </div>
@@ -212,7 +220,10 @@ export function SignupForm({
                 autoComplete="new-password"
                 placeholder={t.passwordPlaceholder}
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setFormError(null);
+                }}
                 className={glassInputField}
               />
             </div>
@@ -229,7 +240,10 @@ export function SignupForm({
                 autoComplete="new-password"
                 placeholder={t.confirmPasswordPlaceholder}
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  setFormError(null);
+                }}
                 className={glassInputField}
               />
             </div>
