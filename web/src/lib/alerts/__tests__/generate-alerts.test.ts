@@ -120,7 +120,9 @@ function makeSupabaseMock(opts: {
   previousBatchAt?: string | null;
   /** created_at of the competitor's first batch; defaults to the previous batch (or this one). */
   firstBatchAt?: string;
-  winnerAds?: Array<{ id: string; platform: string; ad_text: string; first_seen_at: string }>;
+  winnerAds?: Array<{ id: string; platform: string; ad_text: string; first_seen_at: string; reach?: string | null }>;
+  /** Ads first stored during this scrape. */
+  newAdCount?: number;
 }) {
   const upsertRows: unknown[] = [];
   const queries: Array<{ table: string; calls: Call[] }> = [];
@@ -142,7 +144,7 @@ function makeSupabaseMock(opts: {
     }
     if (table === "scraped_ads") {
       if (has("lte")) return { data: opts.winnerAds ?? [], error: null };
-      return { count: 0, error: null };
+      return { count: opts.newAdCount ?? 0, error: null };
     }
     return { data: null, error: null };
   };
@@ -315,4 +317,44 @@ describe("generateAlertsForCompetitor", () => {
       | undefined;
     expect(winner?.dedupe_key).toBe(buildProvenWinnerDedupeKey(competitorId, "ad-9"));
   });
+
+  it("raises a creative push when 8+ ads were first stored in this scrape", async () => {
+    const mock = makeSupabaseMock({ newAdCount: 31 });
+
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+
+    const push = mock.upsertRows.find((r) => (r as { alert_type: string }).alert_type === "creative_push") as
+      | { body: string; metadata: { newAdCount: number } }
+      | undefined;
+    expect(push?.metadata.newAdCount).toBe(31);
+    const countQuery = mock.queries.find(
+      (q) => q.table === "scraped_ads" && q.calls.some((c) => c.method === "gte"),
+    )!;
+    expect(countQuery.calls.find((c) => c.method === "gte")?.args[0]).toBe("created_at");
+  });
+
+  it("stays quiet below 8 new ads", async () => {
+    const mock = makeSupabaseMock({ newAdCount: 7 });
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+    expect(mock.upsertRows.some((r) => (r as { alert_type: string }).alert_type === "creative_push")).toBe(false);
+  });
+
+  it("alerts on at most 5 proven winners per scrape, strongest reach first", async () => {
+    const winnerAds = Array.from({ length: 12 }, (_, i) => ({
+      id: `w${i}`,
+      platform: "meta",
+      ad_text: "Launch ad",
+      first_seen_at: "2026-09-03T00:00:00.000Z",
+      reach: String(1000 * (i + 1)),
+    }));
+    const mock = makeSupabaseMock({ previousBatchAt: "2026-10-04T00:00:00.000Z", winnerAds });
+
+    await generateAlertsForCompetitor({ supabase: mock as never, userId, competitorId, batchId });
+
+    const winners = mock.upsertRows
+      .filter((r) => (r as { alert_type: string }).alert_type === "proven_winner")
+      .map((r) => (r as { metadata: { scrapedAdId: string } }).metadata.scrapedAdId);
+    expect(winners).toEqual(["w11", "w10", "w9", "w8", "w7"]);
+  });
 });
+
