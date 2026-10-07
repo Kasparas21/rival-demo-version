@@ -4,9 +4,11 @@ import {
   DEMO_OWN_BRAND,
 } from "@/lib/demo/dashboard-demo-config";
 import { FROZEN_TRACKED_PAGES } from "@/lib/demo/frozen/frozen-neptunas-website";
+import { evidenceEdgeBetween } from "@/lib/strategy-overview/funnel-cell-edges";
 import type {
   FunnelCellId,
   FunnelCellNodePayload,
+  FunnelEdgePayload,
   FunnelStage,
   StrategyChannelSignals,
   StrategyJourneyGoal,
@@ -451,6 +453,33 @@ export const DEMO_STRATEGY_MAP_FUNNEL_CELLS: FunnelCellNodePayload[] = DEMO_STRA
   demoFunnelCell(cell.platform, cell.funnel as FunnelStage, cell.ads, cell.spend, cell.activity),
 );
 
+/** Demo arrows: each one carries the shared landing page a real map needs before it draws an arrow. */
+function demoEdges(
+  cells: FunnelCellNodePayload[],
+  domain: string,
+  specs: { from: FunnelCellId; to: FunnelCellId; path: string; fromAds: number; toAds: number }[],
+): FunnelEdgePayload[] {
+  return specs.flatMap((s) => {
+    const from = cells.find((c) => c.id === s.from);
+    const to = cells.find((c) => c.id === s.to);
+    if (!from || !to) return [];
+    return [
+      evidenceEdgeBetween(from, to, {
+        sharedLandingPages: [`${domain}${s.path}`],
+        fromAds: s.fromAds,
+        toAds: s.toAds,
+      }),
+    ];
+  });
+}
+
+const DEMO_STRATEGY_MAP_FUNNEL_EDGES = demoEdges(DEMO_STRATEGY_MAP_FUNNEL_CELLS, DEMO_COMPETITOR.domain, [
+  { from: "meta:TOF", to: "meta:MOF", path: "/running", fromAds: 14, toAds: 9 },
+  { from: "meta:MOF", to: "meta:BOF", path: "/sale", fromAds: 8, toAds: 17 },
+  { from: "google:TOF", to: "google:MOF", path: "/running", fromAds: 6, toAds: 5 },
+  { from: "tiktok:TOF", to: "meta:BOF", path: "/sale", fromAds: 4, toAds: 11 },
+]);
+
 /** Organic + email layer for demo strategy maps (rail above TOF, capture below BOF). */
 export const DEMO_STRATEGY_CHANNEL_SIGNALS: StrategyChannelSignals = {
   version: 1,
@@ -519,7 +548,7 @@ export const DEMO_STRATEGY_CHANNEL_SIGNALS: StrategyChannelSignals = {
       kind: "organic_to_paid",
       confidence: 0.82,
       reasoning:
-        "Facebook organic (63 posts, ~378 avg engagement) warms the audience their paid Meta ads retarget.",
+        "Facebook organic (63 posts, ~378 avg engagement) runs alongside paid Meta ads; organic followers may be who those ads retarget, which ad libraries can't show.",
       style: "solid",
     },
     {
@@ -552,7 +581,7 @@ export const DEMO_STRATEGY_CHANNEL_SIGNALS: StrategyChannelSignals = {
       kind: "paid_to_email",
       confidence: 0.84,
       reasoning:
-        "Bottom-funnel Meta traffic feeds the email list — promos mirror paid offer angles and checkout paths.",
+        "Bottom-funnel Meta traffic may be what fills the email list; promos mirror paid offer angles and checkout paths.",
       style: "solid",
     },
     {
@@ -799,7 +828,7 @@ export const DEMO_STRATEGY_MAP: StrategyMapPayload = {
   },
   platformNodes: [],
   funnelCells: DEMO_STRATEGY_MAP_FUNNEL_CELLS,
-  funnelEdges: [],
+  funnelEdges: DEMO_STRATEGY_MAP_FUNNEL_EDGES,
   activeAdCount: 362,
   platformCount: 6,
   derivationQuality: "high",

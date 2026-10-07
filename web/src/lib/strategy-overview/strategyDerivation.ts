@@ -1,11 +1,16 @@
-import { angleLabelOf, angleSlugOf } from "@/lib/strategy-overview/ad-angles";
+import { angleLabelOf } from "@/lib/strategy-overview/ad-angles";
 import { activeDays, estimateMonthlySpendEur } from "@/lib/strategy-overview/adBenchmarks";
 import { estimatePlatformSpend, sumAdSpend, type EurRange } from "@/lib/strategy-overview/reach-spend";
 import { deriveBrandScale, normalizePlatform } from "@/lib/strategy-overview/brand-scale-score";
 import { deriveSidebarInsights } from "@/lib/strategy-overview/derive-sidebar-insights";
 import { strategyMapNodeSize } from "@/lib/strategy-overview/map-node-sizing";
 import { applyFunnelCellLayout } from "@/lib/strategy-overview/layout-funnel-cells";
-import { deriveFunnelCellEdges } from "@/lib/strategy-overview/funnel-cell-edges";
+import {
+  deriveFunnelCellEdges,
+  isSpecificLandingPage,
+  type LandingPagesByCell,
+} from "@/lib/strategy-overview/funnel-cell-edges";
+import { landingPageKeyFromAd } from "@/lib/landing-pages/count-unique-landing-pages";
 import type {
   ActivityLevel,
   CompetitorStrategyMeta,
@@ -181,14 +186,10 @@ export function parseStage(raw: string | null | undefined): FunnelStage | null {
   return null;
 }
 
+/** Average runtime (first to last seen), the same definition the platform nodes use. */
 function computeAvgActiveDaysFromAds(ads: ScrapedAdInput[]): number {
   if (ads.length === 0) return 0;
-  const now = Date.now();
-  const days = ads.map((a) => {
-    const first = a.first_seen_at ? new Date(a.first_seen_at).getTime() : now;
-    return Math.max(1, (now - first) / (1000 * 60 * 60 * 24));
-  });
-  return days.reduce((a, b) => a + b, 0) / days.length;
+  return ads.reduce((sum, a) => sum + activeDays(a.first_seen_at, a.last_seen_at), 0) / ads.length;
 }
 
 /** Funnel stages as rows; platforms as columns — positions applied in layout-funnel-cells. */
@@ -331,132 +332,22 @@ function dataConfidence(
   return "low";
 }
 
-/** Ads that contribute to funnel-edge angle overlap (classified + angle text). */
-export function adsForEdgeAngles(ads: ScrapedAdInput[]): ScrapedAdInput[] {
-  return ads.filter((a) => parseStage(a.funnel_stage) != null && (a.ai_extracted_angle ?? "").trim().length > 0);
-}
-
-function angleTokens(ads: ScrapedAdInput[]): Map<string, Set<string>> {
-  const byPlat = new Map<string, Set<string>>();
-  for (const a of adsForEdgeAngles(ads)) {
-    const pl = normalizePlatform(a.platform);
-    if (!pl) continue;
-    /** Category only: the stored label's hook/body made every ad unique, so platforms never overlapped. */
-    const ang = angleSlugOf(a.ai_extracted_angle);
-    if (!ang || ang === "other") continue;
-    if (!byPlat.has(pl)) byPlat.set(pl, new Set());
-    byPlat.get(pl)!.add(ang);
-  }
-  return byPlat;
-}
-
-export function enrichedAdsByPlatform(ads: ScrapedAdInput[]): Map<StrategyPlatform, number> {
-  const m = new Map<StrategyPlatform, number>();
-  for (const a of ads) {
-    if (parseStage(a.funnel_stage) == null || !(a.ai_extracted_angle ?? "").trim()) continue;
-    const pl = normalizePlatform(a.platform);
-    if (!pl) continue;
-    m.set(pl, (m.get(pl) ?? 0) + 1);
-  }
-  return m;
-}
-
-function jaccard(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 0;
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter += 1;
-  const union = a.size + b.size - inter;
-  return union <= 0 ? 0 : inter / union;
-}
-
-const MIN_ENRICHED_PER_PLATFORM_FOR_EDGE = 5;
-
-export function deriveFunnelEdges(params: {
-  platforms: StrategyPlatform[];
-  stageByPlatform: Map<StrategyPlatform, FunnelStage>;
-  angleByPlatform: Map<string, Set<string>>;
-  enrichedAdsByPlatform: Map<StrategyPlatform, number>;
-  minEnrichedPerPlatform?: number;
-}): { edges: FunnelEdgePayload[]; detected: number; suppressed: number } {
-  const { platforms, stageByPlatform, angleByPlatform, enrichedAdsByPlatform } = params;
-  const minPl = params.minEnrichedPerPlatform ?? MIN_ENRICHED_PER_PLATFORM_FOR_EDGE;
-  const edges: FunnelEdgePayload[] = [];
-  const seen = new Set<string>();
-  let detected = 0;
-
-  const stageIndex = (s: FunnelStage) => STAGE_ORDER.indexOf(s);
-
-  for (let i = 0; i < platforms.length; i++) {
-    for (let j = 0; j < platforms.length; j++) {
-      if (i === j) continue;
-      const from = platforms[i]!;
-      const to = platforms[j]!;
-      const sf = stageByPlatform.get(from)!;
-      const st = stageByPlatform.get(to)!;
-      if (stageIndex(st) <= stageIndex(sf)) continue;
-
-      const key = `${from}->${to}`;
-      if (seen.has(key)) continue;
-
-      const overlap = jaccard(angleByPlatform.get(from) ?? new Set(), angleByPlatform.get(to) ?? new Set());
-      let confidence = 0.35 + (stageIndex(st) - stageIndex(sf)) * 0.18;
-      confidence += overlap * 0.35;
-      confidence = Math.min(0.95, confidence);
-
-      if (confidence < 0.4) continue;
-
-      detected += 1;
-
-      const enFrom = enrichedAdsByPlatform.get(from) ?? 0;
-      const enTo = enrichedAdsByPlatform.get(to) ?? 0;
-      if (enFrom < minPl || enTo < minPl) continue;
-
-      const style: "solid" | "dashed" = confidence >= 0.72 ? "solid" : "dashed";
-      const reasoning =
-        overlap >= 0.2
-          ? `Creative angles overlap between ${PLATFORM_LABEL[from] ?? from} and ${PLATFORM_LABEL[to] ?? to}; staged funnel progression.`
-          : `Heavier ${sf} on ${PLATFORM_LABEL[from] ?? from} feeding ${st} on ${PLATFORM_LABEL[to] ?? to}.`;
-
-      edges.push({ from, to, confidence, reasoning, style });
-      seen.add(key);
-    }
-  }
-
-  const suppressed = detected - edges.length;
-  return { edges, detected, suppressed };
-}
-
-function angleTokensByCell(
-  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>
-): Map<FunnelCellId, Set<string>> {
-  const byCell = new Map<FunnelCellId, Set<string>>();
-  for (const [platform, liveList] of byPlatformLive) {
-    for (const a of adsForEdgeAngles(liveList)) {
-      const stage = parseStage(a.funnel_stage);
-      if (!stage) continue;
-      const id = `${platform}:${stage}` as FunnelCellId;
-      const ang = angleSlugOf(a.ai_extracted_angle);
-      if (!ang || ang === "other") continue;
-      if (!byCell.has(id)) byCell.set(id, new Set());
-      byCell.get(id)!.add(ang);
-    }
-  }
-  return byCell;
-}
-
-function enrichedCountByCell(
-  byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>
-): Map<FunnelCellId, number> {
-  const m = new Map<FunnelCellId, number>();
+/** Ads per specific landing page in each funnel cell: the evidence funnel arrows are drawn from. */
+function landingPagesByCell(byPlatformLive: Map<StrategyPlatform, ScrapedAdInput[]>): LandingPagesByCell {
+  const byCell: LandingPagesByCell = new Map();
   for (const [platform, liveList] of byPlatformLive) {
     for (const a of liveList) {
       const stage = parseStage(a.funnel_stage);
-      if (!stage || !(a.ai_extracted_angle ?? "").trim()) continue;
-      const id = `${platform}:${stage}` as FunnelCellId;
-      m.set(id, (m.get(id) ?? 0) + 1);
+      if (!stage) continue;
+      const key = landingPageKeyFromAd({ platform: a.platform, raw_payload: a.raw_payload });
+      if (!key || !isSpecificLandingPage(key)) continue;
+      const id = `${platform}:${stage}`;
+      const pages = byCell.get(id) ?? new Map<string, number>();
+      pages.set(key, (pages.get(key) ?? 0) + 1);
+      byCell.set(id, pages);
     }
   }
-  return m;
+  return byCell;
 }
 
 function layoutNodes(
@@ -856,10 +747,6 @@ export function deriveStrategyOverviewPayload(
     maxCount = Math.max(maxCount, list.length);
   }
 
-  const adsForAngles = totalLive > 0 ? [...byPlatformLive.values()].flat() : activeAds;
-  const angleByPlatform = angleTokens(adsForAngles);
-  const enrByPl = enrichedAdsByPlatform(adsForAngles);
-
   const brandScaleScore = deriveBrandScale(activeAds, byPlatform);
   console.log(
     `[derivation] brandScaleScore=${brandScaleScore.toFixed(2)} competitor=${competitor.name} platforms=${byPlatform.size} ads=${activeAds.length}`
@@ -985,26 +872,12 @@ export function deriveStrategyOverviewPayload(
   let funnelEdges: FunnelEdgePayload[] = [];
   let edgeDetected = 0;
   let edgeSuppressed = 0;
-  const angleByCell = angleTokensByCell(byPlatformLive);
-  const enrByCell = enrichedCountByCell(byPlatformLive);
-
   if (funnelCells.length > 0) {
     const allowCrossPlatform = suppressEdgesReason !== "single_platform" && suppressEdgesReason !== "low_sample";
     const { edges, detected, suppressed } = deriveFunnelCellEdges({
       cells: funnelCells,
-      angleByCell,
-      enrichedCountByCell: enrByCell,
+      landingPagesByCell: landingPagesByCell(byPlatformLive),
       allowCrossPlatform,
-    });
-    funnelEdges = edges;
-    edgeDetected = detected;
-    edgeSuppressed = suppressed;
-  } else if (!suppressEdgesReason) {
-    const { edges, detected, suppressed } = deriveFunnelEdges({
-      platforms: nodes.map((n) => n.platform),
-      stageByPlatform,
-      angleByPlatform,
-      enrichedAdsByPlatform: enrByPl,
     });
     funnelEdges = edges;
     edgeDetected = detected;

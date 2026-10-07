@@ -32,8 +32,13 @@ describe("buildFunnelArrows", () => {
     const layout = layoutFunnelCellPositions(cells, 94);
     const { edges } = deriveFunnelCellEdges({
       cells,
-      angleByCell: new Map(),
-      enrichedCountByCell: new Map(cells.map((c) => [c.id, c.adCount])),
+      landingPagesByCell: new Map([
+        ["google:TOF", new Map([["https://x.com/a", 3]])],
+        ["google:MOF", new Map([["https://x.com/a", 1]])],
+        ["meta:MOF", new Map([["https://x.com/b", 4]])],
+        ["meta:BOF", new Map([["https://x.com/b", 6]])],
+        ["google:BOF", new Map([["https://x.com/b", 2]])],
+      ]),
     });
     const arrows = buildFunnelArrows({
       edges,

@@ -5,9 +5,11 @@ import type {
   DemoPlatform,
 } from "@/lib/demo/dashboard-demo-data";
 import { DEMO_OWN_BRAND } from "@/lib/demo/dashboard-demo-config";
+import { evidenceEdgeBetween } from "@/lib/strategy-overview/funnel-cell-edges";
 import type {
   FunnelCellId,
   FunnelCellNodePayload,
+  FunnelEdgePayload,
   FunnelStage,
   StrategyChannelSignals,
   StrategyJourneyGoal,
@@ -306,6 +308,33 @@ const OWN_FUNNEL_CELLS = OWN_STRATEGY_CELLS.map((cell) =>
   ownFunnelCell(cell.platform, cell.funnel as FunnelStage, cell.ads, cell.spend, cell.activity),
 );
 
+/** Demo arrows: each one carries the shared landing page a real map needs before it draws an arrow. */
+function demoEdges(
+  cells: FunnelCellNodePayload[],
+  domain: string,
+  specs: { from: FunnelCellId; to: FunnelCellId; path: string; fromAds: number; toAds: number }[],
+): FunnelEdgePayload[] {
+  return specs.flatMap((s) => {
+    const from = cells.find((c) => c.id === s.from);
+    const to = cells.find((c) => c.id === s.to);
+    if (!from || !to) return [];
+    return [
+      evidenceEdgeBetween(from, to, {
+        sharedLandingPages: [`${domain}${s.path}`],
+        fromAds: s.fromAds,
+        toAds: s.toAds,
+      }),
+    ];
+  });
+}
+
+const OWN_FUNNEL_EDGES = demoEdges(OWN_FUNNEL_CELLS, DEMO_OWN_BRAND.domain, [
+  { from: "meta:TOF", to: "meta:MOF", path: "/collections/new", fromAds: 9, toAds: 6 },
+  { from: "meta:MOF", to: "meta:BOF", path: "/offer", fromAds: 5, toAds: 8 },
+  { from: "google:MOF", to: "google:BOF", path: "/pricing", fromAds: 4, toAds: 6 },
+  { from: "linkedin:TOF", to: "meta:MOF", path: "/guide", fromAds: 3, toAds: 4 },
+]);
+
 export const OWN_STRATEGY_CHANNEL_SIGNALS: StrategyChannelSignals = {
   version: 1,
   computedAt: "2026-07-14T10:00:00.000Z",
@@ -519,7 +548,7 @@ export const OWN_STRATEGY_MAP: StrategyMapPayload = {
   },
   platformNodes: [],
   funnelCells: OWN_FUNNEL_CELLS,
-  funnelEdges: [],
+  funnelEdges: OWN_FUNNEL_EDGES,
   activeAdCount: 118,
   platformCount: 3,
   derivationQuality: "high",

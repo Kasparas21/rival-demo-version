@@ -1,24 +1,13 @@
-import { deriveFunnelCellEdges } from "@/lib/strategy-overview/funnel-cell-edges";
-import type { FunnelCellId, FunnelEdgePayload, FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
+import type { FunnelEdgePayload, FunnelStage, StrategyMapPayload } from "@/lib/strategy-overview/payload-types";
 
-/** Always derive cell-level edges from live funnel cells (ignore stale platform-only cache). */
+/**
+ * Funnel arrows to draw: the stored ones that carry evidence (a landing page both ends share). This used to
+ * re-derive arrows in the browser from stage order and ad counts alone, ignoring what the server stored;
+ * maps saved before evidence existed show no arrows until their next recompute.
+ */
 export function resolveStrategyMapEdges(map: StrategyMapPayload): FunnelEdgePayload[] {
-  const cells = Array.isArray(map.funnelCells) ? map.funnelCells : [];
   const stored = Array.isArray(map.funnelEdges) ? map.funnelEdges : [];
-
-  if (cells.length === 0) return stored;
-
-  const allowCrossPlatform = map.suppressEdgesReason !== "single_platform" && map.suppressEdgesReason !== "low_sample";
-  const enriched = new Map<FunnelCellId, number>(
-    cells.map((c) => [c.id, Math.max(1, c.adCount)])
-  );
-
-  return deriveFunnelCellEdges({
-    cells,
-    angleByCell: new Map(),
-    enrichedCountByCell: enriched,
-    allowCrossPlatform,
-  }).edges;
+  return stored.filter((e) => (e.evidence?.sharedLandingPages.length ?? 0) > 0);
 }
 
 export function stageForEdgeEndpoint(

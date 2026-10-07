@@ -67,7 +67,7 @@ export function StrategyMapLegend({ showChannels = false, showGoal = false, comp
             >
               Organic
             </span>
-            {!compact ? <span className="text-[11px] text-slate-500">warms paid TOF</span> : null}
+            {!compact ? <span className="text-[11px] text-slate-500">posts next to paid</span> : null}
           </div>
           <div className={`flex items-center ${compact ? "gap-1" : "gap-2"}`}>
             <span
@@ -84,7 +84,7 @@ export function StrategyMapLegend({ showChannels = false, showGoal = false, comp
             >
               Email
             </span>
-            {!compact ? <span className="text-[11px] text-slate-500">captures BOF traffic</span> : null}
+            {!compact ? <span className="text-[11px] text-slate-500">emails they send</span> : null}
           </div>
         </>
       ) : null}
@@ -98,6 +98,12 @@ export function StrategyMapLegend({ showChannels = false, showGoal = false, comp
             <span className="text-[12px] font-semibold text-slate-800">Outcome</span>
             <span className="text-[11px] text-slate-500">macro goal · paths differ</span>
           </div>
+        </>
+      ) : null}
+      {!compact ? (
+        <>
+          <span className="hidden h-4 w-px bg-slate-200 sm:block" aria-hidden />
+          <span className="text-[11px] text-slate-500">Arrows: stages that send people to the same page</span>
         </>
       ) : null}
     </div>

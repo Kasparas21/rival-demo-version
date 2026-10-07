@@ -88,6 +88,12 @@ export type FunnelEdgePayload = {
   confidence: number;
   reasoning: string;
   style: "solid" | "dashed";
+  /** Why the arrow is drawn: specific landing pages both ends send people to (absent on older payloads). */
+  evidence?: {
+    sharedLandingPages: string[];
+    fromAds: number;
+    toAds: number;
+  };
 };
 
 export type AudienceSignals = {

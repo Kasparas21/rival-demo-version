@@ -393,14 +393,14 @@ export function buildChannelSignals(
 
     const overlapNote =
       themeOverlap >= 0.25
-        ? " Organic themes overlap with paid creative angles - same story pushed on both sides."
+        ? " Organic themes overlap with the paid creative angles: the same story on both sides."
         : "";
     channelEdges.push({
       from: node.id,
       to: target.id,
       kind: "organic_to_paid",
       confidence,
-      reasoning: `${node.label} organic (${node.postCount} posts in ${CHANNEL_WINDOW_DAYS} days, ~${formatEngagement(node.avgEngagement)} avg engagement) warms the audience their paid ${target.platform} ads retarget.${overlapNote}`,
+      reasoning: `${node.label} organic (${node.postCount} posts in ${CHANNEL_WINDOW_DAYS} days, ~${formatEngagement(node.avgEngagement)} avg engagement) runs alongside paid ${target.platform} ads; organic followers may be who those ads retarget, which ad libraries can't show.${overlapNote}`,
       style: confidence >= SOLID_CONFIDENCE ? "solid" : "dashed",
     });
   }
@@ -438,14 +438,14 @@ export function buildChannelSignals(
         ? `, mostly ${emailNode.dominantType.replace(/_/g, " ")}`
         : "";
       const syncNote = offerSync
-        ? " Email offers mirror the promo angles running in paid ads - a coordinated conversion push."
+        ? " Email offers mirror the promo angles running in paid ads, which suggests a coordinated conversion push."
         : "";
       channelEdges.push({
         from: source.id,
         to: "email",
         kind: "paid_to_email",
         confidence,
-        reasoning: `Bottom-funnel ${source.platform} traffic feeds the email list: ${emailNode.emailCount} emails captured in ${CHANNEL_WINDOW_DAYS} days${cadence}${typeNote}.${syncNote}`,
+        reasoning: `${emailNode.emailCount} emails sent in ${CHANNEL_WINDOW_DAYS} days${cadence}${typeNote}. Bottom-funnel ${source.platform} traffic may be what fills this list; sign-ups aren't visible.${syncNote}`,
         style: confidence >= SOLID_CONFIDENCE ? "solid" : "dashed",
       });
     }

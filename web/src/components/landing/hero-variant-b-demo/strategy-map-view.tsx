@@ -126,7 +126,7 @@ export function DemoStrategyMapView({ domain }: { domain?: string }) {
 
       {edgeTip ? (
         <div className="pointer-events-none fixed bottom-24 left-1/2 z-40 max-w-md -translate-x-1/2 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-700 shadow-lg">
-          <span className="font-semibold"> {(edgeTip.confidence * 100).toFixed(0)}% - </span>
+          <span className="font-semibold">Hypothesis · </span>
           {edgeTip.reasoning}
         </div>
       ) : null}
