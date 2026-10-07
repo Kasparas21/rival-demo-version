@@ -130,6 +130,20 @@ describe("computeCreativeTestsData", () => {
     expect(tests[0]!.winner_ad_id).toBe("live");
   });
 
+  it("waits when the others stopped only a day before the survivor's last sighting", () => {
+    const tests = computeCreativeTestsData({
+      userId: USER,
+      competitorId: COMP,
+      lastScrapedAtIso: scrapeIso,
+      ads: [
+        ad({ id: "a", platform: "meta", first: "2030-04-01T00:00:00.000Z", last: "2030-06-14T00:00:00.000Z", active: false }),
+        ad({ id: "b", platform: "meta", first: "2030-04-01T00:00:00.000Z", last: "2030-06-15T00:00:00.000Z", active: true }),
+      ],
+    });
+    expect(tests[0]!.test_status).toBe("running");
+    expect(tests[0]!.winner_ad_id).toBeNull();
+  });
+
   it("is running while several variants are still live", () => {
     const tests = computeCreativeTestsData({
       userId: USER,

@@ -76,6 +76,11 @@ export const MAX_TEST_SIZE = 10;
 /** Copy overlap (word Jaccard) that makes two ads variants; lower when they share an angle category. */
 export const COPY_SIMILARITY_MIN = 0.6;
 export const COPY_SIMILARITY_SAME_ANGLE_MIN = 0.35;
+/**
+ * A survivor must outlast every stopped variant by this much. Versions stopped a day ago after the same
+ * run (or missed by one scrape) aren't a decision yet.
+ */
+export const WINNER_MIN_OUTLIVE_DAYS = 7;
 /** With several variants still running, a reach lead this large names the winner. */
 export const REACH_LEAD_MULTIPLIER = 3;
 
@@ -147,7 +152,7 @@ function clusterVariants(ads: Prepared[]): Prepared[][] {
  * A test is 2–10 ads on one platform, launched within {@link TEST_WINDOW_DAYS} of each other, with
  * near-identical copy (or the same angle category and similar copy). Status follows how advertisers end
  * tests — they stop the losers and keep the winner running:
- * - one variant still running after the rest stopped, 14+ days in → winner
+ * - one variant still running 7+ days after the rest stopped, 14+ days in → winner
  * - several still running → running, unless one leads on published reach by 3×
  * - all stopped → fast fail (<7 days), a 2×-median outlier winner, or no clear winner
  */
@@ -203,7 +208,13 @@ export function computeCreativeTestsData(params: {
 
       if (survivors.length === 1 && stopped > 0) {
         /** The others were switched off and this one kept going: the advertiser picked it. */
-        winner = survivors[0]!.lifespanDays >= WINNER_MIN_LIFESPAN_DAYS ? survivors[0]! : null;
+        const survivor = survivors[0]!;
+        const longestStopped = Math.max(...adLifespans.filter((a) => !a.running).map((a) => a.lifespanDays));
+        winner =
+          survivor.lifespanDays >= WINNER_MIN_LIFESPAN_DAYS &&
+          survivor.lifespanDays - longestStopped >= WINNER_MIN_OUTLIVE_DAYS
+            ? survivor
+            : null;
         status = winner ? "winner_identified" : "running";
       } else if (survivors.length >= 2) {
         const withReach = [...survivors].filter((a) => a.reach != null).sort((a, b) => b.reach! - a.reach!);

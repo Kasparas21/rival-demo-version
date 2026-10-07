@@ -116,7 +116,7 @@ export function CreativeTestsTab({
 }: Props) {
   const domainKey = cacheDomainNorm.trim().toLowerCase();
   const stamp = lastScrapedAt ?? "none";
-  const cacheKey = `${domainKey}:creative-tests:v5:${competitorId}:${stamp}`;
+  const cacheKey = `${domainKey}:creative-tests:v6:${competitorId}:${stamp}`;
 
   const { data, loading, isValidating, error: hookError, refetch } = useScrapeKeyedCache<CreativeTestsApiResponse>({
     cacheKey,
@@ -208,8 +208,8 @@ export function CreativeTestsTab({
         title="Creative Tests"
         description={
           <>
-            Ads {competitorLabel} launched together on the same day. Winners appear when one ad outlives the group median
-            by 2× and ran ≥14 days, with all variants inactive.
+            Versions of the same ad {competitorLabel} launched within a few days of each other. A winner is the version
+            still running after the others were switched off (14+ days in).
           </>
         }
       />

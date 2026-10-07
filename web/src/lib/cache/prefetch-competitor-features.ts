@@ -102,7 +102,7 @@ export async function prefetchAllCompetitorFeatureCaches(params: PrefetchParams)
   if (id) {
     jobs.push(
       prefetchScrapeKeyedCache({
-        cacheKey: `${dom}:creative-tests:v5:${id}:${stamp}`,
+        cacheKey: `${dom}:creative-tests:v6:${id}:${stamp}`,
         fetcher: async () => {
           const res = await fetch(`/api/creative-tests?competitorId=${encodeURIComponent(id)}`, {
             credentials: "include",
@@ -225,7 +225,7 @@ export function prefetchPaidMediaSubTabCaches(params: PaidMediaSubTabPrefetchPar
 
   void Promise.allSettled([
     prefetchScrapeKeyedCache({
-      cacheKey: `${dom}:creative-tests:v5:${id}:${stamp}`,
+      cacheKey: `${dom}:creative-tests:v6:${id}:${stamp}`,
       fetcher: async () => {
         const res = await fetch(`/api/creative-tests?competitorId=${encodeURIComponent(id)}`, {
           credentials: "include",
