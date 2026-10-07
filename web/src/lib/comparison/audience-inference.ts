@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+import { googleAdCopy } from "@/lib/ad-library/google-ad-copy";
+import {
+  describeMetaAudienceEvidence,
+  hasRepresentativeReach,
+  metaAudienceEvidence,
+  type MetaAudienceEvidence,
+} from "@/lib/comparison/meta-audience-evidence";
 import { llmSmart } from "@/lib/llm/anthropic";
 import type {
   AudienceInferenceResult,
@@ -14,7 +21,7 @@ function stripJsonFences(text: string): string {
   return t.trim();
 }
 
-export const audienceInferenceParsedSchema: z.ZodType<AudienceInferenceResult> = z.object({
+export const audienceInferenceParsedSchema = z.object({
   segments: z
     .array(
       z.object({
@@ -37,7 +44,47 @@ export type AudienceInferenceInput = {
   topAngles: { angle: string; count: number }[];
   voiceAverages: { formal: number; emotional: number };
   formatMix: { format: string; share: number }[];
+  /** Meta's published reach and targeting for these ads, when there is any. */
+  metaAudience?: MetaAudienceEvidence | null;
+  /** Real ad texts (longest-running first), so segments rest on what the ads say. */
+  copySamples?: string[];
 };
+
+type AdForAudience = {
+  platform: string;
+  ad_text: string;
+  first_seen_at: string;
+  last_seen_at: string;
+  raw_payload?: unknown;
+};
+
+const COPY_SAMPLES = 12;
+const COPY_SAMPLE_CHARS = 240;
+
+/** Longest-running ads with real copy, one per opening line. */
+export function audienceCopySamples(ads: AdForAudience[]): string[] {
+  const runtime = (a: AdForAudience) => Date.parse(a.last_seen_at) - Date.parse(a.first_seen_at);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const ad of [...ads].sort((a, b) => (runtime(b) || 0) - (runtime(a) || 0))) {
+    const text = (ad.platform === "google" ? googleAdCopy(ad.ad_text) : ad.ad_text).replace(/\s+/g, " ").trim();
+    if (text.length < 20) continue;
+    const key = text.slice(0, 60).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text.slice(0, COPY_SAMPLE_CHARS));
+    if (out.length >= COPY_SAMPLES) break;
+  }
+  return out;
+}
+
+/** Evidence from the ads themselves, added to {@link buildAudienceInferenceInputFromPayload}'s input. */
+export function withAdEvidence(input: AudienceInferenceInput, ads: AdForAudience[]): AudienceInferenceInput {
+  return { ...input, metaAudience: metaAudienceEvidence(ads), copySamples: audienceCopySamples(ads) };
+}
+
+/** Without representative published reach the segments rest on copy and platform mix: cap the model's self-rating. */
+const MAX_CONFIDENCE_WITHOUT_REACH = 0.6;
 
 export function buildAudienceInferenceInputFromPayload(
   meta: { brandName: string; brandDomain: string; brandContext?: string | null },
@@ -88,8 +135,10 @@ STRICT RULES:
 1. Output 1-3 segments only. Quality > quantity.
 2. Each segment must have a specific name (e.g. "Budget-conscious parents 30-45 buying back-to-school items"), not generic ("General consumers").
 3. Confidence score: 0.4-0.6 = "data is suggestive", 0.6-0.8 = "data is fairly clear", 0.8+ = "data is very clear". Be conservative.
-4. Signals must reference observable patterns from the structured data, not inventions.
-5. Output strict JSON only matching the provided schema. No markdown fences.`;
+4. Signals must reference observable patterns from the data given: a reach or targeting figure, a phrase quoted from the ad copy, or the platform/angle/format mix. Nothing else.
+5. When Meta reach data is given, any age or gender in a segment name must agree with it (do not call an audience "young" when most reach is 55+, or "women" when reach is mostly men).
+6. Without reach data, do not state ages or genders unless the ad copy says them.
+7. Output strict JSON only matching the provided schema. No markdown fences.`;
 
   const userPrompt = `Analyze this brand's audience based on advertising patterns:
 
@@ -106,7 +155,8 @@ Voice tone averages: ${input.voiceAverages.formal.toFixed(2)} formal, ${input.vo
 
 Format mix:
 ${input.formatMix.map((f) => `- ${f.format}: ${f.share}%`).join("\n")}
-
+${input.metaAudience ? `\n${describeMetaAudienceEvidence(input.metaAudience)}\n` : "\nNo Meta reach or targeting data published for these ads.\n"}
+${input.copySamples?.length ? `Ad copy (longest-running first):\n${input.copySamples.map((c) => `- "${c}"`).join("\n")}\n` : ""}
 Return JSON: { "segments": [{ "name", "confidence", "signals": [string] }], "primarySegmentName", "summary" }
 Summary: 2 sentences describing the brand's audience strategy overall.`;
 
@@ -129,7 +179,15 @@ Summary: 2 sentences describing the brand's audience strategy overall.`;
       console.warn("[audience-inference] schema validation failed", validated.error.flatten());
       return null;
     }
-    return validated.data;
+    const hasReach = hasRepresentativeReach(input.metaAudience);
+    return {
+      ...validated.data,
+      segments: validated.data.segments.map((s) => ({
+        ...s,
+        confidence: hasReach ? s.confidence : Math.min(s.confidence, MAX_CONFIDENCE_WITHOUT_REACH),
+      })),
+      evidence: { meta: input.metaAudience ?? null, copySamples: input.copySamples?.length ?? 0 },
+    };
   } catch (e) {
     console.warn("[audience-inference] JSON parse failed", e);
     return null;

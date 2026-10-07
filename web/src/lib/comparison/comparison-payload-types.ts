@@ -17,6 +17,8 @@ export type ComparisonSideResponse = {
     lastScrapedAt: string | null;
     /** Last time snapshot diff / move detection ran (24h cooldown). */
     lastMoveDetectionAt: string | null;
+    /** When this side's strategy map was computed (null when there is none). */
+    mapComputedAt?: string | null;
   };
   payload: CompetitorStrategyOverviewPayload | null;
   recomputing: boolean;

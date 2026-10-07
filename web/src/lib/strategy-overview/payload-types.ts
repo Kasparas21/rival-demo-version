@@ -468,6 +468,14 @@ export type AudienceInferenceResult = {
   segments: AudienceInferenceSegment[];
   primarySegmentName: string;
   summary: string;
+  /**
+   * What the inference was given beyond platform mix and angles: Meta's published reach and targeting, and
+   * how many real ad texts. Absent on results made before it existed.
+   */
+  evidence?: {
+    meta: import("@/lib/comparison/meta-audience-evidence").MetaAudienceEvidence | null;
+    copySamples: number;
+  };
 };
 
 export type InsightCardsPayload = {

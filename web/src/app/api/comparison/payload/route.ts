@@ -33,6 +33,8 @@ type SideMeta = {
   logoUrl: string | null;
   lastScrapedAt: string | null;
   lastMoveDetectionAt: string | null;
+  /** When this side's strategy map was computed (null when there is none). */
+  mapComputedAt?: string | null;
 };
 
 type ComparisonSideResponse = {
@@ -306,50 +308,19 @@ async function resolveSidePayload(params: {
   };
 }
 
-function derivedStatsFromStrategyPayload(
-  p: CompetitorStrategyOverviewPayload | null
-): ComparisonDerivedStats | null {
-  if (!p?.insights) return null;
-
-  const angles = p.insights.angle_clustering?.angles ?? [];
-  const velocity = p.insights.testing_velocity_by_platform ?? [];
-  const formats = p.insights.ad_format_mix?.formats ?? [];
-
-  let newIn30 = 0;
-  let lifespanSum = 0;
-  let lifespanN = 0;
-  for (const v of velocity) {
-    newIn30 += v.newIn30 ?? 0;
-    if (typeof v.avgLifespanDays === "number") {
-      lifespanSum += v.avgLifespanDays;
-      lifespanN += 1;
-    }
-  }
-
-  let videoCount = 0;
-  let formatTotal = 0;
-  for (const f of formats) {
-    formatTotal += f.count ?? 0;
-    if (/video/i.test(f.format ?? "")) videoCount += f.count ?? 0;
-  }
-
-  return {
-    avgAdAgeDays: lifespanN > 0 ? Math.round(lifespanSum / lifespanN) : 0,
-    newAdsLast30d: newIn30,
-    videoPercent: formatTotal > 0 ? Math.round((videoCount / formatTotal) * 100) : 0,
-    uniqueAnglesCount: angles.filter((a) => (a.angle ?? "").trim()).length,
-  };
-}
-
-async function resolveDerivedStats(
+/** When each side's stored strategy map was computed: the map's spend and stages are as of then. */
+async function loadMapComputedAt(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   userId: string,
-  competitorId: string,
-  payload: CompetitorStrategyOverviewPayload | null
-): Promise<ComparisonDerivedStats> {
-  const fromPayload = derivedStatsFromStrategyPayload(payload);
-  if (fromPayload) return fromPayload;
-  return computeScrapedAdsDerivedStats(supabase, userId, competitorId);
+  competitorId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("competitor_strategy_overview")
+    .select("computed_at")
+    .eq("user_id", userId)
+    .eq("competitor_id", competitorId)
+    .maybeSingle();
+  return (data?.computed_at as string | null | undefined) ?? null;
 }
 
 export async function GET(req: Request): Promise<NextResponse> {
@@ -418,6 +389,8 @@ export async function GET(req: Request): Promise<NextResponse> {
     rivalId: rivalMeta.competitorId,
   });
 
+  /** Both sides' stats are counted live at one moment, never from stored maps of different ages. */
+  const statsAtMs = Date.now();
   const [
     wsMoves,
     rivalMoves,
@@ -427,19 +400,23 @@ export async function GET(req: Request): Promise<NextResponse> {
     rivalDerived,
     wsAudienceHistory,
     rivalAudienceHistory,
+    wsMapAt,
+    rivalMapAt,
   ] = await Promise.all([
     loadRecentMoves(supabase, user.id, wsRow.id),
     loadRecentMoves(supabase, user.id, rivalMeta.competitorId),
     countStrategySnapshots(supabase, user.id, wsRow.id),
     countStrategySnapshots(supabase, user.id, rivalMeta.competitorId),
-    resolveDerivedStats(supabase, user.id, wsRow.id, wsResolved.payload),
-    resolveDerivedStats(supabase, user.id, rivalMeta.competitorId, rivalResolved.payload),
+    computeScrapedAdsDerivedStats(supabase, user.id, wsRow.id, statsAtMs),
+    computeScrapedAdsDerivedStats(supabase, user.id, rivalMeta.competitorId, statsAtMs),
     loadAudienceHistory(supabase, user.id, wsRow.id),
     loadAudienceHistory(supabase, user.id, rivalMeta.competitorId),
+    loadMapComputedAt(supabase, user.id, wsRow.id),
+    loadMapComputedAt(supabase, user.id, rivalMeta.competitorId),
   ]);
 
   const workspace: ComparisonSideResponse = {
-    meta: wsMeta,
+    meta: { ...wsMeta, mapComputedAt: wsMapAt },
     payload: wsResolved.payload,
     recomputing: wsResolved.recomputing,
     recent_moves: wsMoves,
@@ -450,7 +427,7 @@ export async function GET(req: Request): Promise<NextResponse> {
   };
 
   const competitor: ComparisonSideResponse = {
-    meta: rivalSideMeta,
+    meta: { ...rivalSideMeta, mapComputedAt: rivalMapAt },
     payload: rivalResolved.payload,
     recomputing: rivalResolved.recomputing,
     recent_moves: rivalMoves,

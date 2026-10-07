@@ -7,6 +7,7 @@ import { BarChart3, Clock, Mic, Target } from "lucide-react";
 import { CompetitorLogo } from "@/components/shared/competitor-logo";
 import type { AudienceSnapshotHistoryRow } from "@/lib/comparison/comparison-payload-types";
 import type { AngleCardCategory } from "@/lib/comparison/stealable-angle-present";
+import { hasRepresentativeReach, type MetaAudienceEvidence } from "@/lib/comparison/meta-audience-evidence";
 import type { AudienceInferenceResult, AudienceInferenceSegment } from "@/lib/strategy-overview/payload-types";
 import { ComparisonInsufficient, ComparisonPanelShell } from "@/components/comparison/panel-shell";
 import { FeatureSectionHeader } from "@/components/dashboard/feature-section-header";
@@ -231,6 +232,69 @@ function VennOverlap({
   );
 }
 
+/** One line on what the AI read was built from, so it isn't taken for targeting data. */
+function hypothesisBasis(inf: AudienceInferenceResult): string {
+  const ev = inf.evidence;
+  if (!ev) return "Inferred from platform mix, ad angles, tone and formats; ad libraries don't publish who was targeted.";
+  const parts = [
+    ev.copySamples > 0 ? `${ev.copySamples} ad texts` : null,
+    hasRepresentativeReach(ev.meta) ? `Meta's published reach for ${ev.meta!.adsWithReach} ads` : null,
+    "platform mix, angles and formats",
+  ].filter(Boolean);
+  return `Inferred from ${parts.join(", ")}.`;
+}
+
+/** Meta's published EU reach and targeting: observed data, shown apart from the AI's read. */
+function MetaReachCard({ evidence }: { evidence: MetaAudienceEvidence | null }) {
+  if (!evidence || !hasRepresentativeReach(evidence)) return null;
+  const topAge = [...evidence.agePct].sort((a, b) => b.pct - a.pct)[0];
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Who their Meta ads reached</p>
+      <p className="mt-1 text-xs text-slate-500">
+        Published by Meta for {evidence.adsWithReach} of {evidence.metaAds} active ads ·{" "}
+        {evidence.peopleReached.toLocaleString()} people reached in the EU
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Gender</p>
+          <p className="mt-1 text-sm text-slate-800">
+            {evidence.genderPct.female}% women · {evidence.genderPct.male}% men
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Age</p>
+          <div className="mt-1 space-y-1">
+            {evidence.agePct.map((a) => (
+              <div key={a.range} className="flex items-center gap-2 text-[11px] text-slate-600">
+                <span className="w-10 tabular-nums">{a.range}</span>
+                <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <span
+                    className={`block h-full rounded-full ${a.range === topAge?.range ? "bg-slate-800" : "bg-slate-400"}`}
+                    style={{ width: `${a.pct}%` }}
+                  />
+                </span>
+                <span className="w-8 text-right tabular-nums">{a.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Where</p>
+          <p className="mt-1 text-sm text-slate-800">
+            {evidence.countryPct.map((c) => `${c.country} ${c.pct}%`).join(" · ")}
+          </p>
+          {evidence.targeting.locations.length > 0 ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Targets: {evidence.targeting.locations.map((l) => l.label).join(", ")}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StandaloneAudienceView({
   competitor,
   audienceHistory,
@@ -287,6 +351,8 @@ function StandaloneAudienceView({
         }
       />
 
+      <MetaReachCard evidence={inf.evidence?.meta ?? null} />
+
       {lowData ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
           <p className="font-medium">Limited data</p>
@@ -317,15 +383,18 @@ function StandaloneAudienceView({
             <div className="absolute left-0 top-0 h-full w-1 rounded-l-2xl bg-slate-800" />
             <div className="relative pl-2">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Primary segment</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Primary segment · AI hypothesis
+                </p>
                 <div className="text-right">
                   <p className="text-base font-semibold tabular-nums text-slate-900">{primaryPct}%</p>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-500">Confidence</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-500">AI&apos;s own confidence</p>
                 </div>
               </div>
               <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-600">Primary target</p>
               <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{primary?.name ?? inf.primarySegmentName}</h3>
               {inf.summary?.trim() ? <p className="mt-2 text-sm leading-relaxed text-slate-600">{inf.summary}</p> : null}
+              <p className="mt-2 text-xs text-slate-500">{hypothesisBasis(inf)}</p>
 
               <div className="mt-4 h-2 rounded-full bg-slate-100 overflow-hidden">
                 <div

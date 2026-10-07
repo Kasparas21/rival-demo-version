@@ -225,6 +225,13 @@ export function ComparisonPage({
           description={
             <>
               Updated {freshLabel} · 6 sections · Auto-refreshed with scrapes
+              {workspaceSide && competitorSide ? (
+                <span className="block text-xs text-slate-500">
+                  Ad counts, ages and angles are live. Spend and funnel maps as of: {workspace.name}{" "}
+                  {relativeScrapeLabel(workspaceSide.meta.mapComputedAt ?? null)} · {competitorDisplayLabel}{" "}
+                  {relativeScrapeLabel(competitorSide.meta.mapComputedAt ?? null)}
+                </span>
+              ) : null}
             </>
           }
           actions={

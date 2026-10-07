@@ -159,10 +159,11 @@ export function SideBySideStatsPanel({
   const dashThem = !competitorPayload;
 
   const data = useMemo(() => {
-    const youActive = workspacePayload?.map?.activeAdCount ?? NaN;
-    const themActive = competitorPayload?.map?.activeAdCount ?? NaN;
-    const youPlat = workspacePayload?.map?.platformCount ?? NaN;
-    const themPlat = competitorPayload?.map?.platformCount ?? NaN;
+    // Live counts (same moment for both sides); a stored map can be weeks older than the other side's.
+    const youActive = workspaceDerived.activeAds ?? workspacePayload?.map?.activeAdCount ?? NaN;
+    const themActive = competitorDerived.activeAds ?? competitorPayload?.map?.activeAdCount ?? NaN;
+    const youPlat = workspaceDerived.platformCount ?? workspacePayload?.map?.platformCount ?? NaN;
+    const themPlat = competitorDerived.platformCount ?? competitorPayload?.map?.platformCount ?? NaN;
     const youNew = workspaceDerived.newAdsLast30d;
     const themNew = competitorDerived.newAdsLast30d;
     const youAge = workspaceDerived.avgAdAgeDays;
@@ -346,10 +347,10 @@ export function SideBySideStatsPanel({
   ]);
 
   const secondaries = useMemo(() => {
-    const youActive = workspacePayload?.map?.activeAdCount;
-    const themActive = competitorPayload?.map?.activeAdCount;
-    const youPlat = workspacePayload?.map?.platformCount;
-    const themPlat = competitorPayload?.map?.platformCount;
+    const youActive = workspaceDerived.activeAds ?? workspacePayload?.map?.activeAdCount;
+    const themActive = competitorDerived.activeAds ?? competitorPayload?.map?.activeAdCount;
+    const youPlat = workspaceDerived.platformCount ?? workspacePayload?.map?.platformCount;
+    const themPlat = competitorDerived.platformCount ?? competitorPayload?.map?.platformCount;
     const youNew = workspaceDerived.newAdsLast30d;
     const themNew = competitorDerived.newAdsLast30d;
     const youSpend = workspacePayload?.map?.totalAdSpend?.value;
@@ -395,6 +396,7 @@ export function SideBySideStatsPanel({
     workspacePayload,
     competitorPayload,
     workspaceDerived,
+    competitorDerived,
     dashYou,
     dashThem,
     platTotal,

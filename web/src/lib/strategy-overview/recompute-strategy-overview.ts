@@ -14,7 +14,11 @@ import {
   expandAdsCacheDomainCandidates,
   tryHydrateScrapedAdsFromAdsCache,
 } from "@/lib/strategy-overview/hydrate-scraped-from-ads-cache";
-import { inferAudience, buildAudienceInferenceInputFromPayload } from "@/lib/comparison/audience-inference";
+import {
+  inferAudience,
+  buildAudienceInferenceInputFromPayload,
+  withAdEvidence,
+} from "@/lib/comparison/audience-inference";
 import { generateAlertsForCompetitor } from "@/lib/alerts/generate-alerts-for-competitor";
 import { recordStrategyOverviewSnapshot } from "@/lib/strategy-overview/strategy-overview-snapshots";
 import { normalizeCompetitorStrategyOverviewPayload } from "@/lib/strategy-overview/normalize-strategy-payload";
@@ -777,9 +781,9 @@ export async function recomputeStrategyOverviewForCompetitor(params: {
 
     if (payload.pipelineStatus !== "no_ads_found" && (payload.totalAdCount ?? 0) > 0) {
       const domain = meta.brandDomain ?? meta.cacheDomain;
-      const audIn = buildAudienceInferenceInputFromPayload(
-        { brandName: meta.name, brandDomain: domain },
-        payload
+      const audIn = withAdEvidence(
+        buildAudienceInferenceInputFromPayload({ brandName: meta.name, brandDomain: domain }, payload),
+        freshInputs
       );
       const aud = await inferAudience(audIn);
       payload = { ...payload, audience_inference: aud };
