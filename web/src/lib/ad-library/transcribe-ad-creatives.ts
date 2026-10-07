@@ -92,7 +92,7 @@ export function previewScriptText(js: string): string | null {
   return `${shopping ? `${SHOPPING_AD_PREFIX} ` : ""}${body}`.slice(0, MAX_TEXT_CHARS);
 }
 
-async function readPreviewScript(url: string): Promise<{ ok: true; text: string; costUsd: number } | { ok: false; error: string }> {
+export async function readPreviewScript(url: string): Promise<{ ok: true; text: string; costUsd: number } | { ok: false; error: string }> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) return { ok: false, error: `preview ${res.status}` };
@@ -173,6 +173,13 @@ export async function transcribeAdImage(
   }
 }
 
+/** Read one ad's copy from its image (vision model) or its preview script (free). */
+export function readCreativeText(
+  src: { kind: "image" | "preview_script"; url: string },
+): Promise<{ ok: true; text: string; costUsd: number } | { ok: false; error: string }> {
+  return src.kind === "image" ? transcribeAdImage(src.url) : readPreviewScript(src.url);
+}
+
 export type TranscribeStats = {
   candidates: number;
   transcribed: number;
@@ -224,7 +231,7 @@ export async function transcribeMissingAdCopy(
   const worker = async () => {
     while (next < todo.length) {
       const item = todo[next++]!;
-      const r = item.src.kind === "image" ? await transcribeAdImage(item.src.url) : await readPreviewScript(item.src.url);
+      const r = await readCreativeText(item.src);
       if (!r.ok) {
         stats.failed += 1;
         continue;
