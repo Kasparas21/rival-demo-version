@@ -21,16 +21,23 @@ export function videoRatioScore(videoRatio: number): number {
   return 95;
 }
 
+/** Platforms where an advertiser chooses between video and static creative. Search/text ads are not. */
+const VIDEO_CHOICE_PLATFORMS = new Set(["meta", "facebook", "instagram", "tiktok", "snapchat", "pinterest", "linkedin"]);
+
+/**
+ * Video share on social platforms. Returns null when the advertiser runs nothing there (e.g. Google
+ * search only): the signal then doesn't apply, instead of scoring every text advertiser 15/100.
+ */
 export function computeProductionValueHeuristic(ads: ScrapedAdForActivityScore[]): {
   score: number;
   videoRatio: number;
-} {
-  const n = ads.length;
-  if (n === 0) return { score: 15, videoRatio: 0 };
+} | null {
+  const social = ads.filter((a) => VIDEO_CHOICE_PLATFORMS.has(a.platform.trim().toLowerCase()));
+  if (social.length === 0) return null;
   let v = 0;
-  for (const a of ads) {
+  for (const a of social) {
     if (isVideoish(a)) v += 1;
   }
-  const videoRatio = v / n;
+  const videoRatio = v / social.length;
   return { score: videoRatioScore(videoRatio), videoRatio };
 }

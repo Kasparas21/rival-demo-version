@@ -1,8 +1,6 @@
 import { llmFast } from "@/lib/llm/anthropic";
 
 export type HaikuBatchScores = {
-  production_quality: number;
-  production_reason: string;
   copy_sophistication: number;
   copy_reason: string;
   distinct_product_count: number;
@@ -29,7 +27,8 @@ function stripJsonFence(raw: string): string {
 }
 
 /**
- * Single batched Haiku call per competitor per scoring run (Signals 1, 6, 7).
+ * Single batched AI call per competitor per scoring run (Signals 6 and 7). It sees ad text only, so it
+ * rates copy and product breadth; production value (Signal 1) is measured from formats instead.
  */
 export async function scoreWithHaikuBatch(params: {
   sampleAds: { format: string; copy: string; hasVideo: boolean }[];
@@ -44,7 +43,7 @@ export async function scoreWithHaikuBatch(params: {
   );
 
   const user = [
-    "Here are sample ads from one advertiser. Score them for operational sophistication.",
+    "Here are the most-seen ads from one advertiser. Score their copy and product breadth.",
     "",
     "Ads (samples):",
     ...lines,
@@ -54,8 +53,6 @@ export async function scoreWithHaikuBatch(params: {
     "",
     "Return ONLY valid JSON with this shape (no markdown):",
     "{",
-    '  "production_quality": <0-100 integer>,',
-    '  "production_reason": "<one sentence>",',
     '  "copy_sophistication": <0-100 integer>,',
     '  "copy_reason": "<one sentence>",',
     '  "distinct_product_count": <non-negative integer>,',
@@ -91,10 +88,9 @@ export async function scoreWithHaikuBatch(params: {
     return { ok: false, error: "invalid_shape" };
   }
   const o = parsed as Record<string, unknown>;
-  const pq = clamp01to100(o.production_quality);
   const cs = clamp01to100(o.copy_sophistication);
   const dc = clampCount(o.distinct_product_count);
-  if (pq == null || cs == null || dc == null) {
+  if (cs == null || dc == null) {
     console.error("[activity-score:haiku] missing numeric fields:", o);
     return { ok: false, error: "missing_fields" };
   }
@@ -102,8 +98,6 @@ export async function scoreWithHaikuBatch(params: {
   return {
     ok: true,
     data: {
-      production_quality: pq,
-      production_reason: typeof o.production_reason === "string" ? o.production_reason : "",
       copy_sophistication: cs,
       copy_reason: typeof o.copy_reason === "string" ? o.copy_reason : "",
       distinct_product_count: dc,
