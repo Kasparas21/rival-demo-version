@@ -31,6 +31,10 @@ function ad(p: {
   first: string;
   last: string;
   aiLaunch?: string | null;
+  text?: string;
+  angle?: string | null;
+  active?: boolean;
+  reach?: number;
 }): Parameters<typeof computeCreativeTestsData>[0]["ads"][0] {
   return {
     id: p.id,
@@ -39,9 +43,11 @@ function ad(p: {
     last_seen_at: p.last,
     ai_extracted_launch_date: p.aiLaunch ?? null,
     ad_creative_url: null,
-    ad_text: "t",
-    ai_extracted_angle: null,
+    ad_text: p.text ?? "The Penny Clog went viral the day it hit our site",
+    ai_extracted_angle: p.angle ?? null,
     format: "image",
+    ...(p.active != null ? { is_active: p.active } : {}),
+    ...(p.reach != null ? { reach: p.reach } : {}),
   };
 }
 
@@ -50,7 +56,7 @@ describe("computeCreativeTestsData", () => {
   /** Everything strictly before this is "killed" */
   const killedCutoff = "2030-06-14T12:00:00.000Z";
 
-  it("groups 2+ ads launched same day same platform; drops singleton launch days", () => {
+  it("groups variants launched within 3 days on one platform; leaves later launches out", () => {
     const tests = computeCreativeTestsData({
       userId: USER,
       competitorId: COMP,
@@ -59,12 +65,12 @@ describe("computeCreativeTestsData", () => {
         ad({ id: "a", platform: "meta", first: "2030-01-01T08:00:00.000Z", last: killedCutoff }),
         ad({ id: "b", platform: "meta", first: "2030-01-01T10:00:00.000Z", last: killedCutoff }),
         ad({ id: "c", platform: "meta", first: "2030-01-02T10:00:00.000Z", last: killedCutoff }),
+        ad({ id: "late", platform: "meta", first: "2030-01-10T10:00:00.000Z", last: killedCutoff }),
       ],
     });
     expect(tests).toHaveLength(1);
     expect(tests[0]!.launch_date).toBe("2030-01-01");
-    expect(tests[0]!.ad_count).toBe(2);
-    expect(tests[0]!.ad_ids.sort()).toEqual(["a", "b"].sort());
+    expect(tests[0]!.ad_ids.sort()).toEqual(["a", "b", "c"]);
   });
 
   it("groups ads when first_seen uses Postgres space-separated timestamps", () => {
@@ -105,7 +111,7 @@ describe("computeCreativeTestsData", () => {
     expect(t.winner_lifespan_days).toBeGreaterThanOrEqual(14);
   });
 
-  it("classifies running when any ad is still active (not killed)", () => {
+  it("names the one variant left running after the others stopped", () => {
     const tests = computeCreativeTestsData({
       userId: USER,
       competitorId: COMP,
@@ -120,8 +126,69 @@ describe("computeCreativeTestsData", () => {
         }),
       ],
     });
+    expect(tests[0]!.test_status).toBe("winner_identified");
+    expect(tests[0]!.winner_ad_id).toBe("live");
+  });
+
+  it("is running while several variants are still live", () => {
+    const tests = computeCreativeTestsData({
+      userId: USER,
+      competitorId: COMP,
+      lastScrapedAtIso: scrapeIso,
+      ads: [
+        ad({ id: "a", platform: "meta", first: "2030-05-01T00:00:00.000Z", last: "2030-06-15T00:00:00.000Z", active: true }),
+        ad({ id: "b", platform: "meta", first: "2030-05-01T00:00:00.000Z", last: "2030-06-15T00:00:00.000Z", active: true }),
+        ad({ id: "c", platform: "meta", first: "2030-05-01T00:00:00.000Z", last: "2030-05-05T00:00:00.000Z", active: false }),
+      ],
+    });
     expect(tests[0]!.test_status).toBe("running");
-    expect(tests[0]!.winner_ad_id).toBeNull();
+  });
+
+  it("lets a 3× reach lead pick the winner among live variants", () => {
+    const tests = computeCreativeTestsData({
+      userId: USER,
+      competitorId: COMP,
+      lastScrapedAtIso: scrapeIso,
+      ads: [
+        ad({ id: "a", platform: "meta", first: "2030-05-01T00:00:00.000Z", last: "2030-06-15T00:00:00.000Z", active: true, reach: 30_000 }),
+        ad({ id: "b", platform: "meta", first: "2030-05-01T00:00:00.000Z", last: "2030-06-15T00:00:00.000Z", active: true, reach: 4_000 }),
+      ],
+    });
+    expect(tests[0]!.winner_ad_id).toBe("a");
+  });
+
+  it("doesn't call different ads launched the same day a test", () => {
+    const tests = computeCreativeTestsData({
+      userId: USER,
+      competitorId: COMP,
+      lastScrapedAtIso: scrapeIso,
+      ads: [
+        ad({ id: "a", platform: "meta", first: "2030-01-01T00:00:00.000Z", last: killedCutoff, text: "Fall boots are back in three new colors" }),
+        ad({ id: "b", platform: "meta", first: "2030-01-01T00:00:00.000Z", last: killedCutoff, text: "Free shipping on every order this weekend only" }),
+      ],
+    });
+    expect(tests).toHaveLength(0);
+  });
+
+  it("skips bulk launches bigger than a test", () => {
+    const ads = Array.from({ length: 12 }, (_, i) =>
+      ad({ id: `bulk${i}`, platform: "meta", first: "2030-01-01T00:00:00.000Z", last: killedCutoff }),
+    );
+    expect(computeCreativeTestsData({ userId: USER, competitorId: COMP, lastScrapedAtIso: scrapeIso, ads })).toHaveLength(0);
+  });
+
+  it("ignores Google rows that only carry placeholder text", () => {
+    const placeholder = "Allbirds Inc — allbirds.com\n\nImage · Shown 2026-01-01 → 2026-10-06\n\n2026-01-01 – 2026-10-06\n\nAllbirds Inc";
+    const tests = computeCreativeTestsData({
+      userId: USER,
+      competitorId: COMP,
+      lastScrapedAtIso: scrapeIso,
+      ads: [
+        ad({ id: "g1", platform: "google", first: "2030-01-01T00:00:00.000Z", last: killedCutoff, text: placeholder }),
+        ad({ id: "g2", platform: "google", first: "2030-01-01T00:00:00.000Z", last: killedCutoff, text: placeholder }),
+      ],
+    });
+    expect(tests).toHaveLength(0);
   });
 
   it("classifies all_killed_fast when max lifespan < 7 days", () => {
