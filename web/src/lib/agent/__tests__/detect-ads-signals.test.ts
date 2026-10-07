@@ -7,13 +7,13 @@ import type { Database } from "@/lib/supabase/types";
 
 type Row = Record<string, unknown>;
 
-/** Thenable query builder over in-memory rows; counts every query sent. */
-function fakeAdmin(table: Row[]) {
+/** Thenable query builder over in-memory rows (scraped ads, plus optional earlier signals); counts every query. */
+function fakeAdmin(table: Row[], priorSignals: Row[] = []) {
   let queries = 0;
   const client = {
-    from() {
+    from(name: string) {
       queries++;
-      let rows = [...table];
+      let rows = name === "agent_signals" ? [...priorSignals] : [...table];
       let cap = Infinity;
       const builder = {
         select() {
@@ -21,6 +21,15 @@ function fakeAdmin(table: Row[]) {
         },
         eq(col: string, val: unknown) {
           rows = rows.filter((r) => r[col] === val);
+          return builder;
+        },
+        in(col: string, vals: unknown[]) {
+          const get = (r: Row) =>
+            col === "payload->ad->>stable_ad_key"
+              ? ((r.payload as { ad?: { stable_ad_key?: string } })?.ad?.stable_ad_key ?? null)
+              : r[col];
+          rows = rows.filter((r) => vals.includes(get(r)));
+          rows = rows.map((r) => ({ ...r, ad_key: get(r) }));
           return builder;
         },
         gte(col: string, val: string) {
@@ -112,5 +121,40 @@ describe("detectAdsSignals", () => {
     });
     expect(signals.map((s) => s.signal_type)).toContain("new_cta");
     expect(signals.map((s) => s.signal_type)).not.toContain("platform_expansion");
+  });
+
+  it("calls only the strongest ~10% of running ads winning, scoring 6+", async () => {
+    const { admin } = fakeAdmin([]);
+    const reach = (people: number) => ({ transparency_by_location: { eu_transparency: { eu_total_reach: people } } });
+    const newAds = [
+      ...Array.from({ length: 18 }, (_, i) => ad(`small${i}`, { first_seen_at: daysAgo(20), raw_payload: reach(800) })),
+      ad("big", { first_seen_at: daysAgo(40), raw_payload: reach(250_000), platforms: ["meta", "instagram"] } as Partial<AgentAdInput>),
+      ad("mid", { first_seen_at: daysAgo(35), raw_payload: reach(20_000) }),
+    ];
+    const signals = await detectAdsSignals({ admin, competitorId: "c1", newAds, baseline });
+    const winning = signals.filter((s) => s.signal_type === "new_winning_ad");
+    expect(winning.map((s) => (s.payload as { ad: { stable_ad_key: string } }).ad.stable_ad_key)).toEqual(["big"]);
+    expect(winning[0]!.threat_score).toBeGreaterThanOrEqual(6);
+    expect("raw_payload" in (winning[0]!.payload as { ad: object }).ad).toBe(false);
+  });
+
+  it("signals an ad once per type, not on every scrape", async () => {
+    const prior = [
+      { competitor_id: "c1", source: "ads", signal_type: "new_cta", payload: { ad: { stable_ad_key: "seen" } } },
+    ];
+    const { admin } = fakeAdmin([], prior);
+    const signals = await detectAdsSignals({
+      admin,
+      competitorId: "c1",
+      newAds: [
+        ad("seen", { raw_payload: { cta: "Shop now" } }),
+        ad("fresh", { raw_payload: { cta: "Book now" } }),
+      ],
+      baseline,
+    });
+    const ctaKeys = signals
+      .filter((s) => s.signal_type === "new_cta")
+      .map((s) => (s.payload as { ad: { stable_ad_key: string } }).ad.stable_ad_key);
+    expect(ctaKeys).toEqual(["fresh"]);
   });
 });

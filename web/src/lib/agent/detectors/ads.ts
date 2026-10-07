@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { extractImpressionsIndex } from "@/lib/ad-library/ad-performance-ranking";
 import { calculateThreatScore } from "@/lib/agent/threat-score";
 import type { AgentAdInput, AgentBaselineMetrics, DetectedAgentSignal } from "@/lib/agent/types";
 import type { Database } from "@/lib/supabase/types";
@@ -135,18 +136,21 @@ export async function detectAdsSignals(params: {
   newAds: AgentAdInput[];
   baseline: AgentBaselineMetrics;
 }): Promise<DetectedAgentSignal[]> {
-  const { admin, competitorId, newAds, baseline } = params;
+  const { admin, competitorId, newAds } = params;
   const signals: DetectedAgentSignal[] = [];
   const grouped = groupAdsByStableKey(newAds);
   const now = Date.now();
   const allPlatforms = [...new Set(grouped.flatMap((ad) => ad.platforms ?? [ad.platform]))];
   const ctx = await loadDetectionContext(admin, competitorId, allPlatforms);
 
+  const winningCandidates: DetectedAgentSignal[] = [];
+
   for (const ad of grouped) {
     const daysRunning = Math.max(
       0,
       Math.round((now - new Date(ad.first_seen_at).getTime()) / 86_400_000),
     );
+    const slim = slimAd(ad);
     const platforms = ad.platforms ?? [ad.platform];
     const headline = extractHeadline(ad);
     const cta = extractCtaFromAd(ad);
@@ -154,29 +158,28 @@ export async function detectAdsSignals(params: {
     const isNewAngleFlag = Boolean(angle) && !seenOnOtherAd(ctx.anglesByKey, angle!, ad.stable_ad_key);
 
     if (daysRunning >= 7) {
+      const reachIndex = extractImpressionsIndex(ad.raw_payload);
       const threat = calculateThreatScore({
         days_running: daysRunning,
+        reach_index: reachIndex,
         platform_count: platforms.length,
         is_new_angle: isNewAngleFlag,
-        baseline_avg_duration: baseline.ads?.avg_ad_duration_days ?? 5,
       });
-
-      if (threat >= 5) {
-        signals.push({
-          signal_type: "new_winning_ad",
-          source: "ads",
-          threat_score: threat,
-          payload: {
-            ad,
-            days_running: daysRunning,
-            platforms,
-            hook: headline,
-            cta,
-            creative_url: ad.ad_creative_url,
-            is_new_angle: isNewAngleFlag,
-          },
-        });
-      }
+      winningCandidates.push({
+        signal_type: "new_winning_ad",
+        source: "ads",
+        threat_score: threat,
+        payload: {
+          ad: slim,
+          days_running: daysRunning,
+          reach_index: reachIndex,
+          platforms,
+          hook: headline,
+          cta,
+          creative_url: ad.ad_creative_url,
+          is_new_angle: isNewAngleFlag,
+        },
+      });
     }
 
     if (cta && !seenOnOtherAd(ctx.ctasByKey, cta, ad.stable_ad_key)) {
@@ -184,7 +187,7 @@ export async function detectAdsSignals(params: {
         signal_type: "new_cta",
         source: "ads",
         threat_score: 6,
-        payload: { ad, new_cta: cta },
+        payload: { ad: slim, new_cta: cta },
       });
     }
 
@@ -194,10 +197,61 @@ export async function detectAdsSignals(params: {
         signal_type: "platform_expansion",
         source: "ads",
         threat_score: 7,
-        payload: { ad, new_platforms: newPlatforms },
+        payload: { ad: slim, new_platforms: newPlatforms },
       });
     }
   }
 
-  return signals;
+  signals.push(...topWinningAds(winningCandidates));
+  return dropAlreadySignaled(admin, competitorId, signals);
+}
+
+/** Below this an ad isn't news, whatever its rank (the delivery setting's minimum is 6 too). */
+const MIN_WINNING_THREAT = 6;
+/** Share of this run's running ads that may be called "winning". */
+const WINNING_TOP_SHARE = 0.1;
+
+/** The strongest ~10% of this competitor's running ads, and only those scoring 6+. */
+function topWinningAds(candidates: DetectedAgentSignal[]): DetectedAgentSignal[] {
+  const sorted = [...candidates].sort((a, b) => b.threat_score - a.threat_score);
+  const keep = Math.max(1, Math.ceil(sorted.length * WINNING_TOP_SHARE));
+  const cutoff = sorted[keep - 1]?.threat_score ?? Infinity;
+  return sorted.filter((s) => s.threat_score >= Math.max(cutoff, MIN_WINNING_THREAT));
+}
+
+/** What a signal keeps of the ad: enough for messages and visuals, without the multi-KB scrape payload. */
+function slimAd(ad: AgentAdInput): Omit<AgentAdInput, "raw_payload"> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { raw_payload, ...rest } = ad;
+  return rest;
+}
+
+const SIGNAL_LOOKUP_CHUNK = 200;
+
+/**
+ * Every scrape hands the agent all of a competitor's running ads, so the same ad used to be signalled
+ * again on every run (27K signals from ~4.9K ads). Each ad now produces a given signal type once.
+ */
+async function dropAlreadySignaled(
+  admin: SupabaseClient<Database>,
+  competitorId: string,
+  signals: DetectedAgentSignal[],
+): Promise<DetectedAgentSignal[]> {
+  const keyOf = (s: DetectedAgentSignal) => ((s.payload as { ad?: { stable_ad_key?: string } }).ad?.stable_ad_key ?? "");
+  const keys = [...new Set(signals.map(keyOf).filter(Boolean))];
+  if (keys.length === 0) return signals;
+
+  const seen = new Set<string>();
+  for (let i = 0; i < keys.length; i += SIGNAL_LOOKUP_CHUNK) {
+    const { data } = await admin
+      .from("agent_signals")
+      .select("signal_type, ad_key:payload->ad->>stable_ad_key")
+      .eq("competitor_id", competitorId)
+      .eq("source", "ads")
+      .in("payload->ad->>stable_ad_key", keys.slice(i, i + SIGNAL_LOOKUP_CHUNK));
+    for (const row of (data ?? []) as Array<{ signal_type: string; ad_key: string | null }>) {
+      if (row.ad_key) seen.add(`${row.signal_type}:${row.ad_key}`);
+    }
+  }
+  return signals.filter((s) => !seen.has(`${s.signal_type}:${keyOf(s)}`));
 }
