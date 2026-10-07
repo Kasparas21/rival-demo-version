@@ -22,7 +22,12 @@ import {
   type PatternMetricsAd,
 } from "./compute-pattern-metrics";
 import { DAY_MS, inUtcHalfOpenRange } from "./pattern-week-utils";
-import { normalizeDiscoveryPatternInsights } from "./pattern-types";
+import {
+  findUnsupportedFigures,
+  removeUnsupportedFigures,
+  unsupportedFiguresFeedback,
+} from "./pattern-figure-check";
+import { normalizeDiscoveryPatternInsights, type DiscoveryPatternInsights } from "./pattern-types";
 import type { DiscoveryPatternMetrics, DiscoveryPatternReportDto } from "./types";
 
 import { fetchAllDiscoveryScrapedAds } from "@/lib/discovery/fetch-discovery-scraped-ads";
@@ -313,6 +318,8 @@ function metricsForPrompt(metrics: DiscoveryPatternMetrics) {
 async function callPatternLlm(
   payload: ReturnType<typeof buildEvidencePayload>,
   retryInvalid = false,
+  /** A previous answer and what was wrong with it (figures not in the data). */
+  correction?: { previous: DiscoveryPatternInsights; feedback: string },
 ): Promise<
   | { ok: true; insights: ReturnType<typeof normalizeDiscoveryPatternInsights>; model: string; usage: { inputTokens: number; outputTokens: number; costUsd: number } }
   | { ok: false; error: string }
@@ -324,6 +331,12 @@ async function callPatternLlm(
       role: "user" as const,
       content: `${userContent}\n\nReturn JSON matching this schema:\n${OUTPUT_SCHEMA}`,
     },
+    ...(correction
+      ? [
+          { role: "assistant" as const, content: JSON.stringify(correction.previous) },
+          { role: "user" as const, content: correction.feedback },
+        ]
+      : []),
     ...(retryInvalid
       ? [
           {
@@ -378,6 +391,39 @@ function rowToDto(row: Database["public"]["Tables"]["discovery_pattern_reports"]
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
+}
+
+type PatternLlmOk = Extract<Awaited<ReturnType<typeof callPatternLlm>>, { ok: true }>;
+
+/**
+ * Figures the model states must be in its input. One retry with the offending figures listed, then any
+ * sentence still stating one is dropped. Usage covers both calls.
+ */
+async function withSupportedFigures(
+  first: PatternLlmOk,
+  evidence: ReturnType<typeof buildEvidencePayload>,
+): Promise<PatternLlmOk> {
+  const issues = findUnsupportedFigures(first.insights, evidence);
+  if (issues.length === 0) return first;
+  console.warn(
+    `[discovery-patterns] ${issues.length} unsupported figures, retrying:`,
+    issues.map((i) => `"${i.figure}" in ${i.field}: ${i.text.slice(0, 160)}`).join(" | "),
+  );
+
+  const retry = await callPatternLlm(evidence, false, {
+    previous: first.insights,
+    feedback: unsupportedFiguresFeedback(issues),
+  });
+  const usage = retry.ok
+    ? {
+        inputTokens: first.usage.inputTokens + retry.usage.inputTokens,
+        outputTokens: first.usage.outputTokens + retry.usage.outputTokens,
+        costUsd: first.usage.costUsd + retry.usage.costUsd,
+      }
+    : first.usage;
+  const best =
+    retry.ok && findUnsupportedFigures(retry.insights, evidence).length < issues.length ? retry.insights : first.insights;
+  return { ...first, usage, insights: removeUnsupportedFigures(best, evidence) };
 }
 
 export type GeneratePatternReportResult =
@@ -456,6 +502,7 @@ export async function generatePatternReport(params: {
   if (!llm.ok) {
     llm = await callPatternLlm(evidence, true);
   }
+  if (llm.ok) llm = await withSupportedFigures(llm, evidence);
 
   const nowIso = new Date(nowMs).toISOString();
 
