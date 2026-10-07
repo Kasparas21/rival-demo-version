@@ -4,6 +4,12 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { recomputeStrategyOverviewForCompetitor } from "@/lib/strategy-overview/recompute-strategy-overview";
 import { loadStaleStrategyMaps } from "@/lib/strategy-overview/stale-strategy-maps";
 
+/**
+ * Rebuilds every strategy map that is older than its latest scrape. Not on a schedule: with few people
+ * looking at maps it would pay to classify and infer audiences nobody reads. Maps rebuild when opened
+ * (compiled route, comparison page); call this by hand with the cron secret to catch everything up, or add
+ * it to vercel.json crons once there are active users.
+ */
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
