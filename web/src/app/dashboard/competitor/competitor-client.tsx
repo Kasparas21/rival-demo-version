@@ -1759,6 +1759,8 @@ function CompetitorDashboardBody({
   const [pinterestCountry, setPinterestCountry] = useState(readStoredPinterestCountry);
   const [googleRegion, setGoogleRegion] = useState(readStoredGoogleRegion);
   const [accountLastScrapedAt, setAccountLastScrapedAt] = useState<string | null>(null);
+  /** Until the first read finishes, "null" means unknown, not "never scraped". */
+  const [accountLastScrapedKnown, setAccountLastScrapedKnown] = useState(false);
   const [workspaceBrandCompetitorId, setWorkspaceBrandCompetitorId] = useState("");
   type WorkspaceLibraryLinkState = "idle" | "linking" | "persisting" | "ready" | "error";
   const [workspaceLibraryLinkState, setWorkspaceLibraryLinkState] =
@@ -2259,6 +2261,7 @@ function CompetitorDashboardBody({
     try {
       return await promise;
     } finally {
+      setAccountLastScrapedKnown(true);
       if (readAccountLastScrapedInFlightRef.current === promise) {
         readAccountLastScrapedInFlightRef.current = null;
       }
@@ -3708,15 +3711,15 @@ function CompetitorDashboardBody({
                       }
                     >
                       {void lastScrapeRelativeTick}
-                      {isOwnWorkspace
-                        ? accountLastScrapedAt
-                          ? formatLastScrapedLine(accountLastScrapedAt)
-                          : "Scrape your ads from the Ads Library tab"
-                        : accountLastScrapedAt
-                          ? formatLastScrapedLine(accountLastScrapedAt)
-                          : adsLibraryShowsCreativesOnScreen
-                            ? "First sync in progress · creatives loading"
-                            : "Not yet scraped"}
+                      {accountLastScrapedAt
+                        ? formatLastScrapedLine(accountLastScrapedAt)
+                        : !accountLastScrapedKnown
+                          ? "\u00a0"
+                          : isOwnWorkspace
+                            ? "Scrape your ads from the Ads Library tab"
+                            : adsLibraryShowsCreativesOnScreen
+                              ? "First sync in progress · creatives loading"
+                              : "Not yet scraped"}
                     </span>
                   </div>
                 </div>
