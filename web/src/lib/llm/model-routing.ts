@@ -21,7 +21,8 @@ export type LlmTask =
   | "landing_page_text_extract"
   | "landing_page_change_analysis"
   | "discovery_patterns"
-  | "discovery_chat";
+  | "discovery_chat"
+  | "ad_creative_transcription";
 
 export type LlmRoute = {
   provider: LlmProvider;
@@ -68,6 +69,8 @@ export const MODEL_ROUTING: Record<LlmTask, LlmRoute> = {
   email_intelligence: openRouterRoute("LLM_MODEL_EMAIL_INTELLIGENCE"),
   benchmark: openRouterRoute("LLM_MODEL_BENCHMARK", DEFAULT_OPENROUTER_SMART),
   ad_enrichment: openRouterRoute("LLM_MODEL_AD_ENRICHMENT"),
+  /** Vision: transcribes Google ad images. Cheapest model that read Lithuanian/Estonian/Latvian ads cleanly. */
+  ad_creative_transcription: openRouterRoute("LLM_MODEL_AD_CREATIVE_TRANSCRIPTION", "google/gemini-2.5-flash-lite"),
   ad_detail_analysis: openRouterRoute("LLM_MODEL_AD_DETAIL_ANALYSIS"),
   marketing_improvement: openRouterRoute("LLM_MODEL_MARKETING_IMPROVEMENT", DEFAULT_OPENROUTER_SMART),
   move_detector: openRouterRoute("LLM_MODEL_MOVE_DETECTOR", DEFAULT_OPENROUTER_SMART),

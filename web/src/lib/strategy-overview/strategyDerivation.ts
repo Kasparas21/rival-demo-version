@@ -153,6 +153,8 @@ export type ScrapedAdInput = {
   /** When set (recompute path), Strategy Map uses distinct live creatives; see live-creatives.ts */
   is_active?: boolean;
   raw_payload?: unknown;
+  /** Copy transcribed from the creative image (Google ads without published copy). */
+  creative_text?: string | null;
 };
 
 const PLATFORM_LABEL: Record<string, string> = {

@@ -56,6 +56,7 @@ type AdForAudience = {
   first_seen_at: string;
   last_seen_at: string;
   raw_payload?: unknown;
+  creative_text?: string | null;
 };
 
 const COPY_SAMPLES = 12;
@@ -67,7 +68,8 @@ export function audienceCopySamples(ads: AdForAudience[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const ad of [...ads].sort((a, b) => (runtime(b) || 0) - (runtime(a) || 0))) {
-    const text = (ad.platform === "google" ? googleAdCopy(ad.ad_text) : ad.ad_text).replace(/\s+/g, " ").trim();
+    const copy = ad.platform === "google" ? googleAdCopy(ad.ad_text) || (ad.creative_text ?? "") : ad.ad_text;
+    const text = copy.replace(/\s+/g, " ").trim();
     if (text.length < 20) continue;
     const key = text.slice(0, 60).toLowerCase();
     if (seen.has(key)) continue;

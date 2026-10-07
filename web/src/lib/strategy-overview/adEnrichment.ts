@@ -103,9 +103,15 @@ const modelRowSchema = z.object({
  * Text the model should label. Google/YouTube rows drop the generated "Advertiser — domain · Shown …"
  * scaffolding, so a row with no real copy ends up empty and is skipped instead of labelled from metadata.
  */
-export function enrichmentTextForAd(adText: string | null | undefined, platform: string): string {
+export function enrichmentTextForAd(
+  adText: string | null | undefined,
+  platform: string,
+  creativeText?: string | null,
+): string {
   const p = platform.trim().toLowerCase();
-  const text = p === "google" || p === "youtube" ? googleAdCopy(adText) : (adText ?? "");
+  let text = p === "google" || p === "youtube" ? googleAdCopy(adText) : (adText ?? "");
+  /** Google rows mostly carry no copy; the transcription of the ad's image stands in for it. */
+  if (text.trim().length < MIN_AD_TEXT_CHARS && creativeText?.trim()) text = creativeText;
   return prepareAdTextForEnrichment(text);
 }
 
@@ -115,6 +121,11 @@ export function prepareAdTextForEnrichment(raw: string): string {
   const match = t.match(/[\p{L}\p{N}]/u);
   if (!match || match.index == null) return t;
   return t.slice(match.index).trim();
+}
+
+/** Content hash of what the classifier saw: the ad text plus any transcription of its image. */
+export function enrichmentContentHash(row: { ad_text: string; creative_text?: string | null }): string {
+  return hashAdText(`${row.ad_text}${row.creative_text ? `\n${row.creative_text}` : ""}`);
 }
 
 export function hashAdText(text: string): string {
@@ -439,13 +450,13 @@ export async function enrichScrapedAdsIfNeeded(
   const textCandidates: TextCandidate[] = [];
 
   for (const r of need) {
-    const prepared = enrichmentTextForAd(r.ad_text, r.platform);
+    const prepared = enrichmentTextForAd(r.ad_text, r.platform, r.creative_text);
     if (prepared.length < MIN_AD_TEXT_CHARS) {
       skippedNoText += 1;
       skippedNoTextIds.push(r.id);
       continue;
     }
-    textCandidates.push({ row: r, hash: hashAdText(r.ad_text) });
+    textCandidates.push({ row: r, hash: enrichmentContentHash(r) });
   }
 
   if (skippedNoTextIds.length > 0) {
@@ -500,7 +511,7 @@ export async function enrichScrapedAdsIfNeeded(
     console.log("[enrich-trace] batch index=", i, "batch size=", batch.length);
 
     const items: EnrichItem[] = batch.map((r) => {
-      const cleaned = enrichmentTextForAd(r.ad_text, r.platform);
+      const cleaned = enrichmentTextForAd(r.ad_text, r.platform, r.creative_text);
       return {
         id: r.id,
         ad_text: cleaned.slice(0, 4000),
@@ -621,7 +632,7 @@ export async function enrichScrapedAdsIfNeeded(
         continue;
       }
 
-      const h = hashAdText(row.ad_text);
+      const h = enrichmentContentHash(row);
       await supabase.from("ad_enrichment_log").insert({
         user_id: userId,
         scraped_ad_id: row.id,
