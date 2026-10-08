@@ -482,7 +482,10 @@ function AiAdAnalysisNotice({
         : null;
 
   return (
-    <div className="mb-5 overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50 via-white to-amber-50/70 px-4 py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+    <div
+      role="status"
+      className="overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50 via-white to-amber-50/70 px-4 py-3.5 shadow-[0_8px_30px_rgba(15,23,42,0.14)] animate-in fade-in slide-in-from-bottom-2 duration-200"
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-800">
           {complete ? <Check className="h-4 w-4" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
@@ -3913,9 +3916,6 @@ function CompetitorDashboardBody({
           className="!flex-none flex-col"
         >
           <div className="bg-slate-50">
-            {shouldRenderAiAnalysisNotice ? (
-              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-            ) : null}
             <KeepMountedTab active={navSub === "creative-tests"} className="!flex-none flex-col">
               <CreativeTestsTab
                 competitorId={competitorDbIdForSaved}
@@ -3945,9 +3945,6 @@ function CompetitorDashboardBody({
           className="!flex-none flex-col"
         >
           <div className="bg-slate-50">
-            {shouldRenderAiAnalysisNotice ? (
-              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-            ) : null}
             <KeepMountedTab active={navSub === "audience"} className="!flex-none flex-col">
               <AudienceTab
                 brandId={myBrand.id}
@@ -3989,7 +3986,6 @@ function CompetitorDashboardBody({
         >
         <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
-            {renderAiAnalysisNotice()}
             {showAdLibraryAnalyticsPanel ? (
               <FeatureSectionHeader
                 className="mb-6"
@@ -4945,11 +4941,14 @@ function CompetitorDashboardBody({
         </KeepMountedTab>
       </KeepMountedTab>
 
+      {/* Floats over the page so it can appear and go without pushing the content down. */}
+      {shouldRenderAiAnalysisNotice &&
+      (navTab === "ads library" || navTab === "insights" || (navTab === "comparison" && !isOwnWorkspace)) ? (
+        <div className="fixed bottom-4 right-4 z-40 w-[min(380px,calc(100vw-2rem))]">{renderAiAnalysisNotice()}</div>
+      ) : null}
+
       <KeepMountedTab active={navTab === "insights"} className="!flex-none flex-col">
         <div className="bg-slate-50">
-          {shouldRenderAiAnalysisNotice ? (
-            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-          ) : null}
           <Suspense
             fallback={
               <RivalLoadingBlock padded className="py-14" />
@@ -5164,9 +5163,6 @@ function CompetitorDashboardBody({
       <KeepMountedTab active={navTab === "comparison" && !isOwnWorkspace} className="!flex-none flex-col">
         <div className="bg-slate-50">
           <div className="animate-in fade-in duration-200">
-            {shouldRenderAiAnalysisNotice ? (
-              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-            ) : null}
             <ComparisonPage
               isConfirmed={isConfirmed}
               competitorDisplayLabel={competitorDisplayLabel}
