@@ -299,6 +299,14 @@ function normalizeDomainHostForAdsEvent(input: string): string {
   );
 }
 
+/**
+ * Tabs and sub-tabs are client state: update the query with the history API (Next's router stays in sync)
+ * instead of `router.replace`, whose transition stalled behind a suspended tab and left `?tab=` behind.
+ */
+function replaceQueryInPlace(pathname: string, params: URLSearchParams) {
+  window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
+}
+
 function formatLastScrapedLine(iso: string | null | undefined): string {
   if (!iso) return "No scrape yet";
   const d = new Date(iso);
@@ -1478,9 +1486,9 @@ function CompetitorDashboardBody({
       fix = true;
     }
     if (fix) {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replaceQueryInPlace(pathname, params);
     }
-  }, [searchParams, pathname, router, isOwnWorkspace, showBrandDebugTabs]);
+  }, [searchParams, pathname, isOwnWorkspace, showBrandDebugTabs]);
 
   useEffect(() => {
     const sub = (searchParams.get("sub") ?? "").trim();
@@ -1493,8 +1501,8 @@ function CompetitorDashboardBody({
         : "activity-feed",
     );
     params.delete("view");
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs]);
+    replaceQueryInPlace(pathname, params);
+  }, [pathname, searchParams, isOwnWorkspace, showBrandDebugTabs]);
 
   const deriveTabFromParams = useCallback(
     (params: URLSearchParams) => {
@@ -1556,10 +1564,10 @@ function CompetitorDashboardBody({
         if (opts?.deleteView) {
           params.delete("view");
         }
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        replaceQueryInPlace(pathname, params);
       });
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   const handlePaidMediaSettingsSaved = useCallback(
@@ -1692,10 +1700,10 @@ function CompetitorDashboardBody({
             params.delete("view");
           }
         }
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        replaceQueryInPlace(pathname, params);
       });
     },
-    [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs],
+    [pathname, searchParams, isOwnWorkspace, showBrandDebugTabs],
   );
 
   const handleSubTabChange = useCallback(
@@ -1711,10 +1719,10 @@ function CompetitorDashboardBody({
         if (navTab === "insights") {
           params.delete("view");
         }
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        replaceQueryInPlace(pathname, params);
       });
     },
-    [navTab, pathname, router, searchParams],
+    [navTab, pathname, searchParams],
   );
 
   const navigateToLandingPagesExplorer = useCallback(() => {
@@ -1726,9 +1734,9 @@ function CompetitorDashboardBody({
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "website");
       params.set("sub", "from-ads");
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replaceQueryInPlace(pathname, params);
     });
-  }, [pathname, router, searchParams]);
+  }, [pathname, searchParams]);
   const [visibleAdPlatforms, setVisibleAdPlatforms] = useState<AdsLibraryPlatform[] | null>(null);
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [googleAdsModalOpen, setGoogleAdsModalOpen] = useState(false);
@@ -2535,9 +2543,9 @@ function CompetitorDashboardBody({
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", navTab);
       params.set("sub", fallback);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replaceQueryInPlace(pathname, params);
     });
-  }, [navSub, navTab, pathname, router, searchParams]);
+  }, [navSub, navTab, pathname, searchParams]);
 
   const loadManualRefreshStatus = useCallback(async () => {
     if (!competitorDbIdForSaved || !canManualRefresh) {
