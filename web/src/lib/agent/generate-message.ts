@@ -3,6 +3,27 @@ import { openRouterChatText } from "@/lib/llm/openrouter";
 import type { DetectedAgentSignal } from "./types";
 import { markdownToHtml } from "./delivery/markdown-to-html";
 
+const MAX_SIGNAL_JSON_CHARS = 2_500;
+const MAX_BRIEF_SIGNALS = 40;
+
+/**
+ * Signals as they go into a prompt: each capped in size, so one oversized payload (old trend rows held
+ * 1–4 MB of nested signals) can't blow up the request.
+ */
+export function signalsForPrompt<T extends object>(signals: T[], max = signals.length): unknown[] {
+  return signals.slice(0, max).map((s) => {
+    const json = JSON.stringify(s);
+    if (json.length <= MAX_SIGNAL_JSON_CHARS) return s;
+    const r = s as Record<string, unknown>;
+    return {
+      signal_type: r.signal_type,
+      competitor_id: r.competitor_id,
+      threat_score: r.threat_score,
+      payload_excerpt: JSON.stringify(r.payload ?? null).slice(0, MAX_SIGNAL_JSON_CHARS - 300),
+    };
+  });
+}
+
 export async function generateAgentMessage(params: {
   competitorName: string;
   brandContext: string | null;
@@ -22,7 +43,7 @@ Competitor: ${competitorLabel}
 User's product: ${productDesc}
 
 Signals detected (ordered by importance):
-${JSON.stringify(topSignals, null, 2)}
+${JSON.stringify(signalsForPrompt(topSignals), null, 2)}
 
 Write a complete intelligence message with this exact structure. Use plain English. Be direct and specific. No fluff. No generic advice. Write like a sharp analyst sending a voice note to their boss — confident, clear, opinionated.
 
@@ -91,7 +112,7 @@ export async function generateWeeklyBriefMessage(params: {
   const prompt = `You are Rival's competitive intelligence agent writing a weekly brief.
 
 Here are all the competitive signals detected this week across the user's tracked competitors:
-${JSON.stringify(params.signals, null, 2)}
+${JSON.stringify(signalsForPrompt(params.signals, MAX_BRIEF_SIGNALS), null, 2)}
 
 Write a weekly intelligence brief with this structure:
 
