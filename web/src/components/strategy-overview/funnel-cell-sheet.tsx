@@ -266,6 +266,8 @@ export function FunnelCellSheet({ open, cellId, competitorId, cacheDomainNorm, o
               ) : null}
               {!loading && ads.length > 0 ? (
                 <p className="mt-1 text-[11px] text-slate-500">
+                  {/* Counts cover the ads loaded so far; say so when that's only the first page. */}
+                  {totalInCell > ads.length ? `Of the first ${ads.length} loaded: ` : null}
                   <span className="font-medium text-emerald-700">{runningCount} active</span>
                   {" · "}
                   <span className="font-medium text-slate-600">{inactiveCount} inactive</span>
