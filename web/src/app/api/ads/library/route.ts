@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { CACHEABLE_PLATFORMS, type CacheablePlatform } from "@/lib/ad-library/cache-ttl";
 import type { AdsLibraryPlatform, AdsLibraryResponse } from "@/lib/ad-library/api-types";
 import { ALL_ADS_API_PLATFORMS } from "@/lib/ad-library/channels-to-platforms";
@@ -538,12 +538,14 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
 
   if (shouldRefreshStrategyOverview && userId && resolvedCompetitorId) {
-    void recomputeStrategyOverviewForCompetitor({
-      supabase,
-      userId,
-      competitorId: resolvedCompetitorId,
-      domainHint: domainNorm,
-    }).then((r) => {
+    /**
+     * `after()`, not a bare promise: the function is frozen once the response is sent, which cut this off
+     * partway — new Google ads were left unread and unclassified until the map was opened again. It reads
+     * new Google ads (vision model, ~$0.0002 each) and classifies pending ads; nothing new, nothing spent.
+     */
+    const competitorId = resolvedCompetitorId;
+    after(async () => {
+      const r = await recomputeStrategyOverviewForCompetitor({ supabase, userId, competitorId, domainHint: domainNorm });
       if (!r.ok) console.warn("[api/ads/library] strategy overview recompute:", r.error);
     });
   }
