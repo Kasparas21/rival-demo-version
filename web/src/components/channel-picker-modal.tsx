@@ -99,8 +99,11 @@ export function ChannelPickerModal({
   const selectAll = () => setSelected(new Set(availableChannelIds(enabledPlatforms)));
   const selectNone = () => setSelected(new Set());
 
+  /** Only switched-on platforms are ticked and searched; the defaults also hold "Coming soon" ones. */
+  const selectedAvailable = Array.from(selected).filter((id) => isChannelAvailable(id, enabledPlatforms));
+
   const handleConfirm = () => {
-    onConfirm(Array.from(selected).filter((id) => isChannelAvailable(id, enabledPlatforms)));
+    onConfirm(selectedAvailable);
     onClose();
   };
 
@@ -253,12 +256,12 @@ export function ChannelPickerModal({
               <button
                 type="button"
                 onClick={handleConfirm}
-                disabled={selected.size === 0}
+                disabled={selectedAvailable.length === 0}
                 className="flex h-[50px] w-full items-center justify-center rounded-[18px] bg-[#343434] text-[15px] font-semibold text-white shadow-md transition-colors hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#343434]"
               >
-                {selected.size === 0
+                {selectedAvailable.length === 0
                   ? "Pick at least one platform"
-                  : `Search ${selected.size} platform${selected.size === 1 ? "" : "s"}`}
+                  : `Search ${selectedAvailable.length} platform${selectedAvailable.length === 1 ? "" : "s"}`}
               </button>
             </div>
           </motion.div>

@@ -28,12 +28,17 @@ function formatDelta(delta: number): string {
   return String(delta);
 }
 
-function WowBadge({ delta, pct }: { delta: number; pct: number | null }) {
-  if (delta === 0 && (pct === null || pct === 0)) {
+/**
+ * New ads launched in the last 7 days against the 7 before, as counts. No percentage: a first scrape only
+ * sees ads still running, so the earlier week is undercounted and a ratio ("+675%") overstates the change.
+ */
+function WowBadge({ thisWeek, lastWeek }: { thisWeek: number; lastWeek: number }) {
+  const delta = thisWeek - lastWeek;
+  if (delta === 0) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-slate-500">
         <Minus className="h-3 w-3" aria-hidden />
-        Flat vs prior 7 days
+        {lastWeek === 0 ? "None in either week" : `Same as prior 7 days (${lastWeek})`}
       </span>
     );
   }
@@ -45,8 +50,7 @@ function WowBadge({ delta, pct }: { delta: number; pct: number | null }) {
   return (
     <span className={cn("inline-flex items-center gap-0.5 text-[11px] font-semibold", tone)}>
       <Icon className="h-3 w-3" aria-hidden />
-      {formatDelta(delta)} vs prior 7 days
-      {pct != null ? ` (${up ? "+" : ""}${pct}%)` : null}
+      {formatDelta(delta)} vs prior 7 days ({lastWeek})
     </span>
   );
 }
@@ -83,7 +87,7 @@ export function PlatformAdsLibraryStatsBar({ platform, ads, scrapeAtMs, classNam
   if (stats.total_ads === 0) return null;
 
   const launchHint = (
-    <WowBadge delta={stats.new_week_over_week_delta} pct={stats.new_week_over_week_pct} />
+    <WowBadge thisWeek={stats.new_this_week} lastWeek={stats.new_last_week} />
   );
 
   const netHint =

@@ -55,6 +55,21 @@ export function saveOnboardingDraft(draft: OnboardingDraft): void {
   }
 }
 
+/**
+ * Keep a guest's answers as they go, so leaving mid-flow to sign in doesn't lose them (the signed-in form
+ * restores the draft). Unlike `saveOnboardingDraft` it doesn't mark a trial as pending: they haven't finished.
+ */
+export function saveOnboardingProgress(draft: OnboardingDraft): void {
+  if (typeof window === "undefined" || !draft.companyHost) return;
+  const serialized = JSON.stringify(draft);
+  try {
+    sessionStorage.setItem(ONBOARDING_DRAFT_STORAGE_KEY, serialized);
+    localStorage.setItem(ONBOARDING_DRAFT_LOCAL_KEY, serialized);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
 export function readOnboardingDraft(): OnboardingDraft | null {
   if (typeof window === "undefined") return null;
   try {

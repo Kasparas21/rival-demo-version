@@ -49,6 +49,7 @@ import {
 } from "@/lib/competitor-dashboard-url";
 import { isGenericDashboardLanding } from "@/lib/dashboard/default-home";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { submitSignOut } from "@/lib/auth/submit-sign-out";
 import {
   deleteSavedCompetitorFromAccount,
   fetchSavedCompetitorsFromAccount,
@@ -304,6 +305,8 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     limitsForTier("free_trial").maxWatchedCompetitors,
   );
   const [globalCompetitorsUsed, setGlobalCompetitorsUsed] = useState<number | null>(null);
+  /** The cap above starts at the free-trial default; show the counter once the account's real usage arrives. */
+  const [competitorUsageLoaded, setCompetitorUsageLoaded] = useState(false);
   const [billingPlanTier, setBillingPlanTier] = useState<PlanTier>("free_trial");
   const [maxOwnBrandWorkspaces, setMaxOwnBrandWorkspacesState] = useState(
     limitsForTier("free_trial").maxOwnBrandWorkspaces,
@@ -335,6 +338,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       setMaxOwnBrandWorkspacesState(snap.maxOwnBrandWorkspaces);
       setMaxWatchedCompetitorsCap(snap.maxWatchedCompetitors);
       setGlobalCompetitorsUsed(snap.competitorsWatched);
+      setCompetitorUsageLoaded(true);
     });
   }, []);
 
@@ -509,6 +513,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
       color: DEMO_OWN_BRAND.color,
     };
   }, [activeBrand, isOnDemoPath]);
+
+  /** Brands not loaded yet: show a placeholder, not the "Your workspace ?" fallback. */
+  const brandPending = !brandsLoaded && !isOnDemoPath;
 
   const previousActiveBrandIdRef = useRef<string | null>(null);
 
@@ -802,16 +809,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     [pathname, activeCompetitorSlug, activeBrand.id, refreshBillingUsage, refreshSavedCompetitors, router],
   );
 
-  const handleSignOut = async () => {
+  /**
+   * Leave the dashboard first: signing out in place let open components refetch as a signed-out user and
+   * render raw "Unauthorized" before the redirect.
+   */
+  const handleSignOut = () => {
     clearSidebarCompetitorsStorageForSignOut();
     clearClientCompetitorSlotUsage();
-    try {
-      await fetch("/auth/sign-out", { method: "POST", credentials: "same-origin" });
-    } catch {
-      /* fall through — still attempt client sign-out */
-    }
-    await supabase.auth.signOut();
-    window.location.assign("/login");
+    submitSignOut("/login");
   };
 
   const renderRemoveCompetitorButton = (
@@ -910,9 +915,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               ) : (
                 <div
                   className="w-full h-full text-white flex items-center justify-center text-[11px] font-bold shrink-0"
-                  style={{ backgroundColor: effectiveBrand.color ?? "#343434" }}
+                  style={{ backgroundColor: brandPending ? "#e5e7eb" : (effectiveBrand.color ?? "#343434") }}
                 >
-                  {effectiveBrand.badge}
+                  {brandPending ? null : effectiveBrand.badge}
                 </div>
               )}
             </button>
@@ -936,13 +941,19 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
                 ) : (
                   <div
                     className="w-[36px] h-[36px] rounded-[10px] text-white flex items-center justify-center text-[13px] font-bold shrink-0 shadow-sm"
-                    style={{ backgroundColor: effectiveBrand.color ?? "#343434" }}
+                    style={{ backgroundColor: brandPending ? "#e5e7eb" : (effectiveBrand.color ?? "#343434") }}
                   >
-                    {effectiveBrand.badge}
+                    {brandPending ? null : effectiveBrand.badge}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold text-[#343434] truncate">{effectiveBrand.name}</span>
+                  <span className="block text-[14px] font-semibold text-[#343434] truncate">
+                    {brandPending ? (
+                      <span className="inline-block h-3.5 w-28 animate-pulse rounded bg-slate-200/80 align-middle" aria-label="Loading" />
+                    ) : (
+                      effectiveBrand.name
+                    )}
+                  </span>
                   <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
                 </div>
               </button>
@@ -975,13 +986,19 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               ) : (
                 <div
                   className="w-[36px] h-[36px] rounded-[10px] text-white flex items-center justify-center text-[13px] font-bold shrink-0 shadow-sm"
-                  style={{ backgroundColor: effectiveBrand.color ?? "#343434" }}
+                  style={{ backgroundColor: brandPending ? "#e5e7eb" : (effectiveBrand.color ?? "#343434") }}
                 >
-                  {effectiveBrand.badge}
+                  {brandPending ? null : effectiveBrand.badge}
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold text-[#343434] truncate">{effectiveBrand.name}</span>
+                <span className="block text-[14px] font-semibold text-[#343434] truncate">
+                    {brandPending ? (
+                      <span className="inline-block h-3.5 w-28 animate-pulse rounded bg-slate-200/80 align-middle" aria-label="Loading" />
+                    ) : (
+                      effectiveBrand.name
+                    )}
+                  </span>
                 <span className="block text-[11px] text-[#808080] truncate">Your brand workspace</span>
               </div>
             </button>
@@ -1150,9 +1167,11 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--rival-muted)]">
                 Competitors
               </p>
-              <span className="text-[10px] font-semibold tabular-nums shrink-0 text-[#b4b4b8]" title="Watched competitor slots across all your brands">
-                {globalCompetitorsUsed ?? sidebarCompetitorRows.length}/{maxWatchedCompetitorsCap}
-              </span>
+              {competitorUsageLoaded ? (
+                <span className="text-[10px] font-semibold tabular-nums shrink-0 text-[#b4b4b8]" title="Watched competitor slots across all your brands">
+                  {globalCompetitorsUsed ?? sidebarCompetitorRows.length}/{maxWatchedCompetitorsCap}
+                </span>
+              ) : null}
             </div>
           )}
           {collapsed && (
@@ -1332,7 +1351,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                onClick={() => void handleSignOut()}
+                onClick={handleSignOut}
                 className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[#52525b] ring-1 ring-transparent shadow-sm transition-colors hover:bg-white/85 hover:text-[color:var(--rival-primary)] hover:ring-[#e8e8e8]/80 active:scale-[0.97]"
                 title="Sign out"
               >
@@ -1360,7 +1379,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                onClick={() => void handleSignOut()}
+                onClick={handleSignOut}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[#52525b] transition-colors hover:bg-white/75 hover:text-[color:var(--rival-primary)]"
               >
                 <LogOut className="h-[18px] w-[18px] shrink-0" />

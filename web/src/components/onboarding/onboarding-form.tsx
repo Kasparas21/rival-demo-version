@@ -51,7 +51,13 @@ import { PlanPickerContent } from "@/components/billing/plan-picker-content";
 import { availableChannelIds, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { applyPartialOnboardingDraft } from "@/lib/onboarding/apply-draft";
-import { saveOnboardingDraft, readOnboardingDraft, clearOnboardingDraft, type OnboardingDraft } from "@/lib/onboarding/draft";
+import {
+  saveOnboardingDraft,
+  saveOnboardingProgress,
+  readOnboardingDraft,
+  clearOnboardingDraft,
+  type OnboardingDraft,
+} from "@/lib/onboarding/draft";
 import { resolveOnboardingCompanyHost } from "@/lib/onboarding/resolve-company-host";
 import {
   adsProfileSetupV1,
@@ -695,6 +701,14 @@ export function OnboardingForm({
         : null,
     };
   };
+
+  /** A guest who leaves to sign in comes back to their answers: keep them as each step is reached. */
+  useEffect(() => {
+    if (!guestMode || step === STEP_WEBSITE) return;
+    saveOnboardingProgress(buildPrePaymentDraft());
+    // buildPrePaymentDraft reads exactly these values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guestMode, step, companyUrl, workspaceChannels, brandInsights]);
 
   const finishPrePaymentFlow = async (): Promise<boolean> => {
     if (finishInFlightRef.current) return false;

@@ -299,6 +299,14 @@ function normalizeDomainHostForAdsEvent(input: string): string {
   );
 }
 
+/**
+ * Tabs and sub-tabs are client state: update the query with the history API (Next's router stays in sync)
+ * instead of `router.replace`, whose transition stalled behind a suspended tab and left `?tab=` behind.
+ */
+function replaceQueryInPlace(pathname: string, params: URLSearchParams) {
+  window.history.replaceState(null, "", `${pathname}?${params.toString()}`);
+}
+
 function formatLastScrapedLine(iso: string | null | undefined): string {
   if (!iso) return "No scrape yet";
   const d = new Date(iso);
@@ -482,7 +490,10 @@ function AiAdAnalysisNotice({
         : null;
 
   return (
-    <div className="mb-5 overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50 via-white to-amber-50/70 px-4 py-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)]">
+    <div
+      role="status"
+      className="overflow-hidden rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50 via-white to-amber-50/70 px-4 py-3.5 shadow-[0_8px_30px_rgba(15,23,42,0.14)] animate-in fade-in slide-in-from-bottom-2 duration-200"
+    >
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-800">
           {complete ? <Check className="h-4 w-4" aria-hidden /> : <Sparkles className="h-4 w-4" aria-hidden />}
@@ -1475,9 +1486,9 @@ function CompetitorDashboardBody({
       fix = true;
     }
     if (fix) {
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replaceQueryInPlace(pathname, params);
     }
-  }, [searchParams, pathname, router, isOwnWorkspace, showBrandDebugTabs]);
+  }, [searchParams, pathname, isOwnWorkspace, showBrandDebugTabs]);
 
   useEffect(() => {
     const sub = (searchParams.get("sub") ?? "").trim();
@@ -1490,8 +1501,8 @@ function CompetitorDashboardBody({
         : "activity-feed",
     );
     params.delete("view");
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs]);
+    replaceQueryInPlace(pathname, params);
+  }, [pathname, searchParams, isOwnWorkspace, showBrandDebugTabs]);
 
   const deriveTabFromParams = useCallback(
     (params: URLSearchParams) => {
@@ -1553,10 +1564,10 @@ function CompetitorDashboardBody({
         if (opts?.deleteView) {
           params.delete("view");
         }
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        replaceQueryInPlace(pathname, params);
       });
     },
-    [pathname, router, searchParams],
+    [pathname, searchParams],
   );
 
   const handlePaidMediaSettingsSaved = useCallback(
@@ -1689,10 +1700,10 @@ function CompetitorDashboardBody({
             params.delete("view");
           }
         }
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        replaceQueryInPlace(pathname, params);
       });
     },
-    [pathname, router, searchParams, isOwnWorkspace, showBrandDebugTabs],
+    [pathname, searchParams, isOwnWorkspace, showBrandDebugTabs],
   );
 
   const handleSubTabChange = useCallback(
@@ -1708,10 +1719,10 @@ function CompetitorDashboardBody({
         if (navTab === "insights") {
           params.delete("view");
         }
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+        replaceQueryInPlace(pathname, params);
       });
     },
-    [navTab, pathname, router, searchParams],
+    [navTab, pathname, searchParams],
   );
 
   const navigateToLandingPagesExplorer = useCallback(() => {
@@ -1723,9 +1734,9 @@ function CompetitorDashboardBody({
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", "website");
       params.set("sub", "from-ads");
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replaceQueryInPlace(pathname, params);
     });
-  }, [pathname, router, searchParams]);
+  }, [pathname, searchParams]);
   const [visibleAdPlatforms, setVisibleAdPlatforms] = useState<AdsLibraryPlatform[] | null>(null);
   const [metaAdsModalOpen, setMetaAdsModalOpen] = useState(false);
   const [googleAdsModalOpen, setGoogleAdsModalOpen] = useState(false);
@@ -1759,6 +1770,8 @@ function CompetitorDashboardBody({
   const [pinterestCountry, setPinterestCountry] = useState(readStoredPinterestCountry);
   const [googleRegion, setGoogleRegion] = useState(readStoredGoogleRegion);
   const [accountLastScrapedAt, setAccountLastScrapedAt] = useState<string | null>(null);
+  /** Until the first read finishes, "null" means unknown, not "never scraped". */
+  const [accountLastScrapedKnown, setAccountLastScrapedKnown] = useState(false);
   const [workspaceBrandCompetitorId, setWorkspaceBrandCompetitorId] = useState("");
   type WorkspaceLibraryLinkState = "idle" | "linking" | "persisting" | "ready" | "error";
   const [workspaceLibraryLinkState, setWorkspaceLibraryLinkState] =
@@ -2259,6 +2272,7 @@ function CompetitorDashboardBody({
     try {
       return await promise;
     } finally {
+      setAccountLastScrapedKnown(true);
       if (readAccountLastScrapedInFlightRef.current === promise) {
         readAccountLastScrapedInFlightRef.current = null;
       }
@@ -2529,9 +2543,9 @@ function CompetitorDashboardBody({
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", navTab);
       params.set("sub", fallback);
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      replaceQueryInPlace(pathname, params);
     });
-  }, [navSub, navTab, pathname, router, searchParams]);
+  }, [navSub, navTab, pathname, searchParams]);
 
   const loadManualRefreshStatus = useCallback(async () => {
     if (!competitorDbIdForSaved || !canManualRefresh) {
@@ -3708,15 +3722,15 @@ function CompetitorDashboardBody({
                       }
                     >
                       {void lastScrapeRelativeTick}
-                      {isOwnWorkspace
-                        ? accountLastScrapedAt
-                          ? formatLastScrapedLine(accountLastScrapedAt)
-                          : "Scrape your ads from the Ads Library tab"
-                        : accountLastScrapedAt
-                          ? formatLastScrapedLine(accountLastScrapedAt)
-                          : adsLibraryShowsCreativesOnScreen
-                            ? "First sync in progress · creatives loading"
-                            : "Not yet scraped"}
+                      {accountLastScrapedAt
+                        ? formatLastScrapedLine(accountLastScrapedAt)
+                        : !accountLastScrapedKnown
+                          ? "\u00a0"
+                          : isOwnWorkspace
+                            ? "Scrape your ads from the Ads Library tab"
+                            : adsLibraryShowsCreativesOnScreen
+                              ? "First sync in progress · creatives loading"
+                              : "Not yet scraped"}
                     </span>
                   </div>
                 </div>
@@ -3910,9 +3924,6 @@ function CompetitorDashboardBody({
           className="!flex-none flex-col"
         >
           <div className="bg-slate-50">
-            {shouldRenderAiAnalysisNotice ? (
-              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-            ) : null}
             <KeepMountedTab active={navSub === "creative-tests"} className="!flex-none flex-col">
               <CreativeTestsTab
                 competitorId={competitorDbIdForSaved}
@@ -3942,9 +3953,6 @@ function CompetitorDashboardBody({
           className="!flex-none flex-col"
         >
           <div className="bg-slate-50">
-            {shouldRenderAiAnalysisNotice ? (
-              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-            ) : null}
             <KeepMountedTab active={navSub === "audience"} className="!flex-none flex-col">
               <AudienceTab
                 brandId={myBrand.id}
@@ -3986,7 +3994,6 @@ function CompetitorDashboardBody({
         >
         <div className="bg-transparent">
           <div className={`${COMPETITOR_PAGE_X} py-8 pb-24 w-full animate-in fade-in duration-200`}>
-            {renderAiAnalysisNotice()}
             {showAdLibraryAnalyticsPanel ? (
               <FeatureSectionHeader
                 className="mb-6"
@@ -4942,11 +4949,14 @@ function CompetitorDashboardBody({
         </KeepMountedTab>
       </KeepMountedTab>
 
+      {/* Floats over the page so it can appear and go without pushing the content down. */}
+      {shouldRenderAiAnalysisNotice &&
+      (navTab === "ads library" || navTab === "insights" || (navTab === "comparison" && !isOwnWorkspace)) ? (
+        <div className="fixed bottom-4 right-4 z-40 w-[min(380px,calc(100vw-2rem))]">{renderAiAnalysisNotice()}</div>
+      ) : null}
+
       <KeepMountedTab active={navTab === "insights"} className="!flex-none flex-col">
         <div className="bg-slate-50">
-          {shouldRenderAiAnalysisNotice ? (
-            <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-          ) : null}
           <Suspense
             fallback={
               <RivalLoadingBlock padded className="py-14" />
@@ -5161,9 +5171,6 @@ function CompetitorDashboardBody({
       <KeepMountedTab active={navTab === "comparison" && !isOwnWorkspace} className="!flex-none flex-col">
         <div className="bg-slate-50">
           <div className="animate-in fade-in duration-200">
-            {shouldRenderAiAnalysisNotice ? (
-              <div className={`${COMPETITOR_PAGE_X} pt-6`}>{renderAiAnalysisNotice()}</div>
-            ) : null}
             <ComparisonPage
               isConfirmed={isConfirmed}
               competitorDisplayLabel={competitorDisplayLabel}
