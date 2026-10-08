@@ -92,20 +92,24 @@ export function SidebarRivalAgentControl({ collapsed = false }: SidebarRivalAgen
   if (collapsed) {
     return (
       <>
-        <button
-          type="button"
-          onClick={openSettings}
-          className="flex flex-col items-center gap-1.5 py-1 rounded-lg hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/30"
-          title="Autopilot — tap to customize"
-        >
-          <AgentIconButton className="h-9 w-9 rounded-xl" iconClassName="h-5 w-5" />
+        {/* Icon and switch side by side, not the switch inside the icon button: a <button> in a <button> is
+            invalid HTML and broke hydration, so React rebuilt the page whenever the sidebar was collapsed. */}
+        <div className="flex flex-col items-center gap-1.5 py-1">
+          <button
+            type="button"
+            onClick={openSettings}
+            className="rounded-xl hover:bg-white/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/30"
+            title="Autopilot — tap to customize"
+          >
+            <AgentIconButton className="h-9 w-9 rounded-xl" iconClassName="h-5 w-5" />
+          </button>
           <AgentToggleSwitch
             id={`${toggleId}-collapsed`}
             enabled={settings?.enabled ?? false}
             disabled={settingsLoading || !settings}
             onChange={(next) => void setEnabled(next)}
           />
-        </button>
+        </div>
         <AgentSettingsModal
           open={settingsOpen}
           onClose={closeSettings}
