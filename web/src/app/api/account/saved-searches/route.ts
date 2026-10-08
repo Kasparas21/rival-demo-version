@@ -21,7 +21,7 @@ async function getAuthenticatedUser() {
 export async function GET() {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) {
-    return NextResponse.json({ searches: [] });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { data, error } = await supabase

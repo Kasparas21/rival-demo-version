@@ -223,7 +223,7 @@ async function insertBrandCompetitorMappings(
 export async function GET(request: Request) {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) {
-    return NextResponse.json({ competitors: [] });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const url = new URL(request.url);
