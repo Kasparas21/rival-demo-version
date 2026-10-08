@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { authCallbackErrorMessage } from "@/lib/auth/auth-callback-errors";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { RivalLogoImg } from "@/components/rival-logo";
@@ -46,7 +47,7 @@ export function SignupForm({
   const next =
     safeAuthNextPath(searchParams.get("next"), "/signup") ??
     (hasOnboardingDraft() ? PAYWALL_AFTER_TRIAL_PATH : "/dashboard/spy");
-  const urlAuthError = searchParams.get("error");
+  const urlAuthError = authCallbackErrorMessage(searchParams.get("error"));
   const rawNextQuery = searchParams.get("next");
   const rawTesterQuery = searchParams.get("tester");
   const loginHref = (() => {

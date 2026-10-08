@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import { type AuthCallbackErrorCode } from "@/lib/auth/auth-callback-errors";
 import { NextResponse, type NextRequest } from "next/server";
 import type { CookieOptions } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
@@ -47,20 +48,20 @@ export async function GET(request: NextRequest) {
 
   const { supabaseUrl, supabasePublishableKey } = getPublicSupabaseEnv();
 
-  const fail = (message: string) => {
+  /** Short codes only in the URL (the login page maps them to text); details go to the server log. */
+  const fail = (code: AuthCallbackErrorCode, detail?: string) => {
+    if (detail) console.warn(`[auth/callback] ${code}: ${detail}`);
     const login = request.nextUrl.clone();
     login.pathname = "/login";
     login.search = "";
-    login.searchParams.set("error", message);
+    login.searchParams.set("error", code);
     return NextResponse.redirect(login);
   };
 
   if (oauthError) {
-    const msg =
-      oauthError === "access_denied"
-        ? "Google sign-in was cancelled."
-        : [oauthErrorDescription, oauthError].filter(Boolean).join(" — ") || oauthError;
-    return fail(msg);
+    return oauthError === "access_denied"
+      ? fail("oauth_cancelled")
+      : fail("oauth_failed", [oauthErrorDescription, oauthError].filter(Boolean).join(" — "));
   }
 
   const cookieJar = new Map<string, { value: string; options: CookieOptions }>();
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      return fail(error.message);
+      return fail("link_invalid", error.message);
     }
   } else if (token_hash && typeParam && OTP_TYPES.has(typeParam as EmailOtpType)) {
     // GoTrue expects `type: "email"` for magic-link `token_hash` verification (see @supabase/auth-js verifyOtp docs).
@@ -94,14 +95,13 @@ export async function GET(request: NextRequest) {
         type: verifyType,
       });
       if (error) {
-        return fail(error.message);
+        return fail("link_invalid", error.message);
       }
     } catch (e) {
-      const message = e instanceof Error ? e.message : "verify_failed";
-      return fail(message);
+      return fail("link_invalid", e instanceof Error ? e.message : String(e));
     }
   } else {
-    return fail("missing_code");
+    return fail("link_invalid", "missing code or token");
   }
 
   const {
@@ -109,19 +109,19 @@ export async function GET(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return fail("no_user");
+    return fail("sign_in_failed", "no user after session exchange");
   }
 
   try {
     await ensureUserProfile(supabase, user);
   } catch (e) {
-    const message =
+    const detail =
       e instanceof Error
         ? e.message
         : e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
           ? (e as { message: string }).message
-          : "profile_setup_failed";
-    return fail(message);
+          : String(e);
+    return fail("sign_in_failed", `profile setup: ${detail}`);
   }
 
   const { data: profile } = await supabase
