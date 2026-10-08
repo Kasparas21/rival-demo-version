@@ -49,6 +49,7 @@ import {
 } from "@/lib/competitor-dashboard-url";
 import { isGenericDashboardLanding } from "@/lib/dashboard/default-home";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { submitSignOut } from "@/lib/auth/submit-sign-out";
 import {
   deleteSavedCompetitorFromAccount,
   fetchSavedCompetitorsFromAccount,
@@ -810,12 +811,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   /**
    * Leave the dashboard first: signing out in place let open components refetch as a signed-out user and
-   * render raw "Unauthorized" before the redirect. The GET route clears the session cookies and redirects.
+   * render raw "Unauthorized" before the redirect.
    */
   const handleSignOut = () => {
     clearSidebarCompetitorsStorageForSignOut();
     clearClientCompetitorSlotUsage();
-    window.location.assign("/auth/sign-out?next=/login");
+    submitSignOut("/login");
   };
 
   const renderRemoveCompetitorButton = (

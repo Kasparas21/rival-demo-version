@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { CheckoutNavigationLink } from "@/components/analytics/checkout-navigation-link";
 import { buildCheckoutHref } from "@/lib/billing/checkout-url";
+import { submitSignOut } from "@/lib/auth/submit-sign-out";
 import { DASHBOARD_HOME_PATH } from "@/lib/dashboard/default-home";
 import { buildWorkspaceBrandScrapeHref } from "@/lib/ad-library/workspace-brand-initial-scrape";
 import type { BillingPeriod } from "@/lib/billing/config";
@@ -344,9 +344,13 @@ export function PlanPickerContent({
 
       {variant === "page" ? (
         <p className="mt-6 text-center text-[13px] text-gray-600">
-          <Link href="/auth/sign-out?next=/login" className="font-semibold text-gray-800 underline-offset-2 hover:underline">
+          <button
+            type="button"
+            onClick={() => submitSignOut("/login")}
+            className="font-semibold text-gray-800 underline-offset-2 hover:underline"
+          >
             {copy.switchAccount}
-          </Link>
+          </button>
         </p>
       ) : null}
     </>

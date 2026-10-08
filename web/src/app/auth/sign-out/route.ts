@@ -20,17 +20,26 @@ async function signOutSession(): Promise<void> {
   await supabase.auth.signOut();
 }
 
+/** Visiting the URL no longer signs anyone out (a link or image on another site could). */
 export async function GET(request: NextRequest) {
-  await signOutSession();
-  const next = safeNextPath(request.nextUrl.searchParams.get("next"));
-  const dest = next && next !== "/auth/sign-out" ? next : "/login";
-  const response = NextResponse.redirect(new URL(dest, request.url));
-  clearAuthBridgeCookies(response);
-  return response;
+  return NextResponse.redirect(new URL("/login", request.url));
 }
 
-export async function POST() {
+/**
+ * Form submissions (the sign-out buttons) get a redirect to `next`; fetch callers get JSON. A form posted
+ * from another site doesn't carry the SameSite=Lax session cookie, so it can't sign anyone out.
+ */
+export async function POST(request: NextRequest) {
   await signOutSession();
+  const isForm = (request.headers.get("content-type") ?? "").includes("application/x-www-form-urlencoded");
+  if (isForm) {
+    const form = await request.formData().catch(() => null);
+    const next = safeNextPath(typeof form?.get("next") === "string" ? (form.get("next") as string) : null);
+    const dest = next && next !== "/auth/sign-out" ? next : "/login";
+    const response = NextResponse.redirect(new URL(dest, request.url), 303);
+    clearAuthBridgeCookies(response);
+    return response;
+  }
   const response = NextResponse.json({ ok: true });
   clearAuthBridgeCookies(response);
   return response;
