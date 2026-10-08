@@ -808,16 +808,14 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     [pathname, activeCompetitorSlug, activeBrand.id, refreshBillingUsage, refreshSavedCompetitors, router],
   );
 
-  const handleSignOut = async () => {
+  /**
+   * Leave the dashboard first: signing out in place let open components refetch as a signed-out user and
+   * render raw "Unauthorized" before the redirect. The GET route clears the session cookies and redirects.
+   */
+  const handleSignOut = () => {
     clearSidebarCompetitorsStorageForSignOut();
     clearClientCompetitorSlotUsage();
-    try {
-      await fetch("/auth/sign-out", { method: "POST", credentials: "same-origin" });
-    } catch {
-      /* fall through — still attempt client sign-out */
-    }
-    await supabase.auth.signOut();
-    window.location.assign("/login");
+    window.location.assign("/auth/sign-out?next=/login");
   };
 
   const renderRemoveCompetitorButton = (
@@ -1352,7 +1350,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                onClick={() => void handleSignOut()}
+                onClick={handleSignOut}
                 className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[#52525b] ring-1 ring-transparent shadow-sm transition-colors hover:bg-white/85 hover:text-[color:var(--rival-primary)] hover:ring-[#e8e8e8]/80 active:scale-[0.97]"
                 title="Sign out"
               >
@@ -1380,7 +1378,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 type="button"
-                onClick={() => void handleSignOut()}
+                onClick={handleSignOut}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[#52525b] transition-colors hover:bg-white/75 hover:text-[color:var(--rival-primary)]"
               >
                 <LogOut className="h-[18px] w-[18px] shrink-0" />
