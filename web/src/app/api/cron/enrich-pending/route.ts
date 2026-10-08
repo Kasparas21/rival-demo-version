@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
+import { transcribeMissingAdCopy } from "@/lib/ad-library/transcribe-ad-creatives";
 import { userAllowsScheduledScrape } from "@/lib/billing/scrape-eligibility";
 import { enrichAllPendingScrapedAdsForCompetitor } from "@/lib/strategy-overview/adEnrichment";
 
@@ -63,6 +64,10 @@ async function runEnrichPending(req: Request) {
   let adsEnriched = 0;
 
   for (const { userId, competitorId } of pairs) {
+    // Read Google ads that have no published copy first; classifying them from placeholder text guessed.
+    await transcribeMissingAdCopy(admin, userId, competitorId, { maxAds: 150 }).catch((e) =>
+      console.warn("[cron/enrich-pending] transcribe", competitorId, e instanceof Error ? e.message : e),
+    );
     const stats = await enrichAllPendingScrapedAdsForCompetitor(admin, userId, competitorId);
     competitorsProcessed += 1;
     adsEnriched += stats.enriched;
