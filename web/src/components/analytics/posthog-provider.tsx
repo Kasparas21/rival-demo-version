@@ -93,14 +93,15 @@ export function SitePostHogProvider({ children, bootstrap }: Props) {
     initPostHog();
   }, [bootstrap]);
 
-  if (!Provider || !posthogClient) {
-    return <>{children}</>;
-  }
-
+  // The app stays in the same place in the tree whether or not PostHog has loaded. Wrapping it in the
+  // provider once PostHog arrived (~0.5 s in) changed the tree, so React remounted every page: typed text
+  // lost focus and state set during the first half-second reset. Only PostHogIdentify reads the context.
   return (
-    <Provider client={posthogClient}>
-      {Identify ? <Identify /> : null}
+    <>
+      {Provider && posthogClient ? (
+        <Provider client={posthogClient}>{Identify ? <Identify /> : null}</Provider>
+      ) : null}
       {children}
-    </Provider>
+    </>
   );
 }
