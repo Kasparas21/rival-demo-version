@@ -77,3 +77,37 @@ describe("extractVisualUrlsFromSignal", () => {
     expect(urls).toContain("https://cdn.example/post.jpg");
   });
 });
+
+describe("signalsForPrompt", () => {
+  it("keeps small signals as they are and caps oversized ones", async () => {
+    const { signalsForPrompt } = await import("@/lib/agent/generate-message");
+    const small = { signal_type: "new_cta", competitor_id: "c1", threat_score: 7, payload: { new_cta: "Shop now" } };
+    const huge = { signal_type: "cross_competitor_trend", competitor_id: null, threat_score: 9, payload: { signals: "x".repeat(2_000_000) } };
+    const out = signalsForPrompt([huge, small]);
+    expect(out[1]).toEqual(small);
+    expect(JSON.stringify(out[0]).length).toBeLessThan(3_000);
+    expect(out[0]).toMatchObject({ signal_type: "cross_competitor_trend", threat_score: 9 });
+    expect(signalsForPrompt([small, small, small], 2)).toHaveLength(2);
+  });
+});
+
+describe("detectCrossCompetitorTrends", () => {
+  it("references signals instead of copying them, and never builds a trend of trends", async () => {
+    const { detectCrossCompetitorTrends } = await import("@/lib/agent/detectors/cross-competitor");
+    const rows = [
+      { id: "s1", competitor_id: "a", signal_type: "new_cta", threat_score: 7, source: "ads", payload: { new_cta: "Book now", ad: { platform: "meta", ad_text: "x".repeat(5000) } } },
+      { id: "s2", competitor_id: "b", signal_type: "new_cta", threat_score: 6, source: "ads", payload: { new_cta: "Get 20% off" } },
+      { id: "t1", competitor_id: "a", signal_type: "cross_competitor_trend", threat_score: 9, source: "cross_competitor", payload: { signals: [] } },
+      { id: "t2", competitor_id: "b", signal_type: "cross_competitor_trend", threat_score: 9, source: "cross_competitor", payload: { signals: [] } },
+    ];
+    const query = { select: () => query, eq: () => query, gte: async () => ({ data: rows }) };
+    const admin = { from: () => query } as unknown as Parameters<typeof detectCrossCompetitorTrends>[0];
+    const out = await detectCrossCompetitorTrends(admin, "user-1");
+    expect(out).toHaveLength(1);
+    const payload = out[0]!.payload as { trend_type: string; signal_count: number; signals: { id: string; summary: string | null }[] };
+    expect(payload.trend_type).toBe("new_cta");
+    expect(payload.signal_count).toBe(2);
+    expect(payload.signals.map((s) => [s.id, s.summary])).toEqual([["s1", "Book now"], ["s2", "Get 20% off"]]);
+    expect(JSON.stringify(payload).length).toBeLessThan(1_000);
+  });
+});
