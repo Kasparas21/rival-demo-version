@@ -31,6 +31,11 @@ function resolveSignupTesterInvite(request: NextRequest, bodyTester?: string): s
   return null;
 }
 
+/** Supabase's answer when the address is already registered (code `email_exists`, or the older message). */
+function isEmailTakenError(err: { code?: string; message?: string }): boolean {
+  return err.code === "email_exists" || err.code === "user_already_exists" || /already (been )?registered/i.test(err.message ?? "");
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = getResendApiKey();
   if (!apiKey) {
@@ -95,12 +100,34 @@ export async function POST(request: NextRequest) {
     options: { redirectTo },
   });
 
+  // An address that already has an account gets the same answer as a new one, so the form can't be used
+  // to find out who is registered; the owner gets an email pointing to sign-in instead.
+  if (linkError && isEmailTakenError(linkError)) {
+    const copy = getSignupCopy(locale).existingAccountEmail;
+    const loginUrl = `${origin}/login`;
+    const resetUrl = `${origin}/forgot-password`;
+    const { error: existingSendErr } = await new Resend(apiKey).emails.send({
+      from: getResendFromEmail(),
+      to: email,
+      subject: copy.subject,
+      text: fillCopyTemplate(copy.text, { loginUrl, resetUrl }),
+      html: `
+      <p style="font-family: system-ui, sans-serif; font-size: 15px; color: #111;">${copy.htmlIntro}</p>
+      <p style="font-family: system-ui, sans-serif;">
+        <a href="${loginUrl}" style="display:inline-block;background:#111;color:#fff;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;">${copy.htmlButton}</a>
+      </p>
+      <p style="font-family: system-ui, sans-serif; font-size: 13px;"><a href="${resetUrl}">${copy.htmlReset}</a></p>
+      <p style="font-family: system-ui, sans-serif; font-size: 12px; color: #64748b;">${copy.htmlIgnore}</p>
+    `,
+    });
+    if (existingSendErr) console.error("[sign-up-email] existing-account email", existingSendErr.message);
+    return NextResponse.json({ ok: true });
+  }
+
   const hashedToken = pickHashedTokenFromGenerateLinkProperties(linkData?.properties);
   if (linkError || !hashedToken) {
-    return NextResponse.json(
-      { error: linkError?.message ?? "Could not create account or confirmation link" },
-      { status: 400 },
-    );
+    if (linkError) console.error("[sign-up-email] generateLink", linkError.message);
+    return NextResponse.json({ error: "Could not create account or confirmation link" }, { status: 400 });
   }
 
   const userId = linkData.user?.id;

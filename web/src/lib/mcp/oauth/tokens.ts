@@ -22,8 +22,15 @@ function signingSecret(): string {
   return s;
 }
 
+/**
+ * Without MCP_OAUTH_SIGNING_SECRET the key falls back to the one that signs Slack OAuth state (also
+ * `<base64url json>.<hmac>`), so the purpose is part of what's signed: one kind of token can't pass as
+ * the other. Changing this only invalidates access tokens (15 min); refresh-token hashes are unaffected.
+ */
+const ACCESS_TOKEN_PURPOSE = "rival-mcp-access-token";
+
 function sign(encoded: string): string {
-  return createHmac("sha256", signingSecret()).update(encoded).digest("base64url");
+  return createHmac("sha256", signingSecret()).update(`${ACCESS_TOKEN_PURPOSE}.${encoded}`).digest("base64url");
 }
 
 export function createMcpAccessToken(params: {

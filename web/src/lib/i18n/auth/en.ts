@@ -41,6 +41,14 @@ export const authCopyEn: AuthCopy = {
       htmlButton: "Confirm your email",
       htmlIgnore: "If you did not sign up for Rival, you can ignore this email.",
     },
+    existingAccountEmail: {
+      subject: "You already have a Rival account",
+      text: "Someone tried to sign up for Rival with this email, but it already has an account.\n\nSign in: {loginUrl}\nForgot your password? {resetUrl}\n\nIf this wasn't you, you can ignore this email.\n",
+      htmlIntro: "Someone tried to sign up for Spy Rival with this email, but it already has an account.",
+      htmlButton: "Sign in",
+      htmlReset: "Forgot your password? Reset it here.",
+      htmlIgnore: "If this wasn't you, you can ignore this email.",
+    },
     devPanel: {
       title: "Local dev — no email",
       body: "Sign in instantly (uses service role). Confirmation links from signup also stay on localhost while you develop here.",

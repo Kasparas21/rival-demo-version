@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { authCallbackErrorMessage } from "@/lib/auth/auth-callback-errors";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RivalLogoImg } from "@/components/rival-logo";
@@ -41,7 +42,7 @@ export function LoginForm({ testerInviteCode = null }: { testerInviteCode?: stri
   const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const next = safeAuthNextPath(searchParams.get("next"), "/login") ?? "/dashboard/spy";
-  const urlAuthError = searchParams.get("error");
+  const urlAuthError = authCallbackErrorMessage(searchParams.get("error"));
   const notice = searchParams.get("notice");
   const rawNextQuery = searchParams.get("next");
   const rawTesterQuery = searchParams.get("tester");

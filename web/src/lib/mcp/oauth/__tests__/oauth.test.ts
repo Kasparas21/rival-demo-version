@@ -7,6 +7,7 @@ import {
   hashOpaqueToken,
 } from "@/lib/mcp/oauth/tokens";
 import { isMcpOAuthEnabled } from "@/lib/mcp/oauth-enabled";
+import { createHmac } from "node:crypto";
 
 describe("mcp oauth pkce", () => {
   it("verifies S256 challenge", () => {
@@ -29,6 +30,20 @@ describe("mcp oauth access tokens", () => {
     expect(payload?.user_id).toBe("user-1");
     expect(payload?.client_id).toBe("mcp_client");
     expect(payload?.scope).toBe("mcp:read");
+  });
+
+  it("doesn't accept a token signed for another purpose with the same key", () => {
+    // Production signs Slack OAuth state with the same fallback secret; a payload shaped like an access
+    // token, signed the way the state is, must not verify.
+    const key = "s".repeat(32);
+    vi.stubEnv("MCP_OAUTH_SIGNING_SECRET", "");
+    vi.stubEnv("INTEGRATIONS_OAUTH_STATE_SECRET", key);
+    const encoded = Buffer.from(
+      JSON.stringify({ v: "mcp1", user_id: "user-1", client_id: "x", scope: "mcp:read", exp: Math.floor(Date.now() / 1000) + 600 }),
+    ).toString("base64url");
+    const forged = `${encoded}.${createHmac("sha256", key).update(encoded).digest("base64url")}`;
+    expect(verifyMcpAccessToken(forged)).toBeNull();
+    expect(verifyMcpAccessToken(createMcpAccessToken({ userId: "user-1", clientId: "x" }))?.user_id).toBe("user-1");
   });
 
   it("rejects tampered tokens", () => {
