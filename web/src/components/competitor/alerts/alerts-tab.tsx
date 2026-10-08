@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Bell, Settings2, X } from "lucide-react";
 
@@ -158,6 +159,15 @@ export function AlertsTab({
   useEffect(() => {
     if (settingsOpen) void fetchRules();
   }, [settingsOpen, fetchRules]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSettingsOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [settingsOpen]);
 
   const markRead = useCallback(
     async (ids: string[]) => {
@@ -321,12 +331,23 @@ export function AlertsTab({
         </div>
       )}
 
-      {settingsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/25 p-4 backdrop-blur-sm sm:items-center">
-          <div className={`max-h-[85vh] w-full max-w-lg overflow-y-auto ${alertGlassPanelClass}`}>
+      {/* Portaled to <body>: inside the page's stacking context the sidebar drew over it. */}
+      {settingsOpen && typeof document !== "undefined" ? createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-900/25 p-4 backdrop-blur-sm sm:items-center"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSettingsOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alert-settings-title"
+            className={`max-h-[85vh] w-full max-w-lg overflow-y-auto ${alertGlassPanelClass}`}
+          >
             <div className="sticky top-0 flex items-center justify-between border-b border-white/50 bg-white/55 px-5 py-4 backdrop-blur-xl">
               <div>
-                <h2 className="text-[16px] font-semibold text-slate-900">Alert settings</h2>
+                <h2 id="alert-settings-title" className="text-[16px] font-semibold text-slate-900">Alert settings</h2>
                 <p className="mt-1 text-[12px] text-slate-500">
                   Every detected event appears in your feed. Email me only sends for events you switch on here.
                 </p>
@@ -435,7 +456,8 @@ export function AlertsTab({
               ) : null}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </div>
   );
