@@ -66,7 +66,17 @@ export async function POST(req: Request): Promise<NextResponse> {
     .limit(billing.limits.csvMaxAdsPerExport);
 
   if (competitorId) {
-    query = query.eq("competitor_id", competitorId);
+    // An id that isn't one of the user's competitors gets a 404, not an empty file that uses up an export.
+    const { data: comp } = await supabase
+      .from("saved_competitors")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("id", competitorId)
+      .maybeSingle();
+    if (!comp?.id) {
+      return NextResponse.json({ ok: false, error: "competitor not found" }, { status: 404 });
+    }
+    query = query.eq("competitor_id", comp.id);
   } else if (domain) {
     const { data: comp } = await supabase
       .from("saved_competitors")
