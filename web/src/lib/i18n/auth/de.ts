@@ -41,6 +41,14 @@ export const authCopyDe: AuthCopy = {
       htmlButton: "E-Mail bestätigen",
       htmlIgnore: "Wenn Sie sich nicht bei Rival registriert haben, können Sie diese E-Mail ignorieren.",
     },
+    existingAccountEmail: {
+      subject: "Sie haben bereits ein Rival-Konto",
+      text: "Jemand wollte sich mit dieser E-Mail bei Rival registrieren, aber es gibt bereits ein Konto.\n\nAnmelden: {loginUrl}\nPasswort vergessen? {resetUrl}\n\nWenn Sie das nicht waren, können Sie diese E-Mail ignorieren.\n",
+      htmlIntro: "Jemand wollte sich mit dieser E-Mail bei Spy Rival registrieren, aber es gibt bereits ein Konto.",
+      htmlButton: "Anmelden",
+      htmlReset: "Passwort vergessen? Hier zurücksetzen.",
+      htmlIgnore: "Wenn Sie das nicht waren, können Sie diese E-Mail ignorieren.",
+    },
     devPanel: {
       title: "Lokale Entwicklung — keine E-Mail",
       body: "Sofort anmelden (Service Role). Bestätigungslinks vom Signup bleiben lokal auf localhost.",

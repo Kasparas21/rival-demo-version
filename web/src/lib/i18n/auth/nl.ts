@@ -41,6 +41,14 @@ export const authCopyNl: AuthCopy = {
       htmlButton: "E-mail bevestigen",
       htmlIgnore: "Als u zich niet bij Rival heeft geregistreerd, kunt u deze e-mail negeren.",
     },
+    existingAccountEmail: {
+      subject: "U heeft al een Rival-account",
+      text: "Iemand probeerde zich met dit e-mailadres bij Rival te registreren, maar er bestaat al een account.\n\nInloggen: {loginUrl}\nWachtwoord vergeten? {resetUrl}\n\nWas u dit niet, dan kunt u deze e-mail negeren.\n",
+      htmlIntro: "Iemand probeerde zich met dit e-mailadres bij Spy Rival te registreren, maar er bestaat al een account.",
+      htmlButton: "Inloggen",
+      htmlReset: "Wachtwoord vergeten? Stel het hier opnieuw in.",
+      htmlIgnore: "Was u dit niet, dan kunt u deze e-mail negeren.",
+    },
     devPanel: {
       title: "Lokale ontwikkeling — geen e-mail",
       body: "Direct inloggen (service role). Bevestigingslinks van signup blijven op localhost tijdens lokaal ontwikkelen.",

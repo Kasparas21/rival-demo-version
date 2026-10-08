@@ -39,6 +39,16 @@ export type SignupCopy = {
     emailSendFailed: string;
   };
   confirmationEmail: SignupConfirmationEmailCopy;
+  /** Sent instead of a confirmation when the address already has an account (the form says the same either way). */
+  existingAccountEmail: {
+    subject: string;
+    /** Plain-text body; `{loginUrl}` and `{resetUrl}` placeholders */
+    text: string;
+    htmlIntro: string;
+    htmlButton: string;
+    htmlReset: string;
+    htmlIgnore: string;
+  };
   devPanel: {
     title: string;
     body: string;
