@@ -1106,7 +1106,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           <SidebarRivalAgentControl collapsed={collapsed} />
         </div>
 
-        <div className={`shrink-0 ${collapsed ? "px-3" : "px-4"} pt-2 pb-0.5`}>
+        <div className={`shrink-0 ${collapsed ? "flex justify-center px-3" : "px-4"} pt-2 pb-0.5`}>
           <Link
             href="/dashboard/discovery"
             scroll={false}
@@ -1124,7 +1124,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
 
-        <div className={`shrink-0 ${collapsed ? "px-3" : "px-4"} pb-0.5 pt-1`}>
+        <div className={`shrink-0 ${collapsed ? "flex justify-center px-3" : "px-4"} pb-0.5 pt-1`}>
           <Link
             href="/dashboard/saved"
             scroll={false}
