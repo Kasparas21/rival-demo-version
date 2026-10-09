@@ -400,6 +400,8 @@ export function OnboardingForm({
   const finishInFlightRef = useRef(false);
   /** Last website host seen when advancing from step 0 — invalidates caches when edited */
   const lastContinueFromWebsiteHostRef = useRef<string>("");
+  /** Site whose competitor search was started, so going back and forth doesn't start it again. */
+  const rivalsSearchStartedForRef = useRef<string>("");
 
   const skipDraftHydration = newBrandMode;
   const { enabled: enabledAdPlatforms } = useEnabledAdPlatforms();
@@ -674,7 +676,28 @@ export function OnboardingForm({
       workspaceSocialMergedSigRef.current = "";
       setCompanyScrape(emptyWorkspaceScrapeRow(normalizedCompany));
     }
+    startRivalsSearch(normalizedCompany);
     setStep(1);
+  };
+
+  /**
+   * Start finding their competitors now, while they set up, sign up and pay: the rivals step comes after
+   * payment and should open with the list ready. Cached per site; nothing is shown to guests.
+   */
+  const startRivalsSearch = (site: string) => {
+    if (newBrandMode || rivalsSearchStartedForRef.current === site) return;
+    rivalsSearchStartedForRef.current = site;
+    void fetch("/api/competitor-recommendations", {
+      method: "POST",
+      credentials: guestMode ? "omit" : "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(guestMode ? { "x-rival-guest-onboarding": "1" } : {}),
+      },
+      body: JSON.stringify({ brandId: "_workspace", domain: site }),
+    }).catch(() => {
+      /* the rivals step starts it again if this didn't */
+    });
   };
 
   const buildPrePaymentDraft = (): OnboardingDraft => {

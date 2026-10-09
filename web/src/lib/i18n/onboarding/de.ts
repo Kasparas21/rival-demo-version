@@ -45,7 +45,7 @@ const form: OnboardingCopy["form"] = {
     invalidSite: "Geben Sie eine Website ein, z. B. konkurrent.de",
     trackOne: "1 Konkurrenten verfolgen",
     trackMany: "{count} Konkurrenten verfolgen",
-    skip: "Jetzt überspringen",
+    continueWithout: "Weiter",
     capReached: "Ihr Tarif verfolgt bis zu {count} Konkurrenten.",
   },
   markets: {

@@ -9,6 +9,7 @@ import {
 } from "@/components/competitor-recommendations/use-competitor-recommendations";
 import { registrableDomain } from "@/lib/ad-account-discovery/score";
 import { readClientCompetitorSlotsRemaining, syncClientMaxWatchedCompetitorsFromUsage } from "@/lib/billing/client-plan-cap";
+import { glassInputClass } from "@/components/ui/glass-styles";
 import { fillCopyTemplate } from "@/lib/i18n/fill-copy-template";
 import type { OnboardingFormCopy } from "@/lib/i18n/onboarding/types";
 import { hostToBrandLabel, isPlausiblePublicHostname, normalizedWorkspaceHost } from "@/lib/onboarding/host";
@@ -38,25 +39,29 @@ function RivalRow({
         aria-checked={selected}
         disabled={disabled}
         onClick={onToggle}
-        className="flex w-full cursor-pointer items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-black/[0.02] focus-visible:bg-black/[0.03] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-45"
+        className={`flex w-full cursor-pointer items-center gap-3.5 rounded-xl border px-3.5 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${
+          selected
+            ? "border-[#4a7fa5]/35 bg-white/55 shadow-sm ring-1 ring-[#4a7fa5]/25"
+            : "border-gray-200/70 bg-white/30 hover:border-gray-300/80 hover:bg-white/45"
+        }`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={faviconFor(row.domain)}
           alt=""
-          className="size-9 shrink-0 rounded-[9px] bg-white object-contain p-1.5 ring-1 ring-black/[0.06]"
+          className="size-9 shrink-0 rounded-lg border border-white/60 bg-white/70 object-contain p-1.5"
         />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold tracking-[-0.01em] text-[#1d1d1f]">{row.name}</span>
-          <span className="block truncate text-[13px] text-[#86868b]">{row.domain}</span>
+          <span className="block truncate text-[15px] font-semibold text-gray-900">{row.name}</span>
+          <span className="block truncate text-[13px] text-gray-500">{row.domain}</span>
         </span>
         <span
           aria-hidden
-          className={`flex size-[22px] shrink-0 items-center justify-center rounded-full transition-colors ${
-            selected ? "bg-[#1d1d1f] text-white" : "ring-[1.5px] ring-inset ring-[#d2d2d7]"
+          className={`flex size-6 shrink-0 items-center justify-center rounded-full border transition ${
+            selected ? "border-[#1a1a2e] bg-[#1a1a2e] text-white" : "border-gray-300/80 bg-white/60"
           }`}
         >
-          {selected ? <Check className="size-3.5" strokeWidth={3} /> : null}
+          {selected ? <Check className="size-3.5" strokeWidth={2.75} /> : null}
         </span>
       </button>
     </li>
@@ -133,54 +138,49 @@ export function OnboardingRivalsStep({
     <div>
       <div className="mb-6">
         <h1 className="text-[22px] font-semibold tracking-tight text-gray-900">{copy.title}</h1>
-        <p className="mt-1.5 text-[14px] leading-relaxed text-gray-500">{copy.body}</p>
+        <p className="mt-1.5 text-[14px] leading-relaxed text-gray-600">{copy.body}</p>
       </div>
 
-      <div className="overflow-hidden rounded-2xl bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_6px_20px_rgba(0,0,0,0.04)] ring-1 ring-black/[0.05]">
-        {running ? (
-          <div aria-live="polite">
-            <p className="flex items-center gap-2 px-4 pt-4 pb-1 text-[13px] text-[#86868b]">
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              {copy.loading}
-            </p>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-3.5 px-4 py-3.5">
-                <div className="size-9 animate-pulse rounded-[9px] bg-[#f2f2f4]" />
+      {running ? (
+        <p className="mb-3 flex items-center gap-2 text-[13px] text-gray-500" aria-live="polite">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          {copy.loading}
+        </p>
+      ) : error || view?.status === "failed" ? (
+        <p className="mb-3 flex items-center gap-3 text-[13px] text-gray-600">
+          <span className="flex-1">{copy.failed}</span>
+          <button type="button" onClick={() => void start()} className="cursor-pointer font-semibold text-gray-900 underline">
+            {copy.retry}
+          </button>
+        </p>
+      ) : found.length === 0 ? (
+        <p className="mb-3 text-[13px] text-gray-600">{copy.empty}</p>
+      ) : null}
+
+      <ul className="space-y-2">
+        {running && added.length === 0
+          ? [0, 1, 2].map((i) => (
+              <li key={i} className="flex items-center gap-3.5 rounded-xl border border-gray-200/60 bg-white/25 px-3.5 py-3">
+                <div className="size-9 animate-pulse rounded-lg bg-white/60" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-3 w-28 animate-pulse rounded bg-[#f2f2f4]" />
-                  <div className="h-2.5 w-44 animate-pulse rounded bg-[#f5f5f7]" />
+                  <div className="h-3 w-28 animate-pulse rounded bg-white/70" />
+                  <div className="h-2.5 w-40 animate-pulse rounded bg-white/50" />
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : error || view?.status === "failed" ? (
-          <p className="flex items-center gap-3 px-4 py-4 text-[13px] text-[#6e6e73]">
-            <span className="flex-1">{copy.failed}</span>
-            <button type="button" onClick={() => void start()} className="cursor-pointer font-semibold text-[#0066cc] hover:underline">
-              {copy.retry}
-            </button>
-          </p>
-        ) : found.length === 0 ? (
-          <p className="px-4 py-4 text-[13px] text-[#6e6e73]">{copy.empty}</p>
-        ) : null}
-
-        {rows.length > 0 ? (
-          <ul className={`divide-y divide-black/[0.06] ${running ? "border-t border-black/[0.06]" : ""}`}>
-            {rows.map((row) => (
-              <RivalRow
-                key={row.domain}
-                row={row}
-                selected={selected.has(row.domain)}
-                disabled={!selected.has(row.domain) && atCap}
-                onToggle={() => toggle(row.domain)}
-              />
-            ))}
-          </ul>
-        ) : null}
-
-        <div className="border-t border-black/[0.06]">
+              </li>
+            ))
+          : null}
+        {rows.map((row) => (
+          <RivalRow
+            key={row.domain}
+            row={row}
+            selected={selected.has(row.domain)}
+            disabled={!selected.has(row.domain) && atCap}
+            onToggle={() => toggle(row.domain)}
+          />
+        ))}
+        <li>
           {adding ? (
-            <form onSubmit={addSite} noValidate className="flex items-center gap-2 px-4 py-3">
+            <form onSubmit={addSite} noValidate className="flex items-center gap-2">
               <input
                 autoFocus
                 value={site}
@@ -197,11 +197,11 @@ export function OnboardingRivalsStep({
                 autoComplete="off"
                 autoCapitalize="none"
                 spellCheck={false}
-                className="min-w-0 flex-1 rounded-lg bg-[#f5f5f7] px-3 py-2 text-[15px] text-[#1d1d1f] placeholder:text-[#86868b] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/40"
+                className={`${glassInputClass} min-w-0 flex-1`}
               />
               <button
                 type="submit"
-                className="shrink-0 cursor-pointer rounded-full bg-[#1d1d1f] px-4 py-2 text-[13px] font-semibold text-white hover:bg-black"
+                className="shrink-0 cursor-pointer rounded-full bg-gray-900 px-4 py-2.5 text-[13px] font-semibold text-white hover:bg-black"
               >
                 {copy.add}
               </button>
@@ -210,36 +210,29 @@ export function OnboardingRivalsStep({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="flex w-full cursor-pointer items-center gap-3.5 px-4 py-3.5 text-left text-[15px] font-medium text-[#0066cc] transition-colors hover:bg-black/[0.02]"
+              className="flex w-full cursor-pointer items-center gap-3.5 rounded-xl border border-dashed border-gray-300/80 bg-white/20 px-3.5 py-3 text-left text-[15px] font-medium text-gray-700 transition hover:border-gray-400/80 hover:bg-white/40"
             >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-[#f5f5f7]">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-white/60 bg-white/50">
                 <Plus className="size-4" strokeWidth={2.5} aria-hidden />
               </span>
               {copy.addLabel}
             </button>
           )}
-          {siteError ? <p className="px-4 pb-3 text-[13px] text-[#b42318]">{siteError}</p> : null}
-        </div>
-      </div>
+          {siteError ? <p className="mt-2 text-[13px] text-[#b42318]">{siteError}</p> : null}
+        </li>
+      </ul>
 
       {atCap && slotsLeft != null ? (
-        <p className="mt-3 text-[13px] text-[#86868b]">{fillCopyTemplate(copy.capReached, { count: String(slotsLeft) })}</p>
+        <p className="mt-3 text-[13px] text-gray-500">{fillCopyTemplate(copy.capReached, { count: String(slotsLeft) })}</p>
       ) : null}
 
       <button
         type="button"
-        disabled={count === 0}
+        disabled={running && count === 0}
         onClick={() => onContinue([...selected])}
         className="mt-6 w-full rounded-full bg-gray-900 py-3.5 text-[14px] font-semibold tracking-wide text-white shadow-lg transition hover:scale-[1.02] hover:bg-black active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
       >
-        {count === 1 ? copy.trackOne : fillCopyTemplate(copy.trackMany, { count: String(count) })}
-      </button>
-      <button
-        type="button"
-        onClick={() => onContinue([])}
-        className="mt-3 w-full cursor-pointer py-1.5 text-[14px] font-medium text-[#6e6e73] hover:text-[#1d1d1f]"
-      >
-        {copy.skip}
+        {count === 0 ? copy.continueWithout : count === 1 ? copy.trackOne : fillCopyTemplate(copy.trackMany, { count: String(count) })}
       </button>
     </div>
   );

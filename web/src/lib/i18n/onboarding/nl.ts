@@ -45,7 +45,7 @@ const form: OnboardingCopy["form"] = {
     invalidSite: "Voer een website in, bijvoorbeeld concurrent.nl",
     trackOne: "1 concurrent volgen",
     trackMany: "{count} concurrenten volgen",
-    skip: "Nu overslaan",
+    continueWithout: "Doorgaan",
     capReached: "Uw abonnement volgt tot {count} concurrenten.",
   },
   markets: {

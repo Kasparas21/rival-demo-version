@@ -61,7 +61,8 @@ export type OnboardingFormCopy = {
     trackOne: string;
     /** Template: `{count}` */
     trackMany: string;
-    skip: string;
+    /** The button when nothing is picked. */
+    continueWithout: string;
     /** Template: `{count}` */
     capReached: string;
   };
