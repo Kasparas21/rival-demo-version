@@ -77,7 +77,7 @@ async function withRunSlot<T>(fn: () => Promise<T>): Promise<T> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Run an actor in a slot, waiting and retrying when the account is at its concurrent-run limit. */
-async function runActor(
+export async function runActor(
   actorId: string,
   input: Record<string, unknown>,
   opts: { maxItems: number; memoryMbytes: number },
@@ -117,7 +117,7 @@ async function fetchWebsiteFacebookKeys(host: string): Promise<string[]> {
   }
 }
 
-function metaSearchUrl(query: string): string {
+export function metaSearchUrl(query: string): string {
   const params = new URLSearchParams({
     active_status: "active",
     ad_type: "all",
@@ -128,7 +128,7 @@ function metaSearchUrl(query: string): string {
   return `https://www.facebook.com/ads/library/?${params.toString()}`;
 }
 
-async function metaAds(urls: string[], count: number, details: boolean): Promise<MetaAdSample[]> {
+export async function metaAds(urls: string[], count: number, details: boolean): Promise<MetaAdSample[]> {
   const items = await runActor(
     META_ACTOR(),
     {

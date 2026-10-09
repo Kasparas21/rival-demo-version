@@ -44,6 +44,7 @@ import {
   buildTikTokAdsLibraryPreviewUrl,
 } from "@/lib/onboarding/ad-library-preview-urls";
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
+import { RecommendedCompetitors } from "@/components/competitor-recommendations/recommended-competitors";
 import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progress-bar";
 import type { Locale } from "@/lib/i18n/locale";
 import { buildSignupAfterOnboardingPath, PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
@@ -1587,6 +1588,21 @@ export function OnboardingForm({
           />
         ) : null}
       </div>
+
+      {/* Signed-in only: each search is paid. It starts once the site is known and finishes while they set up. */}
+      {!guestMode && !newBrandMode && companyLooksValid && step >= STEP_WORKSPACE_CHANNELS && step !== STEP_CHOOSE_PLAN ? (
+        <div className="mt-8 border-t border-black/5 pt-6">
+          <RecommendedCompetitors
+            brandId="_workspace"
+            domain={normalizedCompany}
+            limit={3}
+            autoStart
+            compact
+            title="Your closest competitors"
+          />
+          <p className="mt-2 text-[12px] text-[#a1a1aa]">You can track them in one click from Find competitor once you&apos;re set up.</p>
+        </div>
+      ) : null}
     </div>
   );
 }

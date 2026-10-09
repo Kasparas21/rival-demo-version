@@ -1,11 +1,13 @@
 "use client";
-import React, { useState, useRef, useEffect, useLayoutEffect, KeyboardEvent } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, KeyboardEvent } from "react";
 import { Search, X, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import { availableChannelIds, ChannelPickerModal, type ChannelId } from "@/components/channel-picker-modal";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { RivalLogoImg } from "@/components/rival-logo";
+import { RecommendedCompetitors } from "@/components/competitor-recommendations/recommended-competitors";
+import { registrableDomain } from "@/lib/ad-account-discovery/score";
 import { saveSearchToAccount } from "@/lib/account/client";
 import { useActiveBrand } from "@/app/dashboard/brand-context";
 import { competitorWatchLimitReachedMessage } from "@/lib/billing/competitor-limit-copy";
@@ -16,6 +18,8 @@ import {
 } from "@/lib/billing/client-plan-cap";
 import {
   countWatchedSidebarCompetitors,
+  loadSidebarCompetitors,
+  normalizeCompetitorSlug,
   wouldExceedWatchedCompetitorCap,
 } from "@/lib/sidebar-competitors";
 
@@ -65,6 +69,20 @@ export default function SpyOnCompetitorPage() {
 
   useEffect(() => {
     void syncClientMaxWatchedCompetitorsFromUsage();
+  }, []);
+
+  /**
+   * Sites already in the sidebar, so recommendations show "Tracking" instead of "Track". Read during
+   * render: the cards only appear after a client fetch, so the server's empty set is never shown.
+   */
+  const trackedDomains = useMemo<ReadonlySet<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    return new Set(
+      loadSidebarCompetitors().flatMap((c) => {
+        const host = normalizeCompetitorSlug(c.brand?.domain || c.slug);
+        return host.includes(".") ? [registrableDomain(host)] : [];
+      }),
+    );
   }, []);
 
   const reportCompetitorCapReached = () => {
@@ -213,10 +231,22 @@ export default function SpyOnCompetitorPage() {
     router.push(`/dashboard/searching?${params.toString()}`, { scroll: false });
   };
 
+  /** Track a recommended competitor: the same search as typing its site and pressing Spy. */
+  const trackRecommended = (domain: string) => {
+    if (wouldExceedCompetitorCap(domain)) {
+      reportCompetitorCapReached();
+      return;
+    }
+    setCompetitorLimitError(null);
+    setTerms([{ value: domain }]);
+    setInputValue("");
+    setShowChannelPicker(true);
+  };
+
   const fullQuery = inputValue.trim() ? [...termValues, inputValue.trim()].join(" ") : termValues.join(" ");
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center px-6 py-10 sm:px-10 sm:py-14">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col items-center justify-center-safe px-6 py-10 sm:px-10 sm:py-14">
       <div className="flex w-full max-w-2xl flex-col items-center">
         <h1 className="mb-8 flex justify-center filter drop-shadow-sm sm:mb-10">
           <RivalLogoImg className="h-12 w-auto max-w-[min(320px,88vw)] object-contain sm:h-16" />
@@ -312,6 +342,12 @@ export default function SpyOnCompetitorPage() {
           )}
         </div>
       </div>
+
+      {activeBrand.domain ? (
+        <div className="mt-12 w-full max-w-4xl">
+          <RecommendedCompetitors brandId={activeBrand.id} trackedDomains={trackedDomains} onTrack={trackRecommended} />
+        </div>
+      ) : null}
 
       <ChannelPickerModal
         isOpen={showChannelPicker}
