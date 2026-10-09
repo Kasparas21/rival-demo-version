@@ -34,15 +34,20 @@ export function groupFor(ratio: number | null, metaAds: number | null): Recommen
   if (ratio >= 10) return "leader";
   if (ratio >= 1.2) return "best_to_copy";
   if (ratio >= 0.5) return "peer";
-  return (metaAds ?? 0) >= 5 ? "smaller_sharp" : "peer";
+  return (metaAds ?? 0) >= 5 ? "smaller_sharp" : "smaller";
 }
 
+/** Size fit dominates: a step ahead first, then about the same size; much smaller brands come last. */
 const GROUP_BONUS: Record<RecommendationGroup, number> = {
-  best_to_copy: 30,
-  peer: 15,
-  leader: 12,
-  smaller_sharp: 10,
+  best_to_copy: 32,
+  peer: 28,
+  leader: 14,
+  smaller_sharp: 12,
+  smaller: 0,
 };
+/** When neither side's size is known: between a peer and a smaller brand. */
+const UNKNOWN_SIZE_BONUS = 15;
+const MAX_AD_BONUS = 10;
 
 /**
  * Score and order direct competitors: how close they are, whether they're a step ahead, and whether they
@@ -61,8 +66,9 @@ export function rankCandidates(
       const size = sizes.get(c.domain) ?? { trancoRank: null, metaAds: null, reviewsCount: c.reviewsCount ?? null };
       const ratio = sizeRatio(profile, own, size);
       const group = groupFor(ratio, size.metaAds);
-      const adBonus = size.metaAds == null ? 0 : (Math.min(size.metaAds, 10) / 10) * 20;
-      const score = Math.round(c.relevance * 0.5 + GROUP_BONUS[group] + adBonus);
+      const adBonus = size.metaAds == null ? 0 : (Math.min(size.metaAds, 10) / 10) * MAX_AD_BONUS;
+      const sizeBonus = ratio == null ? UNKNOWN_SIZE_BONUS : GROUP_BONUS[group];
+      const score = Math.round(c.relevance * 0.5 + sizeBonus + adBonus);
       return { ...c, size, sizeRatio: ratio == null ? null : Math.round(ratio * 100) / 100, group, score };
     })
     .sort((a, b) => b.score - a.score || b.relevance - a.relevance)

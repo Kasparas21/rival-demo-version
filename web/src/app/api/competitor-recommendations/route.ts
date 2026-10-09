@@ -13,7 +13,7 @@ import {
 } from "@/lib/competitor-recommendations/store";
 import { isPlausiblePublicHostname } from "@/lib/onboarding/host";
 import { parseAdsProfileSetup } from "@/lib/onboarding/workspace-ads-setup";
-import { hitRateLimit } from "@/lib/rate-limit";
+import { clientIp, hitRateLimit } from "@/lib/rate-limit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -25,6 +25,13 @@ const RUN_LIMITS = [
   { windowSec: 60 * 60, max: 3 },
   { windowSec: 24 * 60 * 60, max: 6 },
 ] as const;
+
+/** Guests (onboarding, before sign-up) can only start searches: a few per visitor, and a daily ceiling for all. */
+const GUEST_LIMITS_PER_IP = [
+  { windowSec: 60 * 60, max: 3 },
+  { windowSec: 24 * 60 * 60, max: 5 },
+] as const;
+const GUEST_LIMITS_ALL = [{ windowSec: 24 * 60 * 60, max: 150 }] as const;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -103,15 +110,59 @@ export async function GET(request: Request) {
   }
 }
 
+/** Run the search in the background once this request has claimed it. */
+function runInBackground(site: BrandSite): void {
+  after(async () => {
+    try {
+      const run = await recommendCompetitors({
+        url: site.domain,
+        brandContext: site.brandContext,
+        markets: site.markets,
+      });
+      await saveRun(site.domain, run);
+      console.info("[competitor-recommendations] done", site.domain, `$${run.costUsd}`, `${run.durationMs}ms`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      console.error("[competitor-recommendations] run failed", site.domain, message);
+      await saveFailure(site.domain, message).catch(() => {});
+    }
+  });
+}
+
+/**
+ * Guest onboarding: start the search as soon as the visitor enters their website, so it's ready by the
+ * time they've signed up and paid. Guests only start it; results are read after sign-in.
+ */
+async function startForGuest(request: Request, rawDomain: unknown): Promise<NextResponse> {
+  const domain = siteDomain(typeof rawDomain === "string" ? rawDomain : null);
+  if (!domain) return NextResponse.json({ ok: false, error: "Invalid website" }, { status: 400 });
+  try {
+    const current = await readRecommendations(domain);
+    if (!needsRun(current)) return NextResponse.json({ ok: true, status: viewOf(current, domain).status });
+    const allowed =
+      (await hitRateLimit(`competitor-recommendations:guest:${clientIp(request)}`, GUEST_LIMITS_PER_IP)) &&
+      (await hitRateLimit("competitor-recommendations:guest:all", GUEST_LIMITS_ALL));
+    if (!allowed) return NextResponse.json({ ok: false, error: "Too many searches" }, { status: 429 });
+    if (await claimRun(domain, null, current)) runInBackground({ domain, brandContext: null, markets: [] });
+    return NextResponse.json({ ok: true, status: "running" });
+  } catch (e) {
+    console.error("[competitor-recommendations] guest start", e instanceof Error ? e.message : e);
+    return NextResponse.json({ ok: false, error: "Couldn't start the search" }, { status: 500 });
+  }
+}
+
 /** Start a run for a brand's website, unless a fresh one is stored or already running. */
 export async function POST(request: Request) {
-  const auth = await authed();
-  if (!auth) return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   let body: { brandId?: unknown; domain?: unknown } = {};
   try {
     body = (await request.json()) as typeof body;
   } catch {
     /* no body: the primary brand */
+  }
+  const auth = await authed();
+  if (!auth) {
+    if (request.headers.get("x-rival-guest-onboarding") === "1") return startForGuest(request, body.domain);
+    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
   const site = await resolveBrandSite(
     auth.supabase,
@@ -134,22 +185,7 @@ export async function POST(request: Request) {
     if (!(await claimRun(site.domain, auth.userId, current))) {
       return NextResponse.json({ ok: true, ...viewOf(await readRecommendations(site.domain), site.domain) });
     }
-
-    after(async () => {
-      try {
-        const run = await recommendCompetitors({
-          url: site.domain,
-          brandContext: site.brandContext,
-          markets: site.markets,
-        });
-        await saveRun(site.domain, run);
-        console.info("[competitor-recommendations] done", site.domain, `$${run.costUsd}`, `${run.durationMs}ms`);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        console.error("[competitor-recommendations] run failed", site.domain, message);
-        await saveFailure(site.domain, message).catch(() => {});
-      }
-    });
+    runInBackground(site);
 
     return NextResponse.json({
       ok: true,

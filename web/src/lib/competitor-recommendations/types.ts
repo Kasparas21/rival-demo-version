@@ -55,7 +55,7 @@ export type SizeSignals = {
   reviewsCount: number | null;
 };
 
-export type RecommendationGroup = "best_to_copy" | "peer" | "smaller_sharp" | "leader";
+export type RecommendationGroup = "best_to_copy" | "peer" | "smaller_sharp" | "smaller" | "leader";
 
 export type Recommendation = VerifiedCandidate & {
   size: SizeSignals;

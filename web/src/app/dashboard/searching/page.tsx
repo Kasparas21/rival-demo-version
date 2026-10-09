@@ -2,6 +2,7 @@
 import React, { useEffect, useLayoutEffect, useState, useCallback, useMemo, useRef, Suspense } from "react";
 import { RefreshCw, AlertCircle, ArrowRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { queuedCompetitorSearchHref, takeNextQueuedCompetitor } from "@/lib/competitor-recommendations/track-queue";
 import { availableChannelIds, CHANNELS, isChannelAvailable, type ChannelId } from "@/components/channel-picker-modal";
 import { useEnabledAdPlatforms } from "@/hooks/use-enabled-ad-platforms";
 import { ManualIdentifiersForm, type PlatformIdentifier } from "@/components/manual-identifiers-form";
@@ -183,6 +184,8 @@ function SearchingContent() {
   const workspaceBrandScrapeBrandId = searchParams.get("brandId")?.trim() || activeBrand.id;
   const q = workspaceBrandScrape ? WORKSPACE_BRAND_PLACEHOLDER_SLUG : searchParams.get("q") || "competitor";
   const termsParam = searchParams.get("terms") ?? "";
+  /** "2/3" while working through the rivals picked in onboarding. */
+  const queueParam = /^\d+\/\d+$/.test(searchParams.get("queue") ?? "") ? searchParams.get("queue") : null;
   const channelsParam = searchParams.get("channels") ?? "";
 
   const termHints = useMemo((): TermHint[] | null => {
@@ -534,6 +537,12 @@ function SearchingContent() {
         setIsRedirecting(true);
         setIsFinalizingLibrary(false);
         clearSearchingFlowSnapshot(flowKey);
+        // Setup, or a rival picked in onboarding, just finished: go on to the next picked rival.
+        const next = workspaceBrandScrape || queueParam ? takeNextQueuedCompetitor() : null;
+        if (next) {
+          router.push(queuedCompetitorSearchHref(next), { scroll: false });
+          return;
+        }
         const canonicalHost = normalizeCompetitorSlug(brandForScan?.domain ?? displayName);
         const href = buildCompetitorDashboardPath(canonicalHost);
         router.prefetch(href);
@@ -817,7 +826,7 @@ function SearchingContent() {
         scanRunningRef.current = false;
       }
     },
-    [adLibraryRegions, discoveredBrand, displayName, flowKey, router, selectedChannels]
+    [adLibraryRegions, discoveredBrand, displayName, flowKey, router, selectedChannels, workspaceBrandScrape, queueParam]
   );
 
   useEffect(() => {
@@ -942,6 +951,12 @@ function SearchingContent() {
         <h1 className="mb-4 flex justify-center filter drop-shadow-sm transition-all">
           <RivalLogoImg className="h-12 w-auto max-w-[min(320px,88vw)] object-contain sm:h-16" />
         </h1>
+
+        {queueParam ? (
+          <p className="mb-2 text-[13px] font-medium text-[#86868b]">
+            Tracking your rivals · {queueParam.replace("/", " of ")}
+          </p>
+        ) : null}
 
         {/* Subtext */}
         <h2
@@ -1222,6 +1237,12 @@ function SearchingContent() {
   );
 }
 
+/** A new search in the same tab (the next picked rival) starts with fresh state. */
+function KeyedSearchingContent() {
+  const p = useSearchParams();
+  return <SearchingContent key={`${p.get("q") ?? ""}|${p.get(WORKSPACE_BRAND_SCRAPE_SEARCH_PARAM) ?? ""}|${p.get("queue") ?? ""}`} />;
+}
+
 export default function SearchingViewWrapper() {
   return (
     <Suspense
@@ -1232,7 +1253,7 @@ export default function SearchingViewWrapper() {
         </div>
       }
     >
-      <SearchingContent />
+      <KeyedSearchingContent />
     </Suspense>
   );
 }

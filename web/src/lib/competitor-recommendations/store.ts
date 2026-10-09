@@ -78,7 +78,7 @@ export async function readRecommendations(domain: string): Promise<Row | null> {
  * Mark the domain as running, unless another request just did. True when this request owns the run.
  * The update matches on the start time it read, so two concurrent claims can't both win.
  */
-export async function claimRun(domain: string, userId: string, current: Row | null): Promise<boolean> {
+export async function claimRun(domain: string, userId: string | null, current: Row | null): Promise<boolean> {
   const db = createSupabaseAdminClient();
   const fresh = {
     status: "running" as const,

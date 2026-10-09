@@ -66,7 +66,7 @@ describe("ranking", () => {
     expect(sizeRatio(online, size({ trancoRank: 1_600_000, metaAds: 8 }), size({ metaAds: 18 }))).toBe(2); // tail rank: compare ads
   });
 
-  it("puts a direct competitor a step bigger that advertises first", () => {
+  it("puts a direct competitor a step bigger first, then one the same size, then the giant", () => {
     const base = { sources: ["web"] as const, hint: null, evidence: [], edge: null, rejectReason: null };
     const verified: VerifiedCandidate[] = [
       { ...base, sources: ["web"], domain: "peer.com", name: "Peer", isDirect: true, relevance: 90 },
@@ -83,11 +83,33 @@ describe("ranking", () => {
     const ranked = rankCandidates(online, size({ trancoRank: 70_000, metaAds: 5 }), verified, sizes);
     expect(ranked.map((r) => [r.domain, r.group])).toEqual([
       ["ahead.com", "best_to_copy"],
-      ["giant.com", "leader"],
       ["peer.com", "peer"],
+      ["giant.com", "leader"],
     ]);
     expect(groupFor(0.3, 8)).toBe("smaller_sharp");
-    expect(groupFor(0.3, 0)).toBe("peer");
+    expect(groupFor(0.3, 0)).toBe("smaller");
+  });
+});
+
+describe("ranking real Allbirds sizes", () => {
+  it("puts a same-size brand above much smaller ones that advertise more", () => {
+    const base = { sources: ["web"] as const, hint: null, evidence: [], edge: null, rejectReason: null, isDirect: true };
+    const verified: VerifiedCandidate[] = [
+      { ...base, sources: ["web"], domain: "thousandfell.com", name: "Thousand Fell", relevance: 92 },
+      { ...base, sources: ["web"], domain: "veja-store.com", name: "Veja", relevance: 85 },
+      { ...base, sources: ["web"], domain: "baabuk.com", name: "Baabuk", relevance: 90 },
+    ];
+    const sizes = new Map([
+      ["thousandfell.com", size({ trancoRank: 1_906_323, metaAds: 10 })],
+      ["veja-store.com", size({ trancoRank: 60_638, metaAds: 0 })],
+      ["baabuk.com", size({ trancoRank: 1_357_606, metaAds: 0 })],
+    ]);
+    const ranked = rankCandidates(online, size({ trancoRank: 68_463, metaAds: 10 }), verified, sizes);
+    expect(ranked.map((r) => [r.name, r.group])).toEqual([
+      ["Veja", "peer"],
+      ["Thousand Fell", "smaller_sharp"],
+      ["Baabuk", "smaller"],
+    ]);
   });
 });
 
