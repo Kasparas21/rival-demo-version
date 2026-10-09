@@ -52,6 +52,7 @@ import { TikTokAdCard } from "@/components/ads-library/tiktok-ad-card";
 import { CompetitorSavedHub } from "@/components/competitor/saved-hub/competitor-saved-hub";
 import { CompetitorSavedHubTrigger } from "@/components/competitor/saved-hub/competitor-saved-hub-trigger";
 import { useCompetitorSavedCount } from "@/components/competitor/saved-hub/use-competitor-saved-count";
+import { useDeferredReady } from "@/hooks/use-deferred-ready";
 import { PinterestAdCard } from "@/components/ads-library/pinterest-ad-card";
 import { SnapchatAdCard } from "@/components/ads-library/snapchat-ad-card";
 import { GoogleAdRowCard } from "@/components/ads-library/google-ad-row-card";
@@ -2743,7 +2744,12 @@ function CompetitorDashboardBody({
     cacheDomainNorm
   }:comparison-payload:v2:${comparisonPayloadScrapeStamp}`;
 
-  const comparisonPayloadFetchEnabled = Boolean(cacheDomainNorm.trim()) && !isOwnWorkspace;
+  /** The strategy payload only feeds the AI-analysis notice on other tabs: let the ads paint first. */
+  const comparisonPayloadDeferredReady = useDeferredReady(cacheDomainNorm);
+  const comparisonPayloadFetchEnabled =
+    Boolean(cacheDomainNorm.trim()) &&
+    !isOwnWorkspace &&
+    (navTab === "comparison" || navTab === "insights" || comparisonPayloadDeferredReady);
 
   const landingPagesFetchEnabled =
     Boolean(competitorDbIdForSaved && cacheDomainNorm.trim()) && workspaceLibraryInteractive;
