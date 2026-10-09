@@ -204,6 +204,8 @@ export function useAdLibrary(
       notifyLibraryUpdated?: boolean;
       /** Pro manual refresh — sets `intent: manual` and platform-specific Apify params. */
       manualRefresh?: boolean;
+      /** The DB hydrate already came back empty for this domain: don't ask it again. */
+      hydrateKnownEmpty?: boolean;
     }) => {
       const platforms = opts?.platforms;
       const isManualRefresh = opts?.manualRefresh === true;
@@ -290,7 +292,7 @@ export function useAdLibrary(
 
         let hydrateMarkedFresh = false;
 
-        if (cacheOnly && !forceFresh && totalAfterFetch === 0 && domain.length > 0) {
+        if (cacheOnly && !forceFresh && !opts?.hydrateKnownEmpty && totalAfterFetch === 0 && domain.length > 0) {
           try {
             const hydrateResult = await fetchHydratedAdsLibraryConditional(domain, {
               signal: ac.signal,
@@ -518,7 +520,8 @@ export function useAdLibrary(
         paintResponse(fromDb, true);
         return;
       }
-      void load({ skipCache: false });
+      // The DB has nothing for this domain: one more look in the ads cache, without asking the DB again.
+      void load({ skipCache: false, hydrateKnownEmpty: true });
     })();
   }, [enabled, payloadKey, brand.domain, load]);
 
