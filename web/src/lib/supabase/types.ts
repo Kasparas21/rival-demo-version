@@ -1294,6 +1294,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      competitor_recommendations: {
+        Row: {
+          domain: string;
+          status: "running" | "done" | "failed";
+          result: Json | null;
+          error: string | null;
+          cost_usd: number | null;
+          requested_by: string | null;
+          started_at: string;
+          finished_at: string | null;
+        };
+        Insert: {
+          domain: string;
+          status: "running" | "done" | "failed";
+          result?: Json | null;
+          error?: string | null;
+          cost_usd?: number | null;
+          requested_by?: string | null;
+          started_at?: string;
+          finished_at?: string | null;
+        };
+        Update: {
+          domain?: string;
+          status?: "running" | "done" | "failed";
+          result?: Json | null;
+          error?: string | null;
+          cost_usd?: number | null;
+          requested_by?: string | null;
+          started_at?: string;
+          finished_at?: string | null;
+        };
+        Relationships: [];
+      };
       autopilot_cron_locks: {
         Row: {
           job_name: string;
