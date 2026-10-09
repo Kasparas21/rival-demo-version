@@ -55,6 +55,19 @@ export type EmailDeepAnalysis = {
     | "unknown";
 };
 
+/**
+ * A list from the model, trimmed to `max` instead of rejected: one extra "weakness" used to fail the
+ * whole analysis ("Invalid AI JSON response"), which is how the first real email was lost.
+ */
+const modelList = (max: number, min = 0) =>
+  z.preprocess(
+    (v) =>
+      Array.isArray(v)
+        ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "").slice(0, max)
+        : v,
+    z.array(z.string()).min(min),
+  );
+
 export const emailDeepAnalysisSchema: z.ZodType<EmailDeepAnalysis> = z.object({
   email_type: z.enum([
     "promotional",
@@ -64,7 +77,7 @@ export const emailDeepAnalysisSchema: z.ZodType<EmailDeepAnalysis> = z.object({
     "newsletter",
     "transactional",
     "other",
-  ]),
+  ]).catch("other"),
   ai_angle: z.enum([
     "urgency",
     "social_proof",
@@ -73,31 +86,31 @@ export const emailDeepAnalysisSchema: z.ZodType<EmailDeepAnalysis> = z.object({
     "value",
     "authority",
     "other",
-  ]),
+  ]).catch("other"),
   executive_summary: z.string().min(20),
   funnel_stage: z.string().min(1),
-  confidence: z.enum(["high", "medium", "low"]),
+  confidence: z.enum(["high", "medium", "low"]).catch("medium"),
   subject_line: z.object({
     hook: z.string(),
-    tactics: z.array(z.string()).min(1).max(5),
+    tactics: modelList(5),
   }),
   preheader_role: z.string().nullable(),
-  audience_signals: z.array(z.string()).min(1).max(5),
+  audience_signals: modelList(5),
   persona_hint: z.string().nullable(),
-  persuasion_triggers: z.array(z.string()).min(1).max(5),
-  emotional_drivers: z.array(z.string()).min(1).max(5),
-  urgency_tactics: z.array(z.string()).max(3),
+  persuasion_triggers: modelList(5),
+  emotional_drivers: modelList(5),
+  urgency_tactics: modelList(3),
   copy_structure: z.object({
     hook: z.string(),
-    body_framework: z.array(z.string()).min(2).max(4),
+    body_framework: modelList(4),
     cta_pattern: z.string(),
-    secondary_ctas: z.array(z.string()).max(3),
+    secondary_ctas: modelList(3),
   }),
   ai_offers: z.array(emailIntelligenceOfferSchema),
   positioning: z.string(),
-  what_works: z.array(z.string()).min(1).max(5),
-  weaknesses: z.array(z.string()).max(3),
-  adaptation_playbook: z.array(z.string()).min(3).max(5),
+  what_works: modelList(5),
+  weaknesses: modelList(3),
+  adaptation_playbook: modelList(5),
   esp_detected: z.enum([
     "Klaviyo",
     "Mailchimp",
@@ -106,7 +119,7 @@ export const emailDeepAnalysisSchema: z.ZodType<EmailDeepAnalysis> = z.object({
     "ActiveCampaign",
     "other",
     "unknown",
-  ]),
+  ]).catch("unknown"),
 });
 
 export function emailNeedsDeepAnalysis(row: {

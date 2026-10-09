@@ -49,6 +49,21 @@ describe("emailDeepAnalysisSchema", () => {
     expect(parsed.adaptation_playbook).toHaveLength(3);
   });
 
+  it("trims over-long lists and maps unknown labels instead of failing the whole analysis", () => {
+    // The first real email failed on a fourth "weakness" (limit 3).
+    const parsed = emailDeepAnalysisSchema.parse({
+      ...validDeepPayload,
+      weaknesses: ["a", "b", "c", "d"],
+      adaptation_playbook: ["only one step"],
+      ai_angle: "nostalgia",
+      esp_detected: "Omnisend",
+    });
+    expect(parsed.weaknesses).toEqual(["a", "b", "c"]);
+    expect(parsed.adaptation_playbook).toEqual(["only one step"]);
+    expect(parsed.ai_angle).toBe("other");
+    expect(parsed.esp_detected).toBe("unknown");
+  });
+
   it("rejects incomplete payloads", () => {
     expect(() => emailDeepAnalysisSchema.parse({ email_type: "promotional" })).toThrow();
   });
