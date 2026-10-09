@@ -47,6 +47,24 @@ export type OnboardingFormCopy = {
     body: string;
     comingSoon: string;
   };
+  rivals: {
+    title: string;
+    body: string;
+    loading: string;
+    failed: string;
+    empty: string;
+    retry: string;
+    addLabel: string;
+    addPlaceholder: string;
+    add: string;
+    invalidSite: string;
+    trackOne: string;
+    /** Template: `{count}` */
+    trackMany: string;
+    skip: string;
+    /** Template: `{count}` */
+    capReached: string;
+  };
   markets: {
     title: string;
     body: string;

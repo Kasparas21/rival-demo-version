@@ -44,7 +44,8 @@ import {
   buildTikTokAdsLibraryPreviewUrl,
 } from "@/lib/onboarding/ad-library-preview-urls";
 import { OnboardingCardLocaleSwitcher } from "@/components/onboarding/onboarding-card-locale-switcher";
-import { RecommendedCompetitors } from "@/components/competitor-recommendations/recommended-competitors";
+import { OnboardingRivalsStep } from "@/components/competitor-recommendations/onboarding-rivals-step";
+import { queueCompetitorsToTrack } from "@/lib/competitor-recommendations/track-queue";
 import { OnboardingProgressBar } from "@/components/onboarding/onboarding-progress-bar";
 import type { Locale } from "@/lib/i18n/locale";
 import { buildSignupAfterOnboardingPath, PAYWALL_AFTER_TRIAL_PATH } from "@/lib/auth/trial-flow";
@@ -146,6 +147,8 @@ const STEP_WORKSPACE_CHANNELS = 2;
 const STEP_WORKSPACE_MARKETS = 3;
 const STEP_WORKSPACE_SCRAPE = 4;
 const STEP_CHOOSE_PLAN = 5;
+/** After payment, before regions: pick the rivals to track. Numbered last so the steps above keep their order. */
+const STEP_RIVALS = 6;
 
 /** Default picks: the platforms every account has (Meta + Google). Others show as "Coming soon" unless switched on. */
 const ALL_WORKSPACE_CHANNEL_IDS: ChannelId[] = availableChannelIds();
@@ -388,7 +391,7 @@ export function OnboardingForm({
   });
   const compactPrePaymentFlow = guestMode || prePaymentOnly;
   const [step, setStep] = useState(() => {
-    if (postPaymentResume) return STEP_WORKSPACE_MARKETS;
+    if (postPaymentResume) return STEP_RIVALS;
     if (initialStep != null) return initialStep;
     return STEP_WEBSITE;
   });
@@ -1047,10 +1050,14 @@ export function OnboardingForm({
 
   const totalSteps = useMemo(() => {
     if (compactPrePaymentFlow) return 3;
-    if (postPaymentResume) return 2;
+    if (postPaymentResume) return 3;
     return showPlanStep ? 6 : 5;
   }, [compactPrePaymentFlow, postPaymentResume, showPlanStep]);
-  const progressStepIndex = postPaymentResume ? step - STEP_WORKSPACE_MARKETS : step;
+  const progressStepIndex = postPaymentResume
+    ? step === STEP_RIVALS
+      ? 0
+      : step - STEP_WORKSPACE_MARKETS + 1
+    : step;
   const progressPercent = Math.round(((progressStepIndex + 1) / totalSteps) * 100);
   const isWideOnboardingStep = step === STEP_WORKSPACE_SCRAPE || step === STEP_CHOOSE_PLAN;
   const onboardingCardMaxWidth =
@@ -1062,7 +1069,9 @@ export function OnboardingForm({
         ? "max-w-5xl"
         : step === STEP_WORKSPACE_CHANNELS
           ? "max-w-xl"
-          : "max-w-[440px]";
+          : step === STEP_RIVALS
+            ? "max-w-[480px]"
+            : "max-w-[440px]";
 
   const goBack = () => {
     if (saving) return;
@@ -1071,6 +1080,8 @@ export function OnboardingForm({
       if (step === STEP_WORKSPACE_SCRAPE) {
         setWorkspaceMarketsPickerExpanded(false);
         setStep(STEP_WORKSPACE_MARKETS);
+      } else if (step === STEP_WORKSPACE_MARKETS) {
+        setStep(STEP_RIVALS);
       }
       return;
     }
@@ -1087,7 +1098,7 @@ export function OnboardingForm({
   const showBackButton = guestMode
     ? false
     : postPaymentResume
-      ? step === STEP_WORKSPACE_SCRAPE
+      ? step === STEP_WORKSPACE_SCRAPE || step === STEP_WORKSPACE_MARKETS
       : step > 0 && !(step === STEP_BRAND && brandLoading);
 
   return (
@@ -1312,6 +1323,17 @@ export function OnboardingForm({
               {compactPrePaymentFlow && saving ? t.saving : guestMode ? t.continueToSignup : t.continue}
             </button>
           </>
+        ) : null}
+
+        {postPaymentResume && step === STEP_RIVALS ? (
+          <OnboardingRivalsStep
+            copy={t.rivals}
+            domain={normalizedCompany}
+            onContinue={(domains) => {
+              queueCompetitorsToTrack(domains);
+              setStep(STEP_WORKSPACE_MARKETS);
+            }}
+          />
         ) : null}
 
         {!compactPrePaymentFlow && step === STEP_WORKSPACE_MARKETS ? (
@@ -1588,21 +1610,6 @@ export function OnboardingForm({
           />
         ) : null}
       </div>
-
-      {/* Signed-in only: each search is paid. It starts once the site is known and finishes while they set up. */}
-      {!guestMode && !newBrandMode && companyLooksValid && step >= STEP_WORKSPACE_CHANNELS && step !== STEP_CHOOSE_PLAN ? (
-        <div className="mt-8 border-t border-black/5 pt-6">
-          <RecommendedCompetitors
-            brandId="_workspace"
-            domain={normalizedCompany}
-            limit={3}
-            autoStart
-            compact
-            title="Your closest competitors"
-          />
-          <p className="mt-2 text-[12px] text-[#a1a1aa]">You can track them in one click from Find competitor once you&apos;re set up.</p>
-        </div>
-      ) : null}
     </div>
   );
 }
