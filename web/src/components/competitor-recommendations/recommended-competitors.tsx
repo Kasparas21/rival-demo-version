@@ -18,6 +18,7 @@ const GROUP_LABEL: Record<RecommendationGroup, string> = {
   leader: "Market leader",
   peer: "Close peer",
   smaller_sharp: "Smaller, advertising hard",
+  smaller: "Smaller",
 };
 
 const GROUP_STYLE: Record<RecommendationGroup, string> = {
@@ -25,20 +26,8 @@ const GROUP_STYLE: Record<RecommendationGroup, string> = {
   leader: "bg-[#eef0ff] text-[#3b45a8]",
   peer: "bg-[#f1f1f3] text-[#52525b]",
   smaller_sharp: "bg-[#fff4e5] text-[#a15c00]",
+  smaller: "bg-[#f1f1f3] text-[#71717a]",
 };
-
-/** Where they were searched: the city for local businesses, else the country. */
-function market(view: View): string | null {
-  const p = view.profile;
-  if (!p) return null;
-  if (p.businessType === "local" && p.city) return p.city;
-  if (!p.country) return null;
-  try {
-    return new Intl.DisplayNames(["en"], { type: "region" }).of(p.country) ?? p.country;
-  } catch {
-    return p.country;
-  }
-}
 
 function signals(item: Item): string[] {
   const out: string[] = [];
@@ -53,12 +42,10 @@ function CompetitorCard({
   item,
   tracked,
   onTrack,
-  compact,
 }: {
   item: Item;
   tracked: boolean;
   onTrack?: (domain: string) => void;
-  compact: boolean;
 }) {
   return (
     <li className="flex flex-col gap-3 rounded-2xl border border-white/60 bg-white/55 p-4 text-left shadow-[0_4px_16px_rgba(31,38,135,0.05)]">
@@ -92,12 +79,6 @@ function CompetitorCard({
         <p className="text-[13px] leading-snug text-[#3f3f46]">
           <span className="font-semibold text-[#343434]">What they do well: </span>
           {item.edge}
-        </p>
-      ) : null}
-      {!compact && item.evidence[0] ? (
-        <p className="text-[12px] leading-snug text-[#71717a]">
-          <span className="font-medium">Why they compete: </span>
-          {item.evidence[0]}
         </p>
       ) : null}
 
@@ -235,15 +216,7 @@ export function RecommendedCompetitors({
   return (
     <section className="w-full text-left" aria-live="polite">
       <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.12em] text-[#808080]">
-          <Sparkles className="size-4" aria-hidden />
-          {title}
-        </h2>
-        {!compact && view?.status === "done" && view.finishedAt ? (
-          <span className="text-[11px] font-medium text-[#a1a1aa]">
-            Checked {view.checked} sites · {new Date(view.finishedAt).toLocaleDateString("en", { month: "short", day: "numeric" })}
-          </span>
-        ) : null}
+        <h2 className="text-[13px] font-bold uppercase tracking-[0.12em] text-[#808080]">{title}</h2>
       </div>
 
       {error ? (
@@ -298,23 +271,16 @@ export function RecommendedCompetitors({
           We couldn&apos;t find direct competitors we were sure about. Search for one by name above.
         </p>
       ) : (
-        <>
-          <p className="mb-3 text-[13px] text-[#71717a]">
-            Selling the same thing to the same customers as {view.profile?.brandName ?? view.domain}
-            {market(view) ? ` (${market(view)})` : ""}. The ones most worth learning from come first.
-          </p>
-          <ul className={`grid gap-3 ${compact ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"}`}>
-            {shown.map((item) => (
-              <CompetitorCard
-                key={item.domain}
-                item={item}
-                tracked={trackedDomains?.has(item.domain) ?? false}
-                onTrack={onTrack}
-                compact={compact}
-              />
-            ))}
-          </ul>
-        </>
+        <ul className={`grid gap-3 ${compact ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"}`}>
+          {shown.map((item) => (
+            <CompetitorCard
+              key={item.domain}
+              item={item}
+              tracked={trackedDomains?.has(item.domain) ?? false}
+              onTrack={onTrack}
+            />
+          ))}
+        </ul>
       )}
     </section>
   );
