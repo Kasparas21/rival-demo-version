@@ -7,28 +7,22 @@ describe("resolveScrapePageAdsPeriod", () => {
     expect(
       resolveScrapePageAdsPeriod({
         metaWorkspaceBrandInitialScrape: true,
-        metaStartDate: "2026-05-21",
-        metaEndDate: "2026-05-21",
+        scrapePageAdsPeriod: "last7d",
       }),
     ).toBe("");
   });
 
-  it("derives ISO date range for normal discovery scrapes", () => {
-    expect(
-      resolveScrapePageAdsPeriod({
-        metaStartDate: "2026-01-01",
-        metaEndDate: "2026-05-21",
-      }),
-    ).toBe("2026-01-01_2026-05-21");
+  it("returns empty string when no period is given", () => {
+    expect(resolveScrapePageAdsPeriod({})).toBe("");
   });
 
-  it("prefers explicit scrapePageAdsPeriod when provided", () => {
-    expect(
-      resolveScrapePageAdsPeriod({
-        scrapePageAdsPeriod: "last30d",
-        metaStartDate: "2026-01-01",
-        metaEndDate: "2026-05-21",
-      }),
-    ).toBe("last30d");
+  it("passes through the actor's own presets", () => {
+    for (const preset of ["last24h", "last7d", "last14d", "last30d"]) {
+      expect(resolveScrapePageAdsPeriod({ scrapePageAdsPeriod: preset })).toBe(preset);
+    }
+  });
+
+  it("drops ISO date ranges, which the actor rejects as invalid input", () => {
+    expect(resolveScrapePageAdsPeriod({ scrapePageAdsPeriod: "2026-01-01_2026-05-21" })).toBe("");
   });
 });
