@@ -35,6 +35,7 @@ import { getBillingEntitlement } from "@/lib/billing/entitlements";
 import { authorizeCron, cronUnauthorizedResponse } from "@/lib/cron/authorize-cron";
 import { chainCronInvocation } from "@/lib/cron/chain-cron";
 import { normalizeCompetitorSlug } from "@/lib/sidebar-competitors";
+import { googleAdsMemoryKey } from "@/lib/apify/google-ads";
 
 export const runtime = "nodejs";
 /** Vercel Hobby caps at 300s; time-box still stops new work before the hard kill. */
@@ -357,6 +358,13 @@ async function runWeeklyJobForRow(
       tiktokRegion,
       googleRegion,
       googleResultsLimit: normalizeGoogleAdsResultsLimit(scrapeScalars.googleResultsLimit),
+      ...(scrapeScalars.googleStartDate
+        ? {
+            googleStartDate: scrapeScalars.googleStartDate,
+            googleEndDate: scrapeScalars.googleEndDate,
+            googleMemoryKey: googleAdsMemoryKey(row.id),
+          }
+        : {}),
       pinterestCountry,
       pinterestConfirmedAdvertiserQuery,
       snapchatConfirmedAdvertiserQuery,

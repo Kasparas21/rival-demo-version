@@ -1,0 +1,147 @@
+[
+ {
+  "status": "Success",
+  "advertiserId": "AR10270080752578199553",
+  "advertiserName": "UAB \"Daira Medica\"",
+  "isVerified": null,
+  "creativeId": "CR03930532251418230785",
+  "adFormat": "TEXT",
+  "firstShown": "2026-02-05",
+  "lastShown": "2026-10-13",
+  "approxDaysShown": 250,
+  "previewUrl": "https://tpc.googlesyndication.com/archive/simgad/5426313154943725611",
+  "imageUrl": "https://tpc.googlesyndication.com/archive/simgad/5426313154943725611",
+  "videoUrl": null,
+  "headline": null,
+  "description": null,
+  "destinationUrl": null,
+  "platform": null,
+  "transparencyUrl": "https://adstransparency.google.com/advertiser/AR10270080752578199553",
+  "creativeUrl": "https://adstransparency.google.com/advertiser/AR10270080752578199553/creative/CR03930532251418230785",
+  "isPolitical": false,
+  "error": null,
+  "variants": [
+   {
+    "previewUrl": null,
+    "imageUrl": "https://tpc.googlesyndication.com/archive/simgad/5426313154943725611"
+   },
+   {
+    "previewUrl": null,
+    "imageUrl": "https://tpc.googlesyndication.com/archive/simgad/10382804708721394518"
+   },
+   {
+    "previewUrl": "https://displayads-formats.googleusercontent.com/ads/preview/content.js?client=ads-integrity-transparency&obfuscatedCustomerId=6260148561&creativeId=796061075402&uiFeatures=12&adGroupId=194323887242&assets=%3DH4sIAAAAAAAAAJNi52j6M-_fASYpdo4lHf8mv2CVYuN4vqlxaggAjIKxzRoAAAA&allowedVariations=39&sig=ACiVB_y9nrKE0IuzJLBY4L-5SD4xCfVx7Q&htmlParentId=fletch-render-5636500029767565429&responseCallback=fletchCallback5636500029767565429",
+    "imageUrl": null
+   }
+  ],
+  "variantCount": 3,
+  "targeting": {
+   "hasTargeting": true,
+   "demographics": {
+    "included": true,
+    "excluded": false
+   },
+   "geography": {
+    "included": true,
+    "excluded": false
+   },
+   "contextual": {
+    "included": true,
+    "excluded": true
+   }
+  }
+ },
+ {
+  "status": "Success",
+  "advertiserId": "AR14113145574106595329",
+  "advertiserName": "Auk\u0161taitijos implantologijos klinika",
+  "isVerified": null,
+  "creativeId": "CR13294021308472885249",
+  "adFormat": "IMAGE",
+  "firstShown": "2026-09-10",
+  "lastShown": "2026-10-13",
+  "approxDaysShown": 33,
+  "previewUrl": "https://tpc.googlesyndication.com/archive/simgad/10662660830400638279",
+  "imageUrl": "https://tpc.googlesyndication.com/archive/simgad/10662660830400638279",
+  "videoUrl": null,
+  "headline": null,
+  "description": null,
+  "destinationUrl": null,
+  "platform": null,
+  "transparencyUrl": "https://adstransparency.google.com/advertiser/AR14113145574106595329",
+  "creativeUrl": "https://adstransparency.google.com/advertiser/AR14113145574106595329/creative/CR13294021308472885249",
+  "isPolitical": false,
+  "error": null,
+  "variants": [
+   {
+    "previewUrl": null,
+    "imageUrl": "https://tpc.googlesyndication.com/archive/simgad/10662660830400638279"
+   }
+  ],
+  "variantCount": 1,
+  "targeting": {
+   "hasTargeting": true,
+   "demographics": {
+    "included": true,
+    "excluded": false
+   },
+   "geography": {
+    "included": false,
+    "excluded": false
+   },
+   "contextual": {
+    "included": true,
+    "excluded": false
+   }
+  }
+ },
+ {
+  "status": "Success",
+  "advertiserId": "AR10270080752578199553",
+  "advertiserName": "UAB \"Daira Medica\"",
+  "isVerified": null,
+  "creativeId": "CR10737900874064986113",
+  "adFormat": "VIDEO",
+  "firstShown": "2025-02-05",
+  "lastShown": "2026-10-12",
+  "approxDaysShown": 614,
+  "previewUrl": "https://i.ytimg.com/vi/ffh1Coj6anc/hqdefault.jpg",
+  "imageUrl": "https://i.ytimg.com/vi/ffh1Coj6anc/hqdefault.jpg",
+  "videoUrl": "https://www.youtube.com/watch?v=ffh1Coj6anc",
+  "headline": null,
+  "description": null,
+  "destinationUrl": null,
+  "platform": null,
+  "transparencyUrl": "https://adstransparency.google.com/advertiser/AR10270080752578199553",
+  "creativeUrl": "https://adstransparency.google.com/advertiser/AR10270080752578199553/creative/CR10737900874064986113",
+  "isPolitical": false,
+  "error": null,
+  "variants": [
+   {
+    "previewUrl": "https://i.ytimg.com/vi/ffh1Coj6anc/hqdefault.jpg",
+    "imageUrl": null
+   },
+   {
+    "previewUrl": "https://i.ytimg.com/vi/ffh1Coj6anc/hqdefault.jpg",
+    "imageUrl": null
+   }
+  ],
+  "variantCount": 2,
+  "targeting": {
+   "hasTargeting": true,
+   "demographics": {
+    "included": true,
+    "excluded": false
+   },
+   "geography": {
+    "included": true,
+    "excluded": false
+   },
+   "contextual": {
+    "included": true,
+    "excluded": false
+   }
+  },
+  "youtubeVideoId": "ffh1Coj6anc"
+ }
+]

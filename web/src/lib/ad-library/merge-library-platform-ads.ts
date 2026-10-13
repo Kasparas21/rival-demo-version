@@ -24,6 +24,7 @@ import {
   stableAdKeyForSnapchat,
   stableAdKeyForTikTok,
 } from "./stable-ad-keys";
+import { parseGoogleTransparencyAdvertiserCreative } from "./google-stable-id";
 import { repairMetaAdCardMedia } from "./repair-library-ad-media";
 
 function minOptionalUnix(a?: number, b?: number): number | undefined {
@@ -126,6 +127,54 @@ function mergeMetaCards(a: MetaAdCard, b: MetaAdCard): MetaAdCard {
       ? { librarySeenAtMs: Math.max(a.librarySeenAtMs ?? 0, b.librarySeenAtMs ?? 0) }
       : {}),
   });
+}
+
+/**
+ * A known creative re-delivered without copy (`lifecycleOnly`): keep the stored row and move only its
+ * shown dates and preview forward — a full merge would let the copy-less row blank its headline and title.
+ */
+function refreshGoogleRowLifecycle(stored: GoogleAdRow, fresh: GoogleAdRow): GoogleAdRow {
+  const firstShown = minOptionalDateString(stored.firstShown, fresh.firstShown);
+  const lastShown = maxOptionalDateString(stored.lastShown, fresh.lastShown);
+  if (stored.type === "google" && fresh.type === "google") {
+    const shown = `${firstShown?.slice(0, 10) ?? "?"} → ${lastShown?.slice(0, 10) ?? "?"}`;
+    return {
+      ...stored,
+      firstShown,
+      lastShown,
+      lastShownLabel: lastShown === fresh.lastShown ? fresh.lastShownLabel : stored.lastShownLabel,
+      shownSummary:
+        firstShown || lastShown
+          ? `${firstShown?.slice(0, 10) ?? "…"} – ${lastShown?.slice(0, 10) ?? "…"}`
+          : stored.shownSummary,
+      desc: stored.desc.replace(/Shown \S+ → \S+/, `Shown ${shown}`),
+      previewUrl: fresh.previewUrl ?? stored.previewUrl,
+      img: fresh.previewUrl ? fresh.img : stored.img,
+    };
+  }
+  if (stored.type === "youtube" && fresh.type === "youtube") {
+    return {
+      ...stored,
+      firstShown,
+      lastShown,
+      views: lastShown === fresh.lastShown ? fresh.views : stored.views,
+      thumbnail: stored.thumbnail?.trim() ? stored.thumbnail : fresh.thumbnail,
+      videoUrl: fresh.videoUrl ?? stored.videoUrl,
+    };
+  }
+  return { ...stored, firstShown, lastShown };
+}
+
+function googleCreativeRef(row: GoogleAdRow): string | null {
+  const parsed = parseGoogleTransparencyAdvertiserCreative(row.adUrl);
+  return parsed ? `${parsed.advertiserId}:${parsed.creativeId}` : null;
+}
+
+function withoutLifecycleFlag(row: GoogleAdRow): GoogleAdRow {
+  if (!row.lifecycleOnly) return row;
+  const copy = { ...row };
+  delete copy.lifecycleOnly;
+  return copy;
 }
 
 function mergeGoogleRows(a: GoogleAdRow, b: GoogleAdRow): GoogleAdRow {
@@ -272,19 +321,32 @@ export function mergeGoogleAdRows(
   const nowMs = options?.nowMs ?? Date.now();
   const map = new Map<string, Entry<GoogleAdRow>>();
 
+  /**
+   * Known video creatives come back without their YouTube id, so they key by creative (`yt:AR…:CR…`)
+   * instead of the stored `yt:<videoId>` — find their stored row by creative instead.
+   */
+  const keyByCreative = new Map<string, string>();
   for (const item of existing) {
     const k = stableAdKeyForGoogleRow(item);
     map.set(k, { item, lastSeenMs: googleRowLastSeenMs(item, nowMs) });
+    const ref = googleCreativeRef(item);
+    if (ref) keyByCreative.set(ref, k);
   }
   for (const item of incoming) {
-    const k = stableAdKeyForGoogleRow(item);
+    let k = stableAdKeyForGoogleRow(item);
+    if (item.lifecycleOnly && !map.has(k)) {
+      const ref = googleCreativeRef(item);
+      k = (ref && keyByCreative.get(ref)) || k;
+    }
     const incSeen = Math.max(googleRowLastSeenMs(item, nowMs), nowMs);
     const prev = map.get(k);
     if (!prev) {
-      map.set(k, { item, lastSeenMs: incSeen });
+      /** Unmatched, a copy-less video can't be keyed by its YouTube id and would duplicate the stored video. */
+      if (item.lifecycleOnly && item.type === "youtube" && !item.youtubeVideoId?.trim()) continue;
+      map.set(k, { item: withoutLifecycleFlag(item), lastSeenMs: incSeen });
     } else {
       map.set(k, {
-        item: mergeGoogleRows(prev.item, item),
+        item: item.lifecycleOnly ? refreshGoogleRowLifecycle(prev.item, item) : mergeGoogleRows(prev.item, item),
         lastSeenMs: Math.max(prev.lastSeenMs, incSeen),
       });
     }

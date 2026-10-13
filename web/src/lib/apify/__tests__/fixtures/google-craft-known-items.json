@@ -1,0 +1,36 @@
+[
+ {
+  "type": "creative",
+  "advertiserName": "UAB \"Daira Medica\"",
+  "advertiserId": "AR10270080752578199553",
+  "advertiserRegion": "LT",
+  "advertiserVerified": true,
+  "creativeId": "CR03930532251418230785",
+  "format": "TEXT",
+  "imageUrl": "https://tpc.googlesyndication.com/archive/simgad/5426313154943725611",
+  "firstShown": "2026-02-05T08:26:27.000Z",
+  "lastShown": "2026-10-13T07:14:27.000Z",
+  "daysServed": 244,
+  "matchedDomain": null,
+  "impressionsLower": null,
+  "impressionsUpper": null,
+  "spendLower": null,
+  "spendUpper": null,
+  "spendCurrency": null,
+  "politicalRegions": null,
+  "reportedByUser": false,
+  "previewUrl": "https://tpc.googlesyndication.com/archive/simgad/5426313154943725611",
+  "transparencyUrl": "https://adstransparency.google.com/advertiser/AR10270080752578199553/creative/CR03930532251418230785?region=anywhere",
+  "decodeStatus": "skipped_known",
+  "isNew": false,
+  "memoryStatus": "DUPLICATE",
+  "query": {
+   "input": "AR10270080752578199553",
+   "kind": "id",
+   "value": "AR10270080752578199553",
+   "region": "ANYWHERE",
+   "format": "all"
+  },
+  "scrapedAt": "2026-10-13T12:27:47.288Z"
+ }
+]

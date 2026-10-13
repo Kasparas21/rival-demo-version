@@ -84,6 +84,11 @@ export type RunAdsLibraryParallelScrapeParams = {
   tiktokRegion: string;
   googleRegion: string;
   googleResultsLimit: number;
+  /** Scheduled refresh window (YYYY-MM-DD): only creatives shown since the last Google scrape. */
+  googleStartDate?: string;
+  googleEndDate?: string;
+  /** automation_craft memory name, so creatives already delivered come back free (`googleAdsMemoryKey`). */
+  googleMemoryKey?: string;
   pinterestCountry: string;
   /** Set when the user provided Pinterest ids (not brand fallback) — drives Unverified source vs row advertiser. */
   pinterestConfirmedAdvertiserQuery?: string;
@@ -136,6 +141,9 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
     tiktokRegion,
     googleRegion,
     googleResultsLimit,
+    googleStartDate,
+    googleEndDate,
+    googleMemoryKey,
     pinterestCountry,
     pinterestConfirmedAdvertiserQuery,
     snapchatConfirmedAdvertiserQuery,
@@ -190,11 +198,15 @@ export async function runAdsLibraryParallelScrape(params: RunAdsLibraryParallelS
           startUrls: [transparencyCanon],
           resultsLimit: googleResultsLimit,
           region: googleRegion,
+          startDate: googleStartDate,
+          endDate: googleEndDate,
+          memoryKey: googleMemoryKey,
         });
 
-        out.google.rows = rows
-          .slice(0, googleResultsLimit)
-          .map((item, i) => googleItemToRow(item, i, { queryDomain: queryDom }));
+        out.google.rows = rows.slice(0, googleResultsLimit).map((item, i) => {
+          const row = googleItemToRow(item, i, { queryDomain: queryDom });
+          return item.knownCreative ? { ...row, lifecycleOnly: true } : row;
+        });
       } catch (e) {
         out.google.error = e instanceof Error ? e.message : "Google ads failed";
       }
