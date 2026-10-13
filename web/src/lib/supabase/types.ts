@@ -272,6 +272,7 @@ export type Database = {
           last_classification_review_at: string;
           next_scrape_at: string | null;
           last_scrape_at: string | null;
+          last_sweep_ad_count: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -287,6 +288,7 @@ export type Database = {
           last_classification_review_at?: string;
           next_scrape_at?: string | null;
           last_scrape_at?: string | null;
+          last_sweep_ad_count?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -302,6 +304,7 @@ export type Database = {
           last_classification_review_at?: string;
           next_scrape_at?: string | null;
           last_scrape_at?: string | null;
+          last_sweep_ad_count?: number | null;
           created_at?: string;
           updated_at?: string;
         };

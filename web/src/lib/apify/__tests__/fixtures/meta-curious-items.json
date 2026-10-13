@@ -1,0 +1,648 @@
+[
+ {
+  "ad_archive_id": "955246664086873",
+  "collation_count": null,
+  "collation_id": null,
+  "is_active": true,
+  "page_id": "2012750189007245",
+  "page_is_deleted": false,
+  "snapshot": {
+   "branded_content": {
+    "page_id": "2012750189007245",
+    "page_is_deleted": false,
+    "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+    "page_name": "Liquid Death"
+   },
+   "page_id": "110288902144889",
+   "page_is_deleted": false,
+   "page_profile_uri": "https://www.instagram.com/_u/sergutiov",
+   "root_reshared_post": null,
+   "byline": null,
+   "disclaimer_label": null,
+   "page_name": "sergutiov",
+   "page_profile_picture_url": "https://scontent.cdninstagram.com/v/t51.82787-19/783617706_18621201091058845_3543626435141266022_n.jpg?stp=dst-jpg_s206x206_tt6&_nc_cat=109&ccb=7-5&_nc_sid=525117&efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLnd3dy45MjIuQzIifQ%3D%3D&_nc_ohc=fyJ207lIHA8Q7kNvwHH7WkC&_nc_oc=AdoF8wT0TZQNS7bxN3jmSveNKZhU6QZIDiM25eA2dstLA9HcYgnINzfx1jO6DPnCphU&_nc_zt=24&_nc_ht=scontent.cdninstagram.com&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQP6_guh38DJ4_PsD9MkvaoMC1ihJakT7xqCuj40ugFq2g&oe=6AD3FD29",
+   "event": null,
+   "caption": "ampd.to",
+   "cta_text": "Shop now",
+   "cards": [],
+   "body": null,
+   "cta_type": "SHOP_NOW",
+   "display_format": "IMAGE",
+   "link_description": null,
+   "link_url": "https://ampd.to/?route=amazon.com%2FLiquid-Death-Lime-Flavored-Artificial-Sweeteners%2Fdp%2FB0DVTKJ1NP%2F&retailer=amazon",
+   "images": [
+    {
+     "image_crops": [],
+     "original_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/684761916_1290792545875376_5909365143526831390_n.jpg?_nc_cat=104&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=gZ-yOlH_gpQQ7kNvwFxFsXY&_nc_oc=Adq7IvZxyiyT_hOvypAUG7nZZ-JDR9IjD42oSdrZb4hUmPRn3KKZTu4fkePMIxPFOmg&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQNAW3-EhNL5XjlTRquS6D94VvSmnjmTTj6ggFH4sL1Xlg&oe=6AD3EE4E",
+     "resized_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/686078181_1519334266407691_8436527953180297914_n.jpg?stp=dst-jpg_s600x600_tt6&_nc_cat=102&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=W9woCut2NUUQ7kNvwHG4j3Q&_nc_oc=Adp974P42YoaO1gFv4dDfiPxaBAlxu1WPOpDU4_SYOdAHiYwL74Cf6gu6XKIBExw02o&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQPNNjeNf6p2qKmKhyUXrgxNMJvmNh5CfRP_EVtpnBTyEg&oe=6AD3D580",
+     "watermarked_resized_image_url": ""
+    }
+   ],
+   "page_categories": [
+    "Profile"
+   ],
+   "page_like_count": 0,
+   "title": null,
+   "videos": [],
+   "is_reshared": false,
+   "extra_links": [],
+   "extra_texts": [],
+   "extra_images": [],
+   "extra_videos": [],
+   "country_iso_code": null,
+   "brazil_tax_id": null,
+   "additional_info": null,
+   "ec_certificates": []
+  },
+  "has_user_reported": false,
+  "report_count": null,
+  "menu_items": [],
+  "state_media_run_label": null,
+  "page_name": "Liquid Death",
+  "impressions_with_index": {
+   "impressions_text": null,
+   "impressions_index": -1
+  },
+  "gated_type": "ELIGIBLE",
+  "categories": [
+   "UNKNOWN"
+  ],
+  "is_aaa_eligible": false,
+  "contains_digital_created_media": false,
+  "reach_estimate": null,
+  "currency": "",
+  "spend": null,
+  "end_date": 1791874800,
+  "publisher_platform": [
+   "INSTAGRAM"
+  ],
+  "start_date": 1777532400,
+  "contains_sensitive_content": false,
+  "total_active_time": null,
+  "regional_regulation_data": {
+   "finserv": {
+    "is_deemed_finserv": false,
+    "is_limited_delivery": false
+   },
+   "tw_anti_scam": {
+    "is_limited_delivery": false
+   }
+  },
+  "hide_data_status": "NONE",
+  "fev_info": null,
+  "ad_id": null,
+  "targeted_or_reached_countries": [],
+  "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&search_type=page&sort_data[direction]=desc&sort_data[mode]=total_impressions&view_all_page_id=2012750189007245",
+  "total": 367,
+  "position": 1,
+  "ads_count": 1,
+  "start_date_formatted": "2026-04-30 07:00:00",
+  "end_date_formatted": "2026-10-13 07:00:00",
+  "ad_library_url": "https://www.facebook.com/ads/library/?id=955246664086873",
+  "advertiser": {
+   "page": {
+    "about": {
+     "text": "Don\u2019t be scared. It's just a better-for-you beverage company. #MurderYourThirst #DeathToPlasticBottles"
+    },
+    "is_delegate_page_with_linked_primary_profile": false,
+    "id": "2012750189007245"
+   },
+   "ad_library_page_info": {
+    "page_spend": {
+     "current_week": null,
+     "lifetime_by_disclaimer": [],
+     "weekly_by_disclaimer": [],
+     "is_political_page": false
+    },
+    "page_info": {
+     "entity_type": "PERSON_PROFILE",
+     "ig_followers": 6922563,
+     "ig_username": "liquiddeath",
+     "ig_verification": true,
+     "likes": 341915,
+     "page_alias": "DrinkLiquidDeath",
+     "page_category": "Product/service",
+     "page_cover_photo": "https://scontent.fyxd2-1.fna.fbcdn.net/v/t39.30808-6/631356215_1361834702656481_394271645417852731_n.png?_nc_cat=105&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=957871&_nc_ohc=lQMFshnMidMQ7kNvwGCWjUk&_nc_oc=AdrvTNxNYYkyhzRGwelqdItINuAvEdP1Ot5VFsEFd-VRaDQVmhpCkRmvEFB-NO1S6TL9qgIUy3oRaAssQQbPptIR&_nc_zt=23&_nc_ht=scontent.fyxd2-1.fna&_nc_gid=HEQJviZkx3HhHUMWr5i8Yw&_nc_ss=78180&oh=00_AQMM27jyRZpYTj7yVDaHs-RkBYMOBmbo_oYzSDLJodldWg&oe=6AD3F4ED",
+     "page_id": "2012750189007245",
+     "page_is_deleted": false,
+     "page_is_restricted": false,
+     "page_name": "Liquid Death",
+     "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+     "page_verification": "NOT_VERIFIED",
+     "profile_photo": "https://scontent.fyxd1-1.fna.fbcdn.net/v/t39.30808-1/475110155_1056379036535384_5870173462345314782_n.jpg?stp=dst-jpg_s148x148_tt6&_nc_cat=103&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=418b77&_nc_ohc=e5aMhjQ0ZkgQ7kNvwHRfJfO&_nc_oc=AdrHtE2s0jL7aRbmgJ4EM0luPDpFNFR4eYZeEAbOCSDOpk_im4bEO-eWga72PyTLD0j3XsJF6RKTzBdAsCBMGW7j&_nc_zt=24&_nc_ht=scontent.fyxd1-1.fna&_nc_gid=HEQJviZkx3HhHUMWr5i8Yw&_nc_ss=78180&oh=00_AQN4Cx9ev8gZwkEMhvjm2gI2eGqWRKvcwCs1q2Kb4H8Asg&oe=6AD3D7FB",
+     "is_profile_page": false
+    }
+   }
+  },
+  "violation_types": [],
+  "verified_voice_context": null,
+  "transparency_by_location": {
+   "br_transparency": null,
+   "eu_transparency": null,
+   "uk_transparency": null
+  },
+  "is_violating_eu_siep": false
+ },
+ {
+  "ad_archive_id": "2054840681894781",
+  "collation_count": 4,
+  "collation_id": "1438789998078518",
+  "is_active": true,
+  "page_id": "2012750189007245",
+  "page_is_deleted": false,
+  "snapshot": {
+   "branded_content": null,
+   "page_id": "2012750189007245",
+   "page_is_deleted": false,
+   "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+   "root_reshared_post": null,
+   "byline": null,
+   "disclaimer_label": null,
+   "page_name": "Liquid Death",
+   "page_profile_picture_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/778157270_1681421589627145_8564141825928299978_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=D0IyA-UzIeoQ7kNvwGnuytO&_nc_oc=AdqEIv4U9syqU0n07VGFS25x6yAdE9oYt38JjdxdxXHGp6RMD1MLHB2oq9gMFQKxEjo&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQM0dZV-HMS62jc-KWcedVuoCewdIDEQxaOnZX2XUuwryQ&oe=6AD3FE61",
+   "event": null,
+   "caption": "amazon.com",
+   "cta_text": "Shop now",
+   "cards": [],
+   "body": {
+    "text": "AI data centers use millions of gallons of water to cool servers. But we came up with a solution: drink Liquid Death Energy."
+   },
+   "cta_type": "SHOP_NOW",
+   "display_format": "VIDEO",
+   "link_description": null,
+   "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2FLiquid-Death-Sparkling-Energy-Strawberry%2Fdp%2FB0FV9BGJG1%3Fth%3D1&unq=vcta",
+   "images": [],
+   "page_categories": [
+    "Product/service"
+   ],
+   "page_like_count": 341915,
+   "title": null,
+   "videos": [
+    {
+     "video_hd_url": "https://video.fgig14-2.fna.fbcdn.net/o1/v/t2/f2/m366/AQOwqHxwTNrC-RbguXo7uJNTMfYkNhrCSwIdEkpJRYT3MDTLmNLz0x2Hofh3nPetSrYATW96C6c4w85umQ88bmSXxcaf4k1Neb-6Q6bF7niBfA.mp4?_nc_cat=104&_nc_oc=AdptvoZbWW-1W1Mb0BwSObojttqfcWAApNsFT9CFED3FOskAV00SLpMJnkciQM5HPW0&_nc_sid=b66105&_nc_ht=video.fgig14-2.fna.fbcdn.net&_nc_ohc=KF_lQzCzQf4Q7kNvwH7M5eU&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzIuMTI4MC5kYXNoX2gyNjQtYmFzaWMtZ2VuMl83MjBwIiwieHB2X2Fzc2V0X2lkIjoxNTk3NjIyMTI1MjI4MTI1LCJhc3NldF9hZ2VfZGF5cyI6NTUsInZpX3VzZWNhc2VfaWQiOjEwMTM5LCJkdXJhdGlvbl9zIjozMCwidXJsZ2VuX3NvdXJjZSI6Ind3dyJ9&ccb=17-1&vs=9292e80c0b1f72d8&_nc_vs=HBksFQIYRWZiX2VwaGVtZXJhbC9GNzRFQ0M4NTU1MzY1RDg4NjY4NEQyMjM3NkNEMTRBQV9tdF8xX3ZpZGVvX2Rhc2hpbml0Lm1wNBUAAsgBEgAVAhhAZmJfcGVybWFuZW50LzE2NEY4MjJCMkI4NEQ0MTYwQTlBNkY3Q0Q5MDRDRUFEX2F1ZGlvX2Rhc2hpbml0Lm1wNBUCAsgBEgAoABgAGwKIB3VzZV9vaWwBMRJwcm9ncmVzc2l2ZV9yZWNpcGUBMRUAACa6wZO07MHWBRUCKAJDMiwXQD4HrhR64UgYGWRhc2hfaDI2NC1iYXNpYy1nZW4yXzcyMHARAHUAZbaeAQA&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&_nc_map=urlgen_bucketless&_nc_zt=28&oh=00_AQPB3RM-w4fr0didxojDbgUxRDWyelpfljfjy5ihM667Nw&oe=6AD3DBE0",
+     "video_preview_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/777800954_1741707273703204_5086245072453163638_n.jpg?_nc_cat=108&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=dUS4JP4sWQkQ7kNvwGkPtpy&_nc_oc=AdqaszVkP8OUE7KdfeJyCV3JpvWkSlYCmTl8UnHU-9MF9lwQAKLGjx9qdt0YlS53GQI&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMpGZV4d2RJF6Z4uvfo4mvZhlH8z3Bbb3mlaxL2il99FQ&oe=6AD3DD15",
+     "video_sd_url": "https://video.fgig14-2.fna.fbcdn.net/o1/v/t2/f2/m412/AQOt6lj-eNpzgPXDHsmBIOUijZf16j7Ou37OHIozLFyqj3f17TEKwaGd_1hZabhza80g9wcSt-aDG4bPXwwErLyDrGGy7pZ21Sc6ckiDXw.mp4?_nc_cat=106&_nc_oc=AdqFUSZqol9HVXA-OjeSZhBI0LZLrOROPLGZZKgjWo1QYE_-18vWWrB_uKnpij-GYPk&_nc_sid=ef5aa3&_nc_ht=video.fgig14-2.fna.fbcdn.net&_nc_ohc=sbBWZhFVDGEQ7kNvwHLwIZt&efg=eyJ2ZW5jb2RlX3RhZyI6Inhwdl9wcm9ncmVzc2l2ZS5WSV9VU0VDQVNFX1BST0RVQ1RfVFlQRS4uQzIuNjQwLnN2ZV9zZCIsInhwdl9hc3NldF9pZCI6MTU5NzYyMjEyNTIyODEyNSwiYXNzZXRfYWdlX2RheXMiOjU1LCJ2aV91c2VjYXNlX2lkIjoxMDEzOSwiZHVyYXRpb25fcyI6MzAsInVybGdlbl9zb3VyY2UiOiJ3d3cifQ%3D%3D&ccb=17-1&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&_nc_map=urlgen_bucketless&_nc_zt=28&oh=00_AQOufeqSBxisob9m5mVhKnDPTZPCxfwTb_R0NOWpSYATBQ&oe=6AD3CD38",
+     "watermarked_video_hd_url": null,
+     "watermarked_video_sd_url": null
+    }
+   ],
+   "is_reshared": false,
+   "extra_links": [],
+   "extra_texts": [],
+   "extra_images": [],
+   "extra_videos": [],
+   "country_iso_code": null,
+   "brazil_tax_id": null,
+   "additional_info": null,
+   "ec_certificates": []
+  },
+  "has_user_reported": false,
+  "report_count": null,
+  "menu_items": [],
+  "state_media_run_label": null,
+  "page_name": "Liquid Death",
+  "impressions_with_index": {
+   "impressions_text": null,
+   "impressions_index": -1
+  },
+  "gated_type": "ELIGIBLE",
+  "categories": [
+   "UNKNOWN"
+  ],
+  "is_aaa_eligible": false,
+  "contains_digital_created_media": false,
+  "reach_estimate": null,
+  "currency": "",
+  "spend": null,
+  "end_date": 1791874800,
+  "publisher_platform": [
+   "INSTAGRAM"
+  ],
+  "start_date": 1787036400,
+  "contains_sensitive_content": false,
+  "total_active_time": null,
+  "regional_regulation_data": {
+   "finserv": {
+    "is_deemed_finserv": false,
+    "is_limited_delivery": false
+   },
+   "tw_anti_scam": {
+    "is_limited_delivery": false
+   }
+  },
+  "hide_data_status": "NONE",
+  "fev_info": null,
+  "ad_id": null,
+  "targeted_or_reached_countries": [],
+  "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&search_type=page&sort_data[direction]=desc&sort_data[mode]=total_impressions&view_all_page_id=2012750189007245",
+  "total": 367,
+  "position": 2,
+  "ads_count": 2,
+  "start_date_formatted": "2026-08-18 07:00:00",
+  "end_date_formatted": "2026-10-13 07:00:00",
+  "ad_library_url": "https://www.facebook.com/ads/library/?id=2054840681894781",
+  "advertiser": {
+   "page": {
+    "about": {
+     "text": "Don\u2019t be scared. It's just a better-for-you beverage company. #MurderYourThirst #DeathToPlasticBottles"
+    },
+    "is_delegate_page_with_linked_primary_profile": false,
+    "id": "2012750189007245"
+   },
+   "ad_library_page_info": {
+    "page_spend": {
+     "current_week": null,
+     "lifetime_by_disclaimer": [],
+     "weekly_by_disclaimer": [],
+     "is_political_page": false
+    },
+    "page_info": {
+     "entity_type": "PERSON_PROFILE",
+     "ig_followers": 6922563,
+     "ig_username": "liquiddeath",
+     "ig_verification": true,
+     "likes": 341915,
+     "page_alias": "DrinkLiquidDeath",
+     "page_category": "Product/service",
+     "page_cover_photo": "https://scontent.fsjp5-1.fna.fbcdn.net/v/t39.30808-6/631356215_1361834702656481_394271645417852731_n.png?_nc_cat=105&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=957871&_nc_ohc=lQMFshnMidMQ7kNvwEnehe4&_nc_oc=AdrwC04XMFoczkC4s0MarcxvGJK7Jwq-qQwmfZLju6cTJiM7OhHvTTv8uPcMF0vZuRU&_nc_zt=23&_nc_ht=scontent.fsjp5-1.fna&_nc_gid=F2nP6HOQEuG7g4d4a5Pwnw&_nc_ss=78180&oh=00_AQPzJSAQppF1CW07v-jcvkMdQQgEdfWdKOa9Qn_Ea-a0RA&oe=6AD3F4ED",
+     "page_id": "2012750189007245",
+     "page_is_deleted": false,
+     "page_is_restricted": false,
+     "page_name": "Liquid Death",
+     "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+     "page_verification": "NOT_VERIFIED",
+     "profile_photo": "https://scontent.fsjp5-1.fna.fbcdn.net/v/t39.30808-1/475110155_1056379036535384_5870173462345314782_n.jpg?stp=dst-jpg_s148x148_tt6&_nc_cat=103&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=418b77&_nc_ohc=e5aMhjQ0ZkgQ7kNvwGHf1SF&_nc_oc=AdqKZWQIovUe615hZ0EYlTCAS7AvgdQ5bJCR4004Khb1CESBWOzh2RdVAyug-QJCsco&_nc_zt=24&_nc_ht=scontent.fsjp5-1.fna&_nc_gid=F2nP6HOQEuG7g4d4a5Pwnw&_nc_ss=78180&oh=00_AQNw7tqVMml8pBZQrip76M3sKFiOrkLu2u1ZsjND0D_ZFQ&oe=6AD3D7FB",
+     "is_profile_page": false
+    }
+   }
+  },
+  "violation_types": [],
+  "verified_voice_context": null,
+  "transparency_by_location": {
+   "br_transparency": null,
+   "eu_transparency": null,
+   "uk_transparency": null
+  },
+  "is_violating_eu_siep": false
+ },
+ {
+  "ad_archive_id": "1640295544478670",
+  "collation_count": 1,
+  "collation_id": "1089129580308630",
+  "is_active": true,
+  "page_id": "2012750189007245",
+  "page_is_deleted": false,
+  "snapshot": {
+   "branded_content": null,
+   "page_id": "2012750189007245",
+   "page_is_deleted": false,
+   "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+   "root_reshared_post": null,
+   "byline": null,
+   "disclaimer_label": null,
+   "page_name": "Liquid Death",
+   "page_profile_picture_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/788002192_4022780724519242_8644083927136784979_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=u6ajt6lxOHYQ7kNvwE0QtyO&_nc_oc=AdqDNLUAPSELeAiUCBG2Hqm9ZJ78XTI524MO7vmDWSGQ6Gn3epHu8HawNKPClVLBG4Q&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQPPWwvMVZbY9ksFknQpeQWpEpioKNHNhhjquKzSEhC0ug&oe=6AD3F874",
+   "event": null,
+   "caption": "amazon.com",
+   "cta_text": "Shop now",
+   "cards": [
+    {
+     "body": "Easy-Drinking Energy For People-Drinking Vampires.",
+     "cta_type": "SHOP_NOW",
+     "caption": "amazon.com",
+     "link_description": null,
+     "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2Fdp%2FB0H7ZKH2K6%2Fref%3Dtwister_B0G26HR2D3%3F_encoding%3DUTF8%26th%3D1&unq=af0",
+     "title": "Cruelty-free raspberry cream energy drink",
+     "cta_text": "Shop Now",
+     "video_hd_url": null,
+     "video_preview_image_url": null,
+     "video_sd_url": null,
+     "watermarked_video_hd_url": null,
+     "watermarked_video_sd_url": null,
+     "image_crops": [],
+     "original_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/791276670_2486800585177043_3837008691818014852_n.jpg?_nc_cat=104&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=XiszpFybnpsQ7kNvwGk0HNU&_nc_oc=AdojWdBluitmG7JR4AEEkkstJGQz5BjLta5fczut756pzVamkS8opljii6WEMzVxRPw&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQOGYmbeFoaFl6w0X3bkvGDjErJ1B3tem-_BdhftBO3_fQ&oe=6AD3F5E3",
+     "resized_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/788766890_2941316349548012_2104719971946437753_n.jpg?stp=dst-jpg_s600x600_tt6&_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=qDPZhSLRpNcQ7kNvwHz_xXG&_nc_oc=AdrbU7k5S_mBl2UFWN0hSTRV5IAwb9QPQzphc38KA5XqCMMw7_DUdECVUOrD9NKhrIE&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMehQu6SpUOYyHJPFW7ny65pyOioHNw_MMYkXvVe_zrow&oe=6AD3FC8E",
+     "watermarked_resized_image_url": ""
+    },
+    {
+     "body": "Easy-Drinking Energy For People-Drinking Vampires.",
+     "cta_type": "SHOP_NOW",
+     "caption": "amazon.com",
+     "link_description": null,
+     "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2Fdp%2FB0H7ZKH2K6%2Fref%3Dtwister_B0G26HR2D3%3F_encoding%3DUTF8%26th%3D1&unq=af0",
+     "title": "Cruelty-free raspberry cream energy drink",
+     "cta_text": "Shop Now",
+     "video_hd_url": null,
+     "video_preview_image_url": null,
+     "video_sd_url": null,
+     "watermarked_video_hd_url": null,
+     "watermarked_video_sd_url": null,
+     "image_crops": [],
+     "original_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/790458442_1092266719806130_3843842763162054798_n.jpg?_nc_cat=111&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=7TrB-3L9giMQ7kNvwEdbdVS&_nc_oc=Ado9FxBsiLakKXCjfOYLrIiAz0qd2qd3rQIh79Ji2Lmgoph5PKS4zF892rMk04y3HpI&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMAMLOug30q4FXhk8eJVC2x99z3DR9bDBsdZi3B75htnA&oe=6AD3EE37",
+     "resized_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/788967330_2417627312095321_276185600014208858_n.jpg?stp=dst-jpg_s600x600_tt6&_nc_cat=102&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=0p80JNw8KQkQ7kNvwEQZ6YN&_nc_oc=AdrOwA8HRol4dTt6TxL6UgbCbAqfs_A5nJXxDs9bCYaiIYqj6Ewj9KgndWBhORi3Pco&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQNtWSZBXb-HP7ngMhB0e1u5UnVWhB7ChgQtB9Fp6a_iOA&oe=6AD3CF82",
+     "watermarked_resized_image_url": ""
+    }
+   ],
+   "body": {
+    "text": "Easy-Drinking Energy For People-Drinking Vampires."
+   },
+   "cta_type": "SHOP_NOW",
+   "display_format": "DCO",
+   "link_description": null,
+   "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2Fdp%2FB0H7ZKH2K6%2Fref%3Dtwister_B0G26HR2D3%3F_encoding%3DUTF8%26th%3D1&unq=af0",
+   "images": [],
+   "page_categories": [
+    "Product/service"
+   ],
+   "page_like_count": 341915,
+   "title": null,
+   "videos": [],
+   "is_reshared": false,
+   "extra_links": [],
+   "extra_texts": [],
+   "extra_images": [],
+   "extra_videos": [],
+   "country_iso_code": null,
+   "brazil_tax_id": null,
+   "additional_info": null,
+   "ec_certificates": []
+  },
+  "has_user_reported": false,
+  "report_count": null,
+  "menu_items": [],
+  "state_media_run_label": null,
+  "page_name": "Liquid Death",
+  "impressions_with_index": {
+   "impressions_text": null,
+   "impressions_index": -1
+  },
+  "gated_type": "ELIGIBLE",
+  "categories": [
+   "UNKNOWN"
+  ],
+  "is_aaa_eligible": false,
+  "contains_digital_created_media": false,
+  "reach_estimate": null,
+  "currency": "",
+  "spend": null,
+  "end_date": 1791788400,
+  "publisher_platform": [
+   "INSTAGRAM"
+  ],
+  "start_date": 1788159600,
+  "contains_sensitive_content": false,
+  "total_active_time": null,
+  "regional_regulation_data": {
+   "finserv": {
+    "is_deemed_finserv": false,
+    "is_limited_delivery": false
+   },
+   "tw_anti_scam": {
+    "is_limited_delivery": false
+   }
+  },
+  "hide_data_status": "NONE",
+  "fev_info": null,
+  "ad_id": null,
+  "targeted_or_reached_countries": [],
+  "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&search_type=page&sort_data[direction]=desc&sort_data[mode]=total_impressions&view_all_page_id=2012750189007245",
+  "total": 367,
+  "position": 8,
+  "ads_count": 1,
+  "start_date_formatted": "2026-08-31 07:00:00",
+  "end_date_formatted": "2026-10-12 07:00:00",
+  "ad_library_url": "https://www.facebook.com/ads/library/?id=1640295544478670",
+  "advertiser": {
+   "page": {
+    "about": {
+     "text": "Don\u2019t be scared. It's just a better-for-you beverage company. #MurderYourThirst #DeathToPlasticBottles"
+    },
+    "is_delegate_page_with_linked_primary_profile": false,
+    "id": "2012750189007245"
+   },
+   "ad_library_page_info": {
+    "page_spend": {
+     "current_week": null,
+     "lifetime_by_disclaimer": [],
+     "weekly_by_disclaimer": [],
+     "is_political_page": false
+    },
+    "page_info": {
+     "entity_type": "PERSON_PROFILE",
+     "ig_followers": 6922563,
+     "ig_username": "liquiddeath",
+     "ig_verification": true,
+     "likes": 341915,
+     "page_alias": "DrinkLiquidDeath",
+     "page_category": "Product/service",
+     "page_cover_photo": "https://scontent.fiev25-2.fna.fbcdn.net/v/t39.30808-6/631356215_1361834702656481_394271645417852731_n.png?_nc_cat=105&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=957871&_nc_ohc=lQMFshnMidMQ7kNvwGyFBUl&_nc_oc=Adq1BMIcXX-WooZmNrYFa_asHPQesmCISBZVcD5Is01v6_6C8UL3-R52ckZFsBcq9Js&_nc_zt=23&_nc_ht=scontent.fiev25-2.fna&_nc_gid=yU76sfC40VPj8r7PfN2HEA&_nc_ss=78180&oh=00_AQOAkS0B251DP5SNPNhT3ueyC8SWmgbZL1GqrjB5x4ntAQ&oe=6AD3F4ED",
+     "page_id": "2012750189007245",
+     "page_is_deleted": false,
+     "page_is_restricted": false,
+     "page_name": "Liquid Death",
+     "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+     "page_verification": "NOT_VERIFIED",
+     "profile_photo": "https://scontent.fiev25-2.fna.fbcdn.net/v/t39.30808-1/475110155_1056379036535384_5870173462345314782_n.jpg?stp=dst-jpg_s148x148_tt6&_nc_cat=103&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=418b77&_nc_ohc=e5aMhjQ0ZkgQ7kNvwENraSb&_nc_oc=Adq7EhHtSh8cC9Q_mzL-qDeQI0v4B9atAAIzokXe4BG5pRHBgErIoCejZtx9sKNrMdU&_nc_zt=24&_nc_ht=scontent.fiev25-2.fna&_nc_gid=yU76sfC40VPj8r7PfN2HEA&_nc_ss=78180&oh=00_AQPUn3dTujqmrE8z-zPckXZXuZP8_5_gaALA0bCb3Pbxdw&oe=6AD3D7FB",
+     "is_profile_page": false
+    }
+   }
+  },
+  "violation_types": [],
+  "verified_voice_context": null,
+  "transparency_by_location": {
+   "br_transparency": null,
+   "eu_transparency": null,
+   "uk_transparency": null
+  },
+  "is_violating_eu_siep": false
+ },
+ {
+  "ad_archive_id": "1620911026418262",
+  "collation_count": 2,
+  "collation_id": "3870414936596596",
+  "is_active": true,
+  "page_id": "2012750189007245",
+  "page_is_deleted": false,
+  "snapshot": {
+   "branded_content": null,
+   "page_id": "2012750189007245",
+   "page_is_deleted": false,
+   "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+   "root_reshared_post": null,
+   "byline": null,
+   "disclaimer_label": null,
+   "page_name": "Liquid Death",
+   "page_profile_picture_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/708866451_1677932669908345_2314272575524214275_n.jpg?stp=dst-jpg_s60x60_tt6&_nc_cat=110&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=ucRAFbM4YQ0Q7kNvwFrn3GS&_nc_oc=AdqwFWu6epxDKo1DiGRNWpIsIRfYry9xtc7YqRw2O0WdeTxlFH_XzgTMLQW0sm-OPNM&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQNerTXymaFnEhKN232_edHlMAbUjdCO3CE_iYK5GUVBNw&oe=6AD3D5CE",
+   "event": null,
+   "caption": "amazon.com",
+   "cta_text": "Shop now",
+   "cards": [
+    {
+     "body": " ",
+     "cta_type": "SHOP_NOW",
+     "caption": "amazon.com",
+     "link_description": " ",
+     "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2FLiquid-Death-Soda-Flavored-Sparkling-Water%2Fdp%2FB0GWFS4CF8&unq=cta",
+     "title": "AMPD",
+     "cta_text": "Shop Now",
+     "video_hd_url": null,
+     "video_preview_image_url": null,
+     "video_sd_url": null,
+     "watermarked_video_hd_url": null,
+     "watermarked_video_sd_url": null,
+     "image_crops": [],
+     "original_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/710745337_1772634857056819_1406980273713573537_n.jpg?_nc_cat=100&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=XLbfV2zYBgUQ7kNvwFtAwNk&_nc_oc=Ado5DK_pbACDfamdA_THQ8GUGD50SED70ZOPGYXemaFoTAKX1lIt5_8wcKUfP8E6DnQ&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQO843yjthReeBEVpb91hgMPZqT7Ori4xrt1EUUfBjz7fQ&oe=6AD3CBB3",
+     "resized_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/710745908_26915034741452101_6090185881682861133_n.jpg?stp=dst-jpg_s600x600_tt6&_nc_cat=107&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=vVKBkKedsdIQ7kNvwGpeA98&_nc_oc=Adq8M7Iyc9hxAzuTrKBsMkOn-bREgJJWjgAXyGI54N6gT2TFUJhGnj3sUGjmB5nDQjw&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMv1m0-f2l9XbU1t9HQpdXhglZg8IZGYnMyc6wmb9sygg&oe=6AD3DED9",
+     "watermarked_resized_image_url": ""
+    },
+    {
+     "body": " ",
+     "cta_type": "SHOP_NOW",
+     "caption": "amazon.com",
+     "link_description": " ",
+     "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2FLiquid-Death-Soda-Flavored-Sparkling-Water%2Fdp%2FB0GWFS4CF8&unq=cta",
+     "title": "AMPD",
+     "cta_text": "Shop Now",
+     "video_hd_url": null,
+     "video_preview_image_url": null,
+     "video_sd_url": null,
+     "watermarked_video_hd_url": null,
+     "watermarked_video_sd_url": null,
+     "image_crops": [],
+     "original_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/710745426_1003543608700703_6673068824473768369_n.jpg?_nc_cat=107&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=yC5crxg8mnYQ7kNvwE4-x6t&_nc_oc=AdrfCZsjbFzmsV3zJCpRpunvqumpeKy2YO6O3ci6_QBLBd_zh7hz90Cy3qLrFvykG9U&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMKQY1tEfMVCXtoqaStn46HAvBZgoBjnVMP7iLlbWgMJA&oe=6AD3CAAD",
+     "resized_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/710745975_1732723771229666_101844824994239353_n.jpg?stp=dst-jpg_s600x600_tt6&_nc_cat=108&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=jhCoZmzKpVMQ7kNvwHkFg-y&_nc_oc=Adr5-hC3jwMclXPvdTp323Y7YNfaIaC4Yc_rcnk_Ev7qIrLNz6oVeDhqUaSCjSF7haM&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMknFZ_kON0xnqZFHsLesgZmTbSZRPwNcQaYUNvG-K5-A&oe=6AD3D074",
+     "watermarked_resized_image_url": ""
+    },
+    {
+     "body": " ",
+     "cta_type": "SHOP_NOW",
+     "caption": "amazon.com",
+     "link_description": " ",
+     "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2FLiquid-Death-Soda-Flavored-Sparkling-Water%2Fdp%2FB0GWFS4CF8&unq=cta",
+     "title": "AMPD",
+     "cta_text": "Shop Now",
+     "video_hd_url": null,
+     "video_preview_image_url": null,
+     "video_sd_url": null,
+     "watermarked_video_hd_url": null,
+     "watermarked_video_sd_url": null,
+     "image_crops": [],
+     "original_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/710746215_932865489810060_4119921844525557738_n.jpg?_nc_cat=107&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=Wv7geRdU8WwQ7kNvwGpmNpY&_nc_oc=Adp_ruZYaPm98vl4oOSPafaEchdQYkjop3ChcSwLMsazBcOXcFcECF3FQ1X3RI4R0U0&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQOiudAvOUl3cVhhg0urb9wFyunQ4S8fPi_58vlkOqs63g&oe=6AD3EA98",
+     "resized_image_url": "https://scontent.fgig14-2.fna.fbcdn.net/v/t39.35426-6/710755314_2156514141858027_4994882666811304788_n.jpg?stp=dst-jpg_s600x600_tt6&_nc_cat=101&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=c53f8f&_nc_ohc=aorUB_4o4MIQ7kNvwG1oCk1&_nc_oc=AdpbCYOqtdqNJ6GrrD7UPd8Ml-GTcifWLTa0saMGdW-liDlCMZxvRffn52OmyQLl6TU&_nc_zt=14&_nc_ht=scontent.fgig14-2.fna&_nc_gid=JLeGXZgpSJFkOv_rK44PDw&_nc_ss=78289&oh=00_AQMT1oaXiE2vjFtsCi-QCOMvl1Tkt1dxNcgvguJa8SW4Tw&oe=6AD3EC22",
+     "watermarked_resized_image_url": ""
+    }
+   ],
+   "body": {
+    "text": "\ud83d\udc9a \u26f0\ufe0f No artificial sweeteners, no caffeine, and just 10 calories \u26f0\ufe0f \ud83d\udc9a\n\nYes. The rumors are true. Mt. Death, our most popular flavor of 2026 is now available on Amazon. Link in bio.\n\nWith huge flavor, no caffeine, and just 10 calories, this citrus-flavored sparkling water won\u2019t just murder your thirst, it will murder your craving for neon green soda.\n\nThis flavor was previously called \u201cMtn Don\u2019t\u201d but we had to change the name because a big beverage corporation threatened to sue us. Perhaps they were worried we made something a little too good?\n\nEither way, see what the internet is screaming about. Run to your favorite convenience store or to Amazon right now."
+   },
+   "cta_type": "SHOP_NOW",
+   "display_format": "CAROUSEL",
+   "link_description": null,
+   "link_url": "https://ampd.to/?retailer=amazon&route=amazon.com%2FLiquid-Death-Soda-Flavored-Sparkling-Water%2Fdp%2FB0GWFS4CF8&unq=cta",
+   "images": [],
+   "page_categories": [
+    "Product/service"
+   ],
+   "page_like_count": 341915,
+   "title": null,
+   "videos": [],
+   "is_reshared": false,
+   "extra_links": [],
+   "extra_texts": [],
+   "extra_images": [],
+   "extra_videos": [],
+   "country_iso_code": null,
+   "brazil_tax_id": null,
+   "additional_info": null,
+   "ec_certificates": []
+  },
+  "has_user_reported": false,
+  "report_count": null,
+  "menu_items": [],
+  "state_media_run_label": null,
+  "page_name": "Liquid Death",
+  "impressions_with_index": {
+   "impressions_text": null,
+   "impressions_index": -1
+  },
+  "gated_type": "ELIGIBLE",
+  "categories": [
+   "UNKNOWN"
+  ],
+  "is_aaa_eligible": false,
+  "contains_digital_created_media": false,
+  "reach_estimate": null,
+  "currency": "",
+  "spend": null,
+  "end_date": 1791874800,
+  "publisher_platform": [
+   "INSTAGRAM"
+  ],
+  "start_date": 1779951600,
+  "contains_sensitive_content": false,
+  "total_active_time": null,
+  "regional_regulation_data": {
+   "finserv": {
+    "is_deemed_finserv": false,
+    "is_limited_delivery": false
+   },
+   "tw_anti_scam": {
+    "is_limited_delivery": false
+   }
+  },
+  "hide_data_status": "NONE",
+  "fev_info": null,
+  "ad_id": null,
+  "targeted_or_reached_countries": [],
+  "url": "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&is_targeted_country=false&media_type=all&search_type=page&sort_data[direction]=desc&sort_data[mode]=total_impressions&view_all_page_id=2012750189007245",
+  "total": 367,
+  "position": 16,
+  "ads_count": 1,
+  "start_date_formatted": "2026-05-28 07:00:00",
+  "end_date_formatted": "2026-10-13 07:00:00",
+  "ad_library_url": "https://www.facebook.com/ads/library/?id=1620911026418262",
+  "advertiser": {
+   "page": {
+    "about": {
+     "text": "Don\u2019t be scared. It's just a better-for-you beverage company. #MurderYourThirst #DeathToPlasticBottles"
+    },
+    "is_delegate_page_with_linked_primary_profile": false,
+    "id": "2012750189007245"
+   },
+   "ad_library_page_info": {
+    "page_spend": {
+     "current_week": null,
+     "lifetime_by_disclaimer": [],
+     "weekly_by_disclaimer": [],
+     "is_political_page": false
+    },
+    "page_info": {
+     "entity_type": "PERSON_PROFILE",
+     "ig_followers": 6922563,
+     "ig_username": "liquiddeath",
+     "ig_verification": true,
+     "likes": 341915,
+     "page_alias": "DrinkLiquidDeath",
+     "page_category": "Product/service",
+     "page_cover_photo": "https://scontent.fsjp5-1.fna.fbcdn.net/v/t39.30808-6/631356215_1361834702656481_394271645417852731_n.png?_nc_cat=105&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=957871&_nc_ohc=lQMFshnMidMQ7kNvwEnehe4&_nc_oc=AdrwC04XMFoczkC4s0MarcxvGJK7Jwq-qQwmfZLju6cTJiM7OhHvTTv8uPcMF0vZuRU&_nc_zt=23&_nc_ht=scontent.fsjp5-1.fna&_nc_gid=bmt5F7Xpq4Zx8a8b9wRPBQ&_nc_ss=78180&oh=00_AQPAoGKTJJE7csooMGTrWNXlg1acEzV9HMvEJ6iwKDKCwg&oe=6AD3F4ED",
+     "page_id": "2012750189007245",
+     "page_is_deleted": false,
+     "page_is_restricted": false,
+     "page_name": "Liquid Death",
+     "page_profile_uri": "https://www.facebook.com/DrinkLiquidDeath/",
+     "page_verification": "NOT_VERIFIED",
+     "profile_photo": "https://scontent.fsjp5-1.fna.fbcdn.net/v/t39.30808-1/475110155_1056379036535384_5870173462345314782_n.jpg?stp=dst-jpg_s148x148_tt6&_nc_cat=103&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=418b77&_nc_ohc=e5aMhjQ0ZkgQ7kNvwGHf1SF&_nc_oc=AdqKZWQIovUe615hZ0EYlTCAS7AvgdQ5bJCR4004Khb1CESBWOzh2RdVAyug-QJCsco&_nc_zt=24&_nc_ht=scontent.fsjp5-1.fna&_nc_gid=bmt5F7Xpq4Zx8a8b9wRPBQ&_nc_ss=78180&oh=00_AQMpRspRndQv-kUT_LFBYDWKUD2pS7WwvvKan6NfjbxCHg&oe=6AD3D7FB",
+     "is_profile_page": false
+    }
+   }
+  },
+  "violation_types": [],
+  "verified_voice_context": null,
+  "transparency_by_location": {
+   "br_transparency": null,
+   "eu_transparency": null,
+   "uk_transparency": null
+  },
+  "is_violating_eu_siep": false
+ }
+]
