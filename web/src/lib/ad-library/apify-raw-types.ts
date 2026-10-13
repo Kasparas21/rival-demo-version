@@ -111,6 +111,8 @@ export type GoogleCompanyAdItem = {
   libraryRegionSummary?: string;
   /** From actor `includeTargetingLocations` / targeting blobs — human-readable for UI. */
   libraryTargetingSummary?: string;
+  /** Re-delivered from automation_craft's memory: dates and preview are fresh, copy and targeting weren't re-fetched. */
+  knownCreative?: boolean;
 };
 
 /** Row from LinkedIn transparency scrapers — audience by country when disclosed. */

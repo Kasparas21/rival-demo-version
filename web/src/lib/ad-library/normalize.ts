@@ -137,6 +137,8 @@ export type GoogleAdRow =
       /** Transparency API headline/description when scraped (`null` = no disclosed copy). */
       headline?: string | null;
       description?: string | null;
+      /** Scrape-time only: a known creative re-delivered without copy — merge updates its dates, not its content. */
+      lifecycleOnly?: boolean;
     }
   | {
       type: "youtube";
@@ -160,6 +162,8 @@ export type GoogleAdRow =
       /** Transparency headline/description when scraped (`null` = none). */
       headline?: string | null;
       description?: string | null;
+      /** Scrape-time only: a known creative re-delivered without copy — merge updates its dates, not its content. */
+      lifecycleOnly?: boolean;
     };
 
 export type LinkedInAdCard = {

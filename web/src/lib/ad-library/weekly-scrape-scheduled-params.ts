@@ -11,6 +11,9 @@ export type ParallelScrapeScalars = {
   metaStartDate: string;
   metaEndDate: string;
   googleResultsLimit: number;
+  /** Set only for refreshes of a competitor already scraped on Google (empty = full-history sweep). */
+  googleStartDate: string;
+  googleEndDate: string;
   linkedinMaxAds: number;
   linkedinDateRange: string;
   tiktokMaxAds: number;
@@ -45,6 +48,8 @@ export function buildParallelScrapeScalars(
     metaStartDate: defaultWindow.startYmd,
     metaEndDate: defaultWindow.endYmd,
     googleResultsLimit: defaultLim.googleResultsLimit,
+    googleStartDate: "",
+    googleEndDate: "",
     linkedinMaxAds: defaultLim.linkedinMaxAds,
     linkedinDateRange: defaultLinkedinRange,
     tiktokMaxAds: defaultLim.tiktokMaxAds,
@@ -79,11 +84,21 @@ export function buildParallelScrapeScalars(
         scalars.metaStartDate = "";
         scalars.metaEndDate = "";
         break;
-      case "google":
+      case "google": {
         scalars.googleResultsLimit = isInactiveProbe
           ? lim.googleResultsLimit
           : FULL_SWEEP_ADS_PER_PLATFORM;
+        /**
+         * Google lifecycle comes from each creative's own last-shown date, not from absence, so a refresh
+         * only needs creatives shown since the last scrape — the library also lists long-ended ones, which
+         * a full sweep re-buys every time. Competitors never scraped on Google keep the full sweep.
+         */
+        if (lastScrapeByPlatform.get("google")) {
+          scalars.googleStartDate = dateWindow.startYmd;
+          scalars.googleEndDate = dateWindow.endYmd;
+        }
         break;
+      }
       case "linkedin":
         scalars.linkedinMaxAds = lim.linkedinMaxAds;
         scalars.linkedinDateRange = linkedinDateRangeForWindow(dateWindow, {

@@ -230,3 +230,109 @@ describe("merge-library-platform-ads", () => {
     expect(merged[0]?.img).toBe("https://p16-sign.tiktokcdn.com/a.jpg");
   });
 });
+
+describe("mergeGoogleAdRows with creatives re-delivered from memory", () => {
+  const adUrl = "https://adstransparency.google.com/advertiser/AR1/creative/CR1";
+  const stored: GoogleAdRow = {
+    type: "google",
+    id: "g:AR1:CR1",
+    title: "Dental implants in Vilnius",
+    url: "dentaplanas.lt",
+    desc: "Search / text · Implants from 990 € · Shown 2026-02-05 → 2026-10-10",
+    img: "https://tpc.googlesyndication.com/simgad/1",
+    creativeCopy: "Implants from 990 €",
+    shownSummary: "2026-02-05 – 2026-10-10",
+    adUrl,
+    format: "TEXT",
+    firstShown: "2026-02-05",
+    lastShown: "2026-10-10",
+    headline: "Dental implants in Vilnius",
+    description: "Implants from 990 €",
+    libraryTargetingSummary: "{\"hasTargeting\":true}",
+  };
+  /** What googleItemToRow makes of a copy-less known creative. */
+  const known: GoogleAdRow = {
+    type: "google",
+    id: "g:AR1:CR1",
+    title: "UAB Dentaplanas — dentaplanas.lt",
+    url: "dentaplanas.lt",
+    desc: "Search / text · Shown 2026-02-05 → 2026-10-13",
+    img: null,
+    creativeCopy: null,
+    shownSummary: "2026-02-05 – 2026-10-13",
+    adUrl,
+    format: "TEXT",
+    firstShown: "2026-02-05",
+    lastShown: "2026-10-13",
+    lastShownLabel: "Oct 13, 2026",
+    previewUrl: null,
+    headline: null,
+    description: null,
+    libraryTargetingSummary: null,
+    lifecycleOnly: true,
+  };
+
+  it("moves the shown dates forward without blanking the stored copy", () => {
+    const [merged] = mergeGoogleAdRows([stored], [known]);
+    expect(merged).toMatchObject({
+      title: "Dental implants in Vilnius",
+      headline: "Dental implants in Vilnius",
+      creativeCopy: "Implants from 990 €",
+      img: stored.img,
+      libraryTargetingSummary: stored.libraryTargetingSummary,
+      lastShown: "2026-10-13",
+      lastShownLabel: "Oct 13, 2026",
+      shownSummary: "2026-02-05 – 2026-10-13",
+      desc: "Search / text · Implants from 990 € · Shown 2026-02-05 → 2026-10-13",
+    });
+    expect(merged).not.toHaveProperty("lifecycleOnly");
+  });
+
+  it("stores a known creative with no prior row as-is, without the flag", () => {
+    const [merged] = mergeGoogleAdRows([], [known]);
+    expect(merged.lastShown).toBe("2026-10-13");
+    expect(merged).not.toHaveProperty("lifecycleOnly");
+  });
+});
+
+describe("mergeGoogleAdRows with known video creatives", () => {
+  const adUrl = "https://adstransparency.google.com/advertiser/AR1/creative/CR9";
+  const storedVideo: GoogleAdRow = {
+    type: "youtube",
+    id: "yt:ffh1coj6anc",
+    title: "Smile again",
+    channel: "Dentaplanas",
+    views: "Updated 2026-10-10",
+    thumbnail: "https://i.ytimg.com/vi/ffh1Coj6anc/hqdefault.jpg",
+    youtubeVideoId: "ffh1Coj6anc",
+    adUrl,
+    format: "VIDEO",
+    firstShown: "2026-09-01",
+    lastShown: "2026-10-10",
+  };
+  /** Re-delivered from memory: no YouTube id, so it keys as `yt:AR1:CR9`. */
+  const knownVideo: GoogleAdRow = {
+    type: "youtube",
+    id: "yt:AR1:CR9",
+    title: "Dentaplanas — dentaplanas.lt",
+    channel: "Dentaplanas",
+    views: "Updated 2026-10-13",
+    thumbnail: "",
+    youtubeVideoId: null,
+    adUrl,
+    format: "VIDEO",
+    firstShown: "2026-09-01",
+    lastShown: "2026-10-13",
+    lifecycleOnly: true,
+  };
+
+  it("updates the stored video found by creative instead of adding a duplicate", () => {
+    const merged = mergeGoogleAdRows([storedVideo], [knownVideo]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ youtubeVideoId: "ffh1Coj6anc", title: "Smile again", lastShown: "2026-10-13" });
+  });
+
+  it("skips a known video it can't match rather than storing it under a second key", () => {
+    expect(mergeGoogleAdRows([], [knownVideo])).toHaveLength(0);
+  });
+});
