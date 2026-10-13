@@ -6,6 +6,7 @@ import {
   ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM,
 } from "@/lib/ad-library/constants";
 import { advertiserNameMatchesBrand, brandMatchCandidates, domainBrandLabel } from "@/lib/ad-library/advertiser-name-match";
+import { inferIso2FromCompetitorDomain } from "@/lib/ad-library/infer-ad-library-regions-from-domain";
 import { isMetaKeywordSearchUrl } from "@/lib/ad-library/meta-keyword-search-url";
 import {
   alignMetaLibraryUrlActiveStatus,
@@ -15,9 +16,77 @@ import {
 } from "@/lib/ad-library/canonical-library-url";
 
 const DEFAULT_FACEBOOK_ADS_ACTOR = "curious_coder/facebook-ads-library-scraper";
+/** Same ads and raw Meta item shape as curious_coder at ~1/3 the price, but no EU (DSA) reach or targeting. */
+const JMLP_META_ADS_ACTOR = "jmlp/meta-ad-library-scraper";
+/** jmlp bills Apify compute on top of its per-ad fee, so it runs well below its 4GB default. */
+const JMLP_MEMORY_MBYTES = 1024;
 const DEFAULT_MAX_ADS = ADS_LIBRARY_DEFAULT_ITEMS_PER_PLATFORM;
 const ACTOR_MINIMUM_COUNT = 10;
 const MAX_ACTOR_TIMEOUT_SECS = 300;
+
+/** EU + EEA markets, where Meta publishes the per-ad reach and targeting that only curious_coder returns. */
+const EU_EEA_COUNTRIES = new Set([
+  "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV",
+  "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "IS", "LI", "NO",
+]);
+
+export type MetaAdsActor = "curious" | "jmlp";
+
+/**
+ * `META_ACTOR_MODE`: `by-market` (default) sends EU/EEA scrapes to curious_coder, which keeps EU reach and
+ * targeting, and every other market to jmlp; `curious` or `jmlp` forces one actor everywhere.
+ * Scheduled scrapes search all countries, so for `ALL` the competitor's domain decides: an EU/EEA country
+ * domain or `.eu` stays on curious_coder, anything else (`.com`, `.uk`, …) goes to jmlp.
+ */
+export function resolveMetaAdsActor(
+  country: string,
+  brandDomain?: string | null,
+  mode = process.env.META_ACTOR_MODE,
+): MetaAdsActor {
+  const m = mode?.trim().toLowerCase();
+  if (m === "curious" || m === "jmlp") return m;
+  const c = country.trim().toUpperCase();
+  if (c !== "ALL") return EU_EEA_COUNTRIES.has(c) ? "curious" : "jmlp";
+  const domainCountry = inferIso2FromCompetitorDomain(brandDomain);
+  const euDomain =
+    (domainCountry != null && EU_EEA_COUNTRIES.has(domainCountry)) ||
+    /\.eu\.?$/i.test(brandDomain?.trim().split("/")[0] ?? "");
+  return euDomain ? "curious" : "jmlp";
+}
+
+/**
+ * jmlp reads its filters from each Ad Library URL. Page URLs are built with `country=ALL` (curious_coder
+ * narrows them with `scrapePageAds.countryCode`), so the scrape country is written into those; keyword
+ * and pasted search URLs keep their own filters, dates included.
+ */
+export function buildJmlpMetaAdsInput(params: {
+  urls: string[];
+  maxAds: number;
+  activeStatus: "ACTIVE" | "ALL";
+  country: string;
+}): Record<string, unknown> {
+  return {
+    adLibraryUrls: params.urls.map((url) => withPageUrlCountry(url, params.country)),
+    maxAds: params.maxAds,
+    activeStatus: params.activeStatus === "ALL" ? "all" : "active",
+    country: params.country,
+    proxyConfiguration: {
+      useApifyProxy: true,
+      apifyProxyGroups: ["RESIDENTIAL"],
+    },
+  };
+}
+
+function withPageUrlCountry(url: string, country: string): string {
+  try {
+    const u = new URL(url);
+    if (!u.searchParams.has("view_all_page_id")) return url;
+    u.searchParams.set("country", country);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
 
 function isFacebookPageUrl(value: string): boolean {
   return /(?:facebook|fb)\.com\//i.test(value);
@@ -147,6 +216,7 @@ export async function scrapeFacebookAds(
     metaWorkspaceBrandInitialScrape?: boolean;
   }
 ): Promise<MetaAdCard[]> {
+  /** Overrides the curious_coder-format actor only; jmlp takes a different input. */
   const actorId = process.env.APIFY_FACEBOOK_ADS_ACTOR?.trim() || DEFAULT_FACEBOOK_ADS_ACTOR;
   const workspaceBrandInitial = params.metaWorkspaceBrandInitialScrape === true;
   const activeStatus = params.activeStatus === "ALL" ? "ALL" : "ACTIVE";
@@ -176,39 +246,41 @@ export async function scrapeFacebookAds(
 
   const keywordSearch = !target.pageId && urls.some(({ url }) => isMetaKeywordSearchUrl(url));
   /** Keyword searches return many advertisers that get filtered out, so ask for more. */
-  const actorCount = Math.max(
-    ACTOR_MINIMUM_COUNT,
-    keywordSearch ? Math.min(maxAds * 3, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM) : maxAds,
-  );
+  const wantedCount = keywordSearch ? Math.min(maxAds * 3, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM) : maxAds;
 
   const cc = country === "ALL" ? "ALL" : country;
-  const period = resolveScrapePageAdsPeriod({
-    metaWorkspaceBrandInitialScrape: workspaceBrandInitial,
-    scrapePageAdsPeriod: params.scrapePageAdsPeriod,
-  });
+  const actor = resolveMetaAdsActor(cc, params.brandDomain);
+  // curious_coder refuses counts below 10, so we request 10 and slice the UI
+  // result back down to the cheaper user-facing cap.
+  const actorCount = actor === "jmlp" ? wantedCount : Math.max(ACTOR_MINIMUM_COUNT, wantedCount);
+  const input =
+    actor === "jmlp"
+      ? buildJmlpMetaAdsInput({ urls: urls.map(({ url }) => url), maxAds: actorCount, activeStatus, country: cc })
+      : {
+          urls,
+          count: actorCount,
+          scrapeAdDetails: true,
+          "scrapePageAds.countryCode": cc,
+          "scrapePageAds.activeStatus": activeStatus === "ALL" ? "all" : "active",
+          "scrapePageAds.sortBy": params.scrapePageAdsSortBy ?? "impressions_desc",
+          "scrapePageAds.period": resolveScrapePageAdsPeriod({
+            metaWorkspaceBrandInitialScrape: workspaceBrandInitial,
+            scrapePageAdsPeriod: params.scrapePageAdsPeriod,
+          }),
+          proxyConfiguration: {
+            useApifyProxy: true,
+            apifyProxyGroups: ["RESIDENTIAL"],
+          },
+        };
   const { items } = await runApifyActor<unknown>(
-    actorId,
-    {
-      urls,
-      // This actor refuses values below 10, so we request 10 and slice the UI
-      // result back down to the cheaper user-facing cap.
-      count: actorCount,
-      scrapeAdDetails: true,
-      "scrapePageAds.countryCode": cc,
-      "scrapePageAds.activeStatus": activeStatus === "ALL" ? "all" : "active",
-      "scrapePageAds.sortBy": params.scrapePageAdsSortBy ?? "impressions_desc",
-      "scrapePageAds.period": period,
-      proxyConfiguration: {
-        useApifyProxy: true,
-        apifyProxyGroups: ["RESIDENTIAL"],
-      },
-    },
+    actor === "jmlp" ? JMLP_META_ADS_ACTOR : actorId,
+    input,
     {
       waitSecs: MAX_ACTOR_TIMEOUT_SECS,
       timeoutSecs: MAX_ACTOR_TIMEOUT_SECS,
       // Apify requires maxItems > 0 for pay-per-event / store actors that charge per row
       maxItems: actorCount,
-      memoryMbytes: readFacebookAdsMemoryMbytes(urls.length),
+      memoryMbytes: actor === "jmlp" ? JMLP_MEMORY_MBYTES : readFacebookAdsMemoryMbytes(urls.length),
     }
   );
 

@@ -17,6 +17,7 @@ import {
   countLibraryAdsForPlatform,
   persistScrapedAdsFromAdsLibraryResponse,
 } from "@/lib/ad-library/persist-scraped-ads";
+import { guardMetaSweepCap } from "@/lib/ad-library/meta-sweep-guard";
 import { refreshPlatformTrackingAfterScrape } from "@/lib/ad-library/persist-platform-tracking";
 import {
   applyMetaSweepToMergedCards,
@@ -73,6 +74,17 @@ export async function finalizeAdsLibraryAfterFreshScrape(
   const metaIncomingForSweep =
     platformsNeedingScrape.has("meta") && out.meta.error == null ? [...(out.meta.ads ?? [])] : null;
 
+  /** Meta cap to reconcile with — null when the sweep looks cut short, so nothing gets marked killed. */
+  const metaSweepCap =
+    metaIncomingForSweep && resolvedCompetitorId
+      ? await guardMetaSweepCap(supabase, {
+          competitorId: resolvedCompetitorId,
+          incomingCount: metaIncomingForSweep.length,
+          sweepCap: sweepCaps?.meta ?? null,
+        })
+      : (sweepCaps?.meta ?? null);
+  const guardedSweepCaps: SweepCaps = { ...sweepCaps, meta: metaSweepCap ?? undefined };
+
   if (userId && adsCacheDomain && platformsNeedingScrape.size > 0) {
     const cacheableToMerge = [...platformsNeedingScrape].filter(isCacheablePlatform);
     const readDomains = (
@@ -102,7 +114,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
             mergedMeta.ads = applyMetaSweepToMergedCards(
               (mergedMeta.ads ?? []) as MetaAdCard[],
               metaIncomingForSweep,
-              sweepCaps?.meta ?? null,
+              metaSweepCap,
             );
           }
           out.meta = mergedMeta;
@@ -165,7 +177,7 @@ export async function finalizeAdsLibraryAfterFreshScrape(
           (p): p is AdsLibraryPlatform => p === "meta" || p === "google" || p === "tiktok",
         ),
         out: outForReconcile,
-        sweepCaps,
+        sweepCaps: guardedSweepCaps,
       });
     } catch (reconcileErr) {
       console.error("[finalizeAdsLibrary] reconcileLifecycleAfterSweep", reconcileErr);

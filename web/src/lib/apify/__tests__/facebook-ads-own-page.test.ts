@@ -78,9 +78,10 @@ describe("scrapeFacebookAds keeps only the competitor's own ads", () => {
     runApifyActor.mockResolvedValue({ items: MIXED });
     const ads = await scrapeFacebookAds({ ids: {}, brandName: "Rothys", maxAds: 10 });
     expect(ads.map((a) => a.pageName)).toEqual(["Rothy's", "Rothy's"]);
-    const input = runApifyActor.mock.calls[0]![1] as { urls: { url: string }[]; count: number };
-    expect(isMetaKeywordSearchUrl(input.urls[0]!.url)).toBe(true);
-    expect(input.count).toBeGreaterThanOrEqual(30);
+    // No country given → US → jmlp.
+    const input = runApifyActor.mock.calls[0]![1] as { adLibraryUrls: string[]; maxAds: number };
+    expect(isMetaKeywordSearchUrl(input.adLibraryUrls[0]!)).toBe(true);
+    expect(input.maxAds).toBeGreaterThanOrEqual(30);
   });
 
   it("does not filter a plain Facebook page link (the actor already scopes it)", async () => {

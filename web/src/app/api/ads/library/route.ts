@@ -521,9 +521,12 @@ export async function POST(req: Request): Promise<NextResponse> {
       platformsRequested,
       platformsNeedingScrape,
       out,
-      /** Only Meta ACTIVE sweeps prove absence; ALL-status scrapes include ended ads. */
+      /**
+       * Only undated Meta ACTIVE sweeps prove absence: ALL-status scrapes include ended ads, and a date
+       * window drops live ads that didn't deliver inside it.
+       */
       sweepCaps: {
-        ...(metaStatus === "ACTIVE" ? { meta: metaMaxAds } : {}),
+        ...(metaStatus === "ACTIVE" && !metaStartDate && !metaEndDate ? { meta: metaMaxAds } : {}),
         google: googleResultsLimit,
         tiktok: tiktokMaxAds,
       },
