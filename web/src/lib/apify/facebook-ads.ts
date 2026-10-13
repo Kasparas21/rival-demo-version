@@ -25,20 +25,20 @@ function isFacebookPageUrl(value: string): boolean {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Apify `scrapePageAds.period` — workspace page URL already scopes active ads; never send ISO date ranges. */
+/** Every value the actor's `scrapePageAds.period` accepts; anything else fails the run as invalid input. */
+const SCRAPE_PAGE_ADS_PERIODS = new Set(["", "last24h", "last7d", "last14d", "last30d"]);
+
+/**
+ * Apify `scrapePageAds.period`. The actor rejects ISO date ranges, so start/end dates never become a
+ * period — keyword searches carry them in the Ad Library URL (`start_date[min]` / `[max]`) instead.
+ */
 export function resolveScrapePageAdsPeriod(params: {
   metaWorkspaceBrandInitialScrape?: boolean;
   scrapePageAdsPeriod?: string;
-  metaStartDate?: string;
-  metaEndDate?: string;
 }): string {
   if (params.metaWorkspaceBrandInitialScrape === true) return "";
-  const explicit = params.scrapePageAdsPeriod?.trim();
-  if (explicit != null && explicit !== "") return explicit;
-  const sd = params.metaStartDate?.trim();
-  const ed = params.metaEndDate?.trim();
-  if (sd && ed && ISO_DATE.test(sd) && ISO_DATE.test(ed)) return `${sd}_${ed}`;
-  return "";
+  const explicit = params.scrapePageAdsPeriod?.trim() ?? "";
+  return SCRAPE_PAGE_ADS_PERIODS.has(explicit) ? explicit : "";
 }
 
 function buildKeywordSearchUrl(
@@ -139,7 +139,7 @@ export async function scrapeFacebookAds(
     countryCode?: string;
     metaStartDate?: string;
     metaEndDate?: string;
-    /** Actor `scrapePageAds.period` — derived from dates when set, else empty. */
+    /** Actor `scrapePageAds.period` preset (`last24h`, `last7d`, …); empty when omitted or not a preset. */
     scrapePageAdsPeriod?: string;
     /** Actor `scrapePageAds.sortBy` */
     scrapePageAdsSortBy?: string;
@@ -185,8 +185,6 @@ export async function scrapeFacebookAds(
   const period = resolveScrapePageAdsPeriod({
     metaWorkspaceBrandInitialScrape: workspaceBrandInitial,
     scrapePageAdsPeriod: params.scrapePageAdsPeriod,
-    metaStartDate: sd,
-    metaEndDate: ed,
   });
   const { items } = await runApifyActor<unknown>(
     actorId,
