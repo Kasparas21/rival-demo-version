@@ -106,10 +106,18 @@ export function buildParallelScrapeScalars(
         });
         break;
       case "tiktok":
-        /** Full sweep for TikTok too — lifecycle comes from flight dates in each returned row. */
         scalars.tiktokMaxAds = isInactiveProbe ? lim.tiktokMaxAds : FULL_SWEEP_ADS_PER_PLATFORM;
-        scalars.tiktokStartDate = "";
-        scalars.tiktokEndDate = "";
+        /**
+         * Lifecycle comes from flight dates in each returned row, not from absence, so a refresh only needs
+         * ads shown since the last scrape. Never scraped on TikTok: empty = the past year.
+         */
+        if (lastScrapeByPlatform.get("tiktok")) {
+          scalars.tiktokStartDate = dateWindow.startYmd;
+          scalars.tiktokEndDate = dateWindow.endYmd;
+        } else {
+          scalars.tiktokStartDate = "";
+          scalars.tiktokEndDate = "";
+        }
         break;
       case "pinterest":
         scalars.pinterestMaxResults = lim.pinterestMaxResults;

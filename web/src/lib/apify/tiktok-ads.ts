@@ -16,6 +16,60 @@ import {
  * (data_xplorer/tiktok-ads-scraper) still sends `2` and has returned zero rows for every advertiser since mid-2026.
  */
 const TIKTOK_ADS_ACTOR = process.env.APIFY_TIKTOK_ADS_ACTOR?.trim() || "s-r/tiktok-ads-library";
+
+/**
+ * About 1/7 the price per ad of s-r, and far more complete: for OLAPLEX, INC. it returned the advertiser's
+ * 91 live ads where s-r (like TikTok's own search page) surfaced 4 ended ones.
+ */
+const DAMI_TIKTOK_ACTOR = "dami_studio/tiktok-ads-scraper";
+/** Its default; the start fee is charged per GB of run memory. */
+const DAMI_MEMORY_MBYTES = 256;
+/** Stop inside the 300s cron budget instead of being cut off. */
+const DAMI_TIMEOUT_SECS = 240;
+/** Countries the library covers (EU/EEA, UK, CH); anything else searches all of them. */
+const DAMI_TIKTOK_COUNTRIES = new Set([
+  "AT", "BE", "BG", "CH", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB", "GR", "HR", "HU", "IE",
+  "IS", "IT", "LI", "LT", "LU", "LV", "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
+]);
+
+export type TikTokAdsActor = "dami" | "sr";
+
+/** `TIKTOK_ACTOR_MODE`: dami_studio by default; `sr` switches back to s-r/tiktok-ads-library. */
+export function resolveTikTokAdsActor(mode = process.env.TIKTOK_ACTOR_MODE): TikTokAdsActor {
+  return mode?.trim().toLowerCase() === "sr" ? "sr" : "dami";
+}
+
+export function buildDamiTikTokInput(params: {
+  target: { search: string; advBizId?: string };
+  region: string;
+  startDate: string;
+  endDate: string;
+  limit: number;
+}): Record<string, unknown> {
+  const country = params.region.toUpperCase();
+  const known = DAMI_TIKTOK_COUNTRIES.has(country);
+  const { target } = params;
+  return {
+    ...(target.advBizId
+      ? {
+          /** A library link carries the business id; dami_studio reads its filters back out. */
+          adLibraryUrls: [
+            `https://library.tiktok.com/ads?region=${known ? country : "all"}&adv_name=${encodeURIComponent(target.search)}&adv_biz_ids=${target.advBizId}&query_type=1`,
+          ],
+        }
+      : { advertiserNames: [target.search] }),
+    ...(known ? { countries: [country] } : {}),
+    adStatus: "all",
+    dateFrom: params.startDate,
+    dateTo: params.endDate,
+    maxItems: params.limit,
+    /**
+     * Off: with details on it returned 11 of OLAPLEX's 91 live ads, slower, and half its rows came back
+     * without advertiser or media. Details only add landing page, CTA and audience size.
+     */
+    includeAdDetails: false,
+  };
+}
 /** Regions the actor accepts; anything else (e.g. a non-EU market) searches all regions. */
 const SR_TIKTOK_REGIONS = new Set([
   "all", "NL", "DE", "BE", "FR", "GB", "ES", "IT", "AT", "CH", "PL", "SE", "DK", "NO", "FI", "PT", "IE",
@@ -61,16 +115,72 @@ export async function scrapeTikTokAdsLibrary(params: {
   const target = resolveTikTokSearchTarget(params);
 
   const regionIn = normalizeTikTokAdsRegion(params.region) || DEFAULT_TIKTOK_ADS_REGION;
-  const region = SR_TIKTOK_REGIONS.has(regionIn) ? regionIn : "all";
   /** Name searches also return resellers that get filtered out, so ask for a few more. */
   const limit = target.advBizId ? wanted : Math.min(wanted * 2, ADS_LIBRARY_MAX_ITEMS_PER_PLATFORM);
 
+  const rows =
+    resolveTikTokAdsActor() === "dami"
+      ? await scrapeWithDami({ target, region: regionIn, startDate, endDate, limit })
+      : await scrapeWithSr({
+          target,
+          region: SR_TIKTOK_REGIONS.has(regionIn) ? regionIn : "all",
+          startDate,
+          endDate,
+          limit,
+        });
+
+  const candidates = brandMatchCandidates(
+    target.search,
+    effectiveCompetitorBrandLabel(params.brandName, params.brandDomain),
+    domainBrandLabel(params.brandDomain),
+  );
+
+  return rows
+    .filter((row) => isCompetitorTikTokAd(row, target.advBizId, candidates))
+    .slice(0, wanted)
+    .map((row, i) =>
+      tiktokApifyItemToCard(row.item, i, {
+        brandName: params.brandName,
+        brandDomain: params.brandDomain,
+      }),
+    )
+    .filter((c): c is TikTokAdCard => c !== null);
+}
+
+type ScrapedTikTokRow = {
+  advertiserName: string;
+  advertiserId?: string;
+  /** The field names `tiktokApifyItemToCard` reads (data_xplorer shape). */
+  item: Record<string, unknown>;
+};
+
+/**
+ * A business-id search still returns other advertisers — TikTok's own site mixes them in too (for OLAPLEX, INC.
+ * s-r returned 6 TS COSMETIC MARKETING CO. ads) — so id searches are filtered like name searches.
+ */
+export function isCompetitorTikTokAd(
+  row: ScrapedTikTokRow,
+  advBizId: string | undefined,
+  candidates: readonly string[],
+): boolean {
+  if (advBizId && row.advertiserId) return row.advertiserId === advBizId;
+  return advertiserNameMatchesBrand(row.advertiserName, candidates);
+}
+
+async function scrapeWithSr(params: {
+  target: { search: string; advBizId?: string };
+  region: string;
+  startDate: string;
+  endDate: string;
+  limit: number;
+}): Promise<ScrapedTikTokRow[]> {
+  const { target, limit } = params;
   const input: Record<string, unknown> = {
-    region,
+    region: params.region,
     query_type: "1",
     ad_status: "all",
-    start_date: startDate,
-    end_date: endDate,
+    start_date: params.startDate,
+    end_date: params.endDate,
     limit,
   };
   if (target.advBizId) input.adv_biz_ids = target.advBizId;
@@ -82,25 +192,33 @@ export async function scrapeTikTokAdsLibrary(params: {
     maxItems: limit,
     memoryMbytes: readApifyActorMemoryMbytes("TIKTOK_ADS_MEMORY_MBYTES", APIFY_HEAVY_ACTOR_MEMORY_MBYTES),
   });
+  return items.map((row) => ({
+    advertiserName: stringField(row, "advertiser_name"),
+    item: srTikTokRowToLegacyItem(row),
+  }));
+}
 
-  const candidates = brandMatchCandidates(
-    target.search,
-    effectiveCompetitorBrandLabel(params.brandName, params.brandDomain),
-    domainBrandLabel(params.brandDomain),
-  );
-  const rows = target.advBizId
-    ? items
-    : items.filter((row) => advertiserNameMatchesBrand(stringField(row, "advertiser_name"), candidates));
-
-  return rows
-    .slice(0, wanted)
-    .map((row, i) =>
-      tiktokApifyItemToCard(srTikTokRowToLegacyItem(row), i, {
-        brandName: params.brandName,
-        brandDomain: params.brandDomain,
-      }),
-    )
-    .filter((c): c is TikTokAdCard => c !== null);
+async function scrapeWithDami(params: {
+  target: { search: string; advBizId?: string };
+  region: string;
+  startDate: string;
+  endDate: string;
+  limit: number;
+}): Promise<ScrapedTikTokRow[]> {
+  const { items } = await runApifyActor<Record<string, unknown>>(DAMI_TIKTOK_ACTOR, buildDamiTikTokInput(params), {
+    waitSecs: DAMI_TIMEOUT_SECS + 30,
+    timeoutSecs: DAMI_TIMEOUT_SECS,
+    maxItems: params.limit,
+    memoryMbytes: DAMI_MEMORY_MBYTES,
+  });
+  /** Diagnostic rows ("no results", resolver misses) are never ads. */
+  return items
+    .filter((row) => row?.recordType === "ad")
+    .map((row) => ({
+      advertiserName: stringField(row, "advertiserName"),
+      ...(stringField(row, "advertiserId") ? { advertiserId: stringField(row, "advertiserId") } : {}),
+      item: damiTikTokRowToLegacyItem(row),
+    }));
 }
 
 /** Saved library URL / numeric id → exact advertiser; otherwise search by name. */
@@ -132,6 +250,23 @@ function resolveTikTokSearchTarget(params: {
 function stringField(row: Record<string, unknown>, key: string): string {
   const v = row[key];
   return typeof v === "string" ? v : "";
+}
+
+/** dami_studio rows → the field names `tiktokApifyItemToCard` already reads, as for s-r. */
+export function damiTikTokRowToLegacyItem(row: Record<string, unknown>): Record<string, unknown> {
+  const ymd = (key: string) => stringField(row, key).slice(0, 10);
+  const imageUrls = Array.isArray(row.imageUrls) ? row.imageUrls : [];
+  const imageUrl = stringField(row, "thumbnailUrl") || (typeof imageUrls[0] === "string" ? imageUrls[0] : "");
+  return {
+    "AD ID": stringField(row, "adId"),
+    "Advertiser Name": stringField(row, "advertiserName"),
+    text: stringField(row, "caption"),
+    "Ad Dates": [{ FirstShown: ymd("firstShownDate") }, { LastShown: ymd("lastShownDate") }],
+    "Ad Audience": { raw: stringField(row, "targetAudienceSize") },
+    "Ad Detail URL": stringField(row, "adDetailUrl"),
+    ...(stringField(row, "videoUrl") ? { videoUrl: stringField(row, "videoUrl") } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+  };
 }
 
 /** s-r rows → the field names `tiktokApifyItemToCard` already reads (data_xplorer shape). */

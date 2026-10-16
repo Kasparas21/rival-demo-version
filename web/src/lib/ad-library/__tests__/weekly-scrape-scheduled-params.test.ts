@@ -4,7 +4,7 @@ import { FULL_SWEEP_ADS_PER_PLATFORM, INACTIVE_PROBE_ADS_PER_PLATFORM } from "@/
 import { buildParallelScrapeScalars } from "@/lib/ad-library/weekly-scrape-scheduled-params";
 
 describe("buildParallelScrapeScalars", () => {
-  it("uses full ACTIVE sweeps (no date window) for meta/tiktok so absence can mark kills", () => {
+  it("uses a full ACTIVE sweep (no date window) for meta so absence can mark kills", () => {
     const nowMs = Date.parse("2026-07-03T12:00:00.000Z");
     const nowStamp = new Date(nowMs).toISOString();
 
@@ -34,11 +34,27 @@ describe("buildParallelScrapeScalars", () => {
     expect(scalars.tiktokMaxAds).toBe(FULL_SWEEP_ADS_PER_PLATFORM);
     expect(scalars.metaStartDate).toBe("");
     expect(scalars.metaEndDate).toBe("");
-    expect(scalars.tiktokStartDate).toBe("");
-    expect(scalars.tiktokEndDate).toBe("");
+    /** TikTok and Google lifecycles come from each ad's own shown dates, so refreshes only need the window. */
+    expect(scalars.tiktokStartDate).toBe("2026-06-30");
+    expect(scalars.tiktokEndDate).toBe("2026-07-03");
     /** Google lifecycle is per-creative last-shown, so a refresh only needs creatives shown since the last scrape. */
     expect(scalars.googleStartDate).toBe("2026-07-01");
     expect(scalars.googleEndDate).toBe("2026-07-03");
+  });
+
+  it("keeps a full TikTok sweep for a competitor never scraped on TikTok", () => {
+    const nowMs = Date.parse("2026-07-03T12:00:00.000Z");
+    const scalars = buildParallelScrapeScalars(
+      ["tiktok"],
+      new Map([["tiktok", "PRIMARY"]] as const),
+      new Map(),
+      "2026-06-01T00:00:00.000Z",
+      new Date(nowMs).toISOString(),
+      nowMs,
+    );
+    expect(scalars.tiktokMaxAds).toBe(FULL_SWEEP_ADS_PER_PLATFORM);
+    expect(scalars.tiktokStartDate).toBe("");
+    expect(scalars.tiktokEndDate).toBe("");
   });
 
   it("keeps a full Google sweep for a competitor never scraped on Google", () => {
