@@ -226,10 +226,66 @@
     0 0 0 3px #4a7fa5,
     0 14px 26px -14px rgb(47 111 214 / 60%);
 }
+.adNumber {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 92%);
+  font-size: 12px;
+  font-weight: 800;
+  color: #111827;
+}
+.ad[data-picked] .adNumber {
+  background: #4a7fa5;
+  color: #fff;
+}
+/* Their ad and your remake, side by side */
+.compare {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.compareCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.compareCol small {
+  font-size: 12px;
+  font-weight: 700;
+  color: #6b7785;
+}
+.before {
+  position: relative;
+  display: block;
+  width: 92px;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border-radius: 12px;
+  opacity: 0.85;
+  box-shadow: 0 10px 20px -14px rgb(31 38 135 / 55%);
+}
+.before img,
+.result img {
+  object-fit: cover;
+}
+.compareArrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #111827;
+}
 .result {
   position: relative;
   display: block;
-  width: 190px;
+  width: 168px;
   aspect-ratio: 4 / 5;
   overflow: hidden;
   border-radius: 18px;
@@ -238,7 +294,7 @@
     0 18px 34px -14px rgb(160 200 0 / 75%);
 }
 .result img {
-  filter: hue-rotate(150deg) saturate(1.15);
+  filter: hue-rotate(195deg) saturate(1.3);
 }
 .result em {
   position: absolute;
@@ -246,14 +302,30 @@
   top: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: #030304;
+  gap: 4px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: #fff;
+  font-size: 10.5px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #16191d;
+}
+.resultCta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  height: 40px;
+  background: linear-gradient(90deg, #365c75, #7bb8e6);
   font-size: 12px;
   font-style: normal;
-  font-weight: 700;
-  color: #d1fe17;
+  font-weight: 800;
+  color: #fff;
 }
 .input {
   display: flex;
@@ -345,6 +417,9 @@
     font-size: 14px;
   }
   .result {
-    width: 160px;
+    width: 140px;
+  }
+  .before {
+    width: 76px;
   }
 }

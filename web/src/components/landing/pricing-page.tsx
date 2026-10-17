@@ -17,7 +17,8 @@ import { SiteFooter } from "./editorial-landing";
 import { MotionPage, Reveal } from "./editorial-motion";
 import { PricingPlans } from "./editorial-pricing";
 import { GetStarted, RatingPill, Reviews } from "./landing-closing";
-import { Outperform, Proactive } from "./landing-proactive";
+import { RivalCompare } from "./landing-compare";
+import { Proactive } from "./landing-proactive";
 import { AdsStats, ChannelCards, HowItWorksLoop } from "./landing-showcase";
 import { ScrollStory } from "./landing-story";
 import { PromoOffer } from "./promo-offer";
@@ -108,7 +109,7 @@ export function PricingPage({ copy, locale }: { copy: LandingCopy; locale: Local
         <Proactive copy={show} ctaHref="/signup" />
         <HowItWorksLoop copy={show} />
         <ChannelCards copy={show} />
-        <Outperform copy={show} />
+        <RivalCompare copy={show} ctaHref="/signup" />
         <ScrollStory copy={show} />
 
         <GetStarted copy={show} href="/signup" />

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRef, type CSSProperties } from "react";
-import { ArrowUp, Star } from "lucide-react";
+import { ArrowRight, ArrowUp, Star } from "lucide-react";
 import { ClaudeLogo } from "@/components/landing/ai-assistant-logos";
 import type { LandingShowcaseCopy } from "@/lib/i18n/landing/showcase";
 import { HiggsfieldMark } from "./brand-marks";
@@ -93,6 +93,7 @@ export function WinnerInOneMinute({ copy, ctaHref = "/pricing" }: { copy: Landin
                 {ADS.map((src, index) => (
                   <span key={src} className={styles.ad} data-picked={index === PICKED || undefined}>
                     <Image src={src} alt="" fill sizes="120px" />
+                    <b className={styles.adNumber}>{index + 1}</b>
                     <em>{c.days[index]}</em>
                   </span>
                 ))}
@@ -106,12 +107,28 @@ export function WinnerInOneMinute({ copy, ctaHref = "/pricing" }: { copy: Landin
               {c.making}
             </span>
             <div className={styles.ai} style={step(6)}>
-              <span className={styles.result}>
-                <Image src={ADS[PICKED]} alt="" fill sizes="200px" />
-                <em>
-                  <Star size={12} fill="currentColor" strokeWidth={0} />
-                  {c.yours}
-                </em>
+              <span className={styles.compare}>
+                <span className={styles.compareCol}>
+                  <span className={styles.before}>
+                    <Image src={ADS[PICKED]} alt="" fill sizes="120px" />
+                  </span>
+                  <small>{c.theirs}</small>
+                </span>
+                <span className={styles.compareArrow} aria-hidden="true">
+                  <HiggsfieldMark size={26} />
+                  <ArrowRight size={16} strokeWidth={2.8} />
+                </span>
+                <span className={styles.compareCol}>
+                  <span className={styles.result}>
+                    <Image src={ADS[PICKED]} alt="" fill sizes="200px" />
+                    <em>
+                      <Star size={11} fill="currentColor" strokeWidth={0} />
+                      {c.logo}
+                    </em>
+                    <i className={styles.resultCta}>{c.cta}</i>
+                  </span>
+                  <small>{c.yours}</small>
+                </span>
               </span>
               <p>{c.done}</p>
             </div>

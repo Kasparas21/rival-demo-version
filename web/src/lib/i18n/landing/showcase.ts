@@ -20,8 +20,8 @@ export type LandingShowcaseCopy = {
       add: { title: string; placeholder: string };
       track: { title: string; rows: [Row, Row, Row, Row] };
       slack: { title: string; channel: string; time: string; app: string; message: string; source: string };
-      chat: { title: string; question: string; answer: string };
-      copy: { title: string; theirs: string; yours: string; tool: string };
+      chat: { title: string; connected: string; question: string; answer: string };
+      copy: { title: string; prompt: string; theirs: string; live: string; yours: string; logo: string; tool: string };
     };
   };
   stats: Array<{ top: string; value: string; label: string }>;
@@ -57,20 +57,26 @@ export type LandingShowcaseCopy = {
       pick: string;
       making: string;
       done: string;
+      theirs: string;
       yours: string;
+      logo: string;
+      cta: string;
       placeholder: string;
     };
   };
-  outperform: {
-    text: string;
-    stat: string;
-    statLabel: string;
-    chartTitle: string;
-    chips: [string, string];
-    tiles: Array<{ label: string; value: string }>;
-    marker: string;
-    note: string;
-    months: string[];
+  compare: {
+    title: string;
+    titleMuted: string;
+    without: string;
+    with: string;
+    vs: string;
+    badge: string;
+    cta: string;
+    live: string;
+    channel: string;
+    minute: string;
+    /** Paired rows: the same topic, how it goes without Rival and with it. */
+    rows: Array<{ topic: string; without: string; with: string }>;
   };
   story: {
     words: string[];
@@ -156,11 +162,20 @@ export const showcaseEn: LandingShowcaseCopy = {
         source: "Landing page · yourrival.com/pricing",
       },
       chat: {
-        title: "4. Ask Rival questions in Slack",
+        title: "4. Ask about them in Claude or ChatGPT",
+        connected: "Rival connected",
         question: "What did my competitors launch this week?",
         answer: "6 new TikTok ads. 4 of them lead with a 30% off hook. Want the list?",
       },
-      copy: { title: "5. Remake their best ad", theirs: "Their ad", yours: "Your version", tool: "Rival + Higgsfield in Claude" },
+      copy: {
+        title: "5. Remake their best ad",
+        prompt: "Make this with my logo and colours",
+        theirs: "Their ad",
+        live: "41 days live",
+        yours: "Your version",
+        logo: "Your logo",
+        tool: "Rival + Higgsfield in Claude",
+      },
     },
   },
   stats: [
@@ -219,29 +234,36 @@ export const showcaseEn: LandingShowcaseCopy = {
       connected: ["Rival MCP", "Higgsfield MCP"],
       ask: "Show me my competitors' best ads this month.",
       found: "Rival found 3 winners",
-      reply: "Here are their longest-running ads:",
+      reply: "These three have run the longest, so they're most likely working:",
       days: ["41 days", "33 days", "28 days"],
-      pick: "Love the second one. Make the same photo with my branding.",
+      pick: "Use #2. Make the same photo for my brand.",
       making: "Higgsfield is creating your image",
-      done: "Here it is with your logo and colours.",
-      yours: "Your brand",
+      done: "Same pose, light and layout, now with your logo and colours.",
+      theirs: "Theirs",
+      yours: "Yours",
+      logo: "Your logo",
+      cta: "Shop now",
       placeholder: "Ask Claude anything…",
     },
   },
-  outperform: {
-    text: "Rival checks every ad, post, email and page change your competitors make, every day. That's more than one analyst can keep up with.",
-    stat: "24/7",
-    statLabel: "Watching your rivals",
-    chartTitle: "Winning ads launched",
-    chips: ["Month", "All brands"],
-    tiles: [
-      { label: "Winners launched", value: "14" },
-      { label: "Hours saved a week", value: "9h" },
-      { label: "New ideas tested", value: "23" },
+  compare: {
+    title: "Without Rival",
+    titleMuted: "vs. with Rival",
+    without: "Without Rival",
+    with: "With Rival",
+    vs: "vs",
+    badge: "All Access",
+    cta: "Get All Access",
+    live: "Live 24/7",
+    channel: "#competitors",
+    minute: "1 min",
+    rows: [
+      { topic: "Their ads", without: "Six ad libraries, one tab at a time", with: "Every platform, one feed" },
+      { topic: "Chat with the data", without: "Answers buried in screenshots", with: "Ask Claude or ChatGPT" },
+      { topic: "Their landing pages", without: "Changes go unnoticed", with: "Every change caught" },
+      { topic: "Their sales", without: "You find out after it ends", with: "Same-day Slack alert" },
+      { topic: "Their best ad", without: "Brief a designer, wait days", with: "Remade for your brand" },
     ],
-    marker: "Started using Rival",
-    note: "Example account",
-    months: ["Mar", "Apr", "May", "Jun", "Jul", "Aug"],
   },
   story: {
     words: ["Competitor", "spying", "on", "autopilot"],

@@ -41,7 +41,8 @@ import { MotionPage, Reveal } from "./editorial-motion";
 import { useTilt } from "./editorial-tilt";
 import { GlowCta } from "./glow-cta";
 import { GetStarted, Reviews } from "./landing-closing";
-import { Outperform, Proactive } from "./landing-proactive";
+import { RivalCompare } from "./landing-compare";
+import { Proactive } from "./landing-proactive";
 import { AdsStats, HowItWorksLoop } from "./landing-showcase";
 import { ScrollStory } from "./landing-story";
 import { WinnerInOneMinute } from "./landing-winner";
@@ -225,7 +226,7 @@ export function FeatureDetail({ copy, locale, featureId }: { copy: LandingCopy; 
       <WinnerInOneMinute copy={show} />
       <AdsStats copy={show} />
       <Proactive copy={show} />
-      <Outperform copy={show} />
+      <RivalCompare copy={show} />
       <ScrollStory copy={show} />
       <MoreTiles title={show.detail.moreFeatures} items={others} />
       <Reviews copy={copy.reviews} title={show.reviews.title} />
@@ -480,7 +481,7 @@ export function AdspyDetail({ copy, locale, slug }: { copy: LandingCopy; locale:
       <WinnerInOneMinute copy={show} />
       <HowItWorksLoop copy={show} />
       <Proactive copy={show} />
-      <Outperform copy={show} />
+      <RivalCompare copy={show} />
       <ScrollStory copy={show} />
       <MoreTiles title={show.detail.morePlatforms} items={others} />
       <Reviews copy={copy.reviews} title={show.reviews.title} />
@@ -536,7 +537,7 @@ export function FeaturesOverview({ copy, locale }: { copy: LandingCopy; locale: 
       <HowItWorksLoop copy={show} />
       <WinnerInOneMinute copy={show} />
       <Proactive copy={show} />
-      <Outperform copy={show} />
+      <RivalCompare copy={show} />
       <Reviews copy={copy.reviews} title={show.reviews.title} />
       <GetStarted copy={show} href="/pricing" />
     </DetailFrame>

@@ -21,6 +21,7 @@ import {
   SnapchatLogo,
   TikTokLogo,
 } from "@/components/platform-logos";
+import { ChatGptLogo, ClaudeLogo } from "@/components/landing/ai-assistant-logos";
 import { RivalLogoImg } from "@/components/rival-logo";
 import { HiggsfieldMark, SlackLogo } from "./brand-marks";
 import type { LandingShowcaseCopy } from "@/lib/i18n/landing/showcase";
@@ -217,17 +218,17 @@ export function HowItWorksLoop({ copy }: { copy: LandingShowcaseCopy }) {
       </div>
 
       <div ref={loopRef} className={styles.loop}>
-        <svg className={styles.arrows} viewBox="0 0 1100 900" preserveAspectRatio="none" aria-hidden="true">
+        <svg className={styles.arrows} viewBox="0 0 1100 980" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <marker id="how-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
               <path d="M1 1 L8 5 L1 9" fill="none" stroke="#365c75" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
             </marker>
           </defs>
-          <path d="M735 120 C 850 128, 918 170, 938 232" markerEnd="url(#how-arrow)" />
-          <path d="M1012 520 C 1052 575, 1018 622, 952 652" markerEnd="url(#how-arrow)" />
-          <path d="M612 812 C 580 850, 520 850, 488 816" markerEnd="url(#how-arrow)" />
-          <path d="M126 712 C 58 664, 50 578, 116 528" markerEnd="url(#how-arrow)" />
-          <path d="M172 236 C 186 162, 268 122, 362 118" markerEnd="url(#how-arrow)" />
+          <path d="M735 120 C 850 128, 918 165, 938 222" markerEnd="url(#how-arrow)" />
+          <path d="M1012 565 C 1052 610, 1022 645, 960 662" markerEnd="url(#how-arrow)" />
+          <path d="M612 860 C 580 900, 520 900, 488 864" markerEnd="url(#how-arrow)" />
+          <path d="M120 765 C 54 720, 48 655, 112 615" markerEnd="url(#how-arrow)" />
+          <path d="M172 226 C 186 160, 268 122, 362 118" markerEnd="url(#how-arrow)" />
         </svg>
 
         <div className={styles.orb} aria-hidden="true">
@@ -308,12 +309,17 @@ export function HowItWorksLoop({ copy }: { copy: LandingShowcaseCopy }) {
         <div className={styles.step} data-step="4">
           <p className={styles.stepTitle}>{s.chat.title}</p>
           <div className={styles.stepCard}>
+            <span className={styles.slackTop}>
+              <ClaudeLogo className={styles.slackLogo} />
+              <ChatGptLogo className={styles.slackLogo} />
+              <em>{s.chat.connected}</em>
+            </span>
             <span className={styles.bubble} data-me>
               {s.chat.question}
             </span>
             <span className={styles.bubbleRow}>
               <span className={styles.rivalAvatar}>
-                <Image src="/icon.svg" alt="" width={36} height={36} />
+                <ClaudeLogo className={styles.slackLogo} />
               </span>
               <span className={styles.bubble}>{s.chat.answer}</span>
             </span>
@@ -323,17 +329,31 @@ export function HowItWorksLoop({ copy }: { copy: LandingShowcaseCopy }) {
         <div className={styles.step} data-step="5">
           <p className={styles.stepTitle}>{s.copy.title}</p>
           <div className={styles.stepCard}>
+            <span className={styles.copyPrompt}>
+              <ClaudeLogo className={styles.copyPromptLogo} />
+              {s.copy.prompt}
+            </span>
             <span className={styles.copyRow}>
-              <span className={styles.copyAd}>
-                <Image src="/landing/ads/nike-sale.webp" alt="" fill sizes="140px" />
-                <em>{s.copy.theirs}</em>
+              <span className={styles.copyCol}>
+                <span className={styles.copyAd}>
+                  <Image src="/landing/ads/nike-sale.webp" alt="" fill sizes="140px" />
+                  <MetaLogo className={styles.copyPlatform} />
+                </span>
+                <b>{s.copy.theirs}</b>
+                <small>{s.copy.live}</small>
               </span>
               <span className={styles.copyArrow}>
-                <ArrowRight size={18} strokeWidth={2.6} />
+                <HiggsfieldMark size={22} />
+                <ArrowRight className={styles.copyArrowIcon} size={14} strokeWidth={2.8} />
               </span>
-              <span className={styles.copyAd} data-yours>
-                <Image src="/landing/ads/nike-sale.webp" alt="" fill sizes="140px" />
-                <em>{s.copy.yours}</em>
+              <span className={styles.copyCol}>
+                <span className={styles.copyAd} data-yours>
+                  <Image src="/landing/ads/nike-sale.webp" alt="" fill sizes="140px" />
+                  <em className={styles.copyLogo}>{s.copy.logo}</em>
+                  <i className={styles.copyCta} />
+                </span>
+                <b>{s.copy.yours}</b>
+                <small>&nbsp;</small>
               </span>
             </span>
             <span className={styles.copyTool}>

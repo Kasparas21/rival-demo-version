@@ -17,7 +17,8 @@ import { HeroWords, MotionPage, Reveal } from "./editorial-motion";
 import { GlowCta } from "./glow-cta";
 import { HeroAdCarousel } from "./hero-ad-carousel";
 import { GetStarted, RatingPill, Reviews } from "./landing-closing";
-import { Outperform, Proactive } from "./landing-proactive";
+import { RivalCompare } from "./landing-compare";
+import { Proactive } from "./landing-proactive";
 import { AdsStats, ChannelCards, HowItWorksLoop } from "./landing-showcase";
 import { ScrollStory } from "./landing-story";
 import { WinnerInOneMinute } from "./landing-winner";
@@ -99,7 +100,7 @@ export function SiteFooter({ copy }: { copy: LandingCopy }) {
 
 /**
  * The home page: hero, then the big visual sections on the same sky background (channels, how
- * it works, the ad wall, proactive alerts, the outperform chart and the pinned scroll story),
+ * it works, the ad wall, proactive alerts, without vs with Rival and the pinned scroll story),
  * reviews and a last call to action. Pricing lives on /pricing.
  */
 export function EditorialLanding({
@@ -160,7 +161,7 @@ export function EditorialLanding({
         <WinnerInOneMinute copy={show} />
         <AdsStats copy={show} />
         <Proactive copy={show} />
-        <Outperform copy={show} />
+        <RivalCompare copy={show} />
         <ScrollStory copy={show} />
 
         <Reviews copy={copy.reviews} title={show.reviews.title} />
