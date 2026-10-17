@@ -1,0 +1,473 @@
+/* Header: no bar of its own, just floating glass pills like Holo's. At the top the logo, the
+   menu and "Try now" sit together in the middle; once you scroll the menu fades out and the
+   logo and button glide to the edges (transforms only). Menus open as a dark icon panel. */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  color: #111827;
+  font-family: var(--font-inter), Arial, sans-serif;
+  pointer-events: none;
+}
+.header[data-fixed] {
+  position: fixed;
+  left: 0;
+  right: 0;
+}
+.header *,
+.header *::before,
+.header *::after {
+  box-sizing: border-box;
+}
+.header :is(a, button) {
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.logo,
+.nav :is(a, button),
+.menuToggle {
+  color: inherit;
+}
+.nav button,
+.menuToggle {
+  cursor: pointer;
+  font: inherit;
+}
+.header :is(a, button):focus-visible {
+  outline: 2px solid #4a7fa5;
+  outline-offset: 5px;
+}
+.inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 1200px;
+  height: 88px;
+  margin-inline: auto;
+  padding-inline: 64px;
+}
+.inner > * {
+  pointer-events: auto;
+}
+.logo,
+.nav {
+  border: 1px solid rgb(255 255 255 / 78%);
+  background: rgb(255 255 255 / 62%);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 10px 30px -14px rgb(31 38 135 / 28%);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+}
+.logo {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 52px;
+  padding: 0 20px;
+  border-radius: 999px;
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.logo img {
+  width: auto;
+  height: 30px;
+  filter: brightness(0);
+}
+.nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  height: 52px;
+  padding: 0 26px;
+  border-radius: 999px;
+  transition:
+    opacity 360ms ease,
+    transform 520ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+.nav > a,
+.group > button {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 160ms;
+}
+.nav > a:hover,
+.group > button:hover,
+.group > button[aria-expanded="true"] {
+  color: #3e6c8d;
+}
+.group > button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 0;
+  border: 0;
+  background: none;
+}
+.group > button > svg {
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.group > button[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.login {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.menuToggle {
+  display: none;
+}
+.header[data-compact] .logo {
+  transform: translateX(calc(-1 * var(--logo-shift, 0px)));
+}
+.header[data-compact] .actions {
+  transform: translateX(var(--cta-shift, 0px));
+}
+.header[data-compact] .nav {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.96);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 300ms ease,
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 420ms;
+}
+
+/* The icon menu ---------------------------------------------------------------------------- */
+.mega {
+  position: absolute;
+  top: calc(100% + 16px);
+  left: 50%;
+  width: max-content;
+  max-width: calc(100vw - 48px);
+  padding: 22px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 34px;
+  background: radial-gradient(120% 90% at 50% 0%, #1d232d 0%, #0d1015 72%);
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 25%),
+    0 44px 90px -34px rgb(10 14 20 / 70%);
+  color: #fff;
+  translate: -50% 0;
+  transform: translateY(-8px) scale(0.98);
+  transform-origin: 50% 0;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s 260ms;
+}
+.mega::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -20px;
+  height: 20px;
+}
+.mega[data-open] {
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 220ms ease,
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+.megaGrid {
+  --cols: 5;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 150px));
+  gap: 6px;
+}
+.mega[data-count="6"] .megaGrid {
+  --cols: 6;
+}
+.mega[data-count="3"] .megaGrid {
+  --cols: 3;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 8px 14px;
+  border-radius: 24px;
+  color: #fff;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: background-color 250ms ease;
+}
+.mega[data-open] .tile {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 320ms ease calc(var(--i) * 28ms),
+    transform 480ms cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--i) * 28ms),
+    background-color 250ms ease;
+}
+.tile:is(:hover, :focus-visible) {
+  background: rgb(255 255 255 / 6%);
+}
+.tileIcon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border: 3px solid var(--c);
+  border-radius: 26px;
+  color: var(--c);
+  transition: transform 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tileIcon::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  box-shadow:
+    0 0 26px -2px var(--c),
+    inset 0 0 18px -6px var(--c);
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.tileIcon[data-size="lg"] {
+  width: 104px;
+  height: 104px;
+  border-radius: 32px;
+}
+.tileGlyph {
+  width: 38px;
+  height: 38px;
+  transition: transform 480ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tileIcon[data-size="lg"] .tileGlyph {
+  width: 46px;
+  height: 46px;
+}
+.tileIcon[data-size="sm"] {
+  width: 30px;
+  height: 30px;
+  border-width: 2px;
+  border-radius: 10px;
+}
+.tileIcon[data-size="sm"] .tileGlyph {
+  width: 16px;
+  height: 16px;
+}
+.tile:is(:hover, :focus-visible) .tileIcon {
+  transform: translateY(-4px) rotate(-4deg) scale(1.05);
+}
+.tile:is(:hover, :focus-visible) .tileIcon::after {
+  opacity: 0.9;
+}
+.tile:is(:hover, :focus-visible) .tileGlyph {
+  transform: rotate(8deg) scale(1.08);
+}
+.tileLabel {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-align: center;
+}
+.megaMore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+  margin: 12px auto 2px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 7%);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  transition: background-color 200ms ease;
+}
+.megaMore:hover {
+  background: rgb(255 255 255 / 13%);
+}
+.megaMore svg {
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.megaMore:hover svg {
+  transform: translateX(3px);
+}
+
+/* Smaller screens -------------------------------------------------------------------------- */
+@media (min-width: 1450px) {
+  .inner {
+    max-width: 1320px;
+  }
+}
+@media (max-width: 1100px) {
+  .inner {
+    gap: 19px;
+    padding-inline: 38px;
+  }
+  .nav {
+    gap: 16px;
+  }
+}
+@media (max-width: 800px) {
+  .inner {
+    justify-content: space-between;
+    height: 82px;
+    padding-inline: 27px;
+  }
+  .logo {
+    height: 48px;
+    padding: 0 16px;
+  }
+  .logo img {
+    height: 26px;
+  }
+  .nav {
+    display: none;
+  }
+  .navOpen {
+    position: absolute;
+    top: 74px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    height: auto;
+    max-height: calc(100dvh - 94px);
+    margin: 0;
+    padding: 14px;
+    overflow-y: auto;
+    border: 1px solid #dce7f2;
+    border-radius: 22px;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 20px 40px -10px rgb(49 87 131 / 25%);
+  }
+  .navOpen > a,
+  .group > button {
+    padding: 13px 10px;
+    font-size: 15px;
+  }
+  .group > button {
+    justify-content: space-between;
+    width: 100%;
+  }
+  .navOpen .mega {
+    position: static;
+    display: none;
+    width: auto;
+    max-width: none;
+    margin: 2px 0 10px;
+    padding: 12px;
+    border-radius: 22px;
+    translate: none;
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+  }
+  .navOpen .mega[data-open] {
+    display: block;
+  }
+  .navOpen .mega::before {
+    display: none;
+  }
+  .navOpen .megaGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px;
+  }
+  .navOpen .tile {
+    gap: 8px;
+    padding: 10px 4px;
+  }
+  .navOpen .tileIcon {
+    width: 58px;
+    height: 58px;
+    border-width: 2.5px;
+    border-radius: 18px;
+  }
+  .navOpen .tileGlyph {
+    width: 26px;
+    height: 26px;
+  }
+  .navOpen .tileLabel {
+    font-size: 12.5px;
+  }
+  .actions {
+    gap: 18px;
+  }
+  .menuToggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgb(255 255 255 / 78%);
+    border-radius: 50%;
+    background: rgb(255 255 255 / 62%);
+    box-shadow:
+      inset 0 1px 0 #fff,
+      0 10px 30px -14px rgb(31 38 135 / 28%);
+    transition:
+      opacity 300ms ease,
+      transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .header[data-compact] .menuToggle {
+    opacity: 0;
+    transform: scale(0.8);
+    pointer-events: none;
+  }
+}
+@media (max-width: 600px) {
+  .inner {
+    height: 79px;
+    padding-inline: 24px;
+  }
+  .logo {
+    height: 46px;
+    padding: 0 14px;
+  }
+  .logo img {
+    height: 24px;
+  }
+  .actions {
+    gap: 13px;
+  }
+  .login {
+    display: none;
+  }
+  .navOpen .login {
+    display: block;
+  }
+}
+@media (max-width: 370px) {
+  .inner {
+    padding-inline: 19px;
+  }
+  .actions {
+    gap: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .header *,
+  .header *::before,
+  .header *::after {
+    transition: none !important;
+  }
+}

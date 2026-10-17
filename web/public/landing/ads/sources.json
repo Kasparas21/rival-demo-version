@@ -1,0 +1,65 @@
+{
+  "description": "Captured examples of public brand ads, not a live ad feed or customer endorsements. Creatives are preserved and only resized/compressed. Platform attribution uses Meta Ad Library or the project's raw frozen scrape records.",
+  "preparedOn": "2026-10-06",
+  "ads": [
+    {
+      "asset": "nike-sale.webp",
+      "brand": "Nike",
+      "platform": "Meta",
+      "source": "https://www.facebook.com/ads/library/?id=4568245190055960",
+      "libraryId": "4568245190055960",
+      "captureDate": "2026-10-06",
+      "note": "Creative variant displayed after opening summary ID 2065892690962384. Facebook and Instagram placement icons were visible. Downloaded original creative from the rendered ad."
+    },
+    {
+      "asset": "nike-sneaker.webp",
+      "brand": "Nike",
+      "platform": "Meta",
+      "source": "https://www.facebook.com/ads/library/?id=1495531918341011",
+      "libraryId": "1495531918341011",
+      "captureDate": "2026-10-06",
+      "note": "Downloaded image variant shown in the official Nike advertiser's public library listing."
+    },
+    {
+      "asset": "gymshark-training.webp",
+      "brand": "Gymshark",
+      "platform": "Meta",
+      "source": "https://www.facebook.com/ads/library/?id=1201251448800306",
+      "libraryId": "1201251448800306",
+      "captureDate": "2026-10-06",
+      "note": "Gymshark with Victor Sanchez. Downloaded original creative from the official advertiser's public listing."
+    },
+    {
+      "asset": "gymshark-essentials.webp",
+      "brand": "Gymshark",
+      "platform": "Meta",
+      "source": "https://www.facebook.com/ads/library/?id=1917103678879810",
+      "libraryId": "1917103678879810",
+      "captureDate": "2026-10-06",
+      "note": "Gymshark with Victor Sanchez. Downloaded original creative from the official advertiser's public listing."
+    },
+    {
+      "asset": "adidas-outlet.webp",
+      "brand": "adidas",
+      "platform": "Google",
+      "archiveRecord": "3f000293-b8de-4e88-831b-d9a8b8fd9499",
+      "sourceRecord": "src/lib/demo/frozen/frozen-adidas-com-ads.ts",
+      "originalAsset": "/demo/frozen/adidas.com/ads/3f000293-b8de-4e88-831b-d9a8b8fd9499.png",
+      "note": "Existing raw scraped Google image ad, visually verified. Original external ad URL is not retained in the archive. No inferred performance or current activity labels."
+    },
+    {
+      "asset": "adidas-adilette.webp",
+      "brand": "adidas",
+      "platform": "Meta",
+      "archiveRecord": "a1f8a56d-2085-4d04-929c-46f4388e3b3a",
+      "sourceRecord": "src/lib/demo/frozen/frozen-adidas-com-ads.ts",
+      "originalAsset": "/demo/frozen/adidas.com/ads/a1f8a56d-2085-4d04-929c-46f4388e3b3a.jpg",
+      "note": "Existing raw scraped Meta image ad, visually verified. Original external ad URL is not retained in the archive."
+    }
+  ],
+  "logos": {
+    "nike-logo.webp": "Profile image from https://www.facebook.com/nike",
+    "gymshark-logo.webp": "Profile image from https://www.facebook.com/Gymshark",
+    "adidas-logo.webp": "Existing public/demo/frozen/adidas.com/logo.jpg"
+  }
+}

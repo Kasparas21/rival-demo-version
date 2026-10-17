@@ -1,3 +1,4 @@
+import type { LandingShowcaseCopy } from "@/lib/i18n/landing/showcase";
 import type { Locale } from "@/lib/i18n/locale";
 
 export type FaqItem = { q: string; a: string };
@@ -136,6 +137,8 @@ export type LandingCopy = {
   header: {
     navItems: LandingNavItem[];
     startTrial: string;
+    /** The header's single call to action. */
+    tryNow: string;
     homeAria: string;
     primaryNavAria: string;
     localeSwitcherAria: string;
@@ -253,6 +256,8 @@ export type LandingCopy = {
     stackTools: StackToolCopy[];
     platforms: readonly string[];
   };
+  /** Sections below the hero and the /pricing page (see showcase.ts). */
+  showcase: LandingShowcaseCopy;
   reviews: {
     title: string;
     subtitle: string;
@@ -264,6 +269,10 @@ export type LandingCopy = {
       count: string;
       label: string;
       trustpilotAria: string;
+      /** Rating out of five, e.g. "5/5"; drives how many stars are filled. */
+      score: string;
+      /** Template: `{score}` and `{count}` are shown in bold. */
+      scoreLine: string;
     };
     items: LandingReview[];
   };
@@ -279,6 +288,29 @@ export type LandingCopy = {
     planIncludes: string;
     footnote: string;
     trialCta: string;
+    /** Small line under the plan's trial button. */
+    trialNote: string;
+    /** The single plan card; numbers come from billing/one-plan.ts. */
+    onePlan: {
+      badge: string;
+      name: string;
+      summary: string;
+      /** Band across the top of the card. Template: `{percent}` */
+      banner: string;
+      /** Green pill under the price. Template: `{amount}` */
+      save: string;
+      /** The "… and much more | View all" bar at the bottom of the card. */
+      more: string;
+      viewAll: string;
+      /** Template: `{percent}` */
+      discountBadge: string;
+      includesTitle: string;
+      includes: string[];
+      /** Heading over the add-on prices, e.g. "Need more? Add anytime". */
+      addOnsTitle: string;
+      /** Shown after each add-on price, e.g. "+$5 per extra competitor". */
+      addOns: { competitor: string; brand: string; landingPage: string };
+    };
     popularBadge: string;
     popularClaim: string;
     perMonth: string;

@@ -1,4 +1,5 @@
 import type { LandingCopy } from "@/lib/i18n/landing/types";
+import { ONE_PLAN } from "@/lib/billing/one-plan";
 import { LANDING_PRICE_CURRENCY } from "@/lib/billing/plan-price-format";
 import { ORGANIZATION_SAME_AS, SCHEMA_BRAND_NAME, SITE_URL } from "@/lib/seo/site";
 
@@ -29,66 +30,23 @@ export function webSiteJsonLd() {
 }
 
 export function softwareApplicationJsonLd(copy: LandingCopy) {
-  const enterprise = copy.pricing.plans.find((p) => p.customPricing || p.slug === "enterprise");
-  const starter = copy.pricing.plans.find((p) => p.slug === "starter");
-  const pro = copy.pricing.plans.find((p) => p.slug === "pro");
-  const agency = copy.pricing.plans.find((p) => p.slug === "agency");
+  const price = String(ONE_PLAN.monthlyUsd);
 
   const offers = [
-    enterprise
-      ? {
-          "@type": "Offer",
-          name: copy.jsonLd.enterpriseName,
-          description: enterprise.priceHeadline ?? "Contact for custom enterprise pricing",
-          url: enterprise.contactHref ?? "mailto:hello@spy-rival.com",
-        }
-      : null,
-    starter && starter.monthlyUsd != null
-      ? {
-          "@type": "Offer",
-          name: copy.jsonLd.starterName,
-          price: String(starter.monthlyUsd),
-          priceCurrency: LANDING_PRICE_CURRENCY,
-          priceSpecification: {
-            "@type": "UnitPriceSpecification",
-            price: String(starter.monthlyUsd),
-            priceCurrency: LANDING_PRICE_CURRENCY,
-            billingIncrement: 1,
-            unitText: "MONTH",
-          },
-        }
-      : null,
-    pro && pro.monthlyUsd != null
-      ? {
-          "@type": "Offer",
-          name: copy.jsonLd.proName,
-          price: String(pro.monthlyUsd),
-          priceCurrency: LANDING_PRICE_CURRENCY,
-          priceSpecification: {
-            "@type": "UnitPriceSpecification",
-            price: String(pro.monthlyUsd),
-            priceCurrency: LANDING_PRICE_CURRENCY,
-            billingIncrement: 1,
-            unitText: "MONTH",
-          },
-        }
-      : null,
-    agency && agency.monthlyUsd != null
-      ? {
-          "@type": "Offer",
-          name: copy.jsonLd.agencyName,
-          price: String(agency.monthlyUsd),
-          priceCurrency: LANDING_PRICE_CURRENCY,
-          priceSpecification: {
-            "@type": "UnitPriceSpecification",
-            price: String(agency.monthlyUsd),
-            priceCurrency: LANDING_PRICE_CURRENCY,
-            billingIncrement: 1,
-            unitText: "MONTH",
-          },
-        }
-      : null,
-  ].filter(Boolean);
+    {
+      "@type": "Offer",
+      name: copy.pricing.onePlan.badge,
+      price,
+      priceCurrency: LANDING_PRICE_CURRENCY,
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price,
+        priceCurrency: LANDING_PRICE_CURRENCY,
+        billingIncrement: 1,
+        unitText: "MONTH",
+      },
+    },
+  ];
 
   return {
     "@context": "https://schema.org",

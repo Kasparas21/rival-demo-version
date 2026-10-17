@@ -17,6 +17,7 @@ export const landingCopyDe: LandingCopy = {
       { label: "FAQ", sectionId: "faq" },
     ],
     startTrial: "KOSTENLOS TESTEN",
+    tryNow: "Jetzt testen",
     homeAria: "Rival Startseite",
     primaryNavAria: "Hauptnavigation",
     localeSwitcherAria: "Sprache wählen",
@@ -27,9 +28,9 @@ export const landingCopyDe: LandingCopy = {
       highlight: "auf autopilot",
       line2: "",
       subline:
-        "Wettbewerber-Ads, Organic und E-Mail in einer Plattform - mit Ad-Bibliotheken, Strategy Maps und Alerts bei Änderungen.",
+        "Verfolgen Sie Wettbewerber-Ads auf jeder Plattform, dazu Landingpages und E-Mails. Jede Änderung kommt direkt in Slack, und mit Claude und Higgsfield werden die besten Ads der Konkurrenz zu Ihren eigenen.",
       sublineMobile:
-        "Wettbewerber-Ads, Organic und E-Mail - Ad-Bibliotheken, Strategy Maps und Alerts in einer Plattform.",
+        "Alle Wettbewerber-Ads, Landingpages und E-Mails. Änderungen in Slack, Gewinner-Ads mit Higgsfield neu erstellt.",
     },
     trialCta: "KOSTENLOS TESTEN",
     platformTrialAria: "Test mit {platform} starten",
@@ -275,7 +276,9 @@ export const landingCopyDe: LandingCopy = {
     socialProof: {
       count: "400+",
       label: "Marketer lieben Rival",
-      trustpilotAria: "5 von 5 Sternen auf Trustpilot",
+      trustpilotAria: "4,5 von 5 Sternen auf Trustpilot",
+      score: "4,5/5",
+      scoreLine: "{score} von {count} Marketern",
     },
     items: landingCopyEn.reviews.items.map((item, i) => {
       const deTexts = [
@@ -288,22 +291,44 @@ export const landingCopyDe: LandingCopy = {
     }),
   },
   pricing: {
-    titleLine1: "für",
-    titleHighlight: "Unternehmen",
-    riskFreeBadge: "Individuell",
-    guaranteeTitle: "Maßgeschneiderte Pläne für Teams im großen Maßstab",
+    titleLine1: "ein Plan,",
+    titleHighlight: "jeder Kanal",
+    riskFreeBadge: "7 Tage kostenlos",
+    guaranteeTitle: "Jeder Plan, jeder Kanal",
     guaranteeBody:
-      "Sagen Sie uns, wie viele Marken, Wettbewerber und Märkte Sie abdecken — wir erstellen ein Angebot, das zu Ihrem Workflow und Ihren Sicherheitsanforderungen passt.",
+      "Starte mit 5 Wettbewerbern auf allen 6 Werbeplattformen, Organic Social und E-Mail. Beobachte mehr, wann immer du willst – du zahlst nur, was du hinzufügst.",
     billingAria: "Abrechnungszeitraum",
     monthly: "Monatlich",
     yearly: "Jährlich",
     planIncludes: "Enthalten:",
-    footnote: "Wir antworten in der Regel innerhalb eines Werktags",
-    trialCta: "KOSTENLOS TESTEN",
-    popularBadge: "Enterprise",
-    popularClaim: "Für Growth-Teams & Agenturen",
+    footnote: "Mit einem Klick kündbar. Ohne Rückfragen.",
+    trialCta: "All Access holen",
+    trialNote: "Jederzeit kündbar · ohne Rückhalteanrufe",
+    onePlan: {
+      badge: "All Access",
+      name: "Alles, was Rival kann",
+      summary: "Jede Funktion und jeder Kanal, für bis zu 5 Wettbewerber.",
+      discountBadge: "{percent} % Rabatt",
+      includesTitle: "Enthalten",
+      includes: [
+        "5 Wettbewerber inklusive",
+        "Alle 6 Werbeplattformen, Organic Social und E-Mail",
+        "Autopilot-Alerts per Slack und E-Mail, rund um die Uhr",
+        "Strategy Map, Copy Vault und Timeline",
+        "Deine eigene Marke im direkten Vergleich",
+        "1 Landing Page pro Wettbewerber",
+      ],
+      addOnsTitle: "Mehr nötig? Jederzeit hinzufügen",
+      banner: "Bester Wert · {percent} % Rabatt",
+      save: "Sie sparen {amount} pro Monat",
+      more: "… und vieles mehr",
+      viewAll: "Alle ansehen",
+      addOns: { competitor: "pro weiterem Wettbewerber", brand: "pro weiterer eigener Marke", landingPage: "pro weiterer Landing Page" },
+    },
+    popularBadge: "Am beliebtesten",
+    popularClaim: "Bester Wert für wachsende Teams",
     perMonth: "/Monat",
-    perCompetitor: "{price} / Wettbewerber",
+    perCompetitor: "{price} pro Wettbewerber",
     billedMonthly: "Monatlich abgerechnet",
     billedAnnually: "Jährlich abgerechnet (${yearlyUsd}/Jahr)",
     contactModal: {
@@ -324,9 +349,8 @@ export const landingCopyDe: LandingCopy = {
         priceSubline: "Volumenbasiert · Jahresverträge möglich",
         contactCta: "Kontakt aufnehmen",
         contactHref: "mailto:hello@spy-rival.com?subject=Enterprise-Preise",
-        popular: true,
         summary:
-          "Für Organisationen mit unbegrenztem Umfang, Multi-Marken-Abdeckung, SSO und einer Bereitstellung nach Ihren Sicherheits- und Beschaffungsanforderungen.",
+          "Unbegrenzte Wettbewerber, SSO, individuelle Verträge und ein dedizierter Account Manager.",
         features: [
           "Unbegrenzte Wettbewerber & Marken-Workspaces",
           "Paid-, Organic- & E-Mail-Intelligence auf allen Plattformen",
@@ -344,7 +368,7 @@ export const landingCopyDe: LandingCopy = {
     items: [
       {
         q: "Wie funktioniert der Gratis-Test?",
-        a: "Mit Karte anmelden und 7 Tage vollen Rival-Zugang mit 1 Wettbewerber über alle 6 Plattformen. In den ersten 7 Tagen jederzeit kündigen - keine Abbuchung. Danach ab $40/Monat (Starter) bzw. $384/Jahr (20 % Rabatt) bei jährlicher Buchung. Ein-Klick-Kündigung, keine Retention-Calls.",
+        a: "Mit Karte anmelden und 7 Tage vollen Rival-Zugang mit 1 Wettbewerber über alle 6 Plattformen. In den ersten 7 Tagen jederzeit kündigen - keine Abbuchung. Danach zahlst du $19.33 im Monat (50 % Rabatt auf die üblichen $38.66) für 5 Wettbewerber auf allen Plattformen, plus $5 im Monat für jeden weiteren Wettbewerber. Ein-Klick-Kündigung, keine Retention-Calls.",
       },
       {
         q: "Worin unterscheidet sich Rival von Foreplay oder AdSpy?",
@@ -356,7 +380,7 @@ export const landingCopyDe: LandingCopy = {
       },
       {
         q: "Wie oft werden Daten aktualisiert?",
-        a: "Jeder Wettbewerber wird automatisch im Rollplan aktualisiert - Meta und Google alle paar Tage, andere etwas seltener. Pro-Nutzer können manuell refreshen. Die meisten öffnen Rival montags für die Wochenänderungen.",
+        a: "Jeder Wettbewerber wird automatisch im Rollplan aktualisiert - Meta und Google alle paar Tage, andere etwas seltener. Die meisten öffnen Rival montags für die Wochenänderungen.",
       },
       {
         q: "Kann ich auch meine eigene Marke tracken?",
@@ -422,9 +446,9 @@ export const landingCopyDe: LandingCopy = {
         title: "PRODUKT",
         links: [
           { label: "So funktioniert's", href: "/#how-it-works" },
-          { label: "Vergleich", href: "/#compare" },
-          { label: "Preise", href: "/#pricing" },
-          { label: "FAQ", href: "/#faq" },
+          { label: "Features", href: "/features" },
+          { label: "Preise", href: "/pricing" },
+          { label: "AdSpy", href: "/adspy/meta" },
           { label: "Test starten", href: "/onboarding" },
         ],
       },

@@ -1,0 +1,741 @@
+/* The pricing page's offer ticker, the bottom "Redeem" pill, and the full-screen scratch-card popup.
+   Everything that loops animates transform or opacity only, and nothing here blurs the page,
+   so the popup stays smooth over the moving background. */
+
+/* Offer ticker under the pricing page header (laid out like Holo's, in Rival's steel blue): the
+   offer and its countdown slide by. The only loop is the track's translate. */
+.ticker {
+  position: relative;
+  z-index: 1;
+  height: 54px;
+  overflow: hidden;
+  background: linear-gradient(90deg, #284b63 0%, #365c75 28%, #4a7fa5 62%, #6fa7d1 100%);
+  color: #fff;
+  font-family: var(--font-inter), Arial, sans-serif;
+}
+.ticker[data-expired] {
+  background: linear-gradient(90deg, #3a4048 0%, #2b3036 50%, #16191d 100%);
+}
+.tickerButton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.tickerButton:focus-visible,
+.extend:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -4px;
+}
+.tickerTrack {
+  display: flex;
+  width: max-content;
+  height: 100%;
+  animation: tickerSlide 40s linear infinite;
+}
+@keyframes tickerSlide {
+  to {
+    transform: translateX(-50%);
+  }
+}
+.tickerSet {
+  display: flex;
+  flex: none;
+  align-items: center;
+  height: 100%;
+}
+.tickerItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 24px;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-shadow: 0 1px 10px rgb(0 0 0 / 14%);
+}
+.tickerFlag {
+  font-size: 20px;
+  line-height: 1;
+}
+.tickerDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+}
+.tickerTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 24px;
+  padding: 6px 15px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 22%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 25%);
+  font-size: 17px;
+  white-space: nowrap;
+}
+.tickerTime b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+}
+.tickerExpired {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.digits {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+.extend {
+  flex: 0 0 auto;
+  padding: 6px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #16191d;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  animation: extendPulse 1.6s ease-in-out infinite;
+}
+@keyframes extendPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+}
+
+/* "Redeem" pill fixed to the bottom centre. It slides in after the landing's intro, hides
+   while the popup is open, and only ever animates transform or opacity. */
+.sticky {
+  position: fixed;
+  left: 50%;
+  bottom: calc(22px + env(safe-area-inset-bottom, 0px));
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  /* A fixed box at left: 50% would otherwise only get half the screen and squeeze. */
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  height: 58px;
+  padding: 0 28px 0 22px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #284b63 0%, #4a7fa5 52%, #7bb8e6 100%);
+  color: #fff;
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  translate: -50% 0;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 32%),
+    0 0 0 1px rgb(255 255 255 / 22%),
+    0 18px 44px -14px rgb(54 92 117 / 75%);
+  animation: stickyIn 900ms cubic-bezier(0.22, 1, 0.36, 1) 3.2s backwards;
+  transition:
+    transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 280ms ease,
+    box-shadow 300ms ease;
+}
+.sticky > * {
+  position: relative;
+  z-index: 1;
+}
+.sticky::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 35%), transparent);
+  transform: translateX(-130%) skewX(-20deg);
+}
+.sticky svg {
+  flex: none;
+  animation: giftWiggle 4s ease-in-out 4.8s infinite;
+}
+.sticky:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 32%),
+    0 0 0 1px rgb(255 255 255 / 30%),
+    0 24px 54px -14px rgb(54 92 117 / 85%);
+}
+.sticky:active {
+  transform: scale(0.97);
+}
+.sticky:focus-visible {
+  outline: 2px solid #4a7fa5;
+  outline-offset: 4px;
+}
+.sticky[data-hidden] {
+  opacity: 0;
+  transform: translateY(28px) scale(0.92);
+  pointer-events: none;
+}
+/* Pricing page only: a white capsule with the countdown and the "Redeem" button. It stays hidden at
+   the top and slides in once the visitor scrolls down; then the countdown opens out. */
+.capsule {
+  position: fixed;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100vw - 20px);
+  padding: 6px;
+  border-radius: 999px;
+  translate: -50% 0;
+  background: #fff;
+  box-shadow:
+    0 0 0 1px rgb(17 24 39 / 7%),
+    0 24px 54px -18px rgb(31 38 135 / 45%);
+  opacity: 0;
+  transform: translateY(46px) scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity 300ms ease,
+    transform 520ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.capsule[data-shown] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.capsuleTimer {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: #111827;
+  font-family: var(--font-inter), Arial, sans-serif;
+  white-space: nowrap;
+  transition:
+    max-width 650ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 650ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 400ms ease 120ms;
+}
+.capsuleTimer .digits {
+  font-family: var(--font-inter), Arial, sans-serif;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.capsule[data-shown] .capsuleTimer {
+  max-width: 220px;
+  padding: 0 24px 0 20px;
+  opacity: 1;
+  transition-delay: 260ms;
+}
+.stickyInCapsule {
+  position: relative;
+  left: auto;
+  bottom: auto;
+  translate: none;
+  gap: 12px;
+  height: 62px;
+  padding: 0 26px 0 30px;
+  animation: none;
+}
+.stickyInCapsule svg {
+  animation: none;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.stickyInCapsule:hover svg {
+  transform: translateX(4px);
+}
+@media (max-width: 480px) {
+  .capsuleTimer .digits {
+    font-size: 18px;
+  }
+  .capsule[data-shown] .capsuleTimer {
+    padding: 0 14px 0 12px;
+  }
+  .stickyInCapsule {
+    height: 54px;
+    padding: 0 18px 0 20px;
+    font-size: 15px;
+  }
+}
+
+@keyframes stickyIn {
+  from {
+    opacity: 0;
+    transform: translateY(46px) scale(0.9);
+  }
+}
+@keyframes giftWiggle {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0) scale(1);
+  }
+  76% {
+    transform: rotate(-14deg) scale(1.15);
+  }
+  84% {
+    transform: rotate(10deg) scale(1.15);
+  }
+  92% {
+    transform: rotate(-4deg) scale(1.05);
+  }
+}
+
+/* Popup */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 72px 20px 48px;
+  background:
+    radial-gradient(55% 45% at 50% 38%, rgb(221 241 253 / 85%), transparent 70%),
+    radial-gradient(35% 35% at 78% 72%, rgb(255 244 203 / 55%), transparent 70%),
+    radial-gradient(35% 35% at 20% 75%, rgb(221 241 253 / 55%), transparent 70%),
+    #f8f9fb;
+  color: #0b0d10;
+  font-family: var(--font-inter), Arial, sans-serif;
+  outline: none;
+}
+.close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 75%);
+  color: #5f6d7e;
+  cursor: pointer;
+  box-shadow: 0 4px 14px -6px rgb(31 38 135 / 25%);
+  transition:
+    transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 200ms ease;
+}
+.close:hover {
+  color: #111827;
+  transform: rotate(90deg) scale(1.05);
+}
+.close:focus-visible,
+.primary:focus-visible,
+.copy:focus-visible {
+  outline: 2px solid #4a7fa5;
+  outline-offset: 4px;
+}
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 960px;
+  margin: auto 0;
+  text-align: center;
+}
+.title {
+  margin: 0;
+  font-size: clamp(32px, 5.6vw, 66px);
+  font-weight: 700;
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+.float {
+  width: min(560px, 100%);
+  margin-top: clamp(28px, 5vh, 48px);
+  animation: float 6s ease-in-out infinite;
+  will-change: transform;
+}
+.float:has([data-scratching]) {
+  animation-play-state: paused;
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-0.6deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(0.6deg);
+  }
+}
+.scratchCard {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 80%),
+    0 40px 80px -36px rgb(31 38 135 / 45%);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.prize {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: radial-gradient(70% 60% at 50% 40%, #fff, #f1f7fc);
+}
+.unlocked {
+  margin: 0;
+  background: linear-gradient(90deg, #284b63, #4a7fa5 45%, #7bb8e6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: clamp(24px, 6.4vw, 42px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+.unlockedSub {
+  margin: 0;
+  color: #4a6179;
+  font-size: 16px;
+  font-weight: 600;
+}
+.scratchCard[data-revealed] .unlocked {
+  animation: unlockedPop 900ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes unlockedPop {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+}
+.cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.cover:active {
+  cursor: grabbing;
+}
+.scratchCard[data-revealed] .cover {
+  opacity: 0;
+  transform: scale(1.08);
+  pointer-events: none;
+}
+/* Keyboard users get a reveal button; it only shows, and only takes clicks, when focused. */
+.revealButton {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 22%);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+.revealButton:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  outline: 2px solid #fff;
+}
+.actionSlot {
+  display: flex;
+  justify-content: center;
+  width: min(440px, 100%);
+  min-height: 68px;
+  margin-top: clamp(26px, 4.5vh, 40px);
+}
+.primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 64px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #284b63 0%, #4a7fa5 50%, #7bb8e6 100%);
+  color: #fff;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    0 18px 40px -16px rgb(54 92 117 / 70%);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 300ms ease;
+}
+.primary::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 35%), transparent);
+  transform: translateX(-130%) skewX(-20deg);
+
+}
+@keyframes primarySweep {
+  0% {
+    transform: translateX(-130%) skewX(-20deg);
+  }
+  45%,
+  100% {
+    transform: translateX(380%) skewX(-20deg);
+  }
+}
+.primary:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    0 24px 50px -16px rgb(54 92 117 / 80%);
+  transform: translateY(-2px) scale(1.01);
+}
+.primary:active {
+  transform: scale(0.98);
+}
+.primary:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+.primary > * {
+  position: relative;
+  z-index: 1;
+}
+.formCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 30px 28px 18px;
+  border-radius: 26px;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 80%),
+    0 40px 80px -36px rgb(31 38 135 / 40%);
+}
+.formSub {
+  max-width: 24ch;
+  margin: 0;
+  color: #5b6572;
+  font-size: clamp(17px, 2.4vw, 22px);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.input {
+  width: 100%;
+  height: 60px;
+  padding: 0 22px;
+  border: 1px solid #e3e8ee;
+  border-radius: 18px;
+  background: #f5f7f9;
+  color: #111827;
+  font: inherit;
+  font-size: 18px;
+  text-align: center;
+  outline: none;
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease,
+    background-color 200ms ease;
+}
+.input:focus {
+  border-color: #9ad1ff;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgb(154 209 255 / 30%);
+}
+.input[aria-invalid="true"] {
+  border-color: #e2566b;
+  box-shadow: 0 0 0 4px rgb(226 86 107 / 15%);
+}
+.error {
+  min-height: 18px;
+  margin: 0;
+  color: #c43d52;
+  font-size: 13px;
+}
+.doneIcon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #ddf1fd, #fff4cb);
+  color: #16191d;
+  box-shadow: 0 0 24px rgb(221 241 253 / 70%);
+}
+.codeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.code {
+  padding: 12px 20px;
+  border-radius: 14px;
+  background: #ddf1fd;
+  color: #16191d;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 46px;
+  padding: 0 16px;
+  border: 1px solid #dce5ee;
+  border-radius: 14px;
+  background: #fff;
+  color: #16191d;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 200ms ease;
+}
+.copy:hover {
+  background: #f5f8fb;
+  transform: translateY(-1px);
+}
+
+/* Confetti, on <body> above the popup. */
+.confettiLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti {
+  position: absolute;
+  width: 12px;
+  height: 17px;
+  border-radius: 3px;
+  will-change: transform, opacity;
+}
+.confetti[data-shape="ribbon"] {
+  width: 8px;
+  height: 28px;
+  border-radius: 4px;
+}
+.confetti[data-shape="dot"] {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+@media (max-width: 600px) {
+  .ticker {
+    height: 44px;
+  }
+  .tickerItem {
+    padding: 0 16px;
+    font-size: 14px;
+  }
+  .tickerTime {
+    margin: 0 16px;
+    padding: 4px 11px;
+    font-size: 13.5px;
+  }
+  .tickerDot {
+    width: 5px;
+    height: 5px;
+  }
+  .tickerExpired {
+    font-size: 13px;
+  }
+  .overlay {
+    padding: 64px 16px 32px;
+  }
+  .primary {
+    height: 58px;
+    font-size: 18px;
+  }
+  .sticky {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    height: 54px;
+    padding: 0 24px 0 20px;
+    font-size: 16px;
+  }
+  .formCard {
+    padding: 24px 18px 14px;
+  }
+  .code {
+    font-size: 22px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .float,
+  .tickerTrack,
+  .primary::after,
+  .sticky,
+  .sticky::after,
+  .sticky svg,
+  .extend {
+    animation: none;
+  }
+  .cover {
+    transition: none;
+  }
+}

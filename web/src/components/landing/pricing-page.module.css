@@ -1,0 +1,284 @@
+/* /pricing: a checkout-style header, the plan with floating platform logos around the title,
+   and three reassurances under the card. */
+
+.header {
+  position: relative;
+  z-index: 5;
+  background: #fff;
+  border-bottom: 1px solid #eef1f4;
+}
+.headerInner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  max-width: 1200px;
+  height: 86px;
+  margin: 0 auto;
+  padding: 0 48px;
+}
+.logo {
+  justify-self: start;
+  display: flex;
+  align-items: center;
+}
+.logo img {
+  width: auto;
+  height: 32px;
+  filter: brightness(0);
+}
+.stepper {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.stepper li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: #4b5563;
+}
+.stepper li + li {
+  margin-left: 76px;
+}
+.stepper li + li::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -62px;
+  width: 48px;
+  height: 1.5px;
+  background: #d8dee5;
+}
+.stepper li[aria-current] {
+  color: #111827;
+}
+.stepDot {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f1f3f6;
+  font-size: 14px;
+  font-weight: 700;
+  color: #4b5563;
+}
+.stepper li[aria-current] .stepDot {
+  background: #111827;
+  color: #fff;
+}
+
+/* Hero ------------------------------------------------------------------------------------ */
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 50px 24px 26px;
+  text-align: center;
+}
+.title {
+  font-size: clamp(48px, 7.6vw, 108px);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.065em;
+  color: #111827;
+}
+.sub {
+  max-width: 600px;
+  font-size: 20px;
+  line-height: 1.5;
+  color: #5f6d7e;
+}
+.floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.floater {
+  --r: -8deg;
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 21px;
+  background: #fff;
+  rotate: var(--r);
+  box-shadow:
+    inset 0 0 0 1px rgb(17 24 39 / 5%),
+    0 20px 40px -18px rgb(31 38 135 / 42%);
+  animation: float 6s ease-in-out infinite;
+}
+.floater[data-i="0"] {
+  top: 12%;
+  left: 3%;
+}
+.floater[data-i="1"] {
+  --r: 9deg;
+  top: 78%;
+  left: 2%;
+  width: 58px;
+  height: 58px;
+  animation-delay: -2s;
+}
+.floater[data-i="2"] {
+  --r: -4deg;
+  top: 6%;
+  left: 19%;
+  width: 52px;
+  height: 52px;
+  animation-delay: -4s;
+}
+.floater[data-i="3"] {
+  --r: 10deg;
+  top: 10%;
+  right: 4%;
+  animation-delay: -1s;
+}
+.floater[data-i="4"] {
+  --r: -9deg;
+  top: 76%;
+  right: 2%;
+  width: 58px;
+  height: 58px;
+  animation-delay: -3s;
+}
+.floater[data-i="5"] {
+  --r: 6deg;
+  top: 4%;
+  right: 20%;
+  width: 52px;
+  height: 52px;
+  animation-delay: -5s;
+}
+.floaterLogo {
+  width: 46%;
+  height: 46%;
+}
+@keyframes float {
+  50% {
+    transform: translateY(-14px);
+  }
+}
+.plan {
+  padding: 26px 24px 0;
+}
+
+/* Trust row --------------------------------------------------------------------------------- */
+.trust {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 230px));
+  justify-content: center;
+  margin: 76px auto 0;
+  padding: 0 24px;
+}
+.trustItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 8px 24px;
+  text-align: center;
+}
+.trustItem + .trustItem {
+  border-left: 1px solid #d5dde6;
+}
+.trustIcon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1.8px solid #111827;
+  border-radius: 17px;
+  color: #111827;
+  transition:
+    transform 500ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 300ms ease,
+    color 300ms ease;
+}
+.trustItem:hover .trustIcon {
+  transform: translateY(-4px) rotate(-6deg);
+  background: #111827;
+  color: #fff;
+}
+.trustLabel {
+  max-width: 140px;
+  font-size: 19px;
+  line-height: 1.35;
+  color: #5f6d7e;
+}
+
+@media (max-width: 860px) {
+  .headerInner {
+    grid-template-columns: auto 1fr;
+    height: 72px;
+    padding: 0 20px;
+  }
+  .stepper {
+    justify-self: end;
+  }
+  .stepName {
+    display: none;
+  }
+  .stepper li[aria-current] .stepName {
+    display: inline;
+  }
+  .stepper li + li {
+    margin-left: 34px;
+  }
+  .stepper li + li::before {
+    left: -27px;
+    width: 20px;
+  }
+}
+@media (max-width: 700px) {
+  .logo img {
+    height: 26px;
+  }
+  .hero {
+    gap: 18px;
+    padding: 46px 20px 18px;
+  }
+  .sub {
+    font-size: 17px;
+  }
+  .floaters {
+    display: none;
+  }
+  .plan {
+    padding: 16px 16px 0;
+  }
+  .trust {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 56px;
+    padding: 0 10px;
+  }
+  .trustItem {
+    gap: 12px;
+    padding: 6px 8px;
+  }
+  .trustIcon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+  .trustLabel {
+    font-size: 15px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floater {
+    animation: none;
+  }
+}

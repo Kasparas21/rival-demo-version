@@ -1,8 +1,7 @@
 import { fetchSanity } from "@/lib/sanity/client";
 import { postsQuery } from "@/lib/sanity/queries";
 import type { BlogPostListItem } from "@/lib/sanity/types";
-import { SCHEMA_PLAN_PRICING_USD } from "@/lib/seo/schema-pricing";
-import { LANDING_PRICE_SYMBOL } from "@/lib/billing/plan-price-format";
+import { ONE_PLAN, ONE_PLAN_LIST_USD, formatUsd } from "@/lib/billing/one-plan";
 import { SEO_FOOTER_BLOG_POSTS } from "@/lib/seo/important-blog-posts";
 import { SITE_URL } from "@/lib/seo/site";
 import { truncateExcerpt } from "@/lib/sanity/format";
@@ -19,12 +18,12 @@ export async function GET() {
 
   const lines = [
     "# Rival (spy-rival.com)",
-    `> Rival is multi-platform competitor advertising intelligence: track competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat. Plans: Starter ${LANDING_PRICE_SYMBOL}` +
-      `${SCHEMA_PLAN_PRICING_USD.starter}/mo, Pro ${LANDING_PRICE_SYMBOL}${SCHEMA_PLAN_PRICING_USD.pro}/mo, Agency ${LANDING_PRICE_SYMBOL}${SCHEMA_PLAN_PRICING_USD.agency}/mo. Key features: Strategy Map, Activity Score, Autopilot 24/7, Copy Vault, competitor timelines, and landing-page archive.`,
+    `> Rival is multi-platform competitor advertising intelligence: track competitor ads across Meta, Google, TikTok, LinkedIn, Pinterest, and Snapchat. Pricing: one plan, ${formatUsd(ONE_PLAN.monthlyUsd)}/mo (${ONE_PLAN.discountPercent}% off ${formatUsd(ONE_PLAN_LIST_USD)}) for ${ONE_PLAN.includedCompetitors} competitors on every platform, ` +
+      `plus ${formatUsd(ONE_PLAN.addOnUsd.competitor)}/mo per extra competitor. Key features: Strategy Map, Activity Score, Autopilot 24/7, Copy Vault, competitor timelines, and landing-page archive.`,
     "",
     "## Key pages",
     `- Homepage: ${SITE_URL}/`,
-    `- Pricing: ${SITE_URL}/#pricing`,
+    `- Pricing: ${SITE_URL}/pricing`,
     `- Features: ${SITE_URL}/features`,
     `- Blog: ${SITE_URL}/blog`,
     `- About: ${SITE_URL}/about`,

@@ -1,12 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+import { FeatureDetail } from "@/components/landing/marketing-pages";
 import { FEATURE_DEFINITIONS } from "@/components/marketing/features-page-data";
-import { MarketingInteractivePage } from "@/components/marketing/marketing-interactive-page";
-import {
-  MarketingProductDemo,
-  type MarketingFeatureDemoId,
-} from "@/components/marketing/marketing-product-demo";
+import { EditorialShell } from "@/components/marketing/editorial-shell";
 import { FEATURE_SLUGS } from "@/lib/marketing/site-nav";
 import { getRequestLocale } from "@/lib/i18n/get-request-locale";
 import { getLandingCopy } from "@/lib/i18n/landing";
@@ -15,10 +12,6 @@ type Props = { params: Promise<{ slug: string }> };
 
 function getFeature(slug: string) {
   return FEATURE_DEFINITIONS.find((f) => f.id === slug);
-}
-
-function isFeatureDemoId(slug: string): slug is MarketingFeatureDemoId {
-  return FEATURE_SLUGS.includes(slug);
 }
 
 export function generateStaticParams() {
@@ -44,24 +37,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function FeatureDetailPage({ params }: Props) {
   const { slug } = await params;
   const feature = getFeature(slug);
-  if (!feature || !isFeatureDemoId(slug)) notFound();
+  if (!feature) notFound();
 
   const locale = await getRequestLocale();
   const copy = getLandingCopy(locale);
 
   return (
-    <MarketingInteractivePage
-      copy={copy}
-      locale={locale}
-      wallOnMount
-      breadcrumbs={[
-        { label: "Home", href: "/" },
-        { label: "Features", href: "/features" },
-        { label: feature.name },
-      ]}
-      title={feature.name.toLowerCase()}
-      description={feature.summary}
-      demo={<MarketingProductDemo mode="feature" featureId={slug} />}
-    />
+    <EditorialShell copy={copy} locale={locale}>
+      <FeatureDetail copy={copy} locale={locale} featureId={feature.id} />
+    </EditorialShell>
   );
 }

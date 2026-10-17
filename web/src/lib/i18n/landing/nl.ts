@@ -17,6 +17,7 @@ export const landingCopyNl: LandingCopy = {
       { label: "FAQ", sectionId: "faq" },
     ],
     startTrial: "GRATIS PROBEREN",
+    tryNow: "Probeer nu",
     homeAria: "Rival home",
     primaryNavAria: "Hoofdnavigatie",
     localeSwitcherAria: "Taal kiezen",
@@ -27,9 +28,9 @@ export const landingCopyNl: LandingCopy = {
       highlight: "op autopilot",
       line2: "",
       subline:
-        "Volg concurrenten op ads, organic en e-mail in één platform - met ad-bibliotheken, strategy maps en alerts bij wijzigingen.",
+        "Volg de ads van je concurrenten op elk platform, plus hun landingspagina's en e-mails. Elke wijziging komt in Slack binnen, en met Claude en Higgsfield maak je van hun beste ads je eigen.",
       sublineMobile:
-        "Concurrent ads, organic en e-mail - ad-bibliotheken, strategy maps en alerts in één platform.",
+        "Alle concurrent-ads, landingspagina's en e-mails. Wijzigingen in Slack, winnende ads opnieuw gemaakt met Higgsfield.",
     },
     trialCta: "GRATIS PROBEREN",
     platformTrialAria: "Start proef met {platform}",
@@ -275,7 +276,9 @@ export const landingCopyNl: LandingCopy = {
     socialProof: {
       count: "400+",
       label: "marketeers houden van Rival",
-      trustpilotAria: "5 van 5 sterren op Trustpilot",
+      trustpilotAria: "4,5 van 5 sterren op Trustpilot",
+      score: "4,5/5",
+      scoreLine: "{score} van {count} marketeers",
     },
     items: landingCopyEn.reviews.items.map((item, i) => {
       const nlTexts = [
@@ -288,22 +291,44 @@ export const landingCopyNl: LandingCopy = {
     }),
   },
   pricing: {
-    titleLine1: "gebouwd voor",
-    titleHighlight: "enterprises",
-    riskFreeBadge: "Op maat",
-    guaranteeTitle: "Maatwerkplannen voor teams op schaal",
+    titleLine1: "één plan,",
+    titleHighlight: "elk kanaal",
+    riskFreeBadge: "7 dagen gratis",
+    guaranteeTitle: "Elk plan, elk kanaal",
     guaranteeBody:
-      "Vertel ons hoeveel merken, concurrenten en markten je dekt — we stellen een prijs samen die past bij je workflow en beveiligingseisen.",
+      "Start met 5 concurrenten op alle 6 advertentieplatformen, organic social en e-mail. Volg er meer wanneer je wilt en betaal alleen voor wat je toevoegt.",
     billingAria: "Factureringsperiode",
     monthly: "Maandelijks",
     yearly: "Jaarlijks",
     planIncludes: "Inbegrepen:",
-    footnote: "We reageren meestal binnen één werkdag",
-    trialCta: "GRATIS PROBEREN",
-    popularBadge: "Enterprise",
-    popularClaim: "Voor growth teams & bureaus",
+    footnote: "Opzeggen met één klik, zonder gedoe.",
+    trialCta: "Neem All Access",
+    trialNote: "Altijd opzegbaar · geen belletjes om je te houden",
+    onePlan: {
+      badge: "All Access",
+      name: "Alles wat Rival doet",
+      summary: "Elke functie en elk kanaal, voor tot 5 concurrenten.",
+      discountBadge: "{percent}% korting",
+      includesTitle: "Inbegrepen",
+      includes: [
+        "5 concurrenten inbegrepen",
+        "Alle 6 advertentieplatformen, organic social en e-mail",
+        "Autopilot-alerts via Slack en e-mail, 24/7",
+        "Strategy Map, Copy Vault en Timeline",
+        "Je eigen merk naast je concurrenten",
+        "1 landingspagina per concurrent",
+      ],
+      addOnsTitle: "Meer nodig? Altijd bij te boeken",
+      banner: "Beste deal · {percent}% korting",
+      save: "Bespaar {amount} per maand",
+      more: "… en nog veel meer",
+      viewAll: "Bekijk alles",
+      addOns: { competitor: "per extra concurrent", brand: "per extra eigen merk", landingPage: "per extra landingspagina" },
+    },
+    popularBadge: "Populairst",
+    popularClaim: "Beste waarde voor groeiende teams",
     perMonth: "/maand",
-    perCompetitor: "{price} / concurrent",
+    perCompetitor: "{price} per concurrent",
     billedMonthly: "Maandelijks gefactureerd",
     billedAnnually: "Jaarlijks gefactureerd (${yearlyUsd}/jaar)",
     contactModal: {
@@ -324,9 +349,8 @@ export const landingCopyNl: LandingCopy = {
         priceSubline: "Op volume · jaarcontracten mogelijk",
         contactCta: "Neem contact op",
         contactHref: "mailto:hello@spy-rival.com?subject=Enterprise-prijzen",
-        popular: true,
         summary:
-          "Voor organisaties die onbeperkte schaal, multi-merkdekking, SSO en een uitrol op maat van je security- en inkoopproces nodig hebben.",
+          "Onbeperkte concurrenten, SSO, maatwerkcontracten en een vaste accountmanager.",
         features: [
           "Onbeperkte concurrenten & merk-workspaces",
           "Betaalde, organic & e-mail intelligence op alle platformen",
@@ -344,7 +368,7 @@ export const landingCopyNl: LandingCopy = {
     items: [
       {
         q: "Hoe werkt de gratis proef?",
-        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen - geen kosten. Daarna vanaf $40/maand (Starter) of $384/jaar (20% korting) bij jaarlijkse facturering. Opzeggen met één klik, geen retentiegesprekken.",
+        a: "Meld je aan met je kaart en krijg 7 dagen volledige Rival-toegang met 1 concurrent over alle 6 platformen. Annuleer binnen 7 dagen - geen kosten. Daarna betaal je $19.33 per maand (50% korting op de gebruikelijke $38.66) voor 5 concurrenten op alle platformen, plus $5 per maand voor elke extra concurrent. Opzeggen met één klik, geen retentiegesprekken.",
       },
       {
         q: "Hoe verschilt Rival van Foreplay of AdSpy?",
@@ -356,7 +380,7 @@ export const landingCopyNl: LandingCopy = {
       },
       {
         q: "Hoe vaak worden data bijgewerkt?",
-        a: "Elke concurrent wordt automatisch ververst - Meta en Google elke paar dagen, andere iets langzamer. Pro-gebruikers kunnen handmatig refreshen. De meesten openen Rival maandag voor de weekwijzigingen.",
+        a: "Elke concurrent wordt automatisch ververst - Meta en Google elke paar dagen, andere iets langzamer. De meesten openen Rival maandag voor de weekwijzigingen.",
       },
       {
         q: "Kan ik ook mijn eigen merk volgen?",
@@ -422,9 +446,9 @@ export const landingCopyNl: LandingCopy = {
         title: "PRODUCT",
         links: [
           { label: "Hoe het werkt", href: "/#how-it-works" },
-          { label: "Vergelijk", href: "/#compare" },
-          { label: "Prijzen", href: "/#pricing" },
-          { label: "FAQ", href: "/#faq" },
+          { label: "Features", href: "/features" },
+          { label: "Prijzen", href: "/pricing" },
+          { label: "AdSpy", href: "/adspy/meta" },
           { label: "Proef starten", href: "/onboarding" },
         ],
       },

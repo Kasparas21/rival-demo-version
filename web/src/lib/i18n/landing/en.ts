@@ -1,3 +1,4 @@
+import { showcaseEn } from "@/lib/i18n/landing/showcase";
 import type { LandingCapabilityTile, LandingCopy } from "@/lib/i18n/landing/types";
 
 const COMPARISON_SECTIONS: LandingCopy["comparison"]["sections"] = [
@@ -183,6 +184,7 @@ export const landingCopyEn: LandingCopy = {
       { label: "FAQ", sectionId: "faq" },
     ],
     startTrial: "TRY FOR FREE",
+    tryNow: "Try now",
     homeAria: "Rival home",
     primaryNavAria: "Primary",
     localeSwitcherAria: "Choose language",
@@ -193,9 +195,9 @@ export const landingCopyEn: LandingCopy = {
       highlight: "on autopilot",
       line2: "",
       subline:
-        "Track competitor ads, organic social, and email in one platform - ad libraries, strategy maps, and alerts when something changes.",
+        "Track competitor ads on every platform, plus their landing pages and emails. Get every change in Slack, and turn their best ads into yours with Claude and Higgsfield.",
       sublineMobile:
-        "Competitor ads, organic, and email - ad libraries, strategy maps, and alerts in one platform.",
+        "Every competitor ad, landing page and email. Changes in Slack, winning ads remade with Higgsfield.",
     },
     trialCta: "TRY FOR FREE",
     platformTrialAria: "Start your trial with {platform}",
@@ -435,6 +437,7 @@ export const landingCopyEn: LandingCopy = {
     ],
     platforms: ["Meta", "Google", "TikTok", "LinkedIn", "Snapchat", "Pinterest"],
   },
+  showcase: showcaseEn,
   reviews: {
     title: "trusted by those who move fast.",
     subtitle: "Performance marketers scaling with Rival",
@@ -443,7 +446,9 @@ export const landingCopyEn: LandingCopy = {
     socialProof: {
       count: "400+",
       label: "marketers love Rival",
-      trustpilotAria: "Rated 5 out of 5 on Trustpilot",
+      trustpilotAria: "Rated 4.5 out of 5 on Trustpilot",
+      score: "4.5/5",
+      scoreLine: "{score} from {count} marketers",
     },
     items: [
       {
@@ -484,22 +489,44 @@ export const landingCopyEn: LandingCopy = {
     ],
   },
   pricing: {
-    titleLine1: "built for",
-    titleHighlight: "enterprises",
-    riskFreeBadge: "Tailored",
-    guaranteeTitle: "Custom plans for teams at scale",
+    titleLine1: "one plan,",
+    titleHighlight: "every channel",
+    riskFreeBadge: "7-day free trial",
+    guaranteeTitle: "Every plan, every channel",
     guaranteeBody:
-      "Tell us how many brands, competitors, and markets you cover — we'll put together pricing that fits your workflow and security requirements.",
+      "Start with 5 competitors on all 6 ad platforms, organic social and email. Track more whenever you need, and pay only for what you add.",
     billingAria: "Billing period",
     monthly: "Monthly",
     yearly: "Yearly",
     planIncludes: "What's included:",
-    footnote: "We typically respond within one business day",
-    trialCta: "TRY FOR FREE",
-    popularBadge: "Enterprise",
-    popularClaim: "For growth teams & agencies",
+    footnote: "Cancel in one click. No retention calls.",
+    trialCta: "Get All Access",
+    trialNote: "Cancel anytime · no retention calls",
+    onePlan: {
+      badge: "All Access",
+      name: "Everything Rival does",
+      summary: "Every feature and every channel, for up to 5 competitors.",
+      discountBadge: "{percent}% off",
+      includesTitle: "Included",
+      includes: [
+        "5 competitors included",
+        "All 6 ad platforms, organic social and email",
+        "Autopilot alerts to Slack and email, 24/7",
+        "Strategy Map, Copy Vault and Timeline",
+        "Your own brand, side by side with rivals",
+        "1 landing page tracked per competitor",
+      ],
+      addOnsTitle: "Need more? Add anytime",
+      banner: "Best value · {percent}% off",
+      save: "Save {amount} every month",
+      more: "… and much more",
+      viewAll: "View all",
+      addOns: { competitor: "per extra competitor", brand: "per extra own brand", landingPage: "per extra landing page" },
+    },
+    popularBadge: "Most popular",
+    popularClaim: "Best value for growing teams",
     perMonth: "/month",
-    perCompetitor: "{price} / competitor",
+    perCompetitor: "{price} per competitor",
     billedMonthly: "Billed monthly",
     billedAnnually: "Billed annually (${yearlyUsd}/year)",
     contactModal: {
@@ -520,9 +547,8 @@ export const landingCopyEn: LandingCopy = {
         priceSubline: "Volume-based · annual contracts available",
         contactCta: "Contact us",
         contactHref: "mailto:hello@spy-rival.com?subject=Enterprise%20pricing",
-        popular: true,
         summary:
-          "For organizations that need unlimited scale, multi-brand coverage, SSO, and a deployment tailored to your security and procurement process.",
+          "Unlimited competitors, SSO, custom contracts and a dedicated account manager.",
         features: [
           "Unlimited competitors & brand workspaces",
           "Paid, organic & email intelligence across all platforms",
@@ -540,7 +566,7 @@ export const landingCopyEn: LandingCopy = {
     items: [
       {
         q: "How does the free trial work?",
-        a: "Sign up with your card and get 7 days of full Rival access tracking 1 competitor across all 6 platforms. Cancel anytime in the first 7 days and you won't be charged. If you continue, you're billed from $40/month on Starter ($384/year - 20% off - if you choose annual). One-click cancel, no retention calls.",
+        a: "Sign up with your card and get 7 days of full Rival access tracking 1 competitor across all 6 platforms. Cancel anytime in the first 7 days and you won't be charged. If you continue, you pay $19.33 a month (50% off the usual $38.66) for 5 competitors on every platform, plus $5 a month for each extra competitor you add. One-click cancel, no retention calls.",
       },
       {
         q: "How is Rival different from Foreplay or AdSpy?",
@@ -552,7 +578,7 @@ export const landingCopyEn: LandingCopy = {
       },
       {
         q: "How often does data update?",
-        a: "Every tracked competitor refreshes automatically on a rolling schedule - fast-moving platforms like Meta and Google update every few days, others on a slightly longer cadence - so there's always fresh data waiting when you log in. Pro users can also trigger a manual refresh on demand. Most users open Rival on Monday morning to see everything that changed over the past week.",
+        a: "Every tracked competitor refreshes automatically on a rolling schedule - fast-moving platforms like Meta and Google update every few days, others on a slightly longer cadence - so there's always fresh data waiting when you log in. Most users open Rival on Monday morning to see everything that changed over the past week.",
       },
       {
         q: "Can I track my own brand too?",
@@ -608,9 +634,9 @@ export const landingCopyEn: LandingCopy = {
         title: "PRODUCT",
         links: [
           { label: "How It Works", href: "/#how-it-works" },
-          { label: "Compare", href: "/#compare" },
-          { label: "Pricing", href: "/#pricing" },
-          { label: "FAQ", href: "/#faq" },
+          { label: "Features", href: "/features" },
+          { label: "Pricing", href: "/pricing" },
+          { label: "AdSpy", href: "/adspy/meta" },
           { label: "Start trial", href: "/onboarding" },
         ],
       },

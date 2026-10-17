@@ -1,0 +1,16 @@
+/* Confetti, appended to <body> so it can fly past the card edges. */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgb(255 255 255 / 70%);
+}
+.particle[data-shape="star"] {
+  border-radius: 0;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}

@@ -1,12 +1,20 @@
 import { FEATURE_DEFINITIONS } from "@/components/marketing/features-page-data";
 import type { Locale } from "@/lib/i18n/locale";
 
-export type NavLink = { label: string; href: string };
+export type NavLink = {
+  label: string;
+  href: string;
+  /** Picks the icon and colour the header's menu shows for this link. */
+  key?: string;
+};
 
 export type NavDropdown = {
   type: "dropdown";
+  key: "adspy" | "features" | "resources";
   label: string;
   items: NavLink[];
+  /** Optional "see everything" link under the menu's icons. */
+  more?: NavLink;
 };
 
 export type NavDirectLink = {
@@ -26,6 +34,7 @@ export const FEATURE_SLUGS = FEATURE_DEFINITIONS.map((f) => f.id);
 
 type NavLabels = {
   home: string;
+  allFeatures: string;
   adspy: string;
   features: string;
   pricing: string;
@@ -39,6 +48,7 @@ type NavLabels = {
 
 const NAV_LABELS_EN: NavLabels = {
   home: "Home",
+  allFeatures: "All features",
   adspy: "AdSpy",
   features: "Features",
   pricing: "Pricing",
@@ -59,6 +69,7 @@ const NAV_LABELS_EN: NavLabels = {
 
 const NAV_LABELS_DE: NavLabels = {
   home: "Start",
+  allFeatures: "Alle Features",
   adspy: "AdSpy",
   features: "Features",
   pricing: "Preise",
@@ -89,6 +100,7 @@ const NAV_LABELS_DE: NavLabels = {
 
 const NAV_LABELS_NL: NavLabels = {
   home: "Home",
+  allFeatures: "Alle features",
   adspy: "AdSpy",
   features: "Features",
   pricing: "Prijzen",
@@ -127,31 +139,35 @@ export function getSiteNav(locale: Locale): SiteNavItem[] {
   const labels = navLabelsForLocale(locale);
 
   return [
-    { type: "link", label: labels.home, href: "/" },
     {
       type: "dropdown",
+      key: "adspy",
       label: labels.adspy,
       items: ADSPY_PLATFORM_SLUGS.map((slug) => ({
+        key: slug,
         label: labels.adspyPlatforms[slug],
         href: `/adspy/${slug}`,
       })),
     },
     {
       type: "dropdown",
+      key: "features",
       label: labels.features,
       items: FEATURE_SLUGS.map((slug) => ({
+        key: slug,
         label: labels.featurePages[slug] ?? slug,
         href: `/features/${slug}`,
       })),
+      more: { label: labels.allFeatures, href: "/features" },
     },
-    { type: "link", label: labels.pricing, href: "/#pricing" },
     {
       type: "dropdown",
+      key: "resources",
       label: labels.resources,
       items: [
-        { label: labels.tutorials, href: "/resources/tutorials" },
-        { label: labels.blog, href: "/blog" },
-        { label: labels.tools, href: "/resources/tools" },
+        { key: "tutorials", label: labels.tutorials, href: "/resources/tutorials" },
+        { key: "blog", label: labels.blog, href: "/blog" },
+        { key: "tools", label: labels.tools, href: "/resources/tools" },
       ],
     },
   ];
@@ -160,6 +176,7 @@ export function getSiteNav(locale: Locale): SiteNavItem[] {
 /** Flat list of marketing paths for sitemap generation. */
 export function getMarketingStaticPaths(): string[] {
   return [
+    "/pricing",
     ...ADSPY_PLATFORM_SLUGS.map((slug) => `/adspy/${slug}`),
     ...FEATURE_SLUGS.map((slug) => `/features/${slug}`),
     "/resources/tutorials",
